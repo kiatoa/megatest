@@ -470,7 +470,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-list-disks")
-    (let ((toppath (launch:setup-for-run)))
+    (let ((toppath (launch:setup)))
       (print 
        (string-intersperse 
 	(map (lambda (x)
@@ -722,7 +722,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
     ;; Server? Start up here.
     ;;
-    (let ((tl        (launch:setup-for-run))
+    (let ((tl        (launch:setup))
 	  (run-id    (and (args:get-arg "-run-id")
 			  (string->number (args:get-arg "-run-id")))))
       (if run-id
@@ -742,7 +742,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  "-show-cmdinfo"
 		  "-list-runs"
 		  "-ping")))
-	(if (launch:setup-for-run)
+	(if (launch:setup)
 	    (let ((run-id    (and (args:get-arg "-run-id")
 				  (string->number (args:get-arg "-run-id")))))
 	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
@@ -762,7 +762,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server"))
-    (let ((tl (launch:setup-for-run)))
+    (let ((tl (launch:setup)))
       (if tl 
 	  (let* ((tdbdat  (tasks:open-db))
 		 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
@@ -829,40 +829,46 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (debug:print 0 "ERROR: dump output format " (args:get-arg "-dumpmode") " not supported for -list-targets")))
       (set! *didsomething* #t)))
 
-;; cache the runconfigs in $MT_LINKTREE/$MT_TARGET/$MT_RUNNAME/.runconfig
+;; get the runconfigs
 ;;
 (define (full-runconfigs-read)
-  (let* ((rundir (if (and (getenv "MT_LINKTREE")(getenv "MT_TARGET")(getenv "MT_RUNNAME"))
-		     (conc (getenv "MT_LINKTREE") "/" (getenv "MT_TARGET") "/" (getenv "MT_RUNNAME"))
-		     #f))
-	 (cfgf   (if rundir (conc rundir "/.runconfig." megatest-version "-" megatest-fossil-hash) #f)))
-    (if (and cfgf
-	     (file-exists? cfgf)
-	     (file-write-access? cfgf))
-	(configf:read-alist cfgf)
-	(let* ((keys   (rmt:get-keys))
-	       (target (common:args-get-target))
-	       (key-vals (if target (keys:target->keyval keys target) #f))
-	       (sections (if target (list "default" target) #f))
-	       (data     (begin
-			   (setenv "MT_RUN_AREA_HOME" *toppath*)
-			   (if key-vals
-			       (for-each (lambda (kt)
-					   (setenv (car kt) (cadr kt)))
-					 key-vals))
-			   (read-config (conc *toppath* "/runconfigs.config") #f #t sections: sections))))
-	  (if (and rundir ;; have all needed variabless
-		   (directory-exists? rundir)
-		   (file-write-access? rundir))
-	      (begin
-		(configf:write-alist data cfgf)
-		;; force re-read of megatest.config - this resolves circular references between megatest.config
-		(launch:setup-for-run force: #t)
-		(launch:cache-config))) ;; we can safely cache megatest.config since we have a valid runconfig
-	  data))))
+  (if (eq? *configstatus* 'fulldata)
+      *runconfigdat*
+      (begin
+	(launch:setup)
+	*runconfigdat*)))
+
+;;   (let* ((rundir (if (and (getenv "MT_LINKTREE")(getenv "MT_TARGET")(getenv "MT_RUNNAME"))
+;; 		     (conc (getenv "MT_LINKTREE") "/" (getenv "MT_TARGET") "/" (getenv "MT_RUNNAME"))
+;; 		     #f))
+;; 	 (cfgf   (if rundir (conc rundir "/.runconfig." megatest-version "-" megatest-fossil-hash) #f)))
+;;     (if (and cfgf
+;; 	     (file-exists? cfgf)
+;; 	     (file-write-access? cfgf))
+;; 	(configf:read-alist cfgf)
+;; 	(let* ((keys   (rmt:get-keys))
+;; 	       (target (common:args-get-target))
+;; 	       (key-vals (if target (keys:target->keyval keys target) #f))
+;; 	       (sections (if target (list "default" target) #f))
+;; 	       (data     (begin
+;; 			   (setenv "MT_RUN_AREA_HOME" *toppath*)
+;; 			   (if key-vals
+;; 			       (for-each (lambda (kt)
+;; 					   (setenv (car kt) (cadr kt)))
+;; 					 key-vals))
+;; 			   (read-config (conc *toppath* "/runconfigs.config") #f #t sections: sections))))
+;; 	  (if (and rundir ;; have all needed variabless
+;; 		   (directory-exists? rundir)
+;; 		   (file-write-access? rundir))
+;; 	      (begin
+;; 		(configf:write-alist data cfgf)
+;; 		;; force re-read of megatest.config - this resolves circular references between megatest.config
+;; 		(launch:setup force: #t)
+;; 		(launch:cache-config))) ;; we can safely cache megatest.config since we have a valid runconfig
+;; 	  data))))
 
 (if (args:get-arg "-show-runconfig")
-    (let ((tl (launch:setup-for-run)))
+    (let ((tl (launch:setup)))
       (push-directory *toppath*)
       (let ((data (full-runconfigs-read)))
 	;; keep this one local
@@ -884,7 +890,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (pop-directory)))
 
 (if (args:get-arg "-show-config")
-    (let ((tl   (launch:setup-for-run))
+    (let ((tl   (launch:setup))
 	  (data *configdat*)) ;; (read-config "megatest.config" #f #t)))
       (push-directory *toppath*)
       ;; keep this one local
@@ -1021,7 +1027,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (if (or (args:get-arg "-list-runs")
 	(args:get-arg "-list-db-targets"))
-    (if (launch:setup-for-run)
+    (if (launch:setup)
 	(let* (;; (dbstruct    (make-dbr:dbstruct path: *toppath* local: (args:get-arg "-local")))
 	       (runpatt     (args:get-arg "-list-runs"))
 	       (testpatt    (common:args-get-testpatt #f))
@@ -1352,7 +1358,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Don't think I need this. Incorporated into -list-runs instead
 ;;
 ;; (if (and (args:get-arg "-since")
-;; 	 (launch:setup-for-run))
+;; 	 (launch:setup))
 ;;     (let* ((since-time (string->number (args:get-arg "-since")))
 ;; 	   (run-ids    (db:get-changed-run-ids since-time)))
 ;;       ;; (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
@@ -1510,7 +1516,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
 		(exit 1)))
-	  (if (not (launch:setup-for-run))
+	  (if (not (launch:setup))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
@@ -1616,7 +1622,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (work-area (assoc/default 'work-area cmdinfo))
 	     (db        #f))
 	(change-directory testpath)
-	(if (not (launch:setup-for-run))
+	(if (not (launch:setup))
 	    (begin
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
@@ -1664,7 +1670,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (db        #f) ;; (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status")))
-	  (if (not (launch:setup-for-run))
+	  (if (not (launch:setup))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
@@ -1769,7 +1775,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
         (args:get-arg "-show-keys"))
     (let ((db #f)
 	  (keys #f))
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
@@ -1800,7 +1806,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-rebuild-db")
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1810,7 +1816,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-cleanup-db")
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1829,7 +1835,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-mark-incompletes")
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") b
 	    (exit 1)))
@@ -1842,7 +1848,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-update-meta")
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1859,7 +1865,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
-    (let* ((toppath (launch:setup-for-run))
+    (let* ((toppath (launch:setup))
 	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
       (if dbstruct
 	  (begin
@@ -1890,7 +1896,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (not (or (args:get-arg "-run")
 		  (args:get-arg "-runtests")))) ;; run-wait is built into runtests now
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))

@@ -730,7 +730,7 @@
 ;;  run-ids: '(1 2 3 ...) or #f (for all)
 ;;
 (define (db:multi-db-sync run-ids . options)
-  (let* ((toppath  (launch:setup-for-run))
+  (let* ((toppath  (launch:setup))
 	 (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
 	 (mtdb     (if toppath (db:open-megatest-db)))
 	 (allow-cleanup (if run-ids #f #t))
