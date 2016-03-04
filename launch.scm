@@ -610,66 +610,68 @@
 ;;           *configstatus* (status of the read data)
 ;;
 (define (launch:setup #!key (force #f))
-  (let* ((toppath  (or *toppath* (getenv "MT_RUN_AREA_HOME")))
+  (let* ((toppath  (or *toppath* (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
 	 (runname  (common:args-get-runname))
 	 (target   (common:args-get-target))
 	 (linktree (common:get-linktree))
+	 (mtconfig (or (args:get-arg "-config") "megatest.config")) ;; allow overriding megatest.config 
 	 (rundir   (if (and runname target linktree)(conc linktree "/" target "/" runname) #f))
 	 (mtcachef (and rundir (conc rundir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	 (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	 (cancreate (and rundir (file-exists? rundir)(file-write-access? rundir))))
     ;; (print "runname: " runname " target: " target " mtcachef: " mtcachef " rccachef: " rccachef)
-    (if (not *toppath*)(set! *toppath* toppath)) ;; this probably is not needed?
+    ;; (if (not *toppath*)(set! *toppath* toppath)) ;; this probably is not needed?
     (cond
-     ;; data was read and cached and available in *configstatus*
+     ;; data was read and cached and available in *configstatus*, toppath has already been set
      ((eq? *configstatus* 'fulldata)
       *toppath*)
-     ;; if mtcachef exists just read it
-     ((and mtcachef (file-exists? mtcachef))
+     ;; if mtcachef exists just read it, however we need to assume toppath is available in $MT_RUN_AREA_HOME
+     ((and mtcachef (file-exists? mtcachef) (get-environment-variable "MT_RUN_AREA_HOME"))
       (set! *configdat*    (configf:read-alist mtcachef))
       (set! *runconfigdat* (configf:read-alist rccachef))
       (set! *configinfo*   (list *configdat*  (get-environment-variable "MT_RUN_AREA_HOME")))
       (set! *configstatus* 'fulldata)
+      (set! *toppath*      (get-environment-variable "MT_RUN_AREA_HOME"))
       *toppath*)
      ;; we have all the info needed to fully process runconfigs and megatest.config
      (mtcachef              
-      (let ((first-pass (find-and-read-config 
-				  (or (args:get-arg "-config") "megatest.config")
+      (let* ((toppath    (get-environment-variable "MT_RUN_AREA_HOME")) ;; rely on MT_RUN_AREA_HOME if we are in a test environment
+	     (sections   (list "default" target)) ;; for runconfigs
+	     (first-pass (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect
+				  mtconfig
 				  environ-patt: "env-override"
-				  given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
-				  pathenvvar: "MT_RUN_AREA_HOME")))
-	(if first-pass
+				  given-toppath: toppath
+				  pathenvvar: "MT_RUN_AREA_HOME"))
+	     (first-rundat  (read-config (conc toppath "/runconfigs.config") *runconfigdat* #t 
+					 sections: sections)))
+	(set! *runconfigdat* first-rundat)
+	(if first-pass  ;; 
 	    (begin
 	      (set! *configdat*  (car first-pass))
 	      (set! *configinfo* first-pass)
 	      (set! *toppath*    (or toppath (cadr first-pass))) ;; use the gathered data unless already have it
 	      (set! toppath      *toppath*)
+	      (setenv "MT_RUN_AREA_HOME" *toppath*)
 	      ;; the seed read is done, now read runconfigs, cache it then read megatest.config one more time and cache it
-	      (let* ((keys     (rmt:get-keys))
-		     (key-vals (if target (keys:target->keyval keys target) #f))
-		     (sections (if target (list "default" target) #f)) ;; for runconfigs
-		     (linktree (or (getenv "MT_LINKTREE")
-				   (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f)))
-		     (runconfigdat (begin
-				     (setenv "MT_RUN_AREA_HOME" *toppath*)
-				     (if key-vals
-					 (for-each (lambda (kt)
-						     (setenv (car kt) (cadr kt)))
-						   key-vals))
-				     (read-config (conc *toppath* "/runconfigs.config") #f #t sections: sections))))
+	      (let* ((keys         (rmt:get-keys))
+		     (key-vals     (keys:target->keyval keys target))
+		     (linktree     (or (getenv "MT_LINKTREE")
+				       (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f)))
+		     (second-pass  (find-and-read-config
+				    mtconfig
+				    environ-patt: "env-override"
+				    given-toppath: toppath
+				    pathenvvar: "MT_RUN_AREA_HOME"))
+		     (runconfigdat (begin     ;; this read of the runconfigs will see any adjustments made by re-reading megatest.config
+				     (for-each (lambda (kt)
+						 (setenv (car kt) (cadr kt)))
+					       key-vals)
+				     (read-config (conc toppath "/runconfigs.config") *runconfigdat* #t 
+						  sections: sections))))
 		(if cancreate (configf:write-alist runconfigdat rccachef))
 		(set! *runconfigdat* runconfigdat)
 		(if cancreate (configf:write-alist *configdat* mtcachef))
 		(if cancreate (set! *configstatus* 'fulldata))))
-		;; (let ((second-pass (find-and-read-config
-		;; 		    (or (args:get-arg "-config") "megatest.config")
-		;; 		    environ-patt: "env-override"
-		;; 		    given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
-		;; 		    pathenvvar: "MT_RUN_AREA_HOME")))
-		;;   (if cancreate (configf:write-alist (car second-pass) mtcachef))
-		;;   (set! *configdat* (car second-pass))
-		;;   (set! *toppath*   (or toppath (cadr second-pass))) ;; this should be a no-op, remove it later
-		;;   (if cancreate (set! *configstatus* 'fulldata)))))
 	    ;; no configs found? should not happen but let's try to recover gracefully, return an empty hash-table
 	    (set! *configdat* (make-hash-table))
 	    )))
@@ -679,16 +681,20 @@
 			(or (args:get-arg "-config") "megatest.config")
 			environ-patt: "env-override"
 			given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
-			pathenvvar: "MT_RUN_AREA_HOME"))
-	     (sections (if target (list "default" target) #f))
-	     (rdat     (read-config (conc (or *toppath* (get-environment-variable "MT_RUN_AREA_HOME")(cadr cfgdat))
-					  "/runconfigs.config") #f #t sections: sections)))
-	(set! *configinfo*   cfgdat)
-	(set! *configdat*    (car cfgdat))
-	(set! *runconfigdat* rdat)
-	(set! *toppath*      (or toppath (cadr cfgdat)))
-	(set! toppath        *toppath*)  ;; remove this sillyness later
-	(set! *configstatus* 'partial))))
+			pathenvvar: "MT_RUN_AREA_HOME")))
+	(if cfgdat
+	    (let* ((sections (if target (list "default" target) #f))
+		   (toppath  (or (get-environment-variable "MT_RUN_AREA_HOME")(cadr cfgdat)))
+		   (rdat     (read-config (conc toppath
+						"/runconfigs.config") *runconfigdat* #t sections: sections)))
+	      (set! *configinfo*   cfgdat)
+	      (set! *configdat*    (car cfgdat))
+	      (set! *runconfigdat* rdat)
+	      (set! *toppath*      toppath)
+	      (set! *configstatus* 'partial))
+	    (begin
+	      (debug:print 0 "ERROR: No " mtconfig " file found. Giving up.")
+	      (exit 2))))))
     ;; additional house keeping
     (let* ((linktree (or (getenv "MT_LINKTREE")
 			 (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f))))
