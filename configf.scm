@@ -101,6 +101,8 @@
 		 exn
 		 (begin
 		   (debug:print 0 "WARNING: failed to process config input \"" l "\"")
+		   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+		   ;; (print "exn=" (condition->list exn))
 		   (set! result (conc "#{( " cmdtype ") " cmd"}")))
 		 (if (or allow-system
 			 (not (member cmdtype '("system" "shell"))))
