@@ -620,7 +620,7 @@
 	 (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	 (cancreate (and rundir (file-exists? rundir)(file-write-access? rundir))))
     ;; (print "runname: " runname " target: " target " mtcachef: " mtcachef " rccachef: " rccachef)
-    ;; (if (not *toppath*)(set! *toppath* toppath)) ;; this probably is not needed?
+    (set! *toppath* toppath) ;; This is needed when we are running as a test using CMDINFO as a datasource
     (cond
      ;; data was read and cached and available in *configstatus*, toppath has already been set
      ((eq? *configstatus* 'fulldata)
@@ -635,8 +635,7 @@
       *toppath*)
      ;; we have all the info needed to fully process runconfigs and megatest.config
      (mtcachef              
-      (let* ((toppath    (get-environment-variable "MT_RUN_AREA_HOME")) ;; rely on MT_RUN_AREA_HOME if we are in a test environment
-	     (sections   (list "default" target)) ;; for runconfigs
+      (let* ((sections   (list "default" target)) ;; for runconfigs
 	     (first-pass (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect
 				  mtconfig
 				  environ-patt: "env-override"
