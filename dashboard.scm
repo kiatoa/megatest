@@ -83,7 +83,7 @@ Misc
       (print help)
       (exit)))
 
-(if (not (launch:setup-for-run))
+(if (not (launch:setup))
     (begin
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
@@ -241,6 +241,7 @@ Misc
 	    (string>? test-name1 test-name2)
 	    test1-older))))
     
+;; create a virtual table of all the tests
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 (define (update-rundat runnamepatt numruns testnamepatt keypatts)
   (let* ((referenced-run-ids '())

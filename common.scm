@@ -45,10 +45,14 @@
 
 ;; GLOBAL GLETCHES
 (define *db-keys* #f)
-(define *configinfo* #f)
-(define *configdat*  #f)
-(define *toppath*    #f)
+
+(define *configinfo*   #f)   ;; raw results from setup, includes toppath and table from megatest.config
+(define *runconfigdat* #f)   ;; run configs data
+(define *configdat*    #f)   ;; megatest.config data
+(define *configstatus* #f)   ;; status of data; 'fulldata : all processing done, #f : no data yet, 'partialdata : partial read done
+(define *toppath*      #f)
 (define *already-seen-runconfig-info* #f)
+
 (define *waiting-queue*     (make-hash-table))
 (define *test-meta-updated* (make-hash-table))
 (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
@@ -449,23 +453,30 @@
     (if rtestpatt (debug:print-info 0 "TESTPATT from runconfigs: " rtestpatt))
     testpatt))
 
+(define (common:get-linktree)
+  (or (getenv "MT_LINKTREE")
+      (if *configdat*
+	  (configf:lookup *configdat* "setup" "linktree"))))
+
 (define (common:args-get-runname)
-  (or (args:get-arg "-runname")
-      (args:get-arg ":runname")))
+  (let ((res (or (args:get-arg "-runname")
+		 (args:get-arg ":runname")
+		 (getenv "MT_RUNNAME"))))
+    ;; (if res (set-environment-variable "MT_RUNNAME" res)) ;; not sure if this is a good idea. side effect and all ...
+    res))
 
 (define (common:args-get-target #!key (split #f))
-  (let* ((keys    (keys:config-get-fields *configdat*))
+  (let* ((keys    (if *configdat* (keys:config-get-fields *configdat*) '()))
 	 (numkeys (length keys))
-	 (target  (if (args:get-arg "-reqtarg")
-		      (args:get-arg "-reqtarg")
-		      (if (args:get-arg "-target")
-			  (args:get-arg "-target")
-			  (getenv "MT_TARGET"))))
+	 (target  (or (args:get-arg "-reqtarg")
+		      (args:get-arg "-target")
+		      (getenv "MT_TARGET")))
 	 (tlist   (if target (string-split target "/" #t) '()))
 	 (valid   (if target
-		      (and (not (null? tlist))
-			   (eq? numkeys (length tlist))
-			   (null? (filter string-null? tlist)))
+		      (or (null? keys) ;; probably don't know our keys yet
+			  (and (not (null? tlist))
+			       (eq? numkeys (length tlist))
+			       (null? (filter string-null? tlist))))
 		      #f)))
     (if valid
 	(if split
@@ -473,7 +484,7 @@
 	    target)
 	(if target
 	    (begin
-	      (debug:print 0 "ERROR: Invalid target, spaces or blanks not allowed \"" target "\", target should be: " (string-intersperse keys "/"))
+	      (debug:print 0 "ERROR: Invalid target, spaces or blanks not allowed \"" target "\", target should be: " (string-intersperse keys "/") ", have " tlist " for elements")
 	      #f)
 	    #f))))
 

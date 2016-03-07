@@ -42,7 +42,7 @@
 (define (runs:create-run-record)
   (let* ((mconfig      (if *configdat*
 		           *configdat*
-		           (if (launch:setup-for-run)
+		           (if (launch:setup)
 		               *configdat*
 		               (begin
 		                 (debug:print 0 "ERROR: Called setup in a non-megatest area, exiting")
@@ -1782,8 +1782,7 @@
      (else
       (let (;; (db   #f)
 	    (keys #f))
-	(if (launch:setup-for-run)
-	    (launch:cache-config)
+	(if (not (launch:setup))
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))

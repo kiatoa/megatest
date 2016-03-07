@@ -235,6 +235,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-pathmod"
 			"-env2file"
 			"-envcap"
+			"-envdelta"
 			"-setvars"
 			"-set-state-status"
 			"-set-run-status"
@@ -314,10 +315,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 args:arg-hash
 		 0))
 
+;; Add args that use remargs here
+;;
 (if (and (not (null? remargs))
 	 (not (or
-	       (args:get-arg "-runstep"))
-	      ;; add more args that use remargs here
+	       (args:get-arg "-runstep")
+	       (args:get-arg "-envcap")
+	       (args:get-arg "-envdelta")
+	       )
 	      ))
     (debug:print 0 "ERROR: Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
@@ -465,7 +470,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-list-disks")
-    (let ((toppath (launch:setup-for-run)))
+    (let ((toppath (launch:setup)))
       (print 
        (string-intersperse 
 	(map (lambda (x)
@@ -666,6 +671,49 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; 		  (else  (debug:print 0 "ERROR: No transport set")(exit)))))
 
 ;;======================================================================
+;; Capture, save and manipulate environments
+;;======================================================================
+
+;; NOTE: Keep these above the section where the server or client code is setup
+
+(let ((envcap (args:get-arg "-envcap")))
+  (if envcap
+      (let* ((db      (env:open-db (if (null? remargs) "envdat.db" (car remargs)))))
+	(env:save-env-vars db envcap)
+	(env:close-database db)
+	(set! *didsomething* #t))))
+
+;; delta "language" will eventually be res=a+b-c but for now it is just res=a-b 
+;;
+(let ((envdelta (args:get-arg "-envdelta")))
+  (if envdelta
+      (let ((match (string-split envdelta "-")));; (string-match "([a-z0-9_]+)=([a-z0-9_\\-,]+)" envdelta)))
+	(if (not (null? match))
+	    (let* ((db        (env:open-db (if (null? remargs) "envdat.db" (car remargs))))
+		   ;; (resctx    (cadr match))
+		   ;; (equn      (caddr match))
+		   (parts     match) ;; (string-split equn "-"))
+		   (minuend   (car parts))
+		   (subtraend (cadr parts))
+		   (added     (env:get-added   db minuend subtraend))
+		   (removed   (env:get-removed db minuend subtraend))
+		   (changed   (env:get-changed db minuend subtraend)))
+	      ;; (pp (hash-table->alist added))
+	      ;; (pp (hash-table->alist removed))
+	      ;; (pp (hash-table->alist changed))
+	      (if (args:get-arg "-o")
+		  (with-output-to-file
+		      (args:get-arg "-o")
+		    (lambda ()
+		      (env:print added removed changed)))
+		  (env:print added removed changed))
+	      (env:close-database db)
+	      (set! *didsomething* #t))
+	    (debug:print 0 "ERROR: Parameter to -envdelta should be new=star-end")))))
+
+
+
+;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
 ;;   we start the server if not running else start the client thread
 ;;======================================================================
@@ -674,47 +722,47 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
     ;; Server? Start up here.
     ;;
-    (let ((tl        (launch:setup-for-run))
+    (let ((tl        (launch:setup))
 	  (run-id    (and (args:get-arg "-run-id")
 			  (string->number (args:get-arg "-run-id")))))
       (if run-id
 	  (begin
 	    (server:launch run-id)
 	    (set! *didsomething* #t))
-	  (debug:print 0 "ERROR: server requires run-id be specified with -run-id"))))
+	  (debug:print 0 "ERROR: server requires run-id be specified with -run-id")))
 
     ;; Not a server? This section will decide how to communicate
     ;;
     ;;  Setup client for all expect listed here
-    ;; (if (null? (lset-intersection 
-    ;;     	     equal?
-    ;;     	     (hash-table-keys args:arg-hash)
-    ;;     	     '("-list-servers"
-    ;;     	       "-stop-server"
-    ;;     	       "-show-cmdinfo"
-    ;;     	       "-list-runs"
-    ;;     	       "-ping")))
-    ;;     (if (launch:setup-for-run)
-    ;;         (let ((run-id    (and (args:get-arg "-run-id")
-    ;;     			  (string->number (args:get-arg "-run-id")))))
-    ;;           ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
-    ;;           ;; if not list or kill then start a client (if appropriate)
-    ;;           (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
-    ;;     	      (eq? (length (hash-table-keys args:arg-hash)) 0))
-    ;;     	  (debug:print-info 1 "Server connection not needed")
-    ;;     	  (begin
-    ;;     	    ;; (if run-id 
-    ;;     	    ;;     (client:launch run-id) 
-    ;;     	    ;;     (client:launch 0)      ;; without run-id we'll start a server for "0"
-    ;;     	    #t
-    ;;     	    ))))))
+    (if (null? (lset-intersection 
+		equal?
+		(hash-table-keys args:arg-hash)
+		'("-list-servers"
+		  "-stop-server"
+		  "-show-cmdinfo"
+		  "-list-runs"
+		  "-ping")))
+	(if (launch:setup)
+	    (let ((run-id    (and (args:get-arg "-run-id")
+				  (string->number (args:get-arg "-run-id")))))
+	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
+	      ;; if not list or kill then start a client (if appropriate)
+	      (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
+		      (eq? (length (hash-table-keys args:arg-hash)) 0))
+		  (debug:print-info 1 "Server connection not needed")
+		  (begin
+		    ;; (if run-id 
+		    ;;     (client:launch run-id) 
+		    ;;     (client:launch 0)      ;; without run-id we'll start a server for "0"
+		    #t
+		    ))))))
 
 ;; MAY STILL NEED THIS
 ;;		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server"))
-    (let ((tl (launch:setup-for-run)))
+    (let ((tl (launch:setup)))
       (if tl 
 	  (let* ((tdbdat  (tasks:open-db))
 		 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
@@ -781,23 +829,46 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (debug:print 0 "ERROR: dump output format " (args:get-arg "-dumpmode") " not supported for -list-targets")))
       (set! *didsomething* #t)))
 
+;; get the runconfigs
+;;
 (define (full-runconfigs-read)
-  (let* ((keys   (rmt:get-keys))
-	 (target (common:args-get-target))
-	 (key-vals (if target (keys:target->keyval keys target) #f))
-	 (sections (if target (list "default" target) #f))
-	 (data     (begin
-		     (setenv "MT_RUN_AREA_HOME" *toppath*)
-		     (if key-vals
-			 (for-each (lambda (kt)
-				     (setenv (car kt) (cadr kt)))
-				   key-vals))
-		     (read-config (conc *toppath* "/runconfigs.config") #f #t sections: sections))))
-    data))
+  (if (eq? *configstatus* 'fulldata)
+      *runconfigdat*
+      (begin
+	(launch:setup)
+	*runconfigdat*)))
 
+;;   (let* ((rundir (if (and (getenv "MT_LINKTREE")(getenv "MT_TARGET")(getenv "MT_RUNNAME"))
+;; 		     (conc (getenv "MT_LINKTREE") "/" (getenv "MT_TARGET") "/" (getenv "MT_RUNNAME"))
+;; 		     #f))
+;; 	 (cfgf   (if rundir (conc rundir "/.runconfig." megatest-version "-" megatest-fossil-hash) #f)))
+;;     (if (and cfgf
+;; 	     (file-exists? cfgf)
+;; 	     (file-write-access? cfgf))
+;; 	(configf:read-alist cfgf)
+;; 	(let* ((keys   (rmt:get-keys))
+;; 	       (target (common:args-get-target))
+;; 	       (key-vals (if target (keys:target->keyval keys target) #f))
+;; 	       (sections (if target (list "default" target) #f))
+;; 	       (data     (begin
+;; 			   (setenv "MT_RUN_AREA_HOME" *toppath*)
+;; 			   (if key-vals
+;; 			       (for-each (lambda (kt)
+;; 					   (setenv (car kt) (cadr kt)))
+;; 					 key-vals))
+;; 			   (read-config (conc *toppath* "/runconfigs.config") #f #t sections: sections))))
+;; 	  (if (and rundir ;; have all needed variabless
+;; 		   (directory-exists? rundir)
+;; 		   (file-write-access? rundir))
+;; 	      (begin
+;; 		(configf:write-alist data cfgf)
+;; 		;; force re-read of megatest.config - this resolves circular references between megatest.config
+;; 		(launch:setup force: #t)
+;; 		(launch:cache-config))) ;; we can safely cache megatest.config since we have a valid runconfig
+;; 	  data))))
 
 (if (args:get-arg "-show-runconfig")
-    (let ((tl (launch:setup-for-run)))
+    (let ((tl (launch:setup)))
       (push-directory *toppath*)
       (let ((data (full-runconfigs-read)))
 	;; keep this one local
@@ -819,7 +890,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (pop-directory)))
 
 (if (args:get-arg "-show-config")
-    (let ((tl   (launch:setup-for-run))
+    (let ((tl   (launch:setup))
 	  (data *configdat*)) ;; (read-config "megatest.config" #f #t)))
       (push-directory *toppath*)
       ;; keep this one local
@@ -956,7 +1027,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (if (or (args:get-arg "-list-runs")
 	(args:get-arg "-list-db-targets"))
-    (if (launch:setup-for-run)
+    (if (launch:setup)
 	(let* (;; (dbstruct    (make-dbr:dbstruct path: *toppath* local: (args:get-arg "-local")))
 	       (runpatt     (args:get-arg "-list-runs"))
 	       (testpatt    (common:args-get-testpatt #f))
@@ -1287,7 +1358,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Don't think I need this. Incorporated into -list-runs instead
 ;;
 ;; (if (and (args:get-arg "-since")
-;; 	 (launch:setup-for-run))
+;; 	 (launch:setup))
 ;;     (let* ((since-time (string->number (args:get-arg "-since")))
 ;; 	   (run-ids    (db:get-changed-run-ids since-time)))
 ;;       ;; (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
@@ -1445,7 +1516,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
 		(exit 1)))
-	  (if (not (launch:setup-for-run))
+	  (if (not (launch:setup))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
@@ -1551,7 +1622,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (work-area (assoc/default 'work-area cmdinfo))
 	     (db        #f))
 	(change-directory testpath)
-	(if (not (launch:setup-for-run))
+	(if (not (launch:setup))
 	    (begin
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
@@ -1599,7 +1670,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (db        #f) ;; (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status")))
-	  (if (not (launch:setup-for-run))
+	  (if (not (launch:setup))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
@@ -1704,7 +1775,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
         (args:get-arg "-show-keys"))
     (let ((db #f)
 	  (keys #f))
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
@@ -1735,7 +1806,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-rebuild-db")
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1745,7 +1816,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-cleanup-db")
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1764,7 +1835,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-mark-incompletes")
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") b
 	    (exit 1)))
@@ -1777,7 +1848,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-update-meta")
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1794,7 +1865,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
-    (let* ((toppath (launch:setup-for-run))
+    (let* ((toppath (launch:setup))
 	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
       (if dbstruct
 	  (begin
@@ -1825,7 +1896,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (not (or (args:get-arg "-run")
 		  (args:get-arg "-runtests")))) ;; run-wait is built into runtests now
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1880,24 +1951,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        'new2old
        )
       (set! *didsomething* #t)))
-
-;;======================================================================
-;; Capture, save and manipulate environments
-;;======================================================================
-
-(let ((envcap (args:get-arg "-envcap")))
-  (if envcap
-      (if (substring-index "=" envcap)
-	  (let* ((parts   (string-split envcap "="))
-		 (fname   (car parts))
-		 (context (cadr parts))
-		 (db      (env:open-db fname)))
-	    (env:save-env-vars db context)
-	    (env:close-database db)
-	    (set! *didsomething* #t))
-	  (begin
-	    (debug:print 0 "ERROR: Parameter to -envcap should be <filename>=<context>. E.G. envdat=original, got: " envcap)
-	    (set! *didsomething* #t)))))
 
 ;;======================================================================
 ;; Exit and clean up
