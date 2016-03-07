@@ -115,7 +115,6 @@ Misc
 (define *header*       #f)
 (define *allruns*     '())
 (define *allruns-by-id* (make-hash-table)) ;; 
-(define *runchangerate* (make-hash-table))
 
 (define *buttondat*    (make-hash-table)) ;; <run-id color text test run-key>
 (define *alltestnamelst* '())
@@ -308,10 +307,6 @@ Misc
 		  (if (or (not *hide-empty-runs*) ;; this reduces the data burden when set
 			  (not (null? tests)))
 		      (let ((dstruct (vector run tests key-vals (- (current-seconds) 10))))
-			;;
-			;; compare the tests with the tests in *allruns-by-id* same run-id 
-			;; if different then increment value in *runchangerate*
-			;;
 			(hash-table-set! *allruns-by-id* run-id dstruct)
 			(set! result (cons dstruct result))))))
 	      runs)

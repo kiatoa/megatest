@@ -149,7 +149,23 @@
    (let-values (((rpid exit-type exit-signal)(process-wait pid #t)))
        (and (number? rpid)
 	    (equal? rpid pid)))))
-	 
+
+(define (process:alive-on-host? host pid)
+  (let ((cmd (conc "ssh " host " ps -o pid= -p " pid)))
+    (handle-exceptions
+     exn
+     #f ;; anything goes wrong - assume the process in NOT running.
+     (with-input-from-pipe 
+      cmd
+      (lambda ()
+	(let loop ((inl (read-line)))
+	  (if (eof-object? inl)
+	      #f
+	      (let* ((clean-str (string-substitute "^[^\\d]*([0-9]+)[^\\d]*$" "\\1" inl))
+		     (innum     (string->number clean-str)))
+		(and innum
+		     (eq? pid innum))))))))))
+
 (define (process:get-sub-pids pid)
   (with-input-from-pipe
    (conc "pstree -A -p " pid) ;; | tr 'a-z\\-+`()\\.' ' ' " pid)

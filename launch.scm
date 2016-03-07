@@ -271,11 +271,17 @@
 	  ;; Do not run the test if it is REMOVING, RUNNING, KILLREQ or REMOTEHOSTSTART,
 	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
 	  ;;
-	  (let ((test-info (rmt:get-testinfo-state-status run-id test-id)))
+	  (let* ((test-info (rmt:get-testinfo-state-status run-id test-id))
+		 (test-host (db:test-get-host       test-info))
+		 (test-pid  (db:test-get-process_id test-info)))
 	    (cond
 	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
 	      (debug:print 0 "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
 	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")) ;; prime it for running
+	     ((member (db:test-get-state test-info) '("RUNNING" "REMOTEHOSTSTART"))
+	      (if (process-alive-on-host? test-host test-pid)
+		  (debug:print 0 "ERROR: test state is "  (db:test-get-state test-info) " and process " test-pid " is still running on host " test-host ", cannot proceed")
+		  (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")))
 	     ((not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
 	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a"))
 	     (else ;; (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ"))
