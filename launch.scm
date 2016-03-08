@@ -642,13 +642,16 @@
       *toppath*)
      ;; we have all the info needed to fully process runconfigs and megatest.config
      (mtcachef              
-      (let* ((first-pass (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect
-				  mtconfig
-				  environ-patt: "env-override"
-				  given-toppath: toppath
-				  pathenvvar: "MT_RUN_AREA_HOME"))
-	     (first-rundat  (read-config (conc toppath "/runconfigs.config") *runconfigdat* #t 
-					 sections: sections)))
+      (let* ((first-pass    (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect
+			             mtconfig
+				     environ-patt: "env-override"
+				     given-toppath: toppath
+				     pathenvvar: "MT_RUN_AREA_HOME"))
+	     (first-rundat  (let ((toppath (if toppath 
+					       toppath
+					       (car first-pass))))
+			      (read-config (conc toppath "/runconfigs.config") *runconfigdat* #t 
+					   sections: sections))))
 	(set! *runconfigdat* first-rundat)
 	(if first-pass  ;; 
 	    (begin
