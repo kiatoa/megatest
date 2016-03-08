@@ -178,8 +178,14 @@
 	 (tests:test-set-status! run-id test-id next-state "CHECK" 
 				 (if (eq? this-step-status 'check) "Logpro check found" #f)
 				 #f))
+	((waived)
+	 (launch:einf-rollup-status-set! exit-info 4) ;; (vector-set! exit-info 3 3) ;; rollup-status
+	 ;; NB// test-set-status! does rdb calls under the hood
+	 (tests:test-set-status! run-id test-id next-state "WAIVED" 
+				 (if (eq? this-step-status 'check) "Logpro waived found" #f)
+				 #f))
 	((abort)
-	 (launch:einf-rollup-status-set! exit-info 4) ;; (vector-set! exit-info 3 4) ;; rollup-status
+	 (launch:einf-rollup-status-set! exit-info 5) ;; (vector-set! exit-info 3 4) ;; rollup-status
 	 ;; NB// test-set-status! does rdb calls under the hood
 	 (tests:test-set-status! run-id test-id next-state "ABORT" 
 				 (if (eq? this-step-status 'abort) "Logpro abort found" #f)

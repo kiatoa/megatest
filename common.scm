@@ -721,7 +721,12 @@
 	      
 (define (save-environment-as-files fname #!key (ignorevars (list "USER" "HOME" "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR" "MAKEFLAGS" "MAKEF" "MAKEOVERRIDES")))
   (let ((envvars (get-environment-variables))
-        (whitesp (regexp "[^a-zA-Z0-9_\\-:,.\\/%$]")))
+        (whitesp (regexp "[^a-zA-Z0-9_\\-:,.\\/%$]"))
+	(mungeval (lambda (val)
+		    (cond
+		     ((eq? val #t) "") ;; convert #t to empty string
+		     ((eq? val #f) #f) ;; convert #f to itself (still thinking about this one
+		     (else val)))))
      (with-output-to-file (conc fname ".csh")
        (lambda ()
           (for-each (lambda (keyval)
@@ -733,7 +738,7 @@
 			(print (if (member key ignorevars)
 				   "# setenv "
 				   "setenv ")
-			       key " " delim val delim)))
+			       key " " delim (mungeval val) delim)))
 		    envvars)))
      (with-output-to-file (conc fname ".sh")
        (lambda ()
@@ -746,7 +751,7 @@
 			(print (if (member key ignorevars)
 				   "# export "
 				   "export ")
-			       key "=" delim val delim)))
+			       key "=" delim (mungeval val) delim)))
                     envvars)))))
 
 ;; set some env vars from an alist, return an alist with original values
