@@ -190,6 +190,12 @@
 	 (tests:test-set-status! run-id test-id next-state "ABORT" 
 				 (if (eq? this-step-status 'abort) "Logpro abort found" #f)
 				 #f))
+	((skip)
+	 (launch:einf-rollup-status-set! exit-info 6) ;; (vector-set! exit-info 3 4) ;; rollup-status
+	 ;; NB// test-set-status! does rdb calls under the hood
+	 (tests:test-set-status! run-id test-id next-state "SKIP" 
+				 (if (eq? this-step-status 'skip) "Logpro skip found" #f)
+				 #f))
 	((pass)
 	 (tests:test-set-status! run-id test-id next-state "PASS" #f #f))
 	(else ;; 'fail
