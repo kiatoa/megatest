@@ -235,7 +235,7 @@
 ;;              of tests to run. The item portions are not respected.
 ;;              FIXME: error out if /patt specified
 ;;            
-(define (runs:run-tests target runname test-patts user flags #!key (run-count 3)) ;; test-names
+(define (runs:run-tests target runname test-patts user flags #!key (run-count 1)) ;; test-names
   (let* ((keys               (keys:config-get-fields *configdat*))
 	 (keyvals            (keys:target->keyval keys target))
 	 (run-id             (rmt:register-run keyvals runname "new" "n/a" user))  ;;  test-name)))
