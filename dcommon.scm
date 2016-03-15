@@ -409,7 +409,7 @@
 				(max-row      (if (null? row-indices) 1 (apply max (map cadr row-indices))))
 				(max-col      (if (null? col-indices) 1 
 						  (apply max (map cadr col-indices))))
-				(max-visible  (max (- *num-tests* 15) 3))
+				(max-visible  (max (- (d:alldat-num-tests *alldat*) 15) 3))
 				(max-col-vis  (if (> max-col 10) 10 max-col))
 				(numrows      1)
 				(numcols      1))
