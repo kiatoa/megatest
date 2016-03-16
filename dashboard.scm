@@ -1195,15 +1195,16 @@ Misc
 ;;
 ;; display and manage a single run at a time
 
-(define (tree-path->run-id path)
+(define (tree-path->run-id data path)
   (if (not (null? path))
-      (hash-table-ref/default (dboard:data-get-path-run-ids *data*) path #f)
+      (hash-table-ref/default (d:data-path-run-ids data) path #f)
       #f))
 
 (define dashboard:update-run-summary-tab #f)
 
-;; (define (tests window-id)
-(define (dashboard:one-run db)
+;; This is the Run Summary tab
+;; 
+(define (dashboard:one-run db data)
   (let* ((tb      (iup:treebox
 		   #:value 0
 		   #:name "Runs"
@@ -1213,10 +1214,10 @@ Misc
 		   (lambda (obj id state)
 		     ;; (print "obj: " obj ", id: " id ", state: " state)
 		     (let* ((run-path (tree:node->path obj id))
-			    (run-id   (tree-path->run-id (cdr run-path))))
+			    (run-id   (tree-path->run-id data (cdr run-path))))
 		       (if (number? run-id)
 			   (begin
-			     (dboard:data-set-curr-run-id! *data* run-id)
+			     (d:data-curr-run-id-set! data run-id)
 			     (dashboard:update-run-summary-tab))
 			   (debug:print 0 "ERROR: tree-path->run-id returned non-number " run-id)))
 		       ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
@@ -1229,14 +1230,14 @@ Misc
 			(let* ((toolpath (car (argv)))
 			       (key      (conc lin ":" col))
 			       (test-id  (hash-table-ref/default cell-lookup key -1))
-			       (cmd      (conc toolpath " -test " (dboard:data-get-curr-run-id *data*) "," test-id "&")))
+			       (cmd      (conc toolpath " -test " (d:data-curr-run-id data) "," test-id "&")))
 			  (system cmd)))))
 	 (updater  (lambda ()
 		     (let* ((runs-dat     (if (d:alldat-useserver *alldat*)
 					      (rmt:get-runs-by-patt (d:alldat-keys *alldat*) "%" #f #f #f #f)
 					      (db:get-runs-by-patt db (d:alldat-keys *alldat*) "%" #f #f #f #f)))
 			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
-			    (run-id       (dboard:data-get-curr-run-id *data*))
+			    (run-id       (d:data-curr-run-id data))
 			    (last-update  0) ;; fix me
 			    (tests-dat    (let ((tdat (if run-id
 							  (if (d:alldat-useserver *alldat*)
@@ -1301,16 +1302,16 @@ Misc
 					  (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
 					  (run-path   (append key-vals (list run-name)))
 					  (existing   (tree:find-node tb run-path)))
-				     (if (not (hash-table-ref/default (dboard:data-get-path-run-ids *data*) run-path #f))
+				     (if (not (hash-table-ref/default (d:data-path-run-ids data) run-path #f))
 					 (begin
-					   (hash-table-set! (dboard:data-get-run-keys *data*) run-id run-path)
+					   (hash-table-set! (d:data-run-keys data) run-id run-path)
 					   ;; (iup:attribute-set! (dboard:data-get-runs-matrix *data*)
 					   ;;    		 (conc rownum ":" colnum) col-name)
 					   ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
 					   ;; Here we update the tests treebox and tree keys
 					   (tree:add-node tb "Runs" run-path ;; (append key-vals (list run-name))
 							  userdata: (conc "run-id: " run-id))
-					   (hash-table-set! (dboard:data-get-path-run-ids *data*) run-path run-id)
+					   (hash-table-set! (d:data-path-run-ids data) run-path run-id)
 					   ;; (set! colnum (+ colnum 1))
 					   ))))
 				 run-ids)
@@ -1370,7 +1371,181 @@ Misc
 		       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
     
     (set! dashboard:update-run-summary-tab updater)
-    (dboard:data-set-runs-tree! *data* tb)
+    (d:data-runs-tree-set! data tb)
+    (iup:split
+     tb
+     run-matrix)))
+
+;; This is the New View tab
+;; 
+(define (dashboard:new-view db data)
+  (let* ((tb      (iup:treebox
+		   #:value 0
+		   #:name "Runs"
+		   #:expand "YES"
+		   #:addexpanded "NO"
+		   #:selection-cb
+		   (lambda (obj id state)
+		     ;; (print "obj: " obj ", id: " id ", state: " state)
+		     (let* ((run-path (tree:node->path obj id))
+			    (run-id   (tree-path->run-id data (cdr run-path))))
+		       (if (number? run-id)
+			   (begin
+			     (d:data-curr-run-id-set! data run-id)
+			     (dashboard:update-run-summary-tab))
+			   (debug:print 0 "ERROR: tree-path->run-id returned non-number " run-id)))
+		       ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
+		       )))
+	 (cell-lookup (make-hash-table))
+	 (run-matrix (iup:matrix
+		      #:expand "YES"
+		      #:click-cb
+		      (lambda (obj lin col status)
+			(let* ((toolpath (car (argv)))
+			       (key      (conc lin ":" col))
+			       (test-id  (hash-table-ref/default cell-lookup key -1))
+			       (cmd      (conc toolpath " -test " (d:data-curr-run-id data) "," test-id "&")))
+			  (system cmd)))))
+	 (updater  (lambda ()
+		     (let* ((runs-dat     (if (d:alldat-useserver *alldat*)
+					      (rmt:get-runs-by-patt (d:alldat-keys *alldat*) "%" #f #f #f #f)
+					      (db:get-runs-by-patt db (d:alldat-keys *alldat*) "%" #f #f #f #f)))
+			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
+			    (run-id       (d:data-curr-run-id data))
+			    (last-update  0) ;; fix me
+			    (tests-dat    (let ((tdat (if run-id
+							  (if (d:alldat-useserver *alldat*)
+							      (rmt:get-tests-for-run run-id 
+										     (hash-table-ref/default (d:alldat-searchpatts *alldat*) "test-name" "%/%")
+										     (hash-table-keys (d:alldat-state-ignore-hash *alldat*)) ;; '()
+										     (hash-table-keys (d:alldat-status-ignore-hash *alldat*)) ;; '()
+										     #f #f
+										     (d:alldat-hide-not-hide *alldat*)
+										     #f #f
+										     "id,testname,item_path,state,status"
+										     last-update) ;; get 'em all
+							      (db:get-tests-for-run db run-id 
+										    (hash-table-ref/default (d:alldat-searchpatts *alldat*) "test-name" "%/%")
+										    (hash-table-keys (d:alldat-state-ignore-hash *alldat*)) ;; '()
+										    (hash-table-keys (d:alldat-status-ignore-hash *alldat*)) ;; '()
+										    #f #f
+										    (d:alldat-hide-not-hide *alldat*)
+										    #f #f
+										    "id,testname,item_path,state,status"
+										    last-update))
+							  '()))) ;; get 'em all
+					    (sort tdat (lambda (a b)
+							 (let* ((aval (vector-ref a 2))
+								(bval (vector-ref b 2))
+								(anum (string->number aval))
+								(bnum (string->number bval)))
+							   (if (and anum bnum)
+							       (< anum bnum)
+							       (string<= aval bval)))))))
+			    (tests-mindat (dcommon:minimize-test-data tests-dat))
+			    (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
+			    (row-indices  (cadr indices))
+			    (col-indices  (car indices))
+			    (max-row      (if (null? row-indices) 1 (common:max (map cadr row-indices))))
+			    (max-col      (if (null? col-indices) 1 (common:max (map cadr col-indices))))
+			    (max-visible  (max (- (d:alldat-num-tests *alldat*) 15) 3)) ;; (d:alldat-num-tests *alldat*) is proportional to the size of the window
+			    (numrows      1)
+			    (numcols      1)
+			    (changed      #f)
+			    (runs-hash    (let ((ht (make-hash-table)))
+					    (for-each (lambda (run)
+							(hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
+						      (vector-ref runs-dat 1))
+					    ht))
+			    (run-ids      (sort (filter number? (hash-table-keys runs-hash))
+						(lambda (a b)
+						  (let* ((record-a (hash-table-ref runs-hash a))
+							 (record-b (hash-table-ref runs-hash b))
+							 (time-a   (db:get-value-by-header record-a runs-header "event_time"))
+							 (time-b   (db:get-value-by-header record-b runs-header "event_time")))
+						    (< time-a time-b))))))
+		       
+		       ;; (iup:attribute-set! tb "VALUE" "0")
+		       ;; (iup:attribute-set! tb "NAME" "Runs")
+		       ;; Update the runs tree
+		       (for-each (lambda (run-id)
+				   (let* ((run-record (hash-table-ref/default runs-hash run-id #f))
+					  (key-vals   (map (lambda (key)(db:get-value-by-header run-record runs-header key))
+							   (d:alldat-keys *alldat*)))
+					  (run-name   (db:get-value-by-header run-record runs-header "runname"))
+					  (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
+					  (run-path   (append key-vals (list run-name)))
+					  (existing   (tree:find-node tb run-path)))
+				     (if (not (hash-table-ref/default (d:data-path-run-ids data) run-path #f))
+					 (begin
+					   (hash-table-set! (d:data-run-keys data) run-id run-path)
+					   ;; (iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+					   ;;    		 (conc rownum ":" colnum) col-name)
+					   ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
+					   ;; Here we update the tests treebox and tree keys
+					   (tree:add-node tb "Runs" run-path ;; (append key-vals (list run-name))
+							  userdata: (conc "run-id: " run-id))
+					   (hash-table-set! (d:data-path-run-ids data) run-path run-id)
+					   ;; (set! colnum (+ colnum 1))
+					   ))))
+				 run-ids)
+		       (iup:attribute-set! run-matrix "CLEARVALUE" "ALL") ;; NOTE: Was CONTENTS
+		       (iup:attribute-set! run-matrix "CLEARATTRIB" "CONTENTS")
+		       (iup:attribute-set! run-matrix "RESIZEMATRIX" "YES")
+		       (iup:attribute-set! run-matrix "NUMCOL" max-col )
+		       (iup:attribute-set! run-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
+		       ;; (iup:attribute-set! run-matrix "NUMCOL_VISIBLE" max-col)
+		       ;; (iup:attribute-set! run-matrix "NUMLIN_VISIBLE" (if (> max-row max-visible) max-visible max-row))
+		       
+		       ;; Row labels
+		       (for-each (lambda (ind)
+				   (let* ((name (car ind))
+					  (num  (cadr ind))
+					  (key  (conc num ":0")))
+				     (if (not (equal? (iup:attribute run-matrix key) name))
+					 (begin
+					   (set! changed #t)
+					   (iup:attribute-set! run-matrix key name)))))
+				 row-indices)
+		       
+		       ;; Cell contents
+		       (for-each (lambda (entry)
+				   (let* ((row-name  (cadr entry))
+					  (col-name  (car entry))
+					  (valuedat  (caddr entry))
+					  (test-id   (list-ref valuedat 0))
+					  (test-name row-name) ;; (list-ref valuedat 1))
+					  (item-path col-name) ;; (list-ref valuedat 2))
+					  (state     (list-ref valuedat 1))
+					  (status    (list-ref valuedat 2))
+					  (value     (gutils:get-color-for-state-status state status))
+					  (row-num   (cadr (assoc row-name row-indices)))
+					  (col-num   (cadr (assoc col-name col-indices)))
+					  (key       (conc row-num ":" col-num)))
+				     (hash-table-set! cell-lookup key test-id)
+				     (if (not (equal? (iup:attribute run-matrix key) (cadr value)))
+					 (begin
+					   (set! changed #t)
+					   (iup:attribute-set! run-matrix key (cadr value))
+					   (iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
+				 tests-mindat)
+		       
+		       ;; Col labels - do after setting Cell contents so they are accounted for in the size calc.
+
+		       (for-each (lambda (ind)
+				   (let* ((name (car ind))
+					  (num  (cadr ind))
+					  (key  (conc "0:" num)))
+				     (if (not (equal? (iup:attribute run-matrix key) name))
+					 (begin
+					   (set! changed #t)
+					   (iup:attribute-set! run-matrix key name)
+					   (iup:attribute-set! run-matrix "FITTOTEXT" (conc "C" num))))))
+				 col-indices)
+		       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
+    
+    (set! dashboard:update-run-summary-tab updater)
+    (d:data-runs-tree-set! data tb)
     (iup:split
      tb
      run-matrix)))
@@ -1379,7 +1554,7 @@ Misc
 ;; R U N S 
 ;;======================================================================
 
-(define (make-dashboard-buttons db nruns ntests keynames)
+(define (make-dashboard-buttons db nruns ntests keynames runs-sum-dat new-view-dat)
   (let* ((nkeys   (length keynames))
 	 (runsvec (make-vector nruns))
 	 (header  (make-vector nruns))
@@ -1600,20 +1775,23 @@ Misc
 					(apply iup:hbox (reverse hdrlst))
 					(apply iup:hbox (reverse bdylst))))))
 			 controls))
+	     (data (d:data-init (make-d:data)))
 	     (tabs (iup:tabs
 		    #:tabchangepos-cb (lambda (obj curr prev)
 					(d:alldat-please-update-set! *alldat* #t)
 					(d:alldat-curr-tab-num-set! *alldat* curr))
 		    (dashboard:summary db)
 		    runs-view
-		    (dashboard:one-run db)
+		    (dashboard:one-run db  runs-sum-dat)
+		    (dashboard:new-view db new-view-dat)
 		    (dashboard:run-controls)
 		    )))
 	;; (set! (iup:callback tabs tabchange-cb:) (lambda (a b c)(print "SWITCHED TO TAB: " a " " b " " c)))
 	(iup:attribute-set! tabs "TABTITLE0" "Summary")
 	(iup:attribute-set! tabs "TABTITLE1" "Runs")
 	(iup:attribute-set! tabs "TABTITLE2" "Run Summary")
-	(iup:attribute-set! tabs "TABTITLE3" "Run Control")
+	(iup:attribute-set! tabs "TABTITLE3" "New View")
+	(iup:attribute-set! tabs "TABTITLE4" "Run Control")
 	(iup:attribute-set! tabs "BGCOLOR" "190 190 190")
 	(d:alldat-hide-not-hide-tabs-set! *alldat* tabs)
 	tabs)))
@@ -1698,6 +1876,8 @@ Misc
 	     (update-buttons uidat (d:alldat-numruns *alldat*) (d:alldat-num-tests *alldat*)))
 	    ((2)
 	     (dashboard:update-run-summary-tab))
+	    ((3)
+	     (dashboard:update-run-summary-tab))
 	    (else
 	     (let ((updater (hash-table-ref/default (d:alldat-updaters *alldat*)
 						    (d:alldat-curr-tab-num *alldat*) #f)))
@@ -1715,71 +1895,66 @@ Misc
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
 
-(cond 
- ((args:get-arg "-run")
-  (let ((runid (string->number (args:get-arg "-run"))))
-    (if runid
-	(begin
-	  (lambda (x)
-	    (on-exit std-exit-procedure)
-	    (examine-run (d:alldat-dblocal *alldat*) runid)))
-	(begin
-	  (print "ERROR: runid is not a number " (args:get-arg "-run"))
-	  (exit 1)))))
- ((args:get-arg "-test") ;; run-id,test-id
-  (let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-test") ","))))
-		    (if (> (length d) 1)
-			d
-			(list #f #f))))
-	 (run-id  (car dat))
-	 (test-id (cadr dat)))
-    (if (and (number? run-id)
-	     (number? test-id)
-	     (>= test-id 0))
-	(examine-test run-id test-id)
-	(begin
-	  (debug:print 3 "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
-	  (exit 1)))))
- ((args:get-arg "-guimonitor")
-  (gui-monitor (d:alldat-dblocal *alldat*)))
- (else
-  (set! uidat (make-dashboard-buttons (d:alldat-dblocal *alldat*) (d:alldat-numruns *alldat*) (d:alldat-num-tests *alldat*) (d:alldat-dbkeys *alldat*)))
-  (iup:callback-set! *tim*
-		     "ACTION_CB"
-		     (lambda (x)
-		       (let ((update-is-running #f))
-			 (mutex-lock! (d:alldat-update-mutex *alldat*))
-			 (set! update-is-running (d:alldat-updating *alldat*))
-			 (if (not update-is-running)
-			     (d:alldat-updating-set! *alldat* #t))
-			 (mutex-unlock! (d:alldat-update-mutex *alldat*))
-			 (if (not update-is-running)
-			   (begin
-			     (dashboard:run-update x)
+(define (main)
+  (let ((runs-sum-dat (d:data-init (make-d:data))) ;; data for run-summary tab
+	(new-view-dat (d:data-init (make-d:data))))
+    (cond 
+     ((args:get-arg "-run")
+      (let ((runid (string->number (args:get-arg "-run"))))
+	(if runid
+	    (begin
+	      (lambda (x)
+		(on-exit std-exit-procedure)
+		(examine-run (d:alldat-dblocal *alldat*) runid)))
+	    (begin
+	      (print "ERROR: runid is not a number " (args:get-arg "-run"))
+	      (exit 1)))))
+     ((args:get-arg "-test") ;; run-id,test-id
+      (let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-test") ","))))
+			(if (> (length d) 1)
+			    d
+			    (list #f #f))))
+	     (run-id  (car dat))
+	     (test-id (cadr dat)))
+	(if (and (number? run-id)
+		 (number? test-id)
+		 (>= test-id 0))
+	    (examine-test run-id test-id)
+	    (begin
+	      (debug:print 3 "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
+	      (exit 1)))))
+     ((args:get-arg "-guimonitor")
+      (gui-monitor (d:alldat-dblocal *alldat*)))
+     (else
+      (set! uidat (make-dashboard-buttons (d:alldat-dblocal *alldat*)
+					  (d:alldat-numruns *alldat*)
+					  (d:alldat-num-tests *alldat*)
+					  (d:alldat-dbkeys *alldat*)
+					   runs-sum-dat new-view-dat))
+      (iup:callback-set! *tim*
+			 "ACTION_CB"
+			 (lambda (x)
+			   (let ((update-is-running #f))
 			     (mutex-lock! (d:alldat-update-mutex *alldat*))
-			     (d:alldat-updating-set! *alldat* #f)
-			     (mutex-unlock! (d:alldat-update-mutex *alldat*)))))
-		       1))))
+			     (set! update-is-running (d:alldat-updating *alldat*))
+			     (if (not update-is-running)
+				 (d:alldat-updating-set! *alldat* #t))
+			     (mutex-unlock! (d:alldat-update-mutex *alldat*))
+			     (if (not update-is-running)
+				 (begin
+				   (dashboard:run-update x)
+				   (mutex-lock! (d:alldat-update-mutex *alldat*))
+				   (d:alldat-updating-set! *alldat* #f)
+				   (mutex-unlock! (d:alldat-update-mutex *alldat*)))))
+			   1))))
+    
+    (let ((th1 (make-thread (lambda ()
+			      (thread-sleep! 1)
+			      (d:alldat-please-update-set! *alldat* #t)
+			      (dashboard:run-update 1)) "update buttons once"))
+	  (th2 (make-thread iup:main-loop "Main loop")))
+      (thread-start! th1)
+      (thread-start! th2)
+      (thread-join! th2))))
 
-(let ((th1 (make-thread (lambda ()
-			  (thread-sleep! 1)
-			  (d:alldat-please-update-set! *alldat* #t)
-			  (dashboard:run-update 1)) "update buttons once"))
-			  ;; need to wait for first (d:alldat-updating *alldat*) #t
-			  ;; (let loop ()
-			  ;;   (mutex-lock! (d:alldat-update-mutex *alldat*))
-			  ;;   (if (d:alldat-updating *alldat*)
-			  ;;       (begin
-			  ;;         (set! *please-update-buttons* #t)
-			  ;;         (mark-for-update)
-			  ;;         (print "Did redraw trigger")) "First update after startup")
-			  ;;   (mutex-unlock! (d:alldat-update-mutex *alldat*))
-			  ;;   (thread-sleep! 1)
-			  ;;   (if (not *please-update-buttons*)
-			  ;;       (loop))))))
-      (th2 (make-thread iup:main-loop "Main loop")))
-  (thread-start! th1)
-  (thread-start! th2)
-  (thread-join! th2))
-
-;; (iup:main-loop)(db:close-all (d:alldat-dblocal *alldat*))
+(main)
