@@ -161,8 +161,7 @@
 	    (cond
 	     ((null? tal) ;; more to run?
 	      "COMPLETED")
-	     (else "RUNNING")))
-	   )
+	     (else "RUNNING"))))
       (debug:print 4 "Exit value received: " (launch:einf-exit-code exit-info) " logpro-used: " logpro-used 
 		   " this-step-status: " this-step-status " overall-status: " overall-status 
 		   " next-status: " next-status " rollup-status: "  (launch:einf-rollup-status exit-info)) ;; (vector-ref exit-info 3))
