@@ -1863,30 +1863,37 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; fakeout readline
 
-(if (or (args:get-arg "-repl")
+(if (or (getenv "MT_RUNSCRIPT")
+	(args:get-arg "-repl")
 	(args:get-arg "-load"))
     (let* ((toppath (launch:setup))
 	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
       (if dbstruct
-	  (begin
-	    (set! *db* dbstruct)
-	    (set! *client-non-blocking-mode* #t)
-	    (import extras) ;; might not be needed
-	    ;; (import csi)
-	    (import readline)
-	    (import apropos)
-	    ;; (import (prefix sqlite3 sqlite3:)) ;; doesn't work ...
-	    (include "readline-fix.scm")
-	    (gnu-history-install-file-manager
-	     (string-append
-	      (or (get-environment-variable "HOME") ".") "/.megatest_history"))
-	    (current-input-port (make-gnu-readline-port "megatest> "))
-	    (if (args:get-arg "-repl")
-		(repl)
-		(load (args:get-arg "-load")))
-	    (db:close-all dbstruct))
-	  (exit))
-      (set! *didsomething* #t)))
+	  (cond
+	   ((getenv "MT_RUNSCRIPT") ;; special way to run megatest scripts #!/usr/bin/env MT_RUNSCRIPT=yes megatest
+	    (let ((fname (cadr (argv))))
+	      (print "fname=" fname)
+	      (load fname)))
+	   (else
+	    (begin
+	      (set! *db* dbstruct)
+	      (set! *client-non-blocking-mode* #t)
+	      (import extras) ;; might not be needed
+	      ;; (import csi)
+	      (import readline)
+	      (import apropos)
+	      ;; (import (prefix sqlite3 sqlite3:)) ;; doesn't work ...
+	      (include "readline-fix.scm")
+	      (gnu-history-install-file-manager
+	       (string-append
+		(or (get-environment-variable "HOME") ".") "/.megatest_history"))
+	      (current-input-port (make-gnu-readline-port "megatest> "))
+	      (if (args:get-arg "-repl")
+		  (repl)
+		  (load (args:get-arg "-load")))
+	      (db:close-all dbstruct))
+	    (exit)))
+	  (set! *didsomething* #t))))
 
 ;;======================================================================
 ;; Wait on a run to complete
