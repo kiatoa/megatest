@@ -896,7 +896,7 @@
 		   (tal (cdr all-testnames))
 		   (res (list "digraph tests {"
 			      " size=\"11,11\";"
-			      " ratio=0.95;")))
+			      " ratio=0.9;")))
 	  (let* ((testrec (hash-table-ref test-records hed))
 		 (waitons (or (tests:testqueue-get-waitons testrec) '()))
 		 (newres  (append res
