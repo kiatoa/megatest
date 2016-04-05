@@ -882,28 +882,29 @@
 	   ;; (delete-file temp-path)
 	   res))))))
 
-(define (tests:write-dot-file test-records fname)
+(define (tests:write-dot-file test-records fname sizex sizey)
   (if (file-write-access? (pathname-directory fname))
       (with-output-to-file fname
 	(lambda ()
-	  (map print (tests:tests->dot test-records))))))
+	  (map print (tests:tests->dot test-records sizex sizey))))))
 
-(define (tests:tests->dot test-records)
+(define (tests:tests->dot test-records sizex sizey)
   (let ((all-testnames (hash-table-keys test-records)))
     (if (null? all-testnames)
 	'()
 	(let loop ((hed (car all-testnames))
 		   (tal (cdr all-testnames))
 		   (res (list "digraph tests {"
-			      " size=\"11,11\";"
-			      " ratio=0.9;")))
+			      (conc " size=\"" (or sizex 11) "," (or sizey 11) "\";")
+			      " ratio=0.95;"
+			      )))
 	  (let* ((testrec (hash-table-ref test-records hed))
 		 (waitons (or (tests:testqueue-get-waitons testrec) '()))
 		 (newres  (append res
 				  (if (null? waitons)
-				      (list (conc "   \"" hed "\";"))
+				      (list (conc "   \"" hed "\" [shape=box];"))
 				      (map (lambda (waiton)
-					     (conc "   \"" waiton "\" -> \"" hed "\";"))
+					     (conc "   \"" waiton "\" -> \"" hed "\" [shape=box];"))
 					   waitons)
 				      ))))
 	    (if (null? tal)
@@ -928,10 +929,10 @@
 ;; read data from tmp file or create if not exists
 ;; if exists regen in background
 ;;
-(define (tests:lazy-dot testrecords  outtype)
+(define (tests:lazy-dot testrecords  outtype sizex sizey)
   (let ((dfile (conc "/tmp/." (current-user-name) "-" (server:mk-signature) ".dot"))
 	(fname (conc "/tmp/." (current-user-name) "-" (server:mk-signature) ".dotdat")))
-    (tests:write-dot-file testrecords dfile)
+    (tests:write-dot-file testrecords dfile sizex sizey)
     (if (file-exists? fname)
 	(let ((res (with-input-from-file fname
 		     (lambda ()
