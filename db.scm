@@ -1585,13 +1585,10 @@
 ;; Operates on megatestdb
 ;;
 (define (db:get-var dbstruct var)
-  (let* ((start-ms (current-milliseconds))
-         (throttle (let ((t  (config-lookup *configdat* "setup" "throttle")))
-		     (if t (string->number t) t)))
-	 (res      #f)
+  (let* ((res      #f)
 	 (dbdat    (db:get-db dbstruct #f))
 	 (db       (db:dbdat-get-db dbdat)))
-    (db:delay-if-busy dbdat)
+    ;; (db:delay-if-busy dbdat)
     (sqlite3:for-each-row
      (lambda (val)
        (set! res val))
@@ -1602,19 +1599,18 @@
 	(let ((valnum (string->number res)))
 	  (if valnum (set! res valnum))))
     ;; scale by 10, average with current value.
-    (set! *global-delta* (/ (+ *global-delta* (* (- (current-milliseconds) start-ms)
-						 (if throttle throttle 0.01)))
-			    2))
-    (if (> (abs (- *last-global-delta-printed* *global-delta*)) 0.08) ;; don't print all the time, only if it changes a bit
-	(begin
-	  (debug:print-info 4 "launch throttle factor=" *global-delta*)
-	  (set! *last-global-delta-printed* *global-delta*)))
+;;     (set! *global-delta* (/ (+ *global-delta* (* (- (current-milliseconds) start-ms)
+;; 						 (if throttle throttle 0.01)))
+;; 			    2))
+;;     (if (> (abs (- *last-global-delta-printed* *global-delta*)) 0.08) ;; don't print all the time, only if it changes a bit
+;; 	(begin
+;; 	  (debug:print-info 4 "launch throttle factor=" *global-delta*)
+;; 	  (set! *last-global-delta-printed* *global-delta*)))
     res))
 
 (define (db:set-var dbstruct var val)
-  (let ((dbdat (db:get-db dbstruct #f))
-	(db    (db:dbdat-get-db dbdat)))
-    (db:delay-if-busy dbdat)
+  (let* ((dbdat (db:get-db dbstruct #f))
+	 (db    (db:dbdat-get-db dbdat)))
     (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val)))
 
 (define (db:del-var dbstruct var)
