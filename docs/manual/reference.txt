@@ -68,6 +68,22 @@ Run time limit
 runtimelim 1h 2m 3s  # this will automatically kill the test if it runs for more than 1h 2m and 3s
 -----------------
 
+Tests browser view
+^^^^^^^^^^^^^^^^^^
+
+The tests browser (see the Run Control tab on the dashboard) has two views for displaying the tests. 
+
+. Dot (graphviz) based tree
+. No dot, plain listing
+
+The default is the graphviz based tree but if your tests don't view
+well in that mode then use "nodot" to turn it off.
+
+-----------------
+[setup]
+nodot
+-----------------
+
 The testconfig File
 -------------------
 
