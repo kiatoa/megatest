@@ -186,6 +186,7 @@
 				(filter (lambda (x)
 					  (eq? (substring-index (conc waiting-test "/") x) 0)) ;; is this patt pertinent to the waiting test
 					patts))))
+
     (string-intersperse (delete-duplicates (append patts (if (null? patts-waiton)
 							     (list (conc waiton-test "/%")) ;; really shouldn't add the waiton forcefully like this
 							     patts-waiton)))

@@ -259,29 +259,32 @@
     
     (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 
+    ;; if signal received, clean up and exit
     (let ((sighand (lambda (signum)
 		     ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
 		     (if (eq? signum signal/stop)
-			 (debug:print 0 "ERROR: attempt to STOP process. Exiting."))
-		     (set! *time-to-exit* #t)
-		     (print "Received signal " signum ", cleaning up before exit. Please wait...")
-		     (let ((th1 (make-thread (lambda ()
-					       (let ((tdbdat (tasks:open-db)))
-						 (rmt:tasks-set-state-given-param-key task-key "killed"))
-					       (print "Killed by signal " signum ". Exiting")
-					       (thread-sleep! 3)
-					       (exit))))
-			   (th2 (make-thread (lambda ()
-					       (thread-sleep! 5)
-					       (debug:print 0 "Done")
-					       (exit 4)))))
-		       (thread-start! th2)
-		       (thread-start! th1)
-		       (thread-join! th2)))))
+			 (debug:print 0 "ERROR: attempt to STOP process.")
+                         (begin
+                           (set! *time-to-exit* #t)
+                           (print "Received signal " signum ", cleaning up before exit. Please wait...")
+                           (let ((th1 (make-thread (lambda ()
+                                                     (let ((tdbdat (tasks:open-db)))
+                                                       (rmt:tasks-set-state-given-param-key task-key "killed"))
+                                                     (print "Killed by signal " signum ". Exiting")
+                                                     (thread-sleep! 3)
+                                                     (exit))))
+                                 (th2 (make-thread (lambda ()
+                                                     (thread-sleep! 5)
+                                                     (debug:print 0 "Done")
+                                                     (exit 4)))))
+                             (thread-start! th2)
+                             (thread-start! th1)
+                             (thread-join! th2)))))))
       (set-signal-handler! signal/int sighand)
       (set-signal-handler! signal/term sighand)
-      (set-signal-handler! signal/stop sighand))
-
+      ;;(set-signal-handler! signal/stop sighand)
+      )
+    
     (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (set! runconf (if (file-exists? runconfigf)
 		      (setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
@@ -322,6 +325,8 @@
     (debug:print-info 0 "test names:        " (string-intersperse (sort test-names string<) " "))
     (debug:print-info 0 "required tests:    " (string-intersperse (sort required-tests string<) " "))
 
+
+    ;; allow-auto-rerun - undocumented, maybe unimplemented.
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
     ;; -keepgoing is specified
     (if (eq? *passnum* 0)
@@ -384,7 +389,7 @@
 					       ;; otherwise return #f - this is not an iterated test
 					       (cond
 						((procedure? items)      
-						 (debug:print-info 4 "items is a procedure, will calc later")
+						 (debug:print-info 4 "items is a procedure, will calc later") ;; BB? calc later? when??
 						 items)            ;; calc later
 						((procedure? itemstable)
 						 (debug:print-info 4 "itemstable is a procedure, will calc later")
@@ -441,7 +446,7 @@
 			 (begin
 			   (debug:print-info 0 "No testconfig info yet for " waiton ", setting up to re-process it")
 			   (set! tal (append (cons waiton tal)(list hed))))) ;; (cons (conc waiton "/") required-tests))
-			 
+                     
 		     ;; NOPE: didn't work. required needs to be plain test names. Try tacking on to test-patts
 		     ;;  - doesn't work
 		     ;; (set! test-patts (conc test-patts "," waiton "/"))
@@ -451,14 +456,15 @@
 	     (delete-duplicates (append waitons waitors)))
 	    (let ((remtests (delete-duplicates (append waitons tal))))
 	      (if (not (null? remtests))
-		  (begin
-		    ;; (debug:print-info 0 "Preprocessing continues for " (string-intersperse remtests ", "))
+		  (begin ;; BB: by pushing upstream test with item filter to end, downstream tests' items are not filtered when encountered.  This causes chained-waiton/item_seq4 to FAIL.
+                    ;;          when test3/%, test2/%, test1/% all items are added to testpatt when instead test4/item.1 should imply test3/item.1, which shold imply test2/item.1 and so on
+		    (debug:print-info 0 "Preprocessing continues for " (string-intersperse remtests ", "))
 		    (loop (car remtests)(cdr remtests))))))))
 
     (if (not (null? required-tests))
-	(debug:print-info 1 "Adding \"" (string-intersperse required-tests " ") "\" to the run queue"))
+	(debug:print-info 0 "BB Adding \"" (string-intersperse required-tests " ") "\" to the run queue")) ; BB changed 1 to 0
     ;; NOTE: these are all parent tests, items are not expanded yet.
-    (debug:print-info 4 "test-records=" (hash-table->alist test-records))
+    (debug:print-info 0 "BB test-records=" (hash-table->alist test-records)) ; BB: changed 4 to 0
     (let ((reglen (configf:lookup *configdat* "setup" "runqueue")))
       (if (> (length (hash-table-keys test-records)) 0)
 	  (let* ((keep-going        #t)
