@@ -502,8 +502,8 @@
                       (loop processed new-hed new-tal)
                     )))))))
 
-
-    
+    ;; above: populate test-records hash
+    ;; below - manage call to run-tests-queue
     (counter-reset 'rtloop)
     (debug:print-info 0 "BB: Finished elaboration of waiton dependencies (maybe?)")
     (if (not (null? required-tests))
