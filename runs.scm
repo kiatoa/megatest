@@ -239,7 +239,7 @@
   (let* ((keys               (keys:config-get-fields *configdat*))
 	 (keyvals            (keys:target->keyval keys target))
 	 (run-id             (rmt:register-run keyvals runname "new" "n/a" user))  ;;  test-name)))
-	 (deferred          '()) ;; delay running these since they have a waiton clause
+	 (deferred          '()) ;; delay running these since they have a waiton clause (never used - BB)
 	 (runconfigf         (conc  *toppath* "/runconfigs.config"))
 	 (test-records       (make-hash-table))
 	 ;; need to process runconfigs before generating these lists
@@ -251,7 +251,7 @@
 	 (tdbdat             (tasks:open-db))
 	 (config-reruns      (let ((x (configf:lookup *configdat* "setup" "reruns")))
 			       (if x (string->number x) #f))))
-
+    (debug:print-info 0 "BB------------------------------------------------\nBB: entered run:run-tests with target="target" runname="runname" test-patts="test-patts" user="user" flags="flags" run-count="run-count)
     ;; override the number of reruns from the configs
     (if (and config-reruns
 	     (> run-count config-reruns))
@@ -359,8 +359,10 @@
     ;;======================================================================
     
     (if (not (null? test-names))
-	(let loop ((hed (car test-names))
+	(let loop ((processed '())
+                   (hed (car test-names))
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
+          (debug:print-info 0 "BB: +++LOOP (iter="(counter 'rtloop)")  test-patts="test-patts" hed="hed" tal="tal)
 	  (change-directory *toppath*) ;; PLEASE OPTIMIZE ME!!! I think this should be a no-op but there are several places where change-directories could be happening.
 	  (setenv "MT_TEST_NAME" hed) ;; 
 	  (let*-values (((waitons waitors config)(tests:get-waitons hed all-tests-registry)))
@@ -376,7 +378,9 @@
 	    
 	    ;; (items   (items:get-items-from-config config)))
 	    (if (not (hash-table-ref/default test-records hed #f))
-		(hash-table-set! test-records
+		(begin
+                  (debug:print-info 0 "BB: HASH ADD "hed" whose waitors are >"waitors"<")
+                  (hash-table-set! test-records  ;; BB: here we add record to hash table
 				 hed (vector hed     ;; 0
 					     config  ;; 1
 					     waitons ;; 2
@@ -389,7 +393,7 @@
 					       ;; otherwise return #f - this is not an iterated test
 					       (cond
 						((procedure? items)      
-						 (debug:print-info 4 "items is a procedure, will calc later") ;; BB? calc later? when??
+						 (debug:print-info 4 "items is a procedure, will calc later") ;; BB? calc later? when?? why not now?
 						 items)            ;; calc later
 						((procedure? itemstable)
 						 (debug:print-info 4 "itemstable is a procedure, will calc later")
@@ -408,9 +412,11 @@
 					     #f      ;; itemsdat 5
 					     #f      ;; spare - used for item-path
 					     waitors ;; 
-					     )))
+					     ))))
+            (debug:print-info 0 "BB: iterating over waitons+waitors -> waitons="waitons" waitors="waitors)
 	    (for-each 
 	     (lambda (waiton)
+               (debug:print-info 0 "BB:   - visiting "waiton)
 	       (if (and waiton (not (member waiton test-names)))
 		   (let* ((waiton-record   (hash-table-ref/default test-records waiton #f))
 			  (waiton-tconfig  (if waiton-record (vector-ref waiton-record 1) #f))
@@ -419,6 +425,7 @@
 						    (hash-table-ref/default waiton-tconfig "itemstable" #f))))
 			  (itemmaps        (tests:get-itemmaps config));; (configf:lookup config "requirements" "itemmap"))
 			  (new-test-patts  (tests:extend-test-patts test-patts hed waiton itemmaps)))
+                     (debug:print-info 0 "BB: HASH REF "waiton" (waiton)")
 		     (debug:print-info 0 "Test " waiton " has " (if waiton-record "a" "no") " waiton-record and" (if waiton-itemized " " " no ") "items")
 		     ;; need to account for test-patt here, if I am test "a", selected with a test-patt of "hed/b%"
 		     ;; and we are waiting on "waiton" we need to add "waiton/,waiton/b%" to test-patt
@@ -431,36 +438,74 @@
 		     ;; initially added we add them again to be processed on second round AND add the hed
 		     ;; back in to also be processed on second round
 		     ;;
-		     (if waiton-tconfig
+		     (if waiton-tconfig ;; will be false if waiton record has not been added to hash yet
 			 (begin
+
 			   (set! test-names (cons waiton test-names)) ;; need to process this one, only add once the waiton tconfig read
 			   (if waiton-itemized
 			       (begin
 				 (debug:print-info 0 "New test patts: " new-test-patts ", prev test patts: " test-patts)
 				 (set! required-tests (cons (conc waiton "/") required-tests))
-				 (set! test-patts new-test-patts))
+                                 (debug:print-info 0 "!!! BB !!! waiton *is* itemized accepted new-test-patts->test-patts: "new-test-patts)
+				 (set! test-patts new-test-patts)
+                                 (set! processed (cons hed processed))
+                                 )
 			       (begin
 				 (debug:print-info 0 "Adding non-itemized test " waiton " to required-tests")
 				 (set! required-tests (cons waiton required-tests))
-				 (set! test-patts new-test-patts))))
+                                 (debug:print-info 0 "!!! BB !!! waiton NOT itemized accepted new-test-patts->test-patts: "new-test-patts)
+				 (set! test-patts new-test-patts)
+                                 (set! processed (cons hed processed))
+                                 )))
 			 (begin
-			   (debug:print-info 0 "No testconfig info yet for " waiton ", setting up to re-process it")
-			   (set! tal (append (cons waiton tal)(list hed))))) ;; (cons (conc waiton "/") required-tests))
+			   (debug:print-info 0 "No testconfig info yet for " waiton ", setting up to re-process it even though new-test-patt is >"new-test-patts"<")
+
+                           ;; BB: by pushing upstream test with item
+                           ;; filter to end, downstream tests' items
+                           ;; are not filtered when encountered.  This
+                           ;; causes chained-waiton/item_seq4 to FAIL.
+                           ;; when test3/%, test2/%, test1/% all items
+                           ;; are added to testpatt when instead
+                           ;; test4/item.1 should imply test3/item.1,
+                           ;; which shold imply test2/item.1 and so on
+                           (debug:print-info 0 "BB: pushing "hed" to back of the line")
+                           (debug:print-info 0 "BB: new tal = waiton,tal + hed = "waiton","tal" + "hed)
+                           
+                           (set! tal (append (cons waiton tal)(list hed))))) ;; (cons (conc waiton "/") required-tests)) ;; BB- EXAMINE
                      
 		     ;; NOPE: didn't work. required needs to be plain test names. Try tacking on to test-patts
 		     ;;  - doesn't work
 		     ;; (set! test-patts (conc test-patts "," waiton "/"))
 		     
 		     ;; (set! test-names (cons waiton test-names))))) ;; was an append, now a cons
-		     )))
+		     ))
+               (debug:print-info 0 "BB:   - leaving "waiton)
+               )
 	     (delete-duplicates (append waitons waitors)))
-	    (let ((remtests (delete-duplicates (append waitons tal))))
+            (debug:print-info 0 "BB: done iterating over waitons+waitors -> waitons="waitons" waitors="waitors)
+	    (let ((remtests (delete-duplicates (append waitons tal)))) ;; BB EXAMINE
 	      (if (not (null? remtests))
-		  (begin ;; BB: by pushing upstream test with item filter to end, downstream tests' items are not filtered when encountered.  This causes chained-waiton/item_seq4 to FAIL.
-                    ;;          when test3/%, test2/%, test1/% all items are added to testpatt when instead test4/item.1 should imply test3/item.1, which shold imply test2/item.1 and so on
+		  (begin 
+                    
 		    (debug:print-info 0 "Preprocessing continues for " (string-intersperse remtests ", "))
-		    (loop (car remtests)(cdr remtests))))))))
+                    ;; BB: remtest must be in topological order of waiton edges
+                    (let* (
+                           (filtered-remtests (filter (lambda (x) (not (member x processed))) remtests))
+                           (new-hed (car filtered-remtests))
+                           (method (string->symbol (or (get-environment-variable "DEPSORTMETHOD") "new"))) ;; setenv DEPSORTMETHOD old to go back
+                           (new-tal
+                            (if (eq? method 'old)
+                                (cdr filtered-remtests)
+                                (runs:toposort (cdr filtered-remtests) all-tests-registry))))
+                      ;;(set! remtests (runs:toposort remtests all-tests-registry))
+                      ;;(loop (car remtests)(cdr remtests))
+                      (loop processed new-hed new-tal)
+                    )))))))
 
+
+    
+    (counter-reset 'rtloop)
+    (debug:print-info 0 "BB: Finished elaboration of waiton dependencies (maybe?)")
     (if (not (null? required-tests))
 	(debug:print-info 0 "BB Adding \"" (string-intersperse required-tests " ") "\" to the run queue")) ; BB changed 1 to 0
     ;; NOTE: these are all parent tests, items are not expanded yet.
@@ -511,6 +556,138 @@
     (rmt:tasks-set-state-given-param-key task-key "done")
     ;; (sqlite3:finalize! tasks-db)
     ))
+
+;; define custom counters -- very handy to line up iteration of debug message calls within a single execution
+(define *counter-alist* (make-parameter '()))
+(define (counter key)
+  (let* ((counter-param
+         (or
+          (alist-ref (->string key) (*counter-alist*) equal?)
+          (let ((new-counter (make-parameter 0)))
+            (*counter-alist* (cons (cons (->string key) new-counter) (*counter-alist*)))
+            new-counter)))
+         (current-count (counter-param))
+         (new-count (add1 current-count)))
+    (counter-param new-count)))
+
+(define (counter-reset key)
+  (let ((existing-counter (alist-ref (->string key) (*counter-alist*) equal?)))
+    (if existing-counter
+        (existing-counter 0)
+        (counter key))))
+        
+          
+;; BAD HACK follows.
+;; on initial pass thru, adjacency-list is correct.  later, somehow waitons get corrupted (eg. EVERYTHING depends on test3.. whY?
+;; the hack - cache initial adjacency-list  (hopefully alltests cannot change midstream or the static analysis is otherwise invalidated!!)
+;; good god, *cached-adjacency-list* changes over time.  Should be constant! wtf?, disabling cache.
+
+
+(define *cached-adjacency-list* (make-parameter #f))
+
+;; (define (runs:get-itemmaps all-tests-registry)
+;;   (let* ((full-adjacency-list
+;;          (map
+;;           (lambda (test)
+;;             (let*-values (((waitons waitors config) (tests:get-waitons test all-tests-registry)))
+;;               (debug:print-info 0 "    BB: test="test" waitons="waitons" waitors="waitors)
+;;               (cons test (append waitons waitors))))))))
+
+;; ;(hash-table-ref all-tests-registry test-name))
+  
+;;   )
+  
+
+(define (runs:get-test-adjacency-list all-tests-registry testlist-filter )
+  ;; on first pass, initialize cache with adjacency-list for all tests 
+  (when (or #t (not (*cached-adjacency-list*))) ;; or #t forces eval every time
+      (let* ((alltestlist (hash-table-keys (tests:get-all)))
+             (full-adjacency-list
+                (map
+                 (lambda (test)
+                   (let*-values (((waitons waitors config) (tests:get-waitons test all-tests-registry)))
+                     (debug:print-info 0 "    BB: test="test" waitons="waitons" waitors="waitors)
+                     (cons test (append waitons waitors))))
+                 ;;testlist-filter))
+                 alltestlist))
+             (sorted-alltestlist (sort alltestlist (lambda (a b) (string< (->string a) (->string b))))))
+        (debug:print-info 0 "--=> BB: ALLTESTLIST iter="(counter 'alltestlist)"  val="sorted-alltestlist)
+
+        (debug:print-info 0 "--=> BB: initialized *cached-adjacency-list* with "
+                          full-adjacency-list)
+        (*cached-adjacency-list* full-adjacency-list)))
+
+  ;; return adjacency-list only containing tests in testlist-filter
+  (let* ((full-adjacency-list (*cached-adjacency-list*))
+         ;; trim list - 1) remove any toplevel list whose car is not a member of testlist-filter
+         ;;             2) remove all items from cdr which is not a member of testlist-filter
+         ;;             3) shouldn't happen, but remove any from cdr which matches car
+         (trimmed-list-1 (filter
+                          (lambda (row)
+                            (member (car row) testlist-filter))
+                          full-adjacency-list))
+         (trimmed-list-2 (map
+                          (lambda (row)
+                            (filter
+                             (lambda (field)
+                               (member field testlist-filter))
+                             row))
+                          trimmed-list-1))
+         (trimmed-list-3 (map
+                          (lambda (row)
+                            (let ((hed (car row)) (tal (cdr row)))
+                              (cons hed
+                                    (filter
+                                     (lambda (field)
+                                       (not (equal? field hed)))
+                                     tal))))
+                          trimmed-list-2))
+         (adjacency-list trimmed-list-3))
+    (debug:print-info 0 "      BB full-adjacency-list="full-adjacency-list)
+    (debug:print-info 0 "      BB trimmed-list-1"trimmed-list-1)
+    (debug:print-info 0 "      BB trimmed-list-2"trimmed-list-2)
+    (debug:print-info 0 "      BB trimmed-list-3"trimmed-list-3)
+    (debug:print-info 0 "     BB entered with testlist-filter="testlist-filter)
+    adjacency-list))
+        
+
+(define (toposort-check testlist sortedlist)
+  (let* ((normalize-list (lambda (the-list) (sort the-list (lambda (a b) (string< (->string a) (->string b))))))
+         (normal-testlist (normalize-list testlist))
+         (normal-sortedlist (normalize-list sortedlist))
+         (OK  (cond
+               ((not (= (length normal-testlist) (length normal-sortedlist)))
+                (debug:print-info 0 "BB: TOPOSORT-CHECK FAILED.  length["testlist"] != length["sortedlist"]")
+                #f)
+               ((not (equal? normal-testlist normal-sortedlist))
+                (debug:print-info 0 "BB: TOPOSORT-CHECK FAILED.  members["testlist"] != members["sortedlist"]")
+                #f)
+               (else
+               (debug:print-info 0 "BB: TOPOSORT-CHECK :) PASS :)")))))
+
+    
+    OK))
+    
+          
+(define (runs:toposort testlist all-tests-registry)
+  ;(print "ALL-TESTS-REGISTRY")
+  
+  ;(pretty-print (hash-table->alist all-tests-registry))
+  ;(exit 1)
+    
+
+  (let* ((adjacency-list (runs:get-test-adjacency-list all-tests-registry testlist)))
+    (debug:print-info 0 "BB> adjacency-list("testlist") = "adjacency-list)
+    (let ((sorted-list
+           (topological-sort adjacency-list equal?)))
+      (debug:print-info 0 "BB> sorted-list("testlist") = "sorted-list)
+      (let* ((filtered-sorted-list
+             (filter (lambda (item) (member item testlist)) sorted-list))
+             (res filtered-sorted-list))
+        (debug:print-info 0 "BB> TOPOSORT-*"(counter res)"*-       "testlist" ==**==> " filtered-sorted-list)
+        (toposort-check testlist res)
+        res
+        ))))
 
 
 ;; loop logic. These are used in runs:run-tests-queue to make it a bit more readable.

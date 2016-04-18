@@ -123,16 +123,17 @@
 	   (instr2 (if config
 		       (config-lookup config "requirements" "waitor")
 		       "")))
-       (debug:print-info 8 "waitons string is " instr ", waitors string is " instr2)
+       (debug:print-info 0 "BB: RAW waiton("test-name") is >" instr "<, waitors string is >" instr2"<") ; BB 8 to 0
        (let ((newwaitons
 	      (string-split (cond
 			     ((procedure? instr)
 			      (let ((res (instr)))
-				(debug:print-info 8 "waiton procedure results in string " res " for test " test-name)
+				(debug:print-info 0 "waiton procedure results in string " res " for test " test-name) ; BB changed from 8 to 0
 				res))
 			     ((string? instr)     instr)
 			     (else 
-			      ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " test-name)
+			      ;; NOTE: This is actually the case of *no* waitons!
+                              (debug:print 0 "BB: ERROR: something went wrong in processing waitons for test " test-name) ;; BB: uncommented.
 			      ""))))
 	     (newwaitors
 	      (string-split (cond
@@ -142,7 +143,8 @@
 				res))
 			     ((string? instr2)     instr2)
 			     (else 
-			      ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " test-name)
+			      ;; NOTE: This is actually the case of *no* waitors! ;; BB: WRONG.  This seems to be the case of ALL waitors.
+                              ;;(debug:print 0 "BB: ERROR: something went wrong in processing waitors for test " test-name) ; BB: uncommented/recommented
 			      "")))))
 	 (values
 	  ;; the waitons
@@ -157,7 +159,7 @@
 		    (if (hash-table-ref/default all-tests-registry x #f)
 			#t
 			(begin
-			  (debug:print 0 "ERROR: test " test-name " has unrecognised waiton testname " x)
+			  (debug:print 0 "ERROR: test " test-name " has unrecognised waitor testname " x)
 			  #f)))
 		  newwaitors)
 	  config)))))
@@ -174,6 +176,8 @@
 ;;
 ;;                                  waiting-test is waiting on waiton-test so we need to create a pattern for waiton-test given waiting-test and itemmap
 (define (tests:extend-test-patts test-patt waiting-test waiton-test itemmaps)
+
+  (debug:print-info 0 "BB: iter="(counter test-patt)" test:extend-test-patts entered with test-patt="test-patt" waiting-test="waiting-test" waiton-test="waiton-test" itemmaps="itemmaps)
   (let* ((itemmap          (tests:lookup-itemmap itemmaps waiton-test))
 	 (patts            (string-split test-patt ","))
 	 (waiting-test-len (+ (string-length waiting-test) 1))
@@ -187,10 +191,17 @@
 					  (eq? (substring-index (conc waiting-test "/") x) 0)) ;; is this patt pertinent to the waiting test
 					patts))))
 
-    (string-intersperse (delete-duplicates (append patts (if (null? patts-waiton)
-							     (list (conc waiton-test "/%")) ;; really shouldn't add the waiton forcefully like this
-							     patts-waiton)))
-			",")))
+    (let ((res
+           (string-intersperse
+            (delete-duplicates
+             (append
+              patts
+              (if (null? patts-waiton)
+                  (list (conc waiton-test "/%")) ;; really shouldn't add the waiton forcefully like this
+                  patts-waiton)))
+            ",")))
+      (debug:print-info 0 "BB: test:extend-test-patts returns "res)
+      res)))
   
 ;; tests:glob-like-match 
 (define (tests:glob-like-match patt str) 
