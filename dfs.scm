@@ -2,6 +2,7 @@
 (use extras)
 (use data-structures)
 (use srfi-1)
+(use srfi-13)
 (use regex)
 
 
@@ -19,6 +20,9 @@
 (define (tests:get-test-waitons test-registry test)
   (tests:get-test-property test-registry test 'waitons))
 
+(define (tests:get-test-items test-registry test)
+  (or (tests:get-test-property test-registry test 'items) '()))
+
 (define (tests:get-test-list test-registry)
   (map car test-registry))
 
@@ -30,7 +34,7 @@
         (cons (list key val) alist))))
 
   
-(define (test:get-adj-list test-registry)
+(define (test:get-adjacency-list test-registry)
   (let loop ((rem-tests (tests:get-test-list test-registry)) (res '()))
     (if (null? rem-tests)
         res
@@ -55,7 +59,7 @@
   (cond
    ((eq? item '%) 
     (list '%))
-   ((member '% items) (print "% in items")
+   ((member '% items) 
     (list '%))
    ((member item items) 
     items)
@@ -71,8 +75,72 @@
                (new-res (add-item-to-items-list hed-rem-l1 res)))
           (loop tal-rem-l1 new-res)))))
 
+(define (sort-any inlist)
+  (sort inlist (lambda (x y) (string<? (->string x) (->string y)))))
 
-(define (testpatt->alist testpatt)
+(define (condense-itemlist itemlist test test-registry)
+  (let* ((test-items (tests:get-test-items test-registry test))
+         (sorted-test-items (sort-any test-items))
+         (sorted-itemlist (sort-any itemlist))
+         (res
+          (cond
+           ((member '% itemlist )      '(%))
+           ((equal? sorted-itemlist sorted-test-items)   '(%))
+           (else
+            (sort-any itemlist)))))
+    ;;(print "condense-itemlist test-items="sorted-test-items" itemlist="sorted-itemlist"   res="res "   [equal?="(equal? sorted-test-items sorted-itemlist)"]")
+    res))
+
+
+; TODO : warning if itempatt matches no items in test in test registry
+(define (condense-testpatt-alist-dummy alist test-registry) alist)
+(define (condense-testpatt-alist alist test-registry)
+  (let loop ((rest-alist alist) (res '()))
+    (if (null? rest-alist)
+        res
+        (let* ((hed-alist (car rest-alist))
+               (tal-alist (cdr rest-alist))
+               (testname (car hed-alist))
+               (incoming-items (cdr hed-alist))
+               (existing-item-list (alist-ref testname res))
+               (new-items-list
+                (condense-itemlist
+                 (if existing-item-list
+                     (append-items-lists incoming-items existing-item-list)
+                     incoming-items)
+                 testname
+                 test-registry))
+               (new-res (alist-update testname new-items-list res)))
+          (loop tal-alist new-res)))))
+               
+
+; TODO : warning if itempatt matches no items in test in test registry
+(define (testpatt:alist->string testpatt-alist test-registry)
+  (string-join
+   (let loop ((rem-alist testpatt-alist) (res '()))
+     (if (null? rem-alist)
+        res
+        (let* ((hed-alist (car rem-alist))
+               (tal-alist (cdr rem-alist))
+               (testname (car hed-alist))
+               (item-patts (cdr hed-alist))
+               (test-patts
+                (map
+                 (lambda (item)
+                   (conc (->string testname) "/" (->string item)))
+                 item-patts))
+               (this-res (string-join test-patts ","))
+               (new-res (cons this-res res)))
+          ;;(print "bb: test-patts="test-patts" this-res="this-res" res="res" new-res="new-res)
+          (loop tal-alist new-res))))
+   ","))
+                            
+                         
+
+               
+          
+  
+(define (testpatt:string->alist testpatt test-registry)
   (if (string? testpatt)
       (let ((patts (string-split testpatt ",")))
         (if (null? patts) ;;; no pattern(s) means no match
@@ -80,7 +148,7 @@
             (let loop ((rest-patts patts) (res  '()))
               ;; (print "loop: patt: " patt ", tal " tal)
               (if (null? rest-patts)
-                  res
+                  (condense-testpatt-alist res test-registry)
                   (let* ((hed-patt (car rest-patts))
                          (tal-rest-patts (cdr rest-patts))
                          (patt-parts (string-match (regexp "^([^\\/]*)(\\/(.*)|)$") hed-patt))
@@ -93,73 +161,24 @@
                          (existing-item-patts (or (alist-ref test res) '()))
                          (new-item-patts (add-item-to-items-list item-patt existing-item-patts))
                          (new-res (alist-update test new-item-patts res)))
-                    (print "BB->: test="test" item-patt-raw="item-patt-raw" item-patt="item-patt" existing-item-patts="existing-item-patts" new-item-patts="new-item-patts)
+                    ;(print "BB->: test="test" item-patt-raw="item-patt-raw" item-patt="item-patt" existing-item-patts="existing-item-patts" new-item-patts="new-item-patts)
                     (loop tal-rest-patts new-res))))))))
 
-(define (traverse node adj-list path)
+(define (traverse node adjacency-list path)
   ;(print "node="node" path="path)
-  (let ((children (alist-ref node adj-list)))
+  (let ((children (alist-ref node adjacency-list)))
     (cond
      ((not children)  (list (cons node path)))
      (else
       (apply append
              (map
               (lambda (child)
-                (traverse child adj-list (cons node path)))
+                (traverse child adjacency-list (cons node path)))
               children))))))
 
-(define test-registry
-  '(
-    (aa . ( (items . ( 1 2 3 )) ))
-    (a  . ( (items . ( 1 2 3 )) ))
-    (b  . ( (items . ( 1 2 3 ))
-           (waitons . (a)   ) ) )
-    (c  . ( (items . ( 1 2 3 ))
-           (waitons . (a)   ) ) )
-    (f  . ( (items . ( 1 2 3 ))
-           (waitons . (a)   ) ) )
-    (d  . ( (items . ( 1 2 3 ))
-           (waitons . (b c) ) ) )
-    (g  . ( (items . ( 1 2 3 ))
-           (waitons . (b)   ) ) )
-    (e  . ( (items . ( 1 2 3 ))
-           (waitons . (d)   ) ) )
-    (h  . ( (items . ( 1 2 3 ))
-           (waitons . (d)   ) ) )
-       ))
-
-(set! test-registry2
-      (cons
-       (cons 'ALL-TESTS (list (cons 'waitons (tests:get-test-list test-registry))))
-       test-registry))
 
 
 
-(pretty-print test-registry)
-(define adj-list (test:get-adj-list test-registry))
-
-(print "adjacency list=")(pretty-print adj-list)
-
-(print "topological-sort=" (topological-sort adj-list eq?))
-
-(define seed-testpatt "a/1,a/2,d,aa/%")
-(define seed-testpatt-alist (testpatt->alist seed-testpatt))
-
-;;(define seed-tests '(d aa))
-(define seed-tests (map car seed-testpatt-alist))
-(print "seed-testpatt="seed-testpatt"\n** seed-testpatt-alist="seed-testpatt-alist"\n seed-tests="seed-tests)
-
-(define waiton-paths
-  (map
-   reverse
-   (apply append
-          (map
-           (lambda (test)
-             (traverse test adj-list '())) seed-tests))))
-       
-
-(print "waiton-paths=")
-(pretty-print waiton-paths)  
 
 
 (define (get-waiton-items parent-test parent-item-patterns waiton-test test-registry)
@@ -173,7 +192,8 @@
                  (tal-parent-items (cdr rest-parent-item-patterns))
                  (newres (add-item-to-items-list (parent-item->waiton-item hed-parent-item) res)))
             (loop tal-parent-items newres))))))
-   
+
+;; TODO: only do this with itemwait set true, not always
 (define (push-itempatt-down-path waiton-path seed-items test-registry )
   (let loop ((rest-path waiton-path) (waiton-items seed-items) (res '())  )
     (if (null? rest-path)
@@ -186,28 +206,20 @@
                  
           (loop tal-path waiton-items new-res)))))
                
-(print "testpatts from first path="(car waiton-paths))
 
-(define (condense-alist alist)
-  (let loop ((rest-alist alist) (res '()))
-    (if (null? rest-alist)
-        res
-        (let* ((hed-alist (car rest-alist))
-               (tal-alist (cdr rest-alist))
-               (key (car hed-alist))
-               (new-items (cdr hed-alist))
-               (existing-list (alist-ref key res))
-               (new-list
-                (if existing-list
-                    (append-items-lists new-items existing-list)
-                    new-items
-                    ))
-               (new-res (alist-update key new-list res)))
-          (loop tal-alist new-res)))))
+(define (sort-testpatt-alist-topologically testpatt-alist toposorted-testlist)
+  (let loop ((rem-testlist toposorted-testlist) (res '()))
+    (if (null? rem-testlist)
+        res   ;; TODO - handle if alist has testsnot in toposort-list
+        (let* ((hed-test (car rem-testlist))
+               (tal-testlist (cdr rem-testlist))
+               (next-res (cons hed-test (alist-ref hed-test testpatt-alist)))
+               (new-res (cons next-res res)))
+          ;;(print "bb stat - hed-test="hed-test" next-res="next-res)
+          (loop tal-testlist new-res)))))
                
-                    
-
-(define (get-elaborated-testpatt-alist waiton-paths seed-testpatt-alist test-registry)
+  
+(define (get-elaborated-testpatt-alist waiton-paths seed-testpatt-alist test-registry toposorted-testlist)
   (let ((raw-res
          (let loop ((rest-waiton-paths waiton-paths) (res '()))
            (if (null? rest-waiton-paths)
@@ -221,21 +233,65 @@
                       
                       )
                  (loop tal-paths new-res))))))
-    (condense-alist raw-res)))
-        
+    (sort-testpatt-alist-topologically (condense-testpatt-alist (apply append raw-res) test-registry) toposorted-testlist)))
 
 
-(pretty-print
- (get-elaborated-testpatt-alist waiton-paths seed-testpatt-alist test-registry))
+(define (get-elaborated-testpatt seed-testpatt test-registry)
+  (let* ((adjacency-list (test:get-adjacency-list test-registry))
+         (toposorted-testlist (topological-sort adjacency-list eq?))
+         (seed-testpatt-alist (testpatt:string->alist seed-testpatt test-registry))
+         (seed-tests (map car seed-testpatt-alist))
+         (waiton-paths
+          (map reverse
+               (apply append
+                      (map
+                       (lambda (test)
+                         (traverse test adjacency-list '())) seed-tests))))
+         (final-testpatt-alist
+          (get-elaborated-testpatt-alist
+           waiton-paths
+           seed-testpatt-alist
+           test-registry
+           toposorted-testlist))
+         (final-testpatt-string (testpatt:alist->string final-testpatt-alist test-registry)))
+    final-testpatt-string))
 
 
 
 
+;; (set! test-registry2
+;;       (cons
+;;        (cons 'ALL-TESTS (list (cons 'waitons (tests:get-test-list test-registry))))
+;;        test-registry))
 
+(define test-registry
+  '(
+    (aa . ( (items . ( i1 i2 i3 )) ))
+    (a  . ( (items . ( i1 i2 i3 )) ))
+    (b  . ( (items . ( i1 i2 i3 ))
+           (waitons . (a)   ) ) )
+    (c  . ( (items . ( i1 i2 i3 ))
+           (waitons . (a)   ) ) )
+    (f  . ( (items . ( i1 i2 i3 ))
+           (waitons . (a)   ) ) )
+    (d  . ( (items . ( i1 i2 i3 ))
+           (waitons . (b c) ) ) )
+    (g  . ( (items . ( i1 i2 i3 ))
+           (waitons . (b)   ) ) )
+    (e  . ( (items . ( i1 i2 i3 ))
+           (waitons . (d)   ) ) )
+    (h  . ( (items . ( i1 i2 i3 ))
+           (waitons . (d)   ) ) )
+       ))
 
+(define seed-testpatt "a/i1,a/i3,d,aa/%")
 
+(define elaborated-testpatt (get-elaborated-testpatt seed-testpatt test-registry))
+(print "test-registry:       ")
+(pretty-print test-registry)
 
-
+(print "\nseed-testpatt       = "seed-testpatt)
+(print "\nelaborated-testpatt = "elaborated-testpatt)
 
   
 
