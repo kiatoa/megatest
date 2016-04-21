@@ -421,6 +421,15 @@ Misc
 			   #:numcol-visible 3
 			   #:numlin-visible 20
 			   #:click-cb (lambda (obj lin col status)
+					(let ((popup-menu (iup:menu 
+							   (iup:menu-item "Remove test"
+									  #:action (lambda (obj)(print "Removing test"))))))
+					  (iup:show popup-menu
+						    #:x 'mouse
+						    #:y 'mouse
+						    #:modal? "NO")
+						    
+					  (print "got here"))
 					(print "obj: " obj " lin: " lin " col: " col " status: " status " value: " (iup:attribute obj "VALUE"))))))
     
     ;; (iup:attribute-set! view-matrix "RESIZEMATRIX" "YES")
@@ -790,9 +799,13 @@ Misc
     (call-with-environment-variables
      (list (cons "MT_RUN_AREA_HOME" apath))
      (lambda ()
-       (read-config mtconffile (make-hash-table) #f)) ;; megatest.config
-     )))
-	 
+       (let ((res (read-config mtconffile (make-hash-table) #f))) ;; megatest.config
+	 (if (hash-table? res)
+	     res
+	     (begin
+	       (debug:print 0 "WARNING: failed to read " mtconffile)
+	       (make-hash-table))))))))
+
 
 ;;======================================================================
 ;; G U I   S T U F F 

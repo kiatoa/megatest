@@ -27,4 +27,4 @@ order 1
 EOF
 fi
 
-csi -I ../.. multi-dboard-load-all.scm
+/nfs/pdx/disks/icf_external/pkgs/chicken/4.10.0/bin/csi -I ../.. multi-dboard-load-all.scm
