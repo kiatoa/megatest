@@ -415,6 +415,7 @@ Misc
 			   #:expand "YES"
 			   ;; #:fittosize "YES"
 			   #:resizematrix "YES"
+                           #:menucontext "YES"
 			   #:scrollbar "YES"
 			   #:numcol 100
 			   #:numlin 100
@@ -829,6 +830,7 @@ Misc
 		     )))
     (hash-table-set! *windows* window-id data)
     (iup:show (dashboard:main-panel data window-id))
+    ;;(iup:show (layout-dialog (dashboard:main-panel data window-id)))
     (iup:main-loop)))
 
 ;; ease debugging by loading ~/.dashboardrc

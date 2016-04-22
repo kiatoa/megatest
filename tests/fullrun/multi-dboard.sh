@@ -16,7 +16,7 @@ fi
 if [[ ! -e "$HOME/.megatest/default.dat" ]];then
    cat > "$HOME/.megatest/default.dat" << EOF
 [fullrun]
-path /mfs/matt/data/megatest/tests/fullrun
+path /p/fdk/gwa/ritikaag/megatest/tests/fullrun
 order 1
 # [bigrun]
 # path /mfs/matt/data/megatest/tests/fdktestqa/testqa
