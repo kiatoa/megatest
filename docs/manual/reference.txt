@@ -5,6 +5,22 @@ Reference
 Megatest Config File Settings
 -----------------------------
 
+Disk Space Checks
+~~~~~~~~~~~~~~~~~
+
+Some parameters you can put in the [setup] section of megatest.config:
+
+-------------------
+# minimum space required in a run disk 
+minspace 10000000
+
+# minimum space required in dbdir:
+dbdir-space-required 100000
+
+# script that takes path as parameter and returns number of bytes available:
+free-space-script check-space.sh
+-------------------
+
 Trim trailing spaces
 ~~~~~~~~~~~~~~~~~~~~
 
