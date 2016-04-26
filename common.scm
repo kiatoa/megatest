@@ -675,7 +675,7 @@
 (define (get-df path)
   (if (configf:lookup *configdat* "setup" "free-space-script")
       (with-input-from-pipe 
-       (configf:lookup *configdat* "setup" "free-space-script")
+       (conc (configf:lookup *configdat* "setup" "free-space-script") " " path)
        (lambda ()
 	 (let ((res (read-line)))
 	   (if (string? res)
