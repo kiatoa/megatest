@@ -286,7 +286,7 @@
 	  (set! keys       (rmt:get-keys))
 	  ;; (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals) ;; these may be needed by the launching process
 	  ;; one of these is defunct/redundant ...
-	  (if (not (launch:setup-for-run force: #t))
+	  (if (not (launch:setup force: #t))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting") 
 		;; (sqlite3:finalize! db)
@@ -440,7 +440,7 @@
 					   (hash-table-set! *testconfigs* test-name testconfig) ;; cached for lazy reads later ...
 					   (begin
 					     ;; got here but there are race condiitions - re-do all setup and try one more time
-					     (if (launch:setup-for-run)
+					     (if (launch:setup)
 						 (begin
 						   (launch:cache-config)
 						   (set! testconfig (full-runconfigs-read))) ;; redunantly redundant, but does it resolve the race?
@@ -450,7 +450,7 @@
 				       (if (not testconfig)
 					   (begin
 					     (debug:print 0 "ERROR: Failed to resolve megatest.config, runconfigs.config and testconfig issues. Giving up now")
-					     (exit 1)))s
+					     (exit 1)))
 				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
 				       ;; if ezsteps was defined then we are sure to have at least one step but check anyway
 				       (if (not (> (length ezstepslst) 0))
@@ -599,7 +599,7 @@
 		(exit 4)))))))
 
 ;; set up the very basics needed for doing anything here.
-(define (launch:setup-for-run #!key (force #f))
+(define (launch:setup #!key (force #f))
   ;; would set values for KEYS in the environment here for better support of env-override but 
   ;; have chicken/egg scenario. need to read megatest.config then read it again. Going to 
   ;; pass on that idea for now
@@ -709,7 +709,7 @@
 ;;     runconfigs.config   (cache if all vars avail)
 ;;     megatest.config     (cache if all vars avail)
 ;;
-(define (launch:setup #!key (force #f))
+(define (launch:setup-new #!key (force #f))
   (let* ((runname  (common:args-get-runname))
 	 (target   (common:args-get-target))
 	 (linktree (or (getenv "MT_LINKTREE")

@@ -69,7 +69,7 @@ Misc
       (print help)
       (exit)))
 
-(if (not (launch:setup-for-run))
+(if (not (launch:setup))
     (begin
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))

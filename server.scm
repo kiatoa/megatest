@@ -209,7 +209,7 @@
 			(if (eq? (length slst) 2)
 			    (list (car slst)(string->number (cadr slst)))
 			    #f)))
-	   (toppath       (launch:setup-for-run))
+	   (toppath       (launch:setup))
 	   (server-db-dat (if (not host-port)(tasks:get-server (db:delay-if-busy tdbdat) run-id) #f)))
       (if (not run-id)
 	  (begin
