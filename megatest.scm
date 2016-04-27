@@ -832,6 +832,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; cache the runconfigs in $MT_LINKTREE/$MT_TARGET/$MT_RUNNAME/.runconfig
 ;;
 (define (full-runconfigs-read)
+;; in the envprocessing branch the below code replaces the further below code
+;;  (if (eq? *configstatus* 'fulldata)
+;;      *runconfigdat*
+;;      (begin
+;;	(launch:setup)
+;;	*runconfigdat*)))
+
   (let* ((rundir (if (and (getenv "MT_LINKTREE")(getenv "MT_TARGET")(getenv "MT_RUNNAME"))
 		     (conc (getenv "MT_LINKTREE") "/" (getenv "MT_TARGET") "/" (getenv "MT_RUNNAME"))
 		     #f))
