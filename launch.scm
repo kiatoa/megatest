@@ -439,13 +439,9 @@
 				       (if testconfig
 					   (hash-table-set! *testconfigs* test-name testconfig) ;; cached for lazy reads later ...
 					   (begin
-					     ;; got here but there are race condiitions - re-do all setup and try one more time
-					     (if (launch:setup)
-						 (begin
-						   (launch:cache-config)
-						   (set! testconfig (full-runconfigs-read))) ;; redunantly redundant, but does it resolve the race?
+					     (launch:setup)
 					     (debug:print 0 "WARNING: no testconfig found for " test-name " in search path:\n  "
-							  (string-intersperse (tests:get-tests-search-path *configdat*) "\n  ")))))
+							  (string-intersperse (tests:get-tests-search-path *configdat*) "\n  "))))
 				       ;; after all that, still no testconfig? Time to abort
 				       (if (not testconfig)
 					   (begin
@@ -717,7 +713,8 @@
 ;;           *configstatus* (status of the read data)
 ;;
 (define (launch:setup-new #!key (force #f))
-  (let* ((runname  (common:args-get-runname))
+  (let* ((toppath  (or *toppath* (getenv "MT_RUN_AREA_HOME")))
+	 (runname  (common:args-get-runname))
 	 (target   (common:args-get-target))
 	 (linktree (common:get-linktree))
 	 (rundir   (if (and runname target linktree)(conc linktree "/" target "/" runname) #f))
@@ -725,6 +722,7 @@
 	 (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	 (cancreate (and rundir (file-exists? rundir)(file-write-access? rundir))))
     ;; (print "runname: " runname " target: " target " mtcachef: " mtcachef " rccachef: " rccachef)
+    (if (not *toppath*)(set! *toppath* toppath)) ;; this probably is not needed?
     (cond
      ;; data was read and cached and available in *configstatus*
      ((eq? *configstatus* 'fulldata)
@@ -747,7 +745,8 @@
 	    (begin
 	      (set! *configdat*  (car first-pass))
 	      (set! *configinfo* first-pass)
-	      (set! *toppath*    (cadr first-pass))
+	      (set! *toppath*    (or toppath (cadr first-pass))) ;; use the gathered data unless already have it
+	      (set! toppath      *toppath*)
 	      ;; the seed read is done, now read runconfigs, cache it then read megatest.config one more time and cache it
 	      (let* ((keys     (rmt:get-keys))
 		     (key-vals (if target (keys:target->keyval keys target) #f))
@@ -763,15 +762,17 @@
 				     (read-config (conc *toppath* "/runconfigs.config") #f #t sections: sections))))
 		(if cancreate (configf:write-alist runconfigdat rccachef))
 		(set! *runconfigdat* runconfigdat)
-		(let ((second-pass (find-and-read-config 
-				    (or (args:get-arg "-config") "megatest.config")
-				    environ-patt: "env-override"
-				    given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
-				    pathenvvar: "MT_RUN_AREA_HOME")))
-		  (if cancreate (configf:write-alist (car second-pass) mtcachef))
-		  (set! *configdat* (car second-pass))
-		  (set! *toppath*   (cadr second-pass))
-		  (if cancreate (set! *configstatus* 'fulldata)))))
+		(if cancreate (configf:write-alist *configdat* mtcachef))
+		(if cancreate (set! *configstatus* 'fulldata))))
+		;; (let ((second-pass (find-and-read-config
+		;; 		    (or (args:get-arg "-config") "megatest.config")
+		;; 		    environ-patt: "env-override"
+		;; 		    given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
+		;; 		    pathenvvar: "MT_RUN_AREA_HOME")))
+		;;   (if cancreate (configf:write-alist (car second-pass) mtcachef))
+		;;   (set! *configdat* (car second-pass))
+		;;   (set! *toppath*   (or toppath (cadr second-pass))) ;; this should be a no-op, remove it later
+		;;   (if cancreate (set! *configstatus* 'fulldata)))))
 	    ;; no configs found? should not happen but let's try to recover gracefully, return an empty hash-table
 	    (set! *configdat* (make-hash-table))
 	    )))
@@ -788,13 +789,11 @@
 	(set! *configinfo*   cfgdat)
 	(set! *configdat*    (car cfgdat))
 	(set! *runconfigdat* rdat)
-	(set! *toppath*      (cadr cfgdat))
+	(set! *toppath*      (or toppath (cadr cfgdat)))
+	(set! toppath        *toppath*)  ;; remove this sillyness later
 	(set! *configstatus* 'partial))))
-    ;; final house keeping
-    (let* ((keys     (rmt:get-keys))
-	   (key-vals (if target (keys:target->keyval keys target) #f))
-	   (sections (if target (list "default" target) #f)) ;; for runconfigs
-	   (linktree (or (getenv "MT_LINKTREE")
+    ;; additional house keeping
+    (let* ((linktree (or (getenv "MT_LINKTREE")
 			 (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f))))
       (if linktree
 	  (if (not (file-exists? linktree))
