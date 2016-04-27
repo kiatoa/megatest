@@ -864,7 +864,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(configf:write-alist data cfgf)
 		;; force re-read of megatest.config - this resolves circular references between megatest.config
-		(launch:setup-for-run force: #t)
+		(launch:setup force: #t)
 		(launch:cache-config))) ;; we can safely cache megatest.config since we have a valid runconfig
 	  data))))
 
