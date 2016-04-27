@@ -724,7 +724,7 @@
 	 (mtcachef (and rundir (conc rundir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	 (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	 (cancreate (and rundir (file-exists? rundir)(file-write-access? rundir))))
-    (print "runname: " runname " target: " target " mtcachef: " mtcachef " rccachef: " rccachef)
+    ;; (print "runname: " runname " target: " target " mtcachef: " mtcachef " rccachef: " rccachef)
     (cond
      ;; data was read and cached and available in *configstatus*
      ((eq? *configstatus* 'fulldata)

@@ -473,9 +473,10 @@
 		      (getenv "MT_TARGET")))
 	 (tlist   (if target (string-split target "/" #t) '()))
 	 (valid   (if target
-		      (and (not (null? tlist))
-			   (eq? numkeys (length tlist))
-			   (null? (filter string-null? tlist)))
+		      (or (null? keys) ;; probably don't know our keys yet
+			  (and (not (null? tlist))
+			       (eq? numkeys (length tlist))
+			       (null? (filter string-null? tlist))))
 		      #f)))
     (if valid
 	(if split
