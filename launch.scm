@@ -717,6 +717,7 @@
 	 (runname  (common:args-get-runname))
 	 (target   (common:args-get-target))
 	 (linktree (common:get-linktree))
+	 (sections (if target (list "default" target) #f)) ;; for runconfigs
 	 (mtconfig (or (args:get-arg "-config") "megatest.config")) ;; allow overriding megatest.config 
 	 (rundir   (if (and runname target linktree)(conc linktree "/" target "/" runname) #f))
 	 (mtcachef (and rundir (conc rundir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
@@ -738,8 +739,7 @@
       *toppath*)
      ;; we have all the info needed to fully process runconfigs and megatest.config
      (mtcachef              
-      (let* ((sections   (list "default" target)) ;; for runconfigs
-	     (first-pass (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect
+      (let* ((first-pass (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect
 				  mtconfig
 				  environ-patt: "env-override"
 				  given-toppath: toppath
@@ -785,8 +785,7 @@
 			given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
 			pathenvvar: "MT_RUN_AREA_HOME")))
 	(if cfgdat
-	    (let* ((sections (if target (list "default" target) #f))
-		   (toppath  (or (get-environment-variable "MT_RUN_AREA_HOME")(cadr cfgdat)))
+	    (let* ((toppath  (or (get-environment-variable "MT_RUN_AREA_HOME")(cadr cfgdat)))
 		   (rdat     (read-config (conc toppath
 						"/runconfigs.config") *runconfigdat* #t sections: sections)))
 	      (set! *configinfo*   cfgdat)
