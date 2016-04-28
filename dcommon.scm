@@ -683,19 +683,41 @@
     ;; (debug:print 0 "test-record=" test-record)
     ))
 
+(define (dcommon:estimate-scale sizex sizey originx originy nodes)
+  (print "sizex: " sizex " sizey: " sizey " originx: " originx " originy: " originy " nodes: " nodes)
+  (let* ((maxx 1)
+	 (maxy 1))
+    (for-each
+     (lambda (node)
+       (if (equal? (car node) "node")
+	   (let ((x (string->number (list-ref node 2)))
+		 (y (string->number (list-ref node 3))))
+	     (if (and x (> x maxx))(set! maxx x))
+	     (if (and y (> y maxy))(set! maxy y)))))
+     nodes)
+    (let ((scalex (/ sizex maxx))
+	  (scaley (/ sizey maxy)))
+      (print "maxx: " maxx " maxy: " maxy " scalex: " scalex " scaley: " scaley)
+      (min scalex scaley))))
+
+;; sizex, sizey     - canvas size
+;; originx, originy - canvas origin
+;;
 (define (dcommon:initial-draw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames test-records)
   (let* ((dot-data ;; (map cdr (filter
 		   ;; 	  (lambda (x)(equal? "node" (car x)))
-	  (map string-split (tests:lazy-dot test-records "plain"))) ;; (tests:easy-dot test-records "plain")))
-	 (scalef (hash-table-ref   tests-draw-state 'scalef))
-	 (dotscale (hash-table-ref tests-draw-state 'dotscale))
+	  (map string-split (tests:lazy-dot test-records "plain" sizex sizey))) ;; (tests:easy-dot test-records "plain")))
 	 (test-browse-xoffset (hash-table-ref tests-draw-state 'test-browse-xoffset))
 	 (test-browse-yoffset (hash-table-ref tests-draw-state 'test-browse-yoffset))
 	 (xtorig (+ test-browse-xoffset (* (/ sizex 2) 1 (- 0.5 xadj)))) ;;  (- xadj 1))))
 	 (ytorig (+ test-browse-yoffset (* (/ sizey 2) 1 (- yadj 0.5))))
 	 (boxw   10)
 	 (tests-hash     (hash-table-ref tests-draw-state 'tests-info))
-	 (selected-tests (hash-table-ref tests-draw-state 'selected-tests )))
+	 (selected-tests (hash-table-ref tests-draw-state 'selected-tests ))
+	 (scalef         (dcommon:estimate-scale sizex sizey originx originy dot-data)))
+
+    (hash-table-set! tests-draw-state 'scalef scalef)
+    
     ;; (print "dot-data=" dot-data)
     (hash-table-set! tests-draw-state 'xtorig xtorig)
     (hash-table-set! tests-draw-state 'ytorig ytorig)
@@ -714,7 +736,7 @@
 						dot-data)))
 			    (if (null? tmpres)
 				;;           llx  lly boxw boxh
-				(list "0" "1" "1" (conc (length tal)) "2" "0.5") ;; return some junk
+				(list "0" "1" "1" (conc (length tal)) "2" "0.5") ;; return some placeholder junk if no dat found
 				(car tmpres))))
 		 (edgedat (let ((edges (filter (lambda (x)  ;; filter for edge
 						 (if (and (not (null? x))
@@ -725,18 +747,18 @@
 			    (map (lambda (inlst)
 				   (dcommon:process-polyline 
 				    (map (lambda (instr)
-					   (* dotscale (string->number instr))) ;; convert to number and scale
+					   (string->number instr)) ;; convert to number and scale
 					 (let ((il (cddddr inlst)))
 					   (take il (- (length il) 2))))
 				    (lambda (x y)
-				      (list (+ x xtorig)
-					    (+ y ytorig)))
+				      (list (+ x 0)   ;; xtorig)
+					    (+ y 0))) ;; ytorig)))
 				    #f #f)) ;; process polyline
 				 edges)))
-		 (llx  (* (string->number (list-ref nodedat 2)) dotscale))
-		 (lly  (* (string->number (list-ref nodedat 3)) dotscale))
-		 (boxw (* (string->number (list-ref nodedat 4)) dotscale))
-		 (boxh (* (string->number (list-ref nodedat 5)) dotscale))
+		 (llx  (string->number (list-ref nodedat 2)))
+		 (lly  (string->number (list-ref nodedat 3)))
+		 (boxw (string->number (list-ref nodedat 4)))
+		 (boxh (string->number (list-ref nodedat 5)))
 		 (urx  (+ llx boxw))
 		 (ury  (+ lly boxh)))
 					; (print "hed " hed " llx " llx " lly " lly " urx " urx " ury " ury)

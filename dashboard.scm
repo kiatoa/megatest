@@ -863,7 +863,6 @@ Misc
 	  (begin
 	    (hash-table-set! tests-draw-state 'first-time #f)
 	    (hash-table-set! tests-draw-state 'scalef 1)
-	    (hash-table-set! tests-draw-state 'dotscale 10.5)
 	    (hash-table-set! tests-draw-state 'tests-info (make-hash-table))
 	    (hash-table-set! tests-draw-state 'selected-tests (make-hash-table))
 	    ;; set these 
@@ -901,7 +900,6 @@ Misc
 	 (test-patterns-textbox  #f))
     (hash-table-set! tests-draw-state 'first-time #t)
     ;; (hash-table-set! tests-draw-state 'scalef 1)
-    ;; (hash-table-set! tests-draw-state 'dotscale 60)
     (tests:get-full-data test-names test-records '() all-tests-registry)
     (set! sorted-testnames (tests:sort-by-priority-and-waiton test-records))
     
@@ -1059,22 +1057,12 @@ Misc
 			    ;; Following doesn't work 
 			    #:wheel-cb (lambda (obj step x y dir) ;; dir is 4 for up and 5 for down. I think.
 					 (let ((scalef (hash-table-ref tests-draw-state 'scalef)))
-					   ;; (debug:print 0 "step=" step ", dir=" dir ", scalef=" scalef ", x=" x ", y=" y)
-					   ;; (let (;; (xadj last-xadj)
-					   ;; (yadj (+ last-yadj (if (> step 0)
-					   ;;		      -0.01
-					   ;;			      0.01))))
 					   (hash-table-set! tests-draw-state 'scalef (+ scalef
 											(if (> step 0)
-											    0.01
-											    -0.01)))
-
-					   ;; (print "step: " step " x: " x " y: " y " dir: \"" dir "\"")
-					   ;; (print "the-cnv: " the-cnv " obj: " obj " xadj: " xadj " yadj: " yadj " dir: " dir)
+											    (* scalef 0.01)
+											    (* scalef -0.01))))
 					   (if the-cnv
 					       (dashboard:draw-tests the-cnv last-xadj last-yadj tests-draw-state sorted-testnames test-records))
-					   ;; (set! last-xadj xadj)
-					   ;; (set! last-yadj yadj)
 					   ))
 			    ;; #:size "50x50"
 			    #:expand "YES"
@@ -1087,8 +1075,11 @@ Misc
 					  (let-values (((xx yy)(canvas-origin the-cnv)))
 					    (canvas-transform-set! the-cnv #f)
 					    (print "canvas-origin: " xx " " yy " click at " x " " y))
-					  (let ((tests-info     (hash-table-ref tests-draw-state  'tests-info))
-						(selected-tests (hash-table-ref tests-draw-state  'selected-tests)))
+					  (let* ((tests-info     (hash-table-ref tests-draw-state  'tests-info))
+						 (selected-tests (hash-table-ref tests-draw-state  'selected-tests))
+						 (scalef         (hash-table-ref tests-draw-state 'scalef))
+						 (x-scaled       (/ x scalef))
+						 (y-scaled       (/ y scalef)))
 					    ;; (print "\tx\ty\tllx\tlly\turx\tury")
 					    (for-each (lambda (test-name)
 							(let* ((rec-coords (hash-table-ref tests-info test-name))
@@ -1096,12 +1087,13 @@ Misc
 							       (urx        (list-ref rec-coords 1))
 							       (lly        (list-ref rec-coords 2))
 							       (ury        (list-ref rec-coords 3)))
-							  ;; (print "\t" x "\t" y "\t" llx "\t" lly "\t" urx "\t" ury "\t" test-name " ")
+							  (if (eq? pressed 1)
+							      (print "\tx=" x "\ty=" y "\t" llx "\t" lly "\t" urx "\t" ury "\t" test-name " "))
 							  (if (and (eq? pressed 1)
-								   (> x llx)
-								   (> y lly)
-								   (< x urx)
-								   (< y ury))
+								   (>= x-scaled llx)
+								   (>= y-scaled lly)
+								   (<= x-scaled urx)
+								   (<= y-scaled ury))
 							      (let ((patterns (string-split (iup:attribute test-patterns-textbox "VALUE"))))
 								(let* ((selected     (not (member test-name patterns)))
 								       (newpatt-list (if selected
