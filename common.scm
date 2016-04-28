@@ -669,7 +669,20 @@
 (define (common:get-disk-space-used fpath)
   (with-input-from-pipe (conc "/usr/bin/du -s " fpath) read))
 
+;; given path get free space, allows override in [setup]
+;; with free-space-script /path/to/some/script.sh
+;;
 (define (get-df path)
+  (if (configf:lookup *configdat* "setup" "free-space-script")
+      (with-input-from-pipe 
+       (configf:lookup *configdat* "setup" "free-space-script")
+       (lambda ()
+	 (let ((res (read-line)))
+	   (if (string? res)
+	       (string->number res)))))
+      (get-unix-df path)))
+
+(define (get-unix-df path)
   (let* ((df-results (process:cmd-run->list (conc "df " path)))
 	 (space-rx   (regexp "([0-9]+)\\s+([0-9]+)%"))
 	 (freespc    #f))
@@ -682,6 +695,35 @@
 			    (set! freespc newval))))))
 	      (car df-results))
     freespc))
+
+;; check space in dbdir
+;; returns: ok/not dbspace required-space
+;;
+(define (common:check-db-dir-space)
+  (let* ((dbdir    (db:get-dbdir))
+	 (dbspace  (if (directory? dbdir)
+		       (get-df dbdir)
+		       0))
+	 (required (string->number 
+		    (or (configf:lookup *configdat* "setup" "dbdir-space-required")
+			"100000"))))
+    (list (> dbspace required)
+	  dbspace
+	  required
+	  dbdir)))
+
+;; check available space in dbdir, exit if insufficient
+;;
+(define (common:check-db-dir-and-exit-if-insufficient)
+  (let* ((spacedat (common:check-db-dir-space))
+	 (is-ok    (car spacedat))
+	 (dbspace  (cadr spacedat))
+	 (required (caddr spacedat))
+	 (dbdir    (cadddr spacedat)))
+    (if (not is-ok)
+	(begin
+	  (debug:print 0 "ERROR: Insufficient space in " dbdir ", require " required ", have " dbspace  ", exiting now.")
+	  (exit 1)))))
   
 ;; paths is list of lists ((name path) ... )
 ;;
