@@ -126,12 +126,12 @@
     (debug:print 5 "items: " items " itemstable: " itemstable)
     (set! items (map (lambda (item)
 		       (if (procedure? (cadr item))
-			   (list (car item)((cadr item)))
+			   (list (car item)((cadr item)))  ;; evaluate the proc
 			   item))
 		     items))
     (set! itemstable (map (lambda (item)
 			    (if (procedure? (cadr item))
-				(list (car item)((cadr item)))
+				(list (car item)((cadr item)))  ;; evaluate the proc
 				item))
 			  itemstable))
     (if (and have-items  (null? items))     (debug:print 0 "ERROR: [items] section in testconfig but no entries defined"))
