@@ -863,7 +863,7 @@ Misc
 	  (begin
 	    (hash-table-set! tests-draw-state 'first-time #f)
 	    (hash-table-set! tests-draw-state 'scalef 1)
-	    (hash-table-set! tests-draw-state 'dotscale 60)
+	    (hash-table-set! tests-draw-state 'dotscale 10.5)
 	    (hash-table-set! tests-draw-state 'tests-info (make-hash-table))
 	    (hash-table-set! tests-draw-state 'selected-tests (make-hash-table))
 	    ;; set these 

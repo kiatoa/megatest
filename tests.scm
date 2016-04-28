@@ -862,6 +862,7 @@
 	  (temp-port     (open-output-file* fd)))
       ;; (format temp-port "This file is ~A.~%" temp-path)
       (format temp-port "digraph tests {\n")
+      (format temp-port "  size=4,8\n")
       ;; (format temp-port "   splines=none\n")
       (for-each
        (lambda (testname)
@@ -893,7 +894,9 @@
 	'()
 	(let loop ((hed (car all-testnames))
 		   (tal (cdr all-testnames))
-		   (res (list "digraph tests {")))
+		   (res (list "digraph tests {"
+			      " size=\"11,11\";"
+			      " ratio=0.95;")))
 	  (let* ((testrec (hash-table-ref test-records hed))
 		 (waitons (or (tests:testqueue-get-waitons testrec) '()))
 		 (newres  (append res
