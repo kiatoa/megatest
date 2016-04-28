@@ -237,7 +237,7 @@
 (define (submegatest-panel dbstruct keydat testdat runname testconfig)
   (let* ((subarea (configf:lookup testconfig "setup" "submegatest"))
 	 (area-exists (and subarea (file-exists? subarea))))
-    (debug:print-info 0 "Megatest subarea=" subarea ", area-exists=" area-exists)
+    ;; (debug:print-info 0 "Megatest subarea=" subarea ", area-exists=" area-exists)
     (if subarea
 	(iup:frame 
 	 #:title "Megatest Run Info" ; #:expand "YES"
