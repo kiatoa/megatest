@@ -737,41 +737,52 @@
 		     (not (string=? "" (getenv "MT_ITEMPATH"))))
 		 (conc "/" (getenv "MT_ITEMPATH"))))))
 
+;; if .testconfig exists in test directory read and return it
+;; else if have cached copy in *testconfigs* return it IFF there is a section "have fulldata"
+;; else read the testconfig file
+;;   if have path to test directory save the config as .testconfig and return it
+;;
 (define (tests:get-testconfig test-name test-registry system-allowed #!key (force-create #f))
-  (let* ((treg              (or test-registry
-				(tests:get-all)))
-	 (test-path         (hash-table-ref/default 
-			     treg test-name 
-			     (conc *toppath* "/tests/" test-name)))
-	 (test-configf (conc test-path "/testconfig"))
-	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
-	 (cache-path   (tests:get-test-path-from-environment))
-	 (cache-exists (and cache-path 
+  (let* ((cache-path   (tests:get-test-path-from-environment))
+	 (cache-file   (and cache-path (conc cache-path "/.testconfig")))
+	 (cache-exists (and cache-file
 			    (not force-create)  ;; if force-create then pretend there is no cache to read
-			    (file-exists? (conc cache-path "/.testconfig"))))
-	 (cache-file   (conc cache-path "/.testconfig"))
-	 (tcfg         (if testexists
-			   (or (and (not force-create)
-				    cache-exists
-				    (handle-exceptions
-				     exn
-				     (begin
-				       (debug:print 0 "WARNING: Failed to read " cache-file) 
-				       (make-hash-table)) ;; better to return a hash and keep going - I think
-				     (configf:read-alist cache-file)))
-			       (read-config test-configf #f system-allowed environ-patt: (if system-allowed
-											     "pre-launch-env-vars"
-											     #f)))
+			    (file-exists? cache-file)))
+	 (cached-dat   (if (and (not force-create)
+				cache-exists)
+			   (handle-exceptions
+			    exn
+			    #f ;; any issues, just give up with the cached version and re-read
+			    (configf:read-alist cache-file))
 			   #f)))
-    (hash-table-set! *testconfigs* test-name tcfg)
-    (if (and testexists
-	     cache-path
-	     (not cache-exists)
-	     (file-write-access? cache-path))
-	(let ((tpath (conc cache-path "/.testconfig")))
-	  (debug:print-info 1 "Caching testconfig for " test-name " in " tpath)
-	  (configf:write-alist tcfg tpath)))
-    tcfg))
+    (if cached-dat
+	cached-dat
+	(let ((dat (hash-table-ref/default *testconfigs* test-name #f)))
+	  (if (and  dat ;; have a locally cached version
+		    (hash-table-ref/default dat "have fulldata" #f)) ;; marked as good data?
+	      dat
+	      ;; no cached data available
+	      (let* ((treg         (or test-registry
+				       (tests:get-all)))
+		     (test-path    (or (hash-table-ref/default treg test-name #f)
+				       (conc *toppath* "/tests/" test-name)))
+		     (test-configf (conc test-path "/testconfig"))
+		     (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
+		     (tcfg         (if testexists
+				       (read-config test-configf #f system-allowed
+						    environ-patt: (if system-allowed
+								      "pre-launch-env-vars"
+								      #f))
+				       #f)))
+		(if cache-file (hash-table-set! tcfg "have fulldata" #t)) ;; mark this as fully read data
+		(if tcfg (hash-table-set! *testconfigs* test-name tcfg))
+		(if (and testexists
+			 cache-file
+			 (file-write-access? cache-path))
+		    (let ((tpath (conc cache-path "/.testconfig")))
+		      (debug:print-info 1 "Caching testconfig for " test-name " in " tpath)
+		      (configf:write-alist tcfg tpath)))
+		tcfg))))))
   
 ;; sort tests by priority and waiton
 ;; Move test specific stuff to a test unit FIXME one of these days
