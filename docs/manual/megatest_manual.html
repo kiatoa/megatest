@@ -1099,6 +1099,21 @@ sudo netstat -tulpn</pre>
 <h2 id="_megatest_config_file_settings">Megatest Config File Settings</h2>
 <div class="sectionbody">
 <div class="sect2">
+<h3 id="_disk_space_checks">Disk Space Checks</h3>
+<div class="paragraph"><p>Some parameters you can put in the [setup] section of megatest.config:</p></div>
+<div class="listingblock">
+<div class="content monospaced">
+<pre># minimum space required in a run disk
+minspace 10000000
+
+# minimum space required in dbdir:
+dbdir-space-required 100000
+
+# script that takes path as parameter and returns number of bytes available:
+free-space-script check-space.sh</pre>
+</div></div>
+</div>
+<div class="sect2">
 <h3 id="_trim_trailing_spaces">Trim trailing spaces</h3>
 <div class="listingblock">
 <div class="content monospaced">
