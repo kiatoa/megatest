@@ -585,6 +585,12 @@
 (define (rmt:get-main-run-stats run-id)
   (rmt:send-receive 'get-main-run-stats #f (list run-id)))
 
+(define (rmt:get-var varname)
+  (rmt:send-receive 'get-var #f (list varname)))
+
+(define (rmt:set-var varname value)
+  (rmt:send-receive 'set-var #f (list varname value)))
+
 ;;======================================================================
 ;; M U L T I R U N   Q U E R I E S
 ;;======================================================================
