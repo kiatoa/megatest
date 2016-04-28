@@ -13,7 +13,7 @@
 (require-library iup)
 (import (prefix iup iup:))
 (use canvas-draw)
-(use regex)
+(use regex defstruct)
 
 (declare (unit dcommon))
 
@@ -66,6 +66,11 @@
 (define (dboard:data-get-run-name      vec)    (vector-ref vec 19))
 (define (dboard:data-get-runs-listbox  vec)    (vector-ref vec 20))
 
+(defstruct d:data runs tests runs-matrix tests-tree run-keys
+  curr-test-ids updaters path-run-ids curr-run-id runs-tree test-patts
+  states statuses logs-textbox command command-tb target run-name
+  runs-listbox)
+
 (define (dboard:data-set-runs!          vec val)(vector-set! vec 0 val))
 (define (dboard:data-set-tests!         vec val)(vector-set! vec 1 val))
 (define (dboard:data-set-runs-matrix!   vec val)(vector-set! vec 2 val))
@@ -100,6 +105,12 @@
 
 ;; Look up run-ids by ??
 (dboard:data-set-path-run-ids! *data* (make-hash-table))
+
+(define (d:data-init dat)
+  (d:data-run-keys-set!      dat (make-hash-table))
+  (d:data-curr-test-ids-set! dat (make-hash-table))
+  (d:data-path-run-ids-set!  dat (make-hash-table))
+  dat)
 
 ;;======================================================================
 ;; D O T F I L E
