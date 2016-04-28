@@ -111,6 +111,35 @@
 	   ((string? (cadr res))(cadr res)) ;; it is a list
 	   (else cadr res))))))
 
+;; return items given config
+;;
+(define (tests:get-items tconfig)
+  (let ((items      (hash-table-ref/default tconfig "items" #f)) ;; items 4
+	(itemstable (hash-table-ref/default tconfig "itemstable" #f))) 
+    ;; if either items or items table is a proc return it so test running
+    ;; process can know to call items:get-items-from-config
+    ;; if either is a list and none is a proc go ahead and call get-items
+    ;; otherwise return #f - this is not an iterated test
+    (cond
+     ((procedure? items)      
+      (debug:print-info 4 "items is a procedure, will calc later")
+      items)            ;; calc later
+     ((procedure? itemstable)
+      (debug:print-info 4 "itemstable is a procedure, will calc later")
+      itemstable)       ;; calc later
+     ((filter (lambda (x)
+		(let ((val (car x)))
+		  (if (procedure? val) val #f)))
+	      (append (if (list? items) items '())
+		      (if (list? itemstable) itemstable '())))
+      'have-procedure)
+     ((or (list? items)(list? itemstable)) ;; calc now
+      (debug:print-info 4 "items and itemstable are lists, calc now\n"
+			"    items: " items " itemstable: " itemstable)
+      (items:get-items-from-config tconfig))
+     (else #f))))                           ;; not iterated
+
+
 ;; returns waitons waitors tconfigdat
 ;;
 (define (tests:get-waitons test-name all-tests-registry)
@@ -126,7 +155,7 @@
        (debug:print-info 8 "waitons string is " instr ", waitors string is " instr2)
        (let ((newwaitons
 	      (string-split (cond
-			     ((procedure? instr)
+			     ((procedure? instr) ;; here 
 			      (let ((res (instr)))
 				(debug:print-info 8 "waiton procedure results in string " res " for test " test-name)
 				res))
@@ -190,6 +219,8 @@
 							     (list (conc waiton-test "/%")) ;; really shouldn't add the waiton forcefully like this
 							     patts-waiton)))
 			",")))
+
+
   
 ;; tests:glob-like-match 
 (define (tests:glob-like-match patt str) 
