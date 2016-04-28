@@ -1871,10 +1871,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
       (if dbstruct
 	  (cond
-	   ((getenv "MT_RUNSCRIPT") ;; special way to run megatest scripts #!/usr/bin/env MT_RUNSCRIPT=yes megatest
-	    (let ((fname (cadr (argv))))
-	      (print "fname=" fname)
-	      (load fname)))
+	   ((getenv "MT_RUNSCRIPT")
+	    ;; How to run megatest scripts
+	    ;;
+	    ;; #!/bin/bash
+	    ;;
+	    ;; export MT_RUNSCRIPT=yes
+	    ;; megatest << EOF
+	    ;; (print "Hello world")
+	    ;; (exit)
+	    ;; EOF
+
+	    (repl))
 	   (else
 	    (begin
 	      (set! *db* dbstruct)
