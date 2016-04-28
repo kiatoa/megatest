@@ -140,11 +140,12 @@
     ;; set the test final status
     (let* ((process-exit-status (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
 	   (this-step-status (cond
-			      ((and (eq? process-exit-status 2) logpro-used) 'warn)  ;; logpro 2 = warnings
-			      ((and (eq? process-exit-status 3) logpro-used) 'check) ;; logpro 3 = check
-			      ((and (eq? process-exit-status 4) logpro-used) 'waived) ;; logpro 4 = abort			      
-			      ((and (eq? process-exit-status 5) logpro-used) 'abort) ;; logpro 4 = abort
-			      ((eq? process-exit-status 0)                   'pass)  ;; logpro 0 = pass
+			      ((and (eq? process-exit-status 2) logpro-used) 'warn)   ;; logpro 2 = warnings
+			      ((and (eq? process-exit-status 3) logpro-used) 'check)  ;; logpro 3 = check
+			      ((and (eq? process-exit-status 4) logpro-used) 'waived) ;; logpro 4 = waived
+			      ((and (eq? process-exit-status 5) logpro-used) 'abort)  ;; logpro 5 = abort
+			      ((and (eq? process-exit-status 6) logpro-used) 'skip)   ;; logpro 6 = skip
+			      ((eq? process-exit-status 0)                   'pass)   ;; logpro 0 = pass
 			      (else 'fail)))
 	   (overall-status   (cond
 			      ((eq? (launch:einf-rollup-status exit-info) 2) 'warn) ;; rollup-status (vector-ref exit-info 3)
