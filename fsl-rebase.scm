@@ -10,8 +10,8 @@
        (branch     (caddr (argv)))
        (cmd        (conc "fossil timeline after " basecommit " -n 1000000 -W 0"))
        (theregex   (conc ;; "^[^\\]]+"
-			 ;; "\\[([\\]]+)\\]\\s+"
-			 ;; "(.*)"
+			 "\\[([a-z0-9]+)\\]\\s+"
+			 "(.*)"
 			 "\\s+\\(.*tags:\\s+" branch 
 			 ;; ".*\\)"
 			 )))
@@ -19,10 +19,19 @@
   (with-input-from-pipe
    cmd
    (lambda ()
-     (let loop ((inl (read-line)))
+     (let loop ((inl (read-line))
+		(res '()))
        (if (not (eof-object? inl))
 	   (let ((have-match (string-search theregex inl)))
 	     (if have-match
-		 (print "match: " inl)
-		 (print "no match: " theregex " " inl))
-	     (loop (read-line))))))))
+		 (loop (read-line)
+		       (cons (conc "fossil merge --cherrypick " (cadr have-match)
+				   "\nfossil commit -m \"Cherry pick from " (cadr have-match)
+				   ": " (caddr have-match) "\"")
+			     res))
+		 (loop (read-line) res)))
+	   (map print res))))))
+
+;; (print "match: " inl "\n   $1: " (cadr have-match) " $2: " (caddr have-match))
+;; (print "no match: " theregex " " inl))
+;; (loop (read-line))))))))
