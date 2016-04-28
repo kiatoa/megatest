@@ -7,7 +7,7 @@ lookitnada  ls /nada
 
 [triggers]
 # run like this: cmd test-id test-rundir trigger
-COMPLETED/FAIL xterm;echo
+COMPLETED/FAIL   echo "trigger: ez_fail_quick, COMPLETED/FAIL" >> $MT_RUN_AREA_HOME/triggers_$MT_RUN_NAME.dat
 
 [test_meta]
 author matt
