@@ -95,9 +95,16 @@ Misc
   keys           dbkeys      header      
   allruns        useserver   ro
   allruns-by-id  buttondat   searchpatts
-  numruns        tot-runs    
-  last-db-update 
-  please-update  )
+  numruns        tot-runs    num-tests
+  last-db-update updating
+  please-update  
+  update-mutex
+  item-test-names
+  start-run-offset
+  start-test-offset
+  status-ignore-hash
+  state-ignore-hash
+ )
 
 (define *alldat* (make-d:alldat
 		  header: #f 
@@ -107,7 +114,16 @@ Misc
 		  searchpatts: (make-hash-table)
 		  numruns: 16
 		  last-db-update: 0
-		  please-update: #t))
+		  please-update: #t
+		  updating: #f
+		  update-mutex: (make-mutex)
+		  item-test-names: '()
+		  num-tests: 15
+		  start-run-offset: 0
+		  start-test-offset: 0
+		  status-ignore-hash: (make-hash-table)
+		  state-ignore-hash: (make-hash-table)
+		  ))
 
 (d:alldat-useserver-set! *alldat* (cond
 				   ((args:get-arg "-use-local") #f)
@@ -134,19 +150,6 @@ Misc
 
 ;; Update management
 ;;
-
-(define *delayed-update* 0)
-(define *update-is-running* #f)
-(define *update-mutex* (make-mutex))
-
-(define *all-item-test-names* '())
-(define *num-tests*     15)
-(define *start-run-offset*  0)
-(define *start-test-offset* 0)
-(define *examine-test-dat* (make-hash-table))
-(define *exit-started* #f)
-(define *status-ignore-hash* (make-hash-table))
-(define *state-ignore-hash*  (make-hash-table))
 
 (define *tests-sort-options* (vector (vector "Sort +a" 'testname   "ASC")
 				     (vector "Sort -a" 'testname   "DESC")
@@ -249,15 +252,15 @@ Misc
 (define (update-rundat runnamepatt numruns testnamepatt keypatts)
   (let* ((referenced-run-ids '())
 	 (allruns     (if (d:alldat-useserver *alldat*)
-			  (rmt:get-runs runnamepatt numruns *start-run-offset* keypatts)
+			  (rmt:get-runs runnamepatt numruns (d:alldat-start-run-offset *alldat*) keypatts)
 			  (db:get-runs (d:alldat-dblocal *alldat*) runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
-				      *start-run-offset* keypatts)))
+				      (d:alldat-start-run-offset *alldat*) keypatts)))
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
 	 (result      '())
 	 (maxtests    0)
-	 (states      (hash-table-keys *state-ignore-hash*))
-	 (statuses    (hash-table-keys *status-ignore-hash*))
+	 (states      (hash-table-keys (d:alldat-state-ignore-hash *alldat*)))
+	 (statuses    (hash-table-keys (d:alldat-status-ignore-hash *alldat*)))
 	 (sort-info   (get-curr-sort))
 	 (sort-by     (vector-ref sort-info 1))
 	 (sort-order  (vector-ref sort-info 2))
@@ -300,7 +303,7 @@ Misc
 				      (if (eq? *tests-sort-reverse* 3) ;; +event_time
 					(sort newdat compare-tests)
 					newdat))))
-		  ;; NOTE: bubble-up also sets the global *all-item-test-names*
+		  ;; NOTE: bubble-up also sets the global (d:alldat-item-test-names *alldat*)
 		  ;; (tests       (bubble-up tmptests priority: bubble-type))
 		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
 		  ;; (debug:print 0 "Getting data for run " run-id " with key-vals=" key-vals)
@@ -445,14 +448,14 @@ Misc
 		   (hash-table-set! tests tname (append (hash-table-ref/default tests tname '())(list testdat))))))
 	   test-dats)
 	  ;; Set all tests with items 
-	  (set! *all-item-test-names* (append (if (null? tnames)
-						  '()
-						  (filter (lambda (tname)
-							    (let ((tlst (hash-table-ref tests tname)))
-							      (and (list tlst)
-								   (> (length tlst) 1))))
-							  tnames))
-					      *all-item-test-names*))
+	  (d:alldat-item-test-names-set! *alldat* (append (if (null? tnames)
+							      '()
+							      (filter (lambda (tname)
+									(let ((tlst (hash-table-ref tests tname)))
+									  (and (list tlst)
+									       (> (length tlst) 1))))
+								      tnames))
+							  (d:alldat-item-test-names *alldat*)))
 	  (let loop ((hed (car tnames))
 		     (tal (cdr tnames))
 		     (res '()))
@@ -486,10 +489,10 @@ Misc
      runs)
 
     (set! *alltestnamelst* (collapse-rows *alltestnamelst*)) ;;; argh. please clean up this sillyness
-    (set! *alltestnamelst* (let ((xl (if (> (length *alltestnamelst*) *start-test-offset*)
-					 (drop *alltestnamelst* *start-test-offset*)
+    (set! *alltestnamelst* (let ((xl (if (> (length *alltestnamelst*) (d:alldat-start-test-offset *alldat*))
+					 (drop *alltestnamelst* (d:alldat-start-test-offset *alldat*))
 					 '())))
-			     (append xl (make-list (- *num-tests* (length xl)) ""))))
+			     (append xl (make-list (- (d:alldat-num-tests *alldat*) (length xl)) ""))))
     (update-labels uidat)
     (for-each
      (lambda (rundat)
@@ -567,8 +570,8 @@ Misc
   (let ((search-changed (not (null? (filter (lambda (key)
 					      (not (equal? (hash-table-ref (d:alldat-searchpatts *alldat*) key) "%")))
 					    (hash-table-keys (d:alldat-searchpatts *alldat*))))))
-	(state-changed  (not (null? (hash-table-keys *state-ignore-hash*))))
-	(status-changed (not (null? (hash-table-keys *status-ignore-hash*)))))
+	(state-changed  (not (null? (hash-table-keys (d:alldat-state-ignore-hash *alldat*)))))
+	(status-changed (not (null? (hash-table-keys (d:alldat-status-ignore-hash *alldat*))))))
     (iup:attribute-set! *hide-not-hide-tabs* "BGCOLOR"
 			(if (or search-changed
 				state-changed
@@ -582,8 +585,7 @@ Misc
   (set-bg-on-filter))
 
 (define (mark-for-update)
-  (d:alldat-last-db-update-set! *alldat* 0)
-  (set! *delayed-update* 1))
+  (d:alldat-last-db-update-set! *alldat* 0))
 
 ;;======================================================================
 ;; R U N C O N T R O L
@@ -1132,24 +1134,27 @@ Misc
 					      (db:get-runs-by-patt db (d:alldat-keys *alldat*) "%" #f #f #f #f)))
 			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 			    (run-id       (dboard:data-get-curr-run-id *data*))
+			    (last-update  0) ;; fix me
 			    (tests-dat    (let ((tdat (if run-id
 							  (if (d:alldat-useserver *alldat*)
 							      (rmt:get-tests-for-run run-id 
 										     (hash-table-ref/default (d:alldat-searchpatts *alldat*) "test-name" "%/%")
-										     (hash-table-keys *state-ignore-hash*) ;; '()
-										     (hash-table-keys *status-ignore-hash*) ;; '()
+										     (hash-table-keys (d:alldat-state-ignore-hash *alldat*)) ;; '()
+										     (hash-table-keys (d:alldat-status-ignore-hash *alldat*)) ;; '()
 										     #f #f
 										     *hide-not-hide*
 										     #f #f
-										     "id,testname,item_path,state,status") ;; get 'em all
+										     "id,testname,item_path,state,status"
+										     last-update) ;; get 'em all
 							      (db:get-tests-for-run db run-id 
 										    (hash-table-ref/default (d:alldat-searchpatts *alldat*) "test-name" "%/%")
-										    (hash-table-keys *state-ignore-hash*) ;; '()
-										    (hash-table-keys *status-ignore-hash*) ;; '()
+										    (hash-table-keys (d:alldat-state-ignore-hash *alldat*)) ;; '()
+										    (hash-table-keys (d:alldat-status-ignore-hash *alldat*)) ;; '()
 										    #f #f
 										    *hide-not-hide*
 										    #f #f
-										    "id,testname,item_path,state,status"))
+										    "id,testname,item_path,state,status"
+										    last-update))
 							  '()))) ;; get 'em all
 					    (sort tdat (lambda (a b)
 							 (let* ((aval (vector-ref a 2))
@@ -1165,7 +1170,7 @@ Misc
 			    (col-indices  (car indices))
 			    (max-row      (if (null? row-indices) 1 (common:max (map cadr row-indices))))
 			    (max-col      (if (null? col-indices) 1 (common:max (map cadr col-indices))))
-			    (max-visible  (max (- *num-tests* 15) 3)) ;; *num-tests* is proportional to the size of the window
+			    (max-visible  (max (- (d:alldat-num-tests *alldat*) 15) 3)) ;; (d:alldat-num-tests *alldat*) is proportional to the size of the window
 			    (numrows      1)
 			    (numcols      1)
 			    (changed      #f)
@@ -1338,7 +1343,7 @@ Misc
 						       (begin
 							 (for-each (lambda (tname)
 								     (hash-table-set! *collapsed* tname #t))
-								   *all-item-test-names*)
+								   (d:alldat-item-test-names *alldat*))
 							 (iup:attribute-set! obj "TITLE" "Expand"))
 						       (begin
 							 (for-each (lambda (tname)
@@ -1355,8 +1360,8 @@ Misc
 		     (iup:toggle status  #:action   (lambda (obj val)
 						      (mark-for-update)
 						      (if (eq? val 1)
-							  (hash-table-set! *status-ignore-hash* status #t)
-							  (hash-table-delete! *status-ignore-hash* status))
+							  (hash-table-set! (d:alldat-status-ignore-hash *alldat*) status #t)
+							  (hash-table-delete! (d:alldat-status-ignore-hash *alldat*) status))
 						      (set-bg-on-filter))))
 		   (map cadr *common:std-statuses*))) ;; '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
 	     (apply 
@@ -1365,24 +1370,24 @@ Misc
 		     (iup:toggle state   #:action   (lambda (obj val)
 						      (mark-for-update)
 						      (if (eq? val 1)
-							  (hash-table-set! *state-ignore-hash* state #t)
-							  (hash-table-delete! *state-ignore-hash* state))
+							  (hash-table-set! (d:alldat-state-ignore-hash *alldat*) state #t)
+							  (hash-table-delete! (d:alldat-state-ignore-hash *alldat*) state))
 						      (set-bg-on-filter))))
 		   (map cadr *common:std-states*))) ;; '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
 	     (iup:valuator #:valuechanged_cb (lambda (obj)
 					       (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))
 						     (oldmax   (string->number (iup:attribute obj "MAX")))
 						     (maxruns  (d:alldat-tot-runs *alldat*)))
-						 (set! *start-run-offset* val)
+						 (d:alldat-start-run-offset-set! *alldat* val)
 						 (mark-for-update)
-						 (debug:print 6 "*start-run-offset* " *start-run-offset* " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
+						 (debug:print 6 "(d:alldat-start-run-offset *alldat*) " (d:alldat-start-run-offset *alldat*) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
 						 (iup:attribute-set! obj "MAX" (* maxruns 10))))
 			   #:expand "HORIZONTAL"
 			   #:max (* 10 (length (d:alldat-allruns *alldat*)))
 			   #:min 0
 			   #:step 0.01)))
-					;(iup:button "inc rows" #:action (lambda (obj)(set! *num-tests* (+ *num-tests* 1))))
-					;(iup:button "dec rows" #:action (lambda (obj)(set! *num-tests* (if (> *num-tests* 0)(- *num-tests* 1) 0))))
+					;(iup:button "inc rows" #:action (lambda (obj)(d:alldat-num-tests-set! *alldat* (+ (d:alldat-num-tests *alldat*) 1))))
+					;(iup:button "dec rows" #:action (lambda (obj)(d:alldat-num-tests-set! *alldat* (if (> (d:alldat-num-tests *alldat*) 0)(- (d:alldat-num-tests *alldat*) 1) 0))))
 	   )
 	  )
     
@@ -1411,8 +1416,8 @@ Misc
 											     (oldmax  (string->number (iup:attribute obj "MAX")))
 											     (newmax  (* 10 (length *alltestnamelst*))))
 											 (d:alldat-please-update-set! *alldat* #t)
-											 (set! *start-test-offset* (inexact->exact (round (/ val 10))))
-											 (debug:print 6 "*start-test-offset* " *start-test-offset* " val: " val " newmax: " newmax " oldmax: " oldmax)
+											 (d:alldat-start-test-offset-set! *alldat* (inexact->exact (round (/ val 10))))
+											 (debug:print 6 "(d:alldat-start-test-offset *alldat*) " (d:alldat-start-test-offset *alldat*) " val: " val " newmax: " newmax " oldmax: " oldmax)
 											 (if (< val 10)
 											     (iup:attribute-set! obj "MAX" newmax))
 											 ))
@@ -1514,10 +1519,11 @@ Misc
 (if (or (args:get-arg "-rows")
 	(get-environment-variable "DASHBOARDROWS" ))
     (begin
-      (set! *num-tests* (string->number (or (args:get-arg "-rows")
-					    (get-environment-variable "DASHBOARDROWS"))))
+      (d:alldat-num-tests-set! *alldat* (string->number
+					 (or (args:get-arg "-rows")
+					     (get-environment-variable "DASHBOARDROWS"))))
       (update-rundat "%" (d:alldat-numruns *alldat*) "%/%" '()))
-    (set! *num-tests* (min (max (update-rundat "%" (d:alldat-numruns *alldat*) "%/%" '()) 8) 20)))
+    (d:alldat-num-tests-set! *alldat* (min (max (update-rundat "%" (d:alldat-numruns *alldat*) "%/%" '()) 8) 20)))
 
 (define *tim* (iup:timer))
 (define *ord* #f)
@@ -1586,7 +1592,7 @@ Misc
 						(if val (set! res (cons (list key val) res))))))
 					(d:alldat-dbkeys *alldat*))
 			      res))
-	     (update-buttons uidat (d:alldat-numruns *alldat*) *num-tests*))
+	     (update-buttons uidat (d:alldat-numruns *alldat*) (d:alldat-num-tests *alldat*)))
 	    ((2)
 	     (dashboard:update-run-summary-tab))
 	    (else
@@ -1634,37 +1640,37 @@ Misc
  ((args:get-arg "-guimonitor")
   (gui-monitor (d:alldat-dblocal *alldat*)))
  (else
-  (set! uidat (make-dashboard-buttons (d:alldat-dblocal *alldat*) (d:alldat-numruns *alldat*) *num-tests* (d:alldat-dbkeys *alldat*)))
+  (set! uidat (make-dashboard-buttons (d:alldat-dblocal *alldat*) (d:alldat-numruns *alldat*) (d:alldat-num-tests *alldat*) (d:alldat-dbkeys *alldat*)))
   (iup:callback-set! *tim*
 		     "ACTION_CB"
 		     (lambda (x)
 		       (let ((update-is-running #f))
-			 (mutex-lock! *update-mutex*)
-			 (set! update-is-running *update-is-running*)
+			 (mutex-lock! (d:alldat-update-mutex *alldat*))
+			 (set! update-is-running (d:alldat-updating *alldat*))
 			 (if (not update-is-running)
-			     (set! *update-is-running* #t))
-			 (mutex-unlock! *update-mutex*)
+			     (d:alldat-updating-set! *alldat* #t))
+			 (mutex-unlock! (d:alldat-update-mutex *alldat*))
 			 (if (not update-is-running)
 			   (begin
 			     (dashboard:run-update x)
-			     (mutex-lock! *update-mutex*)
-			     (set! *update-is-running* #f)
-			     (mutex-unlock! *update-mutex*))))
+			     (mutex-lock! (d:alldat-update-mutex *alldat*))
+			     (d:alldat-updating-set! *alldat* #f)
+			     (mutex-unlock! (d:alldat-update-mutex *alldat*)))))
 		       1))))
 
 (let ((th1 (make-thread (lambda ()
 			  (thread-sleep! 1)
 			  (d:alldat-please-update-set! *alldat* #t)
 			  (dashboard:run-update 1)) "update buttons once"))
-			  ;; need to wait for first *update-is-running* #t
+			  ;; need to wait for first (d:alldat-updating *alldat*) #t
 			  ;; (let loop ()
-			  ;;   (mutex-lock! *update-mutex*)
-			  ;;   (if *update-is-running*
+			  ;;   (mutex-lock! (d:alldat-update-mutex *alldat*))
+			  ;;   (if (d:alldat-updating *alldat*)
 			  ;;       (begin
 			  ;;         (set! *please-update-buttons* #t)
 			  ;;         (mark-for-update)
 			  ;;         (print "Did redraw trigger")) "First update after startup")
-			  ;;   (mutex-unlock! *update-mutex*)
+			  ;;   (mutex-unlock! (d:alldat-update-mutex *alldat*))
 			  ;;   (thread-sleep! 1)
 			  ;;   (if (not *please-update-buttons*)
 			  ;;       (loop))))))
