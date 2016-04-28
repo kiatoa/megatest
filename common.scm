@@ -466,7 +466,7 @@
     res))
 
 (define (common:args-get-target #!key (split #f))
-  (let* ((keys    (if *configdat* (keys:config-get-fields *configdat*) '()))
+  (let* ((keys    (if (hash-table? *configdat*) (keys:config-get-fields *configdat*) '()))
 	 (numkeys (length keys))
 	 (target  (or (args:get-arg "-reqtarg")
 		      (args:get-arg "-target")
