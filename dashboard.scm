@@ -16,7 +16,7 @@
 (use canvas-draw)
 (import canvas-draw-iup)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 defstruct)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 defstruct sparse-vectors)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (uses common))
@@ -147,6 +147,92 @@ Misc
 		  curr-tab-num: 0
 		  updaters: (make-hash-table)
 		  ))
+
+;; simple two dimentional sparse array
+;;
+(define (make-sparse-array)
+  (let ((a (make-sparse-vector)))
+    (sparse-vector-set! a 0 (make-sparse-vector))
+    a))
+
+(define (sparse-array? a)
+  (and (sparse-vector? a)
+       (sparse-vector? (sparse-vector-ref a 0))))
+
+(define (sparse-array-ref a x y)
+  (let ((row (sparse-vector-ref a x)))
+    (if row
+	(sparse-vector-ref row y)
+	#f)))
+
+(define (sparse-array-set! a x y val)
+  (let ((row (sparse-vector-ref a x)))
+    (if row
+	(sparse-vector-set! row y val)
+	(let ((new-row (make-sparse-vector)))
+	  (sparse-vector-set! a x new-row)
+	  (sparse-vector-set! new-row y val)))))
+
+;; data for runs, tests etc
+;;
+(defstruct d:rundat
+  ;; new system
+  runs-index    ;; target/runname => colnum
+  tests-index   ;; testname/itempath => rownum
+  matrix-dat    ;; vector of vectors rows/cols
+  )
+
+(define (d:rundat-make-init)
+  (make-d:rundat
+   runs-index: (make-hash-table)
+   tests-index: (make-hash-table)
+   matrix-dat: (make-sparse-array)))
+
+(defstruct d:testdat
+  id       ;; testid
+  state    ;; test state
+  status   ;; test status
+  )
+
+(define (d:rundat-get-col-num dat target runname force-set)
+  (let* ((runs-index (d:rundat-runs-index dat))
+	 (col-name   (conc target "/" runname))
+	 (res        (hash-table-ref/default runs-index col-name #f)))
+    (if res
+	res
+	(if force-set
+	    (let ((max-col-num (+ 1 (apply max -1 (hash-table-values runs-index)))))
+	      (hash-table-set! runs-index col-name max-col-num)
+	      max-col-num)))))
+
+(define (d:rundat-get-row-num dat testname itempath force-set)
+  (let* ((tests-index (d:rundat-runs-index dat))
+	 (row-name    (conc testname "/" itempath))
+	 (res         (hash-table-ref/default runs-index row-name #f)))
+    (if res
+	res
+	(if force-set
+	    (let ((max-row-num (+ 1 (apply max -1 (hash-table-values tests-index)))))
+	      (hash-table-set! runs-index row-name max-row-num)
+	      max-row-num)))))
+
+;; default is to NOT set the cell if the column and row names are not pre-existing
+;;
+(define (d:rundat-set-test-cell dat target runname testname itempath test-id state status #!key (force-set #f))
+  (let* ((col-num  (d:rundat-get-col-num dat target runname force-set))
+	 (row-num  (d:rundat-get-row-num dat testname itempath force-set)))
+    (if (and row-num col-num)
+	(let ((tdat (d:testdat 
+		     id: test-id
+		     state: state
+		     status: status)))
+	  (sparse-array-set! (d:rundat-matrix-dat dat) col-num row-num tdat)
+	  tdat)
+	#f)))
+
+
+
+
 
 (d:alldat-useserver-set! *alldat* (cond
 				   ((args:get-arg "-use-local") #f)
