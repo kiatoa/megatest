@@ -1,5 +1,10 @@
 [ezsteps]
 calcresults megatest -list-runs $MT_RUNNAME -target $MT_TARGET
+check_triggers  cat $MT_RUN_AREA_HOME/triggers_$MT_RUN_NAME.dat
+
+[logpro]
+check_triggers ;;
+  (expect:error in "LogFileBody" = 0 "No errors" #/error/i)
 
 [requirements]
 waiton  #{getenv ALL_TOPLEVEL_TESTS}

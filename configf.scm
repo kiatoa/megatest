@@ -274,6 +274,13 @@
 												    metadata: metapath))
 							    (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
 							  (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f)))
+	       (configf:key-no-val ( x key val)            (let* ((alist   (hash-table-ref/default res curr-section-name '()))
+								  (fval    (or (if (string? val) val #f) ""))) ;; fval should be either "" or " " (one or more spaces)
+							     (debug:print 10 "   setting: [" curr-section-name "] " key " = #t")
+							     (safe-setenv key fval)
+							     (hash-table-set! res curr-section-name 
+									      (config:assoc-safe-add alist key fval metadata: metapath))
+							     (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name key #f)))
 	       (configf:key-val-pr ( x key unk1 val unk2 ) (let* ((alist   (hash-table-ref/default res curr-section-name '()))
 								  (envar   (and environ-patt (string-search (regexp environ-patt) curr-section-name)))
 								  (realval (if envar
@@ -285,11 +292,6 @@
 							     (hash-table-set! res curr-section-name 
 									      (config:assoc-safe-add alist key realval metadata: metapath))
 							     (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name key #f)))
-	       (configf:key-no-val ( x key val)             (let* ((alist   (hash-table-ref/default res curr-section-name '())))
-							      (debug:print 10 "   setting: [" curr-section-name "] " key " = #t")
-							      (hash-table-set! res curr-section-name 
-									       (config:assoc-safe-add alist key #t metadata: metapath))
-							      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name key #f)))
 	       ;; if a continued line
 	       (configf:cont-ln-rx ( x whsp val     ) (let ((alist (hash-table-ref/default res curr-section-name '())))
 						(if var-flag             ;; if set to a string then we have a continued var
