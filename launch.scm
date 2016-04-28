@@ -858,8 +858,8 @@
 	  (if res
 	      (cdr res)
 	      (begin
-		(if (common:low-noise-print 20 "no valid disks")
-		    (debug:print 0 "ERROR: No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists!"))
+		(if (common:low-noise-print 20 "No valid disks or no disk with enough space")
+		    (debug:print 0 "ERROR: No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists and has enough space!\n    You can change minspace in the [setup] section of megatest.config. Current setting is: " minspace))
 		(exit 1)))))))
 
 ;; Desired directory structure:

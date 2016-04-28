@@ -185,6 +185,10 @@
 	 (config-reruns      (let ((x (configf:lookup *configdat* "setup" "reruns")))
 			       (if x (string->number x) #f))))
 
+    ;; per user request. If less than 100Meg space on dbdir partition, bail out with error
+    ;; this will reduce issues in database corruption
+    (common:check-db-dir-and-exit-if-insufficient)
+    
     ;; override the number of reruns from the configs
     (if (and config-reruns
 	     (> run-count config-reruns))
@@ -193,7 +197,7 @@
     (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 
     (let ((sighand (lambda (signum)
-		     ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
+		    y ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
 		     (set! *time-to-exit* #t)
 		     (print "Received signal " signum ", cleaning up before exit. Please wait...")
 		     (let ((th1 (make-thread (lambda ()

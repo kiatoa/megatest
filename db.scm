@@ -147,8 +147,7 @@
 ;;      (was planned to be;  zeroth db with name=main.db)
 ;;
 (define (db:dbfile-path run-id)
-  (let* ((dbdir           (or (configf:lookup *configdat* "setup" "dbdir")
-			      (conc (configf:lookup *configdat* "setup" "linktree") "/.db")))
+  (let* ((dbdir           (db:get-dbdir))
 	 (fname           (if run-id
 			      (if (eq? run-id 0) "main.db" (conc run-id ".db"))
 			      #f)))
@@ -161,6 +160,10 @@
     (if fname
 	(conc dbdir "/" fname)
 	dbdir)))
+
+(define (db:get-dbdir)
+  (or (configf:lookup *configdat* "setup" "dbdir")
+      (conc (configf:lookup *configdat* "setup" "linktree") "/.db")))
 	       
 (define (db:set-sync db)
   (let ((syncprag (configf:lookup *configdat* "setup" "sychronous")))
