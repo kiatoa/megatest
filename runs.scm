@@ -75,14 +75,21 @@
 		  (list (list "MT_RUN_AREA_HOME" toppath)
 			(list "MT_RUNNAME"       runname)
 			(list "MT_TARGET"        target))))
-    ;; Now can read the runconfigs file
+    
+    ;; Now can read the runconfigs file -- can replace this with call to launch:setup?
     ;; 
-    (set! runconfig (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target)))
-    (if (not (hash-table-ref/default runconfig (args:get-arg "-reqtarg") #f))
+    ;; This block should be ok to remove - just keep the set of runconfig
+    ;; 
+    (if (not (eq? *configstatus* 'fulldata))
 	(begin
-	  (debug:print 0 "ERROR: [" (args:get-arg "-reqtarg") "] not found in " runconfigf)
-	  (if db (sqlite3:finalize! db))
-	  (exit 1)))
+	  (debug:print 0 "Processing runconfigs.config again...")
+	  (set! runconfig (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target)))
+	  (if (not (hash-table-ref/default runconfig (args:get-arg "-reqtarg") #f))
+	      (begin
+		(debug:print 0 "ERROR: [" (args:get-arg "-reqtarg") "] not found in " runconfigf)
+		(if db (sqlite3:finalize! db))
+		(exit 1))))
+	(set! runconfig *runconfigdat*))
     ;; Now have runconfigs data loaded, set environment vars
 
     ;; Only now can we calculate the testpatt
