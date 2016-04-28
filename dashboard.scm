@@ -91,19 +91,36 @@ Misc
 ;; create a stuct for all the miscellaneous state
 ;;
 (defstruct d:alldat 
-  dbdir          dblocal     dbfpath
-  keys           dbkeys      header      
-  allruns        useserver   ro
-  allruns-by-id  buttondat   searchpatts
-  numruns        tot-runs    num-tests
-  last-db-update updating
-  please-update  
-  update-mutex
+  allruns 
+  allruns-by-id
+  buttondat 
+  curr-tab-num
+  dbdir
+  dbfpath
+  dbkeys 
+  dblocal
+  header      
+  hide-empty-runs
+  hide-not-hide  ;; toggle for hide/not hide
+  hide-not-hide-button
+  hide-not-hide-tabs
   item-test-names
+  keys
+  last-db-update 
+  num-tests
+  numruns
+  please-update  
+  ro
+  searchpatts
   start-run-offset
   start-test-offset
-  status-ignore-hash
   state-ignore-hash
+  status-ignore-hash
+  tot-runs   
+  update-mutex
+  updaters
+  updating
+  useserver  
  )
 
 (define *alldat* (make-d:alldat
@@ -123,6 +140,12 @@ Misc
 		  start-test-offset: 0
 		  status-ignore-hash: (make-hash-table)
 		  state-ignore-hash: (make-hash-table)
+		  hide-empty-runs: #f
+		  hide-not-hide: #t
+		  hide-not-hide-button: #f
+		  hide-not-hide-tabs: #f
+		  curr-tab-num: 0
+		  updaters: (make-hash-table)
 		  ))
 
 (d:alldat-useserver-set! *alldat* (cond
@@ -147,10 +170,12 @@ Misc
 (d:alldat-tot-runs-set! *alldat* (if (d:alldat-useserver *alldat*)
 				     (rmt:get-num-runs "%")
 				     (db:get-num-runs (d:alldat-dblocal *alldat*) "%")))
-
-;; Update management
 ;;
+(define *exit-started* #f)
+;; *updaters* (make-hash-table))
 
+;; sorting global data (would apply to many testsuites so leave it global for now)
+;;
 (define *tests-sort-options* (vector (vector "Sort +a" 'testname   "ASC")
 				     (vector "Sort -a" 'testname   "DESC")
 				     (vector "Sort +t" 'event_time "ASC")
@@ -181,14 +206,6 @@ Misc
 
 (define (get-curr-sort)
   (vector-ref *tests-sort-options* *tests-sort-reverse*))
-
-(define *hide-empty-runs* #f)
-(define *hide-not-hide* #t) ;; toggle for hide/not hide
-(define *hide-not-hide-button* #f)
-(define *hide-not-hide-tabs* #f)
-
-(define *current-tab-number* 0)
-(define *updaters* (make-hash-table))
 
 (debug:setup)
 
@@ -282,14 +299,14 @@ Misc
 		       (tmptests    (if (d:alldat-useserver *alldat*)
 					(rmt:get-tests-for-run run-id testnamepatt states statuses
 							       #f #f
-							       *hide-not-hide*
+							       (d:alldat-hide-not-hide *alldat*)
 							       sort-by
 							       sort-order
 							       'shortlist
 							       last-update)
 					(db:get-tests-for-run (d:alldat-dblocal *alldat*) run-id testnamepatt states statuses
 							      #f #f
-							      *hide-not-hide*
+							      (d:alldat-hide-not-hide *alldat*)
 							      sort-by
 							      sort-order
 							      'shortlist
@@ -311,7 +328,7 @@ Misc
 		  (set! referenced-run-ids (cons run-id referenced-run-ids))
 		  (if (> (length tests) maxtests)
 		      (set! maxtests (length tests)))
-		  (if (or (not *hide-empty-runs*) ;; this reduces the data burden when set
+		  (if (or (not (d:alldat-hide-empty-runs *alldat*)) ;; this reduces the data burden when set
 			  (not (null? tests)))
 		      (let ((dstruct (vector run tests key-vals (- (current-seconds) 10))))
 			(hash-table-set! (d:alldat-allruns-by-id *alldat*) run-id dstruct)
@@ -479,7 +496,7 @@ Misc
        (if (vector? rundat)
 	   (let* ((testdat   (vector-ref rundat 1))
 		  (testnames (map test:test-get-fullname testdat)))
-	     (if (not (and *hide-empty-runs*
+	     (if (not (and (d:alldat-hide-empty-runs *alldat*)
 			   (null? testnames)))
 		 (for-each (lambda (testname)
 			     (if (not (member testname *alltestnamelst*))
@@ -572,7 +589,7 @@ Misc
 					    (hash-table-keys (d:alldat-searchpatts *alldat*))))))
 	(state-changed  (not (null? (hash-table-keys (d:alldat-state-ignore-hash *alldat*)))))
 	(status-changed (not (null? (hash-table-keys (d:alldat-status-ignore-hash *alldat*))))))
-    (iup:attribute-set! *hide-not-hide-tabs* "BGCOLOR"
+    (iup:attribute-set! (d:alldat-hide-not-hide-tabs *alldat*) "BGCOLOR"
 			(if (or search-changed
 				state-changed
 				status-changed)
@@ -1142,7 +1159,7 @@ Misc
 										     (hash-table-keys (d:alldat-state-ignore-hash *alldat*)) ;; '()
 										     (hash-table-keys (d:alldat-status-ignore-hash *alldat*)) ;; '()
 										     #f #f
-										     *hide-not-hide*
+										     (d:alldat-hide-not-hide *alldat*)
 										     #f #f
 										     "id,testname,item_path,state,status"
 										     last-update) ;; get 'em all
@@ -1151,7 +1168,7 @@ Misc
 										    (hash-table-keys (d:alldat-state-ignore-hash *alldat*)) ;; '()
 										    (hash-table-keys (d:alldat-status-ignore-hash *alldat*)) ;; '()
 										    #f #f
-										    *hide-not-hide*
+										    (d:alldat-hide-not-hide *alldat*)
 										    #f #f
 										    "id,testname,item_path,state,status"
 										    last-update))
@@ -1322,14 +1339,14 @@ Misc
 	      ;;   				 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
 	      ;;   				 (mark-for-update)))
 	      (iup:button "HideEmpty" #:action (lambda (obj)
-						 (set! *hide-empty-runs* (not *hide-empty-runs*))
-						 (iup:attribute-set! obj "TITLE" (if *hide-empty-runs* "+HideE" "-HideE"))
+						 (d:alldat-hide-empty-runs-set! *alldat* (not (d:alldat-hide-empty-runs *alldat*)))
+						 (iup:attribute-set! obj "TITLE" (if (d:alldat-hide-empty-runs *alldat*) "+HideE" "-HideE"))
 						 (mark-for-update)))
 	      (let ((hideit (iup:button "HideTests" #:action (lambda (obj)
-							       (set! *hide-not-hide* (not *hide-not-hide*))
-							       (iup:attribute-set! obj "TITLE" (if *hide-not-hide* "HideTests" "NotHide"))
+							       (d:alldat-hide-not-hide-set! *alldat* (not (d:alldat-hide-not-hide *alldat*)))
+							       (iup:attribute-set! obj "TITLE" (if (d:alldat-hide-not-hide *alldat*) "HideTests" "NotHide"))
 							       (mark-for-update)))))
-		(set! *hide-not-hide-button* hideit)
+		(d:alldat-hide-not-hide-button-set! *alldat* hideit) ;; never used, can eliminate ...
 		hideit))
 	     (iup:hbox
 	      (iup:button "Quit"      #:action (lambda (obj)
@@ -1500,7 +1517,7 @@ Misc
 	     (tabs (iup:tabs
 		    #:tabchangepos-cb (lambda (obj curr prev)
 					(d:alldat-please-update-set! *alldat* #t)
-					(set! *current-tab-number* curr))
+					(d:alldat-curr-tab-num-set! *alldat* curr))
 		    (dashboard:summary db)
 		    runs-view
 		    (dashboard:one-run db)
@@ -1512,7 +1529,7 @@ Misc
 	(iup:attribute-set! tabs "TABTITLE2" "Run Summary")
 	(iup:attribute-set! tabs "TABTITLE3" "Run Control")
 	(iup:attribute-set! tabs "BGCOLOR" "190 190 190")
-	(set! *hide-not-hide-tabs* tabs)
+	(d:alldat-hide-not-hide-tabs-set! *alldat* tabs)
 	tabs)))
     (vector keycol lftcol header runsvec)))
 
@@ -1570,7 +1587,7 @@ Misc
 			      -1))
 	 (run-update-time (current-seconds))
 	 (recalc          (dashboard:recalc modtime (d:alldat-please-update *alldat*) (d:alldat-last-db-update *alldat*))))
-    (if (and (eq? *current-tab-number* 0)
+    (if (and (eq? (d:alldat-curr-tab-num *alldat*) 0)
 	     (or (> monitor-modtime *last-monitor-update-time*)
 		 (> (- run-update-time *last-monitor-update-time*) 5))) ;; update every 1/2 minute just in case
 	(begin
@@ -1578,7 +1595,7 @@ Misc
 	  (if dashboard:update-servers-table (dashboard:update-servers-table))))
     (if recalc
 	(begin	
-	  (case *current-tab-number* 
+	  (case (d:alldat-curr-tab-num *alldat*) 
 	    ((0) 
 	     (if dashboard:update-summary-tab (dashboard:update-summary-tab)))
 	    ((1) ;; The runs table is active
@@ -1596,11 +1613,11 @@ Misc
 	    ((2)
 	     (dashboard:update-run-summary-tab))
 	    (else
-	     (let ((updater (hash-table-ref/default *updaters* *current-tab-number* #f)))
+	     (let ((updater (hash-table-ref/default (d:alldat-updaters *alldat*)
+						    (d:alldat-curr-tab-num *alldat*) #f)))
 	       (if updater (updater)))))
 	  (d:alldat-please-update-set! *alldat* #f)
 	  (d:alldat-last-db-update-set! *alldat* modtime)
-	  ;; (set! *last-update* run-update-time)
 	  (set! *last-recalc-ended-time* (current-milliseconds))))))
 
 ;;======================================================================
