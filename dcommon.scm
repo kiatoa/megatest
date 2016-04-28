@@ -592,12 +592,12 @@
 ;; CANVAS STUFF FOR TESTS
 ;;======================================================================
 
-(define (dcommon:draw-test cnv scalef x y w h name selected)
-  (let* ((llx (* scalef x))
-	 (lly (* scalef y))
-	 (urx (* scalef (+ x w)))
-	 (ury (* scalef (+ y h))))
-    (canvas-text! cnv (+ llx 5)(+ lly 5) name) ;; (conc testname " (" xtorig "," ytorig ")"))
+(define (dcommon:draw-test cnv xoffset yoffset scalef x y w h name selected)
+  (let* ((llx (dcommon:x->canvas x scalef xoffset))
+	 (lly (dcommon:y->canvas y scalef yoffset))
+	 (urx (dcommon:x->canvas (+ x w) scalef xoffset))
+	 (ury (dcommon:y->canvas (+ y h) scalef yoffset)))
+    (canvas-text! cnv (+ llx 5)(+ lly 5) name)
     (canvas-rectangle! cnv llx urx lly ury)
     (if selected (canvas-box! cnv llx (+ llx 5) lly (+ lly 5)))))
 
@@ -643,16 +643,16 @@
 
 (define (dcommon:get-box-center box)
   (let* ((llx  (list-ref box 0))
-	 (lly  (list-ref box 4))
-	 (boxw (list-ref box 5))
-	 (boxh (list-ref box 6)))
+	 (lly  (list-ref box 1))
+	 (boxw (list-ref box 4))
+	 (boxh (list-ref box 5)))
     (vector (+ llx (/ boxw 2))
 	    (+ lly (/ boxh 2)))))
 
 (define-inline (num->int num)
   (inexact->exact (round num)))
 
-(define (dcommon:draw-edges cnv scalef edges)
+(define (dcommon:draw-edges cnv xoffset yoffset scalef edges)
   (for-each
    (lambda (e)
      (let loop ((x1 (car e))
@@ -661,11 +661,19 @@
 		(y2 #f)
 		(tal (cddr e)))
        (if (and x1 y1 x2 y2)
-	   (canvas-line! cnv x1 y1 x2 y2)) ;; (num->int x1)(num->int y1)(num->int x2)(num->int y2)))
+	   (canvas-line! 
+	    cnv 
+	    (num->int (dcommon:x->canvas x1 scalef xoffset))
+	    (num->int (dcommon:y->canvas y1 scalef yoffset))
+	    (num->int (dcommon:x->canvas x2 scalef xoffset))
+	    (num->int (dcommon:y->canvas y2 scalef yoffset)))) ;; (num->int x1)(num->int y1)(num->int x2)(num->int y2)))
        (if (< (length tal) 2)
-	   (canvas-mark! cnv x1 y1) ;; (num->int x1)(num->int y1))
+	   (canvas-mark! cnv
+			 (num->int (dcommon:x->canvas x1 scalef xoffset))
+			 (num->int (dcommon:y->canvas y1 scalef yoffset))) ;; (num->int x1)(num->int y1))
 	   (loop (car tal)(cadr tal) x1 y1 (cddr tal)))))
-   (map (lambda (e)(map (lambda (x)(num->int (* x scalef))) e)) edges)))
+   ;; (map (lambda (e)(map (lambda (x)(num->int (* x scalef))) e)) edges)))
+   edges))
 
 
 (define (dcommon:draw-arrows cnv testname tests-hash test-records)
@@ -700,6 +708,26 @@
       (print "maxx: " maxx " maxy: " maxy " scalex: " scalex " scaley: " scaley)
       (min scalex scaley))))
 
+(define (dcommon:get-xoffset tests-draw-state sizex-in xadj-in)
+  (let ((xadj  (or xadj-in  (hash-table-ref/default tests-draw-state 'xadj 0)))
+	(sizex (or sizex-in (hash-table-ref/default tests-draw-state 'sizex 500))))
+    (hash-table-set! tests-draw-state 'xadj xadj) ;; for use in de-scaling when handling mouse clicks
+    (hash-table-set! tests-draw-state 'sizex sizex)
+    (* (/ sizex 2) (- 0.5 xadj))))
+
+(define (dcommon:get-yoffset tests-draw-state sizey-in yadj-in)
+  (let ((yadj  (or yadj-in  (hash-table-ref/default tests-draw-state 'yadj 0)))
+	(sizey (or sizey-in (hash-table-ref/default tests-draw-state 'sizey 500))))
+    (hash-table-set! tests-draw-state 'yadj yadj) ;; for use in de-scaling when handling mouse clicks
+    (hash-table-set! tests-draw-state 'sizey sizey)
+    (* (/ sizey 2) (- yadj 0.5))))
+
+(define (dcommon:x->canvas x scalef xoffset)
+  (+ xoffset (* x scalef)))
+
+(define (dcommon:y->canvas y scalef yoffset)
+  (+ yoffset (* y scalef)))
+
 ;; sizex, sizey     - canvas size
 ;; originx, originy - canvas origin
 ;;
@@ -707,20 +735,15 @@
   (let* ((dot-data ;; (map cdr (filter
 		   ;; 	  (lambda (x)(equal? "node" (car x)))
 	  (map string-split (tests:lazy-dot test-records "plain" sizex sizey))) ;; (tests:easy-dot test-records "plain")))
-	 (test-browse-xoffset (hash-table-ref tests-draw-state 'test-browse-xoffset))
-	 (test-browse-yoffset (hash-table-ref tests-draw-state 'test-browse-yoffset))
-	 (xtorig (+ test-browse-xoffset (* (/ sizex 2) 1 (- 0.5 xadj)))) ;;  (- xadj 1))))
-	 (ytorig (+ test-browse-yoffset (* (/ sizey 2) 1 (- yadj 0.5))))
-	 (boxw   10)
-	 (tests-hash     (hash-table-ref tests-draw-state 'tests-info))
+	 (xoffset	 (dcommon:get-xoffset tests-draw-state sizex xadj))
+	 (yoffset        (dcommon:get-yoffset tests-draw-state sizey yadj))
+	 (boxw           10)
+	 (tests-info     (hash-table-ref tests-draw-state 'tests-info))
 	 (selected-tests (hash-table-ref tests-draw-state 'selected-tests ))
 	 (scalef         (dcommon:estimate-scale sizex sizey originx originy dot-data)))
 
     (hash-table-set! tests-draw-state 'scalef scalef)
     
-    ;; (print "dot-data=" dot-data)
-    (hash-table-set! tests-draw-state 'xtorig xtorig)
-    (hash-table-set! tests-draw-state 'ytorig ytorig)
     (let ((longest-str   (if (null? sorted-testnames) "         " (car (sort sorted-testnames (lambda (a b)(>= (string-length a)(string-length b))))))))
       (let-values (((x-max y-max) (canvas-text-size cnv longest-str)))
 	(if (> x-max boxw)(set! boxw (+ 10 x-max)))))
@@ -762,20 +785,15 @@
 		 (urx  (+ llx boxw))
 		 (ury  (+ lly boxh)))
 					; (print "hed " hed " llx " llx " lly " lly " urx " urx " ury " ury)
-	    (dcommon:draw-test cnv scalef llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
-	    ;; (dcommon:draw-arrows cnv testname tests-hash test-records))
-	    (dcommon:draw-edges cnv scalef edgedat)
+	    (dcommon:draw-test cnv xoffset yoffset scalef llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
+	    ;; (dcommon:draw-arrows cnv testname tests-info test-records))
+	    (dcommon:draw-edges cnv xoffset yoffset scalef edgedat)
 	    
 	    ;; data used by mouse click calc. keep the wacky order for now.
-	    (hash-table-set! tests-hash hed  (list llx urx (- sizey ury)(- sizey lly) lly boxw boxh edgedat)) 
-	    ;; (list llx lly boxw boxh)) ;; NB// Swap ury and lly
+	    (hash-table-set! tests-info hed  (list llx lly urx ury boxw boxh edgedat)) 
 	    (if (not (null? tal))
 		(loop (car tal)
 		      (cdr tal))))))
-    ;; (for-each
-    ;;  (lambda (testname)
-    ;;    (dcommon:draw-arrows cnv testname tests-hash test-records))
-    ;;  sorted-testnames))
     ))
 
 ;; per-point-proc required, remainder optional
@@ -799,44 +817,32 @@
 
 (define (dcommon:redraw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames test-records)
   (let* ((scalef              (hash-table-ref tests-draw-state 'scalef))
-	 (test-browse-xoffset (hash-table-ref tests-draw-state 'test-browse-xoffset))
-	 (test-browse-yoffset (hash-table-ref tests-draw-state 'test-browse-yoffset))
-	 (xtorig              (+ test-browse-xoffset (* (/ sizex 2) (- xadj 0.5)))) ;;  (- xadj 1))))
-	 (ytorig              (+ test-browse-yoffset (* (/ sizey 2) (- 0.5 yadj))))
-	 (xdelta              (- (hash-table-ref tests-draw-state 'xtorig) xtorig))
-	 (ydelta              (- (hash-table-ref tests-draw-state 'ytorig) ytorig))
-	 (tests-hash          (hash-table-ref tests-draw-state 'tests-info))
+	 (xoffset             (dcommon:get-xoffset tests-draw-state sizex xadj))
+	 (yoffset             (dcommon:get-yoffset tests-draw-state sizey yadj))
+	 (tests-info          (hash-table-ref tests-draw-state 'tests-info))
 	 (selected-tests      (hash-table-ref tests-draw-state 'selected-tests )))
-    (hash-table-set! tests-draw-state 'xtorig xtorig)
-    (hash-table-set! tests-draw-state 'ytorig ytorig)
     (if (not (null? sorted-testnames))
 	(let loop ((hed (car (reverse sorted-testnames)))
 		   (tal (cdr (reverse sorted-testnames))))
-	  (let* ((tvals (hash-table-ref tests-hash hed))
-		 (llx   (+ xdelta (list-ref tvals 0)))
-		 (lly   (+ ydelta (list-ref tvals 4)))
-		 (boxw  (list-ref tvals 5))
-		 (boxh  (list-ref tvals 6))
+	  (let* ((tvals (hash-table-ref tests-info hed))
+		 (llx   (list-ref tvals 0))
+		 (lly   (list-ref tvals 1))
+		 (boxw  (list-ref tvals 4))
+		 (boxh  (list-ref tvals 5))
 		 (edges (map (lambda (pline)
 			       (dcommon:process-polyline pline
 							 (lambda (x1 y1)
-							   (list (+ x1 xdelta)
-								 (+ y1 ydelta)))
+							   (list x1 y1))
 							 #f #f))
-			     (list-ref tvals 7)))
+			     (list-ref tvals 6)))
 		 (urx   (+ llx boxw))
 		 (ury   (+ lly boxh)))
-	    (dcommon:draw-test cnv scalef llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
-	    (dcommon:draw-edges cnv scalef edges)
-	    (hash-table-set! tests-hash hed (list llx urx (- sizey ury)(- sizey lly) lly boxw boxh edges))
+	    (dcommon:draw-test cnv xoffset yoffset scalef llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
+	    (dcommon:draw-edges cnv xoffset yoffset scalef edges)
 	    (if (not (null? tal))
 		;; leave a column of space to the right to list items
 		(loop (car tal)
 		      (cdr tal))))))))
-    ;; (for-each
-    ;;  (lambda (testname)
-    ;;    (dcommon:draw-edges cnv scalef edges)) ;; (dcommon:draw-arrows cnv testname tests-hash test-records))
-    ;;  sorted-testnames)))
 
 ;;======================================================================
 ;;  S T E P S
