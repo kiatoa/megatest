@@ -61,7 +61,9 @@ EGGS=matchable readline apropos base64 regex-literals format regex-case test coo
      json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
      spiffy-directory-listing ssax sxml-serializer sxml-modifications sql-de-lite \
      srfi-19 refdb ini-file sparse-vectors z3 call-with-environment-variables hahn linenoise \
-     crypt parley
+     crypt parley zlib shell udp loops foof-loop lazy-seq ansi-escape-sequences rfc3339 slice \
+     slice-utf8 scsh-process functional-lists srfi-101 uuid-lib filepath srfi-78 srfi-42 sexp-diff \
+     low-level-macros symbol-utils expand-full chicken-doc irc silex lalr lalr-driver sha1 refdb
 
 #
 # Derived variables
