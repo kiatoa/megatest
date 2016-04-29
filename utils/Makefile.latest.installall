@@ -46,7 +46,7 @@ PROXY=
 # http://code.call-cc.org/dev-snapshots/2015/06/07/chicken-4.10.0rc1.tar.gz
 # http://code.call-cc.org/releases/4.10.0/chicken-4.10.0.tar.gz
 # Select version of chicken, sqlite3 etc
-CHICKEN_VERSION=4.10.0
+CHICKEN_VERSION=4.10.1
 SQLITE3_VERSION=3090200
 # http://www.sqlite.org/2014/sqlite-autoconf-3080500.tar.gz
 # http://www.sqlite.org/2015/sqlite-autoconf-3081101.tar.gz
@@ -164,6 +164,9 @@ chicken-4.10.0rc1.tar.gz :
 
 chicken-4.10.0.tar.gz :
 	wget http://code.call-cc.org/releases/4.10.0/chicken-4.10.0.tar.gz
+
+chicken-4.10.1.tar.gz :
+	wget http://code.call-cc.org/dev-snapshots/2015/08/29/chicken-4.10.1.tar.gz
 
 # git clone git://code.call-cc.org/chicken-core
 # git clone http://code.call-cc.org/git/chicken-core.git
@@ -293,10 +296,10 @@ iup/installall.sh : iuplib.fossil $(PREFIX)/lib/libiup.so
 
 #	cd iup && if [ -e makeall.sh ];then fossil update $(IUPBRANCH); else fossil open ../iuplib.fossil;fossil update $(IUPBRANCH); fi
 
-iup/alldone : iup/makeall.sh $(PREFIX)/include/iup.h $(PREFIX)/lib/libiup.so
+#iup/alldone : iup/makeall.sh $(PREFIX)/include/iup.h $(PREFIX)/lib/libiup.so
 #	cd iup && ./makeall.sh $(IUPCONFIG)
 
-$(PREFIX)/lib/libiup.so $(PREFIX)/include/iup.h : iup/installall.sh iup/alldone
+$(PREFIX)/lib/libiup.so $(PREFIX)/include/iup.h : iup/installall.sh
 #	cd iup && ./makeall.sh $(IUPCONFIG)
 
 # $(PREFIX)/lib/libiup.so : iup/iup/alldone
