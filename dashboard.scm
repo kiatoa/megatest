@@ -352,18 +352,18 @@ Misc
     
 ;; create a virtual table of all the tests
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
-(define (update-rundat runnamepatt numruns testnamepatt keypatts)
+(define (update-rundat data runnamepatt numruns testnamepatt keypatts)
   (let* ((referenced-run-ids '())
-	 (allruns     (if (d:alldat-useserver *alldat*)
-			  (rmt:get-runs runnamepatt numruns (d:alldat-start-run-offset *alldat*) keypatts)
-			  (db:get-runs (d:alldat-dblocal *alldat*) runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
-				      (d:alldat-start-run-offset *alldat*) keypatts)))
+	 (allruns     (if (d:alldat-useserver data)
+			  (rmt:get-runs runnamepatt numruns (d:alldat-start-run-offset data) keypatts)
+			  (db:get-runs (d:alldat-dblocal data) runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
+				      (d:alldat-start-run-offset data) keypatts)))
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
 	 (result      '())
 	 (maxtests    0)
-	 (states      (hash-table-keys (d:alldat-state-ignore-hash *alldat*)))
-	 (statuses    (hash-table-keys (d:alldat-status-ignore-hash *alldat*)))
+	 (states      (hash-table-keys (d:alldat-state-ignore-hash data)))
+	 (statuses    (hash-table-keys (d:alldat-status-ignore-hash data)))
 	 (sort-info   (get-curr-sort))
 	 (sort-by     (vector-ref sort-info 1))
 	 (sort-order  (vector-ref sort-info 2))
@@ -375,24 +375,24 @@ Misc
     ;; 
     (for-each (lambda (run)
 		(let* ((run-id      (db:get-value-by-header run header "id"))
-		       (key-vals    (if (d:alldat-useserver *alldat*) 
+		       (key-vals    (if (d:alldat-useserver data) 
 					(rmt:get-key-vals run-id)
-					(db:get-key-vals (d:alldat-dblocal *alldat*) run-id)))
-		       (prev-dat    (let ((rec (hash-table-ref/default (d:alldat-allruns-by-id *alldat*) run-id #f)))
+					(db:get-key-vals (d:alldat-dblocal data) run-id)))
+		       (prev-dat    (let ((rec (hash-table-ref/default (d:alldat-allruns-by-id data) run-id #f)))
 				      (if rec rec (vector run '() key-vals -100)))) ;; -100 is before time began
 		       (prev-tests  (vector-ref prev-dat 1))
 		       (last-update (vector-ref prev-dat 3))
-		       (tmptests    (if (d:alldat-useserver *alldat*)
+		       (tmptests    (if (d:alldat-useserver data)
 					(rmt:get-tests-for-run run-id testnamepatt states statuses
 							       #f #f
-							       (d:alldat-hide-not-hide *alldat*)
+							       (d:alldat-hide-not-hide data)
 							       sort-by
 							       sort-order
 							       'shortlist
 							       last-update)
-					(db:get-tests-for-run (d:alldat-dblocal *alldat*) run-id testnamepatt states statuses
+					(db:get-tests-for-run (d:alldat-dblocal data) run-id testnamepatt states statuses
 							      #f #f
-							      (d:alldat-hide-not-hide *alldat*)
+							      (d:alldat-hide-not-hide data)
 							      sort-by
 							      sort-order
 							      'shortlist
@@ -406,7 +406,7 @@ Misc
 				      (if (eq? *tests-sort-reverse* 3) ;; +event_time
 					(sort newdat compare-tests)
 					newdat))))
-		  ;; NOTE: bubble-up also sets the global (d:alldat-item-test-names *alldat*)
+		  ;; NOTE: bubble-up also sets the global (d:alldat-item-test-names data)
 		  ;; (tests       (bubble-up tmptests priority: bubble-type))
 		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
 		  ;; (debug:print 0 "Getting data for run " run-id " with key-vals=" key-vals)
@@ -414,16 +414,16 @@ Misc
 		  (set! referenced-run-ids (cons run-id referenced-run-ids))
 		  (if (> (length tests) maxtests)
 		      (set! maxtests (length tests)))
-		  (if (or (not (d:alldat-hide-empty-runs *alldat*)) ;; this reduces the data burden when set
+		  (if (or (not (d:alldat-hide-empty-runs data)) ;; this reduces the data burden when set
 			  (not (null? tests)))
 		      (let ((dstruct (vector run tests key-vals (- (current-seconds) 10))))
-			(hash-table-set! (d:alldat-allruns-by-id *alldat*) run-id dstruct)
+			(hash-table-set! (d:alldat-allruns-by-id data) run-id dstruct)
 			(set! result (cons dstruct result))))))
 	      runs)
 
-    (d:alldat-header-set! *alldat* header)
-    (d:alldat-allruns-set! *alldat* result)
-    (debug:print-info 6 "(d:alldat-allruns *alldat*) has " (length (d:alldat-allruns *alldat*)) " runs")
+    (d:alldat-header-set! data header)
+    (d:alldat-allruns-set! data result)
+    (debug:print-info 6 "(d:alldat-allruns data) has " (length (d:alldat-allruns data)) " runs")
     maxtests))
 
 (define *collapsed* (make-hash-table))
@@ -1148,8 +1148,9 @@ Misc
 ;;======================================================================
 ;;
 ;; General info about the run(s) and megatest area
-(define (dashboard:summary db)
-  (let ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f #f))) ;; changed to #f since I want #{} to be expanded by [system ...] to NOT be expanded. WAS: 'return-string)))
+(define (dashboard:summary data)
+  (let* ((db               (d:alldat-dblocal data))
+	 (rawconfig        (read-config (conc *toppath* "/megatest.config") #f #f))) ;; changed to #f since I want #{} to be expanded by [system ...] to NOT be expanded. WAS: 'return-string)))
     (iup:vbox
      (iup:split
       #:value 500
@@ -1544,8 +1545,9 @@ Misc
 ;; R U N S 
 ;;======================================================================
 
-(define (make-dashboard-buttons db nruns ntests keynames runs-sum-dat new-view-dat)
-  (let* ((nkeys   (length keynames))
+(define (make-dashboard-buttons data nruns ntests keynames runs-sum-dat new-view-dat)
+  (let* ((db      (d:alldat-dblocal data))
+	 (nkeys   (length keynames))
 	 (runsvec (make-vector nruns))
 	 (header  (make-vector nruns))
 	 (lftcol  (make-vector ntests))
@@ -1770,7 +1772,7 @@ Misc
 		    #:tabchangepos-cb (lambda (obj curr prev)
 					(d:alldat-please-update-set! *alldat* #t)
 					(d:alldat-curr-tab-num-set! *alldat* curr))
-		    (dashboard:summary db)
+		    (dashboard:summary *alldat*)
 		    runs-view
 		    (dashboard:one-run db  runs-sum-dat)
 		    (dashboard:new-view db new-view-dat)
@@ -1793,8 +1795,8 @@ Misc
       (d:alldat-num-tests-set! *alldat* (string->number
 					 (or (args:get-arg "-rows")
 					     (get-environment-variable "DASHBOARDROWS"))))
-      (update-rundat "%" (d:alldat-numruns *alldat*) "%/%" '()))
-    (d:alldat-num-tests-set! *alldat* (min (max (update-rundat "%" (d:alldat-numruns *alldat*) "%/%" '()) 8) 20)))
+      (update-rundat *alldat* "%" (d:alldat-numruns *alldat*) "%/%" '()))
+    (d:alldat-num-tests-set! *alldat* (min (max (update-rundat *alldat* "%" (d:alldat-numruns *alldat*) "%/%" '()) 8) 20)))
 
 (define *tim* (iup:timer))
 (define *ord* #f)
@@ -1853,7 +1855,7 @@ Misc
 	    ((0) 
 	     (if dashboard:update-summary-tab (dashboard:update-summary-tab)))
 	    ((1) ;; The runs table is active
-	     (update-rundat (hash-table-ref/default (d:alldat-searchpatts *alldat*) "runname" "%") (d:alldat-numruns *alldat*)
+	     (update-rundat *alldat* (hash-table-ref/default (d:alldat-searchpatts *alldat*) "runname" "%") (d:alldat-numruns *alldat*)
 			    (hash-table-ref/default (d:alldat-searchpatts *alldat*) "test-name" "%/%")
 			    ;; (hash-table-ref/default (d:alldat-searchpatts *alldat*) "item-name" "%")
 			    (let ((res '()))
@@ -1916,7 +1918,7 @@ Misc
      ((args:get-arg "-guimonitor")
       (gui-monitor (d:alldat-dblocal *alldat*)))
      (else
-      (set! uidat (make-dashboard-buttons (d:alldat-dblocal *alldat*)
+      (set! uidat (make-dashboard-buttons *alldat* ;; (d:alldat-dblocal *alldat*)
 					  (d:alldat-numruns *alldat*)
 					  (d:alldat-num-tests *alldat*)
 					  (d:alldat-dbkeys *alldat*)
