@@ -24,6 +24,7 @@ help :
 	@echo For IUP set IUPBRANCH, currently $(IUPBRANCH)
 	@echo         set IUPCONFIG, currently $(IUPCONFIG) - look in https://www.kiatoa.com/fossils/iuplib for .inc files
 	@echo You are using PREFIX=$(PREFIX)
+	@echo You are using PRODCHICKEN=$(PRODCHICKEN)
 	@echo You are using PROXY="$(PROXY)"
 	@echo If needed set PROXY to host.dom:port
 	@echo   http_proxy=$(http_proxy)
@@ -39,14 +40,16 @@ FPIC=-C "-fPIC"
 ifeq ($(PREFIX),)
 PREFIX=$(PWD)/target
 endif
-
+ifeq ($(PRODCHICKEN),)
+PRODCHICKEN=$(PREFIX)/prod-chicken/
+endif
 # Set this on the command line of your make call if needed: make PROXY=host.com:1234
 PROXY=
 
 # http://code.call-cc.org/dev-snapshots/2015/06/07/chicken-4.10.0rc1.tar.gz
 # http://code.call-cc.org/releases/4.10.0/chicken-4.10.0.tar.gz
 # Select version of chicken, sqlite3 etc
-CHICKEN_VERSION=4.10.0
+CHICKEN_VERSION=4.10.1
 SQLITE3_VERSION=3090200
 # http://www.sqlite.org/2014/sqlite-autoconf-3080500.tar.gz
 # http://www.sqlite.org/2015/sqlite-autoconf-3081101.tar.gz
@@ -149,9 +152,9 @@ $(PREFIX)/setup-chicken4x.csh : $(EGGFLAGS)
 	(echo "setenv LD_LIBRARY_PATH $(LD_LIBRARY_PATH)" >> $(PREFIX)/setup-chicken4x.csh)
 
 chicken-core/chicken.scm : chicken-$(CHICKEN_VERSION).tar.gz
-	tar xf chicken-$(CHICKEN_VERSION).tar.gz
-	ln -sf chicken-$(CHICKEN_VERSION) chicken-core
-
+	#tar xf chicken-$(CHICKEN_VERSION).tar.gz
+	#ln -sf chicken-$(CHICKEN_VERSION) chicken-core
+	echo "Hello from chicken"
 
 chicken-4.9.0rc1.tar.gz : 
 	wget http://code.call-cc.org/dev-snapshots/2014/04/17/chicken-4.9.0rc1.tar.gz
@@ -165,12 +168,27 @@ chicken-4.10.0rc1.tar.gz :
 chicken-4.10.0.tar.gz :
 	wget http://code.call-cc.org/releases/4.10.0/chicken-4.10.0.tar.gz
 
+chicken-4.10.1.tar.gz :
+	fossil clone https://www.kiatoa.com/fossils/chicken-core chicken-scheme.fossil
+	mkdir -p chicken-core
+	cd chicken-core; pwd
+	cd chicken-core; fossil open ../chicken-scheme.fossil
+	cd chicken-core; fossil up 337f5be
+#	wget http://code.call-cc.org/dev-snapshots/2015/08/29/chicken-4.10.1.tar.gz
+
 # git clone git://code.call-cc.org/chicken-core
 # git clone http://code.call-cc.org/git/chicken-core.git
 
-$(CHICKEN_INSTALL) : chicken-core/chicken.scm $(PREFIX)/setup-chicken4x.sh $(PREFIX)/setup-chicken4x.csh
-	cd chicken-core;make PLATFORM=linux PREFIX=$(PREFIX)
-	cd chicken-core;make PLATFORM=linux PREFIX=$(PREFIX) install
+$(PRODCHICKEN)/bin/chicken :
+	wget http://code.call-cc.org/dev-snapshots/2015/08/29/chicken-4.10.1.tar.gz
+	tar -xzvf chicken-4.10.1.tar.gz
+	cd chicken-4.10.1/; make PLATFORM=linux PREFIX=$(PRODCHICKEN)
+	cd chicken-4.10.1/; make PLATFORM=linux PREFIX=$(PRODCHICKEN) install
+	rm -rfv chicken-4.10.1/ 
+
+$(CHICKEN_INSTALL) : chicken-core/chicken.scm $(PREFIX)/setup-chicken4x.sh $(PREFIX)/setup-chicken4x.csh $(PRODCHICKEN)/bin/chicken
+	cd chicken-core; LD_LIBRARY_PATH=$(PRODCHICKEN) make PLATFORM=linux CHICKEN=$(PRODCHICKEN)/bin/chicken  PREFIX=$(PREFIX)
+	cd chicken-core; LD_LIBRARY_PATH=$(PRODCHICKEN) make PLATFORM=linux CHICKEN=$(PRODCHICKEN)/bin/chicken  PREFIX=$(PREFIX) install
 
 #======================================================================
 # S Q L I T E 3
@@ -226,7 +244,7 @@ $(PREFIX)/lib/chicken/7/mutils.so : opensrc/histstore/histstore.scm
 	cd opensrc/mutils;chicken-install
 
 $(PREFIX)/lib/chicken/7/dbi.so : opensrc/dbi/dbi.scm
-	cd opensrc/dbi;chicken-install
+	cd opensrc/dbi; sed -i -e 's/.*postgres.*/;;commented out/g' dbi.scm; chicken-install
 
 $(PREFIX)/lib/chicken/7/margs.so : opensrc/margs/margs.scm
 	cd opensrc/margs;chicken-install
@@ -251,7 +269,8 @@ stml/requirements.scm : stml/requirements.scm.template
 	cp stml/requirements.scm.template stml/requirements.scm
 
 $(PREFIX)/lib/chicken/7/stml.so : stml/requirements.scm
-	cd stml;make
+	cd stml; sed -i -e "s#.*TARGDIR.*#TARGDIR=$(PREFIX)/bin#g" install.cfg 
+	cd stml;CSC_OPTIONS='-C "-fPIC"' make
 
 #======================================================================
 # F F C A L L (Used by IUP)
@@ -279,9 +298,9 @@ iuplib.fossil :
 iup/installall.sh : iuplib.fossil $(PREFIX)/lib/libiup.so
 	mkdir -p iup
 	pwd
-	#wget -c http://sourceforge.net/projects/canvasdraw/files/5.9/Linux%20Libraries/cd-5.9_Linux26g4_64_lib.tar.gz/download
-	#wget -c http://sourceforge.net/projects/iup/files/3.17/Linux%20Libraries/iup-3.17_Linux26g4_64_lib.tar.gz/download
-	#wget -c http://sourceforge.net/projects/imtoolkit/files/3.10/Linux%20Libraries/im-3.10_Linux26g4_64_lib.tar.gz/download
+	wget -c --no-check-certificate http://sourceforge.net/projects/canvasdraw/files/5.9/Linux%20Libraries/cd-5.9_Linux26g4_64_lib.tar.gz/download
+	wget -c --no-check-certificate http://sourceforge.net/projects/iup/files/3.17/Linux%20Libraries/iup-3.17_Linux26g4_64_lib.tar.gz/download
+	wget -c --no-check-certificate http://sourceforge.net/projects/imtoolkit/files/3.10/Linux%20Libraries/im-3.10_Linux26g4_64_lib.tar.gz/download
 	#wget -c http://sourceforge.net/projects/luabinaries/files/5.3.2/Linux%20Libraries/lua-5.3.2_Linux26g4_64_lib.tar.gz/download
 	tar -xzvf cd-5.9_Linux26g4_64_lib.tar.gz -C iup/
 	tar -xzvf im-3.10_Linux26g4_64_lib.tar.gz -C iup/
@@ -293,10 +312,10 @@ iup/installall.sh : iuplib.fossil $(PREFIX)/lib/libiup.so
 
 #	cd iup && if [ -e makeall.sh ];then fossil update $(IUPBRANCH); else fossil open ../iuplib.fossil;fossil update $(IUPBRANCH); fi
 
-iup/alldone : iup/makeall.sh $(PREFIX)/include/iup.h $(PREFIX)/lib/libiup.so
+#iup/alldone : iup/makeall.sh $(PREFIX)/include/iup.h $(PREFIX)/lib/libiup.so
 #	cd iup && ./makeall.sh $(IUPCONFIG)
 
-$(PREFIX)/lib/libiup.so $(PREFIX)/include/iup.h : iup/installall.sh iup/alldone
+$(PREFIX)/lib/libiup.so $(PREFIX)/include/iup.h : iup/installall.sh
 #	cd iup && ./makeall.sh $(IUPCONFIG)
 
 # $(PREFIX)/lib/libiup.so : iup/iup/alldone
