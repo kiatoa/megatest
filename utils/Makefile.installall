@@ -112,10 +112,10 @@ base : chkn eggs
 # stuff needed for Kiatoa and Megatest from matts miscellaneous stash
 #   NOTE TO SELF: eggifying these would be great...
 mutils : base logprobin $(PREFIX)/bin/hs \
-        $(PREFIX)/lib/chicken/7/mutils.so \
-        $(PREFIX)/lib/chicken/7/dbi.so \
-        $(PREFIX)/lib/chicken/7/stml.so \
-        $(PREFIX)/lib/chicken/7/margs.so
+        $(PREFIX)/lib/chicken/8/mutils.so \
+        $(PREFIX)/lib/chicken/8/dbi.so \
+        $(PREFIX)/lib/chicken/8/stml.so \
+        $(PREFIX)/lib/chicken/8/margs.so
 
 chkn : $(CHICKEN_INSTALL)
 
@@ -227,13 +227,13 @@ opensrc/histstore/histstore.scm : opensrc.fossil
 	mkdir -p opensrc
 	cd opensrc;if [ -e .fslckout ];then fossil update; else fossil open ../opensrc.fossil; fi
 
-$(PREFIX)/lib/chicken/7/mutils.so : opensrc/histstore/histstore.scm
+$(PREFIX)/lib/chicken/8/mutils.so : opensrc/histstore/histstore.scm
 	cd opensrc/mutils;chicken-install
 
-$(PREFIX)/lib/chicken/7/dbi.so : opensrc/dbi/dbi.scm
+$(PREFIX)/lib/chicken/8/dbi.so : opensrc/dbi/dbi.scm
 	cd opensrc/dbi;chicken-install
 
-$(PREFIX)/lib/chicken/7/margs.so : opensrc/margs/margs.scm
+$(PREFIX)/lib/chicken/8/margs.so : opensrc/margs/margs.scm
 	cd opensrc/margs;chicken-install
 
 opensrc/histstore/hs : opensrc/histstore/histstore.scm chkn eggs $(CHICKEN_EGG_DIR)/sqlite3.so 
@@ -255,7 +255,7 @@ stml/requirements.scm : stml/requirements.scm.template
 	cp stml/install.cfg.template      stml/install.cfg
 	cp stml/requirements.scm.template stml/requirements.scm
 
-$(PREFIX)/lib/chicken/7/stml.so : stml/requirements.scm
+$(PREFIX)/lib/chicken/8/stml.so : stml/requirements.scm
 	cd stml;make
 
 #======================================================================
