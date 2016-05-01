@@ -46,7 +46,8 @@ PROXY=
 # http://code.call-cc.org/dev-snapshots/2015/06/07/chicken-4.10.0rc1.tar.gz
 # http://code.call-cc.org/releases/4.10.0/chicken-4.10.0.tar.gz
 # Select version of chicken, sqlite3 etc
-CHICKEN_VERSION=4.10.0
+# CHICKEN_VERSION=4.10.0
+CHICKEN_VERSION=4.11.0rc2
 SQLITE3_VERSION=3090200
 # http://www.sqlite.org/2014/sqlite-autoconf-3080500.tar.gz
 # http://www.sqlite.org/2015/sqlite-autoconf-3081101.tar.gz
@@ -79,7 +80,7 @@ PATH:=$(PREFIX)/bin:$(PATH)
 LIBPATH=$(PREFIX)/lib$(ADDITIONAL_LIBPATH)
 LD_LIBRARY_PATH=$(LIBPATH)
 CHICKEN_INSTALL=$(PREFIX)/bin/chicken-install
-CHICKEN_EGG_DIR=$(PREFIX)/lib/chicken/7
+CHICKEN_EGG_DIR=$(PREFIX)/lib/chicken/8
 
 VPATH=$(CHICKEN_EGG_DIR):$(PWD)/eggflags
 
@@ -148,10 +149,11 @@ $(PREFIX)/setup-chicken4x.csh : $(EGGFLAGS)
 	(echo "setenv PATH $(PREFIX):'$$'PATH" > $(PREFIX)/setup-chicken4x.csh)
 	(echo "setenv LD_LIBRARY_PATH $(LD_LIBRARY_PATH)" >> $(PREFIX)/setup-chicken4x.csh)
 
+# NOTE: the touch chicken-core/chicken.scm compensates for the time stamp from the tar file
 chicken-core/chicken.scm : chicken-$(CHICKEN_VERSION).tar.gz
 	tar xf chicken-$(CHICKEN_VERSION).tar.gz
 	ln -sf chicken-$(CHICKEN_VERSION) chicken-core
-
+	if [[ -e chicken-core/chicken.scm ]];then touch chicken-core/chicken.scm;fi
 
 chicken-4.9.0rc1.tar.gz : 
 	wget http://code.call-cc.org/dev-snapshots/2014/04/17/chicken-4.9.0rc1.tar.gz
@@ -164,6 +166,9 @@ chicken-4.10.0rc1.tar.gz :
 
 chicken-4.10.0.tar.gz :
 	wget http://code.call-cc.org/releases/4.10.0/chicken-4.10.0.tar.gz
+
+chicken-4.11.0rc2.tar.gz : 
+	wget http://code.call-cc.org/dev-snapshots/2016/04/28/chicken-4.11.0rc2.tar.gz
 
 # git clone git://code.call-cc.org/chicken-core
 # git clone http://code.call-cc.org/git/chicken-core.git
