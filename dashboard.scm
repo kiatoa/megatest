@@ -332,7 +332,7 @@ Misc
 	 (delta (map (lambda (a b)(abs (- a b))) c1 c2)))
     (null? (filter (lambda (x)(> x 3)) delta))))
 
-(define (compare-tests test1 test2)
+(define (dboard:compare-tests test1 test2)
   (let* ((test-name1  (db:test-get-testname  test1))
 	 (item-path1  (db:test-get-item-path test1))
 	 (eventtime1  (db:test-get-event_time test1))
@@ -352,6 +352,54 @@ Misc
 	    (string>? test-name1 test-name2)
 	    test1-older))))
 
+;; This is roughly the same as dboard:get-tests-dat, should merge them if possible
+;;
+(define (dboard:get-tests-for-run-duplicate data run-id run testnamepatt key-vals)
+  (let* ((states      (hash-table-keys (d:alldat-state-ignore-hash data)))
+	 (statuses    (hash-table-keys (d:alldat-status-ignore-hash data)))
+	 (sort-info   (get-curr-sort))
+	 (sort-by     (vector-ref sort-info 1))
+	 (sort-order  (vector-ref sort-info 2))
+	 (bubble-type (if (member sort-order '(testname))
+			  'testname
+			  'itempath))
+	 (prev-dat    (let ((rec (hash-table-ref/default (d:alldat-allruns-by-id data) run-id #f)))
+			(if rec rec (vector run '() key-vals -100)))) ;; -100 is before time began
+	 (prev-tests  (vector-ref prev-dat 1))
+	 (last-update (vector-ref prev-dat 3))
+	 (tmptests    (if (d:alldat-useserver data)
+			  (rmt:get-tests-for-run run-id testnamepatt states statuses
+						 #f #f
+						 (d:alldat-hide-not-hide data)
+						 sort-by
+						 sort-order
+						 'shortlist
+						 (if (d:alldat-filters-changed data)
+						     0
+						     last-update))
+			  (db:get-tests-for-run (d:alldat-dblocal data) run-id testnamepatt states statuses
+						#f #f
+						(d:alldat-hide-not-hide data)
+						sort-by
+						sort-order
+						'shortlist
+						(if (d:alldat-filters-changed data)
+						    0
+						    last-update))))
+	 (tests       (let ((newdat (filter
+				     (lambda (x)
+				       (not (equal? (db:test-get-state x) "DELETED"))) ;; remove deleted tests but do it after merging
+				     (delete-duplicates (if (d:alldat-filters-changed data)
+							    tmptests
+							    (append tmptests prev-tests))
+							(lambda (a b)
+							  (eq? (db:test-get-id a)(db:test-get-id b)))))))
+			(if (eq? *tests-sort-reverse* 3) ;; +event_time
+			    (sort newdat dboard:compare-tests)
+			    newdat))))
+    (debug:print 0 "(dboard:get-tests-for-run-duplicate: got " (length tests) " test records for run " run-id)
+    tests))
+
 ;; create a virtual table of all the tests
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 (define (update-rundat data runnamepatt numruns testnamepatt keypatts)
@@ -364,14 +412,7 @@ Misc
 	 (runs        (db:get-rows   allruns))
 	 (result      '())
 	 (maxtests    0)
-	 (states      (hash-table-keys (d:alldat-state-ignore-hash data)))
-	 (statuses    (hash-table-keys (d:alldat-status-ignore-hash data)))
-	 (sort-info   (get-curr-sort))
-	 (sort-by     (vector-ref sort-info 1))
-	 (sort-order  (vector-ref sort-info 2))
-	 (bubble-type (if (member sort-order '(testname))
-			  'testname
-			  'itempath)))
+)
     ;; 
     ;; trim runs to only those that are changing often here
     ;; 
@@ -380,34 +421,7 @@ Misc
 		       (key-vals    (if (d:alldat-useserver data) 
 					(rmt:get-key-vals run-id)
 					(db:get-key-vals (d:alldat-dblocal data) run-id)))
-		       (prev-dat    (let ((rec (hash-table-ref/default (d:alldat-allruns-by-id data) run-id #f)))
-				      (if rec rec (vector run '() key-vals -100)))) ;; -100 is before time began
-		       (prev-tests  (vector-ref prev-dat 1))
-		       (last-update (vector-ref prev-dat 3))
-		       (tmptests    (if (d:alldat-useserver data)
-					(rmt:get-tests-for-run run-id testnamepatt states statuses
-							       #f #f
-							       (d:alldat-hide-not-hide data)
-							       sort-by
-							       sort-order
-							       'shortlist
-							       last-update)
-					(db:get-tests-for-run (d:alldat-dblocal data) run-id testnamepatt states statuses
-							      #f #f
-							      (d:alldat-hide-not-hide data)
-							      sort-by
-							      sort-order
-							      'shortlist
-							      last-update)))
-		       (tests       (let ((newdat (filter
-						   (lambda (x)
-						     (not (equal? (db:test-get-state x) "DELETED"))) ;; remove deleted tests but do it after merging
-						   (delete-duplicates (append tmptests prev-tests)
-								      (lambda (a b)
-									(eq? (db:test-get-id a)(db:test-get-id b)))))))
-				      (if (eq? *tests-sort-reverse* 3) ;; +event_time
-					  (sort newdat compare-tests)
-					  newdat))))
+		       (tests       (dboard:get-tests-for-run-duplicate data run-id run testnamepatt key-vals)))
 		  ;; NOTE: bubble-up also sets the global (d:alldat-item-test-names data)
 		  ;; (tests       (bubble-up tmptests priority: bubble-type))
 		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
@@ -683,11 +697,12 @@ Misc
 				status-changed)
 			    "190 180 190"
 			    "190 190 190"
-			    ))))
+			    ))
+    (d:alldat-filters-changed-set! *alldat* #t)))
 
 (define (update-search x val)
   (hash-table-set! (d:alldat-searchpatts *alldat*) x val)
-  (d:alldat-set-filters-changed! *alldat* #t)
+  (d:alldat-filters-changed-set! *alldat* #t)
   (set-bg-on-filter))
 
 (define (mark-for-update)
@@ -1229,6 +1244,7 @@ Misc
 						0
 						last-update)))
 		  '()))) ;; get 'em all
+    (debug:print 0 "dboard:get-tests-dat: got " (length tdat) " test records for run " run-id)
     (sort tdat (lambda (a b)
 		 (let* ((aval (vector-ref a 2))
 			(bval (vector-ref b 2))
@@ -1535,21 +1551,7 @@ Misc
 ;; R U N S 
 ;;======================================================================
 
-(define (make-dashboard-buttons data nruns ntests keynames runs-sum-dat new-view-dat)
-  (let* ((db      (d:alldat-dblocal data))
-	 (nkeys   (length keynames))
-	 (runsvec (make-vector nruns))
-	 (header  (make-vector nruns))
-	 (lftcol  (make-vector ntests))
-	 (keycol  (make-vector ntests))
-	 (controls '())
-	 (lftlst  '())
-	 (hdrlst  '())
-	 (bdylst  '())
-	 (result  '())
-	 (i       0))
-    ;; controls (along bottom)
-    (set! controls
+(define (dboard:make-controls data)
 	  (iup:hbox
 	   (iup:vbox
 	    (iup:frame 
@@ -1648,8 +1650,23 @@ Misc
 			   #:step 0.01)))
 					;(iup:button "inc rows" #:action (lambda (obj)(d:alldat-num-tests-set! data (+ (d:alldat-num-tests data) 1))))
 					;(iup:button "dec rows" #:action (lambda (obj)(d:alldat-num-tests-set! data (if (> (d:alldat-num-tests data) 0)(- (d:alldat-num-tests data) 1) 0))))
-	   )
-	  )
+	   ))
+
+(define (make-dashboard-buttons data nruns ntests keynames runs-sum-dat new-view-dat)
+  (let* ((db      (d:alldat-dblocal data))
+	 (nkeys   (length keynames))
+	 (runsvec (make-vector nruns))
+	 (header  (make-vector nruns))
+	 (lftcol  (make-vector ntests))
+	 (keycol  (make-vector ntests))
+	 (controls '())
+	 (lftlst  '())
+	 (hdrlst  '())
+	 (bdylst  '())
+	 (result  '())
+	 (i       0))
+    ;; controls (along bottom)
+    (set! controls (dboard:make-controls data))
     
     ;; create the left most column for the run key names and the test names 
     (set! lftlst (list (iup:hbox
@@ -1756,7 +1773,8 @@ Misc
 					;; the header
 					(apply iup:hbox (reverse hdrlst))
 					(apply iup:hbox (reverse bdylst))))))
-			 controls))
+			 ;; controls
+			 ))
 	     ;; (data (d:data-init (make-d:data)))
 	     (tabs (iup:tabs
 		    #:tabchangepos-cb (lambda (obj curr prev)
@@ -1776,7 +1794,9 @@ Misc
 	(iup:attribute-set! tabs "TABTITLE4" "Run Control")
 	(iup:attribute-set! tabs "BGCOLOR" "190 190 190")
 	(d:alldat-hide-not-hide-tabs-set! *alldat* tabs)
-	tabs)))
+	(iup:vbox
+	 tabs
+	 controls))))
     (vector keycol lftcol header runsvec)))
 
 (if (or (args:get-arg "-rows")
