@@ -56,7 +56,7 @@
   ls                     : list contents of target area
   get <relversion>       : retrieve data for release <version>
     -m \"message\"       : why retrieved?
-
+  cp <relative path>     : copy file to current directory 
   log                    : get listing of recent downloads
 
 Part of the Megatest tool suite.
@@ -110,6 +110,7 @@ Version: " megatest-fossil-hash)) ;; "
 
 ;; Create the sqlite db
 (define (sretrieve:db-do configdat proc) 
+
   (let ((path (configf:lookup configdat "database" "location")))
     (if (not path)
 	(begin
@@ -127,16 +128,17 @@ Version: " megatest-fossil-hash)) ;; "
 	     (debug:print 2 "ERROR: problem accessing db " dbpath
 			  ((condition-property-accessor 'exn 'message) exn))
 	     (exit 1))
+            ;;(debug:print 0 "calling proc " proc "db path " dbpath )
 	   (call-with-database
             dbpath
 	    (lambda (db)
-	      ;; (debug:print 0 "calling proc " proc " on db " db)
+	       ;;(debug:print 0 "calling proc " proc " on db " db)
 	      (set-busy-handler! db (busy-timeout 10000)) ;; 10 sec timeout
 	      (if (not dbexists)(sretrieve:initialize-db db))
 	      (proc db)))))
 	(debug:print 0 "ERROR: invalid path for storing database: " path))))
 
-;; copy in file to dest, validation is done BEFORE calling this
+;; copy in directory to dest, validation is done BEFORE calling this
 ;;
 (define (sretrieve:get configdat retriever version comment)
   (let* ((base-dir  (configf:lookup configdat "settings" "base-dir"))
@@ -158,12 +160,93 @@ Version: " megatest-fossil-hash)) ;; "
        (sretrieve:register-action db "get" retriever datadir comment)))
       (sretrieve:do-as-calling-user
        (lambda ()
-	 (change-directory datadir)
-	 (let ((files (filter (lambda (x)
+         (if (directory? datadir)
+	   (begin
+  	    (change-directory datadir)
+	    (let ((files (filter (lambda (x)
 				(not (member x '("." ".."))))
 			      (glob "*" ".*"))))
-	   (print "files: " files)
-	   (process-execute "/bin/tar" (append (list "chfv" "-") files)))))))
+	     (print "files: " files)
+	     (process-execute "/bin/tar" (append (list "chfv" "-") files))))
+             (begin
+               (let* ((parent-dir (pathname-directory datadir) )
+                      (filename  (conc(pathname-file datadir) "." (pathname-extension datadir))))
+                  (change-directory parent-dir)  
+                  (process-execute "/bin/tar" (list "chfv" "-" filename))
+             )))
+))
+))
+
+
+;; copy in file to dest, validation is done BEFORE calling this
+;;
+(define (sretrieve:cp configdat retriever file comment)
+  (let* ((base-dir  (configf:lookup configdat "settings" "base-dir"))
+         (allowed-sub-paths (configf:lookup configdat "settings" "allowed-sub-paths"))    
+	 (datadir   (conc base-dir "/" file))
+         (filename  (conc(pathname-file datadir) "." (pathname-extension datadir))))
+    (if (or (not base-dir)
+	    (not (file-exists? base-dir)))
+	(begin
+	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
+	  (exit 1)))
+    (print datadir)
+    (if (not (file-exists? datadir))
+	(begin
+	  (debug:print 0 "ERROR: File  (" file "), not found at " base-dir "." )
+	  (exit 1)))
+    (if (directory? datadir)
+	(begin
+	  (debug:print 0 "ERROR: (" file ") is a dirctory!! cp cmd works only on files ." )
+	  (exit 1)))
+    (if(not (string-match (regexp  allowed-sub-paths) file))
+        (begin
+	  (debug:print 0 "ERROR: Access denied to file (" file ")!! " )
+	  (exit 1)))
+     
+     (sretrieve:db-do
+     configdat
+     (lambda (db)
+       (sretrieve:register-action db "cp" retriever datadir comment)))
+      (sretrieve:do-as-calling-user
+      ;;  (debug:print 0 "ph:  "(pathname-directory datadir)  "!! " )
+       (change-directory (pathname-directory datadir))  
+       ;;(debug:print 0 "ph: /bin/tar" (list "chfv" "-" filename) )
+      (process-execute "/bin/tar" (list "chfv" "-" filename)))
+      ))
+
+;; ls in file to dest, validation is done BEFORE calling this
+;;
+(define (sretrieve:ls configdat retriever file comment)
+  (let* ((base-dir  (configf:lookup configdat "settings" "base-dir"))
+         (allowed-sub-paths (configf:lookup configdat "settings" "allowed-sub-paths"))    
+	 (datadir   (conc base-dir "/" file))
+         (filename  (conc(pathname-file datadir) "." (pathname-extension datadir))))
+    (if (or (not base-dir)
+	    (not (file-exists? base-dir)))
+	(begin
+	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
+	  (exit 1)))
+    (print datadir)
+    (if (not (file-exists? datadir))
+	(begin
+	  (debug:print 0 "ERROR: File  (" file "), not found at " base-dir "." )
+	  (exit 1)))
+      (if(not (string-match (regexp  allowed-sub-paths) file))
+        (begin
+	  (debug:print 0 "ERROR: Access denied to file (" file ")!! " )
+	  (exit 1)))
+   
+        (sretrieve:do-as-calling-user
+        (lambda ()
+	 ;;(change-directory datadir)
+         ;; (debug:print 0  "/usr/bin/find" (list datadir "-ls" "|" "grep" "-E" "'"allowed-file-patt"'"))
+         ;; (status (with-input-from-pipe "find " datadir " -ls | grep -E '" allowed-file-patt "'" (lambda () (read-line))))
+         ;; (debug:print 0 status) 
+	  (process-execute "/bin/ls" (list "-ls"  "-lrt" datadir ))
+ ))))
+
+
 
 ;;(filter (lambda (x)
 ;;							     (not (member x '("." ".."))))
@@ -378,6 +461,7 @@ Version: " megatest-fossil-hash)) ;; "
 (define (sretrieve:process-action configdat action . args)
   (let* ((base-dir      (configf:lookup configdat "settings" "base-dir"))
 	 (user          (current-user-name))
+         (allowed-sub-paths (configf:lookup configdat "settings" "allowed-sub-paths")) 
 	 (allowed-users (string-split
 			 (or (configf:lookup configdat "settings" "allowed-users")
 			     "")))
@@ -411,6 +495,29 @@ Version: " megatest-fossil-hash)) ;; "
 
 	 (debug:print 0 "retrieving " version " of " package-type " as tar data on stdout")
 	 (sretrieve:get configdat user version msg)))
+         ((cp)
+            (if (< (length args) 1)
+             (begin 
+	     (debug:print 0 "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (exit 1)))
+          (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
+              (file     (car args))
+	      (msg         (or (args:get-arg "-m") "")) )
+
+	 (debug:print 0 "copinging " file " to current directory " )
+	 (sretrieve:cp configdat user file msg)))
+      ((ls)
+            (if (< (length args) 1)
+             (begin 
+	     (debug:print 0 "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (exit 1)))
+          (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
+              (dir     (car args))
+	      (msg         (or (args:get-arg "-m") "")) )
+
+	 (debug:print 0 "Listing files in " )
+	 (sretrieve:ls configdat user dir msg)))
+ 
       (else (debug:print 0 "Unrecognised command " action)))))
   
 ;; ease debugging by loading ~/.dashboardrc - REMOVE FROM PRODUCTION!
@@ -444,7 +551,7 @@ Version: " megatest-fossil-hash)) ;; "
 		 (print "Files in " base-dir)
                  (sretrieve:do-as-calling-user
                     (lambda ()
-		 (process-execute "/bin/ls" (list base-dir)))))
+		 (process-execute "/bin/ls" (list "-lrt" base-dir)))))
 	       (print "ERROR: No base dir specified!"))))
 	((log)
 	 (sretrieve:db-do configdat (lambda (db)
