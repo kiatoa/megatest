@@ -16,7 +16,7 @@ fi
 if [[ ! -e "$HOME/.megatest/default.dat" ]];then
    cat > "$HOME/.megatest/default.dat" << EOF
 [fullrun]
-path /mfs/matt/data/megatest/tests/fullrun
+path /home/USER/myMegatestArea
 order 1
 # [bigrun]
 # path /mfs/matt/data/megatest/tests/fdktestqa/testqa
@@ -27,4 +27,4 @@ order 1
 EOF
 fi
 
-csi -I ../.. multi-dboard-load-all.scm
+/nfs/pdx/disks/icf_external/pkgs/chicken/4.10.0/bin/csi -I ../.. multi-dboard-load-all.scm

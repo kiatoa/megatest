@@ -165,6 +165,7 @@ Misc
   current-tab-id     ;; 
   update-needed      ;; flag to indicate that the tab pointed to by current tab id needs refreshing immediately
   tabs               ;; hash of tab-id -> areaname (??) should be of type "tab"
+  groupn             ;; 
   )
 
 ;; all the components of an area display, all fits into a tab but
@@ -414,12 +415,22 @@ Misc
 			   #:expand "YES"
 			   ;; #:fittosize "YES"
 			   #:resizematrix "YES"
+                           #:menucontext "YES"
 			   #:scrollbar "YES"
 			   #:numcol 100
 			   #:numlin 100
 			   #:numcol-visible 3
 			   #:numlin-visible 20
 			   #:click-cb (lambda (obj lin col status)
+					(let ((popup-menu (iup:menu 
+							   (iup:menu-item "Remove test"
+									  #:action (lambda (obj)(print "Removing test"))))))
+					  (iup:show popup-menu
+						    #:x 'mouse
+						    #:y 'mouse
+						    #:modal? "NO")
+						    
+					  (print "got here"))
 					(print "obj: " obj " lin: " lin " col: " col " status: " status " value: " (iup:attribute obj "VALUE"))))))
     
     ;; (iup:attribute-set! view-matrix "RESIZEMATRIX" "YES")
@@ -520,6 +531,44 @@ Misc
 ;; D A S H B O A R D
 ;;======================================================================
 
+;; The main menu
+(define (dcommon:main-menu data)
+  (iup:menu ;; a menu is a special attribute to a dialog (think Gnome putting the menu at screen top)
+   (iup:menu-item "Files" (iup:menu   ;; Note that you can use either #:action or action: for options
+			   (iup:menu-item "Open"  action: (lambda (obj)
+							    (let* ((area-name (iup:textbox #:expand "HORIZONTAL"))
+								   (fd        (iup:file-dialog #:dialogtype "DIR"))
+								   (top       (iup:show fd #:modal? "YES")))
+							      (iup:attribute-set! source-tb "VALUE"
+										  (iup:attribute fd "VALUE"))
+                                                              (iup:destroy! fd))))
+                           (iup:menu-item "Open area"  action: (lambda (obj)
+                                                            (let* ((area-name (iup:textbox #:expand "HORIZONTAL"))
+                                                                   (fd        (iup:file-dialog #:dialogtype "DIR"))
+                                                                   (top       (iup:show fd #:modal? "YES"))
+                                                                   ;;(source-tb (iup:textbox #:expand "HORIZONTAL"))
+                                                                   (cfgdat    (data-cfgdat data))
+                                                                   (fname     (conc (getenv "HOME") "/.megatest/" (data-groupn data) ".dat"))
+                                                                   )
+                                                              ;;(iup:attribute-set! source-tb "VALUE"
+                                                              ;;                    (iup:attribute fd "VALUE"))
+                                                               (configf:set-section-var cfgdat "lvqa" "path" (iup:attribute fd "VALUE"))
+                                                               (configf:write-alist cfgdat fname)
+							      (iup:destroy! fd))))		      
+                           (iup:menu-item "Save"  #:action (lambda (obj)(print "File->save " obj)))
+                           (iup:menu-item "Exit"  #:action (lambda (obj)(exit)))))
+   (iup:menu-item "Tools" (iup:menu
+			   (iup:menu-item "Create new blah" #:action (lambda (obj)(print "Tools->new blah")))
+			   ;; (iup:menu-item "Show dialog"     #:action (lambda (obj)
+			   ;;  					   (show message-window
+			   ;;  					     #:modal? #t
+			   ;;  					     ;; set positon using coordinates or center, start, top, left, end, bottom, right, parent-center, current
+			   ;;  					     ;; #:x 'mouse
+			   ;;  					     ;; #:y 'mouse
+			   ;;  )					     
+			   ))))
+
+
 (define (dashboard:area-panel aname data window-id)
   (let* ((apath      (configf:lookup (data-cfgdat data) aname "path")) ;;  (hash-table-ref (dboard:data-cfgdat data) area-name))
 	 ;;          (hash-table-ref (dboard:data-cfgdat data) aname))
@@ -556,7 +605,7 @@ Misc
 (define (dashboard:main-panel data window-id)
   (iup:dialog
    #:title "Megatest Control Panel"
-;;   #:menu (dcommon:main-menu data)
+   #:menu (dcommon:main-menu data)
    #:shrink "YES"
    (iup:vbox
     (let* ((area-names  (hash-table-keys (data-cfgdat data)))
@@ -751,9 +800,13 @@ Misc
     (call-with-environment-variables
      (list (cons "MT_RUN_AREA_HOME" apath))
      (lambda ()
-       (read-config mtconffile (make-hash-table) #f)) ;; megatest.config
-     )))
-	 
+       (let ((res (read-config mtconffile (make-hash-table) #f))) ;; megatest.config
+	 (if (hash-table? res)
+	     res
+	     (begin
+	       (debug:print 0 "WARNING: failed to read " mtconffile)
+	       (make-hash-table))))))))
+
 
 ;;======================================================================
 ;; G U I   S T U F F 
@@ -773,9 +826,11 @@ Misc
 		     0                 ;; current tab id
 		     #f                ;; redraw needed for current tab id
 		     (make-hash-table) ;; tab-id -> areaname
+                     groupn
 		     )))
     (hash-table-set! *windows* window-id data)
     (iup:show (dashboard:main-panel data window-id))
+    ;;(iup:show (layout-dialog (dashboard:main-panel data window-id)))
     (iup:main-loop)))
 
 ;; ease debugging by loading ~/.dashboardrc
