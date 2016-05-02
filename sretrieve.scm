@@ -167,7 +167,7 @@ Version: " megatest-fossil-hash)) ;; "
 				(not (member x '("." ".."))))
 			      (glob "*" ".*"))))
 	     (print "files: " files)
-	     (process-execute "/bin/tar" (append (list "chfv" "-") files))))
+	     (process-execute "/bin/tar" (append (append (list  "chfv" "-") files) (list "--ignore-failed-read")))))
              (begin
                (let* ((parent-dir (pathname-directory datadir) )
                       (filename  (conc(pathname-file datadir) "." (pathname-extension datadir))))
