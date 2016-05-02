@@ -1217,6 +1217,7 @@ Misc
       #f))
 
 (define dashboard:update-run-summary-tab #f)
+(define dashboard:update-new-view-tab #f)
 
 (define (dboard:get-tests-dat data run-id last-update)
   (let ((tdat (if run-id
@@ -1417,7 +1418,7 @@ Misc
 		       (if (number? run-id)
 			   (begin
 			     (d:data-curr-run-id-set! ddata run-id)
-			     (dashboard:update-run-summary-tab))
+			     (dashboard:update-new-view-tab))
 			   (debug:print 0 "ERROR: tree-path->run-id returned non-number " run-id)))
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		     )))
@@ -1541,7 +1542,7 @@ Misc
 				 col-indices)
 		       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
     
-    (set! dashboard:update-run-summary-tab updater)
+    (set! dashboard:update-new-view-tab updater)
     (d:data-runs-tree-set! ddata tb)
     (iup:split
      tb
@@ -1879,7 +1880,7 @@ Misc
 	    ((2)
 	     (dashboard:update-run-summary-tab))
 	    ((3)
-	     (dashboard:update-run-summary-tab))
+	     (dashboard:update-new-view-tab))
 	    (else
 	     (let ((updater (hash-table-ref/default (d:alldat-updaters *alldat*)
 						    (d:alldat-curr-tab-num *alldat*) #f)))
@@ -1899,7 +1900,7 @@ Misc
 
 (define (main)
   (let* ((runs-sum-dat (d:data-init (make-d:data))) ;; data for run-summary tab
-	 (new-view-dat runs-sum-dat) ;; NOT YET SEPARATE (d:data-init (make-d:data))))
+	 (new-view-dat (d:data-init (make-d:data)))
 	 (data         *alldat*))
     (cond 
      ((args:get-arg "-run")
