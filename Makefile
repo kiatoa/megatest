@@ -166,7 +166,7 @@ $(MTQA_FOSSIL) :
 	fossil clone https://www.kiatoa.com/fossils/megatest_qa $(MTQA_FOSSIL)
 
 clean : 
-	rm -f $(OFILES) $(GOFILES) megatest dboard dboard.o megatest.o dashboard.o
+	rm -f $(OFILES) $(GOFILES) megatest dboard dboard.o megatest.o dashboard.o megatest-fossil-hash.*
 
 # Deploy section (not complete yet)
 #
