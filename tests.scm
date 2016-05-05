@@ -805,7 +805,7 @@
 								      "pre-launch-env-vars"
 								      #f))
 				       #f)))
-		(if cache-file (hash-table-set! tcfg "have fulldata" #t)) ;; mark this as fully read data
+		(if (and tcfg cache-file) (hash-table-set! tcfg "have fulldata" #t)) ;; mark this as fully read data
 		(if tcfg (hash-table-set! *testconfigs* test-name tcfg))
 		(if (and testexists
 			 cache-file
