@@ -2849,15 +2849,17 @@
   (let ((res '()))
     (for-each
      (lambda (entry-name)
-       (let* ((var       entry-name)
-	      (value     (or (configf:lookup dat entry-name "measured")  "n/a"))
+       (let* ((value     (or (configf:lookup dat entry-name "measured")  "n/a"))
 	      (expected  (or (configf:lookup dat entry-name "expected")  "n/a"))
 	      (tolerance (or (configf:lookup dat entry-name "tolerance") "n/a"))
 	      (comment   (or (configf:lookup dat entry-name "comment")
 			     (configf:lookup dat entry-name "desc")      "n/a"))
 	      (status    (or (configf:lookup dat entry-name "status")    "n/a"))
 	      (type      (or (configf:lookup dat entry-name "expected")  "n/a")))
-	 #f))
+	 (set! res (append
+		    res
+		    (list (list stepname entry-name expected tolerance comment status type))))
+	 ))
      (hash-table-keys dat))
     res))
 
