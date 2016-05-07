@@ -1593,13 +1593,10 @@
 ;; returns number if string->number is successful, string otherwise
 ;; also updates *global-delta*
 ;;
-;; Operates on megatestdb
-;;
 (define (db:get-var dbstruct var)
   (let* ((res      #f)
 	 (dbdat    (db:get-db dbstruct #f))
 	 (db       (db:dbdat-get-db dbdat)))
-    ;; (db:delay-if-busy dbdat)
     (sqlite3:for-each-row
      (lambda (val)
        (set! res val))
@@ -1609,7 +1606,12 @@
     (if (string? res)
 	(let ((valnum (string->number res)))
 	  (if valnum (set! res valnum))))
-    ;; scale by 10, average with current value.
+    res))
+
+;; This was part of db:get-var. It was used to estimate the load on
+;; the database files.
+;;
+;; scale by 10, average with current value.
 ;;     (set! *global-delta* (/ (+ *global-delta* (* (- (current-milliseconds) start-ms)
 ;; 						 (if throttle throttle 0.01)))
 ;; 			    2))
@@ -1617,7 +1619,6 @@
 ;; 	(begin
 ;; 	  (debug:print-info 4 "launch throttle factor=" *global-delta*)
 ;; 	  (set! *last-global-delta-printed* *global-delta*)))
-    res))
 
 (define (db:set-var dbstruct var val)
   (let* ((dbdat (db:get-db dbstruct #f))

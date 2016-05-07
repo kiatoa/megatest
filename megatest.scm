@@ -456,7 +456,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (hash-table-set! args:arg-hash "-testpatt" newval)
       (hash-table-delete! args:arg-hash "-itempatt")))
 
-
+(if (args:get-arg "-runtests")
+    (debug:print 0 "WARNING: \"-runtests\" is deprecated. Use \"-run\" with \"-testpatt\" instead"))
 
 (on-exit std-exit-procedure)
 
@@ -480,29 +481,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (common:get-disks *configdat*))
 	"\n"))
       (set! *didsomething* #t)))
-
-(define (make-sparse-array)
-  (let ((a (make-sparse-vector)))
-    (sparse-vector-set! a 0 (make-sparse-vector))
-    a))
-
-(define (sparse-array? a)
-  (and (sparse-vector? a)
-       (sparse-vector? (sparse-vector-ref a 0))))
-
-(define (sparse-array-ref a x y)
-  (let ((row (sparse-vector-ref a x)))
-    (if row
-	(sparse-vector-ref row y)
-	#f)))
-
-(define (sparse-array-set! a x y val)
-  (let ((row (sparse-vector-ref a x)))
-    (if row
-	(sparse-vector-set! row y val)
-	(let ((new-row (make-sparse-vector)))
-	  (sparse-vector-set! a x new-row)
-	  (sparse-vector-set! new-row y val)))))
 
 ;; csv processing record
 (define (make-refdb:csv)
@@ -662,14 +640,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (host:port     (args:get-arg "-ping")))
       (server:ping run-id host:port)))
 
-;;       (set! *did-something* #t)
-;; 	      (begin
-;; 		(print ((rpc:procedure 'testing (car host-port)(cadr host-port))))
-;; 		(case (server:get-transport)
-;; 		  ((http)(http:ping run-id host-port))
-;; 		  ((rpc) (rpc:procedure 'server:login (car host-port)(cadr host-port));;  *toppath*)) ;; (rpc-transport:ping  run-id (car host-port)(cadr host-port)))
-;; 		  (else  (debug:print 0 "ERROR: No transport set")(exit)))))
-
 ;;======================================================================
 ;; Capture, save and manipulate environments
 ;;======================================================================
@@ -710,8 +680,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (env:close-database db)
 	      (set! *didsomething* #t))
 	    (debug:print 0 "ERROR: Parameter to -envdelta should be new=star-end")))))
-
-
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
@@ -949,15 +917,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (debug:print 0 "ERROR: Attempted " action "on test(s) but run area config file not found")
 	    (exit 1))
 	  ;; put test parameters into convenient variables
-	  (runs:operate-on  action
-			    target
-			    (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
-			    (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
-			    state: (common:args-get-state)
-			    status: (common:args-get-status)
-			    new-state-status: (args:get-arg "-set-state-status")))
+	  (begin
+	    ;; check for correct version, exit with message if not correct
+	    (common:exit-on-version-changed)
+	    (runs:operate-on  action
+			      target
+			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+			      (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+			      state: (common:args-get-state)
+			      status: (common:args-get-status)
+			      new-state-status: (args:get-arg "-set-state-status"))))
       (set! *didsomething* #t)))))
-	  
+
 (if (args:get-arg "-remove-runs")
     (general-run-call 
      "-remove-runs"
@@ -1832,6 +1803,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        ;; 'old2new
        'new2old
        )
+      (if (common:version-changed?)
+	  (common:set-last-run-version))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-mark-incompletes")
