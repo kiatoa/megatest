@@ -13,7 +13,7 @@
 ;;
 ;;======================================================================
 
-(use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3 call-with-environment-variables)
+(use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3 call-with-environment-variables csv)
 (use defstruct)
 
 (import (prefix base64 base64:))
@@ -474,7 +474,15 @@
 						      (prevstep #f))
 					     ;; check exit-info (vector-ref exit-info 1)
 					     (if (launch:einf-exit-status exit-info) ;; (vector-ref exit-info 1)
-						 (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig)))
+						 (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig))
+						       (stepname    (car ezstep)))
+						   ;; if logpro-used read in the stepname.dat file
+						   (if (and logpro-used (file-exists? (conc stepname ".dat")))
+						       (let* ((dat  (read-config (conc stepname ".dat") #f #f))
+							      (csvr (db:logpro-dat->csv dat stepname))
+							      (csvt (let-values (( (fmt-cell fmt-record fmt-csv) (make-format ",")))
+								      (fmt-csv (map list->csv-record csvr)))))
+							 (rmt:csv->test-data run-id test-id csvt)))
 						   (if (steprun-good? logpro-used (launch:einf-exit-code exit-info))
 						       (if (not (null? tal))
 							   (loop (car tal) (cdr tal) stepname))
