@@ -133,6 +133,65 @@
 (define *fdb* #f)
 
 ;;======================================================================
+;; V E R S I O N
+;;======================================================================
+
+(define (common:get-full-version)
+  (conc megatest-version "-" megatest-fossil-hash))
+
+(define (common:version-signature)
+  (conc megatest-version "-" (substring megatest-fossil-hash 0 4)))
+
+;; from metadat lookup MEGATEST_VERSION
+;;
+(define (common:get-last-run-version)
+  (rmt:get-var "MEGATEST_VERSION"))
+
+(define (common:set-last-run-version)
+  (rmt:set-var "MEGATEST_VERSION" (common:version-signature)))
+
+(define (common:version-changed?)
+  (not (equal? (common:get-last-run-version)
+	       (common:version-signature))))
+
+(define (common:exit-on-version-changed)
+  (if (common:version-changed?)
+      (begin
+	(debug:print 0
+		     "ERROR: Version mismatch!\n"
+		     "   expected: " (common:version-signature) "\n"
+		     "   got:      " (common:get-last-run-version) "\n"
+		     " to switch versions you can run: \"megatest -cleanup-db\"")
+	(exit 1))))
+
+;;======================================================================
+;; S P A R S E   A R R A Y S
+;;======================================================================
+
+(define (make-sparse-array)
+  (let ((a (make-sparse-vector)))
+    (sparse-vector-set! a 0 (make-sparse-vector))
+    a))
+
+(define (sparse-array? a)
+  (and (sparse-vector? a)
+       (sparse-vector? (sparse-vector-ref a 0))))
+
+(define (sparse-array-ref a x y)
+  (let ((row (sparse-vector-ref a x)))
+    (if row
+	(sparse-vector-ref row y)
+	#f)))
+
+(define (sparse-array-set! a x y val)
+  (let ((row (sparse-vector-ref a x)))
+    (if row
+	(sparse-vector-set! row y val)
+	(let ((new-row (make-sparse-vector)))
+	  (sparse-vector-set! a x new-row)
+	  (sparse-vector-set! new-row y val)))))
+
+;;======================================================================
 ;; L O C K E R S   A N D   B L O C K E R S 
 ;;======================================================================
 
@@ -364,9 +423,6 @@
 	      parts)
     time-secs))
 		       
-(define (common:version-signature)
-  (conc megatest-version "-" (substring megatest-fossil-hash 0 4)))
-
 ;; one-of args defined
 (define (args-defined? . param)
   (let ((res #f))

@@ -150,31 +150,6 @@ Misc
 		  filters-changed: #f
 		  ))
 
-;; simple two dimentional sparse array
-;;
-(define (make-sparse-array)
-  (let ((a (make-sparse-vector)))
-    (sparse-vector-set! a 0 (make-sparse-vector))
-    a))
-
-(define (sparse-array? a)
-  (and (sparse-vector? a)
-       (sparse-vector? (sparse-vector-ref a 0))))
-
-(define (sparse-array-ref a x y)
-  (let ((row (sparse-vector-ref a x)))
-    (if row
-	(sparse-vector-ref row y)
-	#f)))
-
-(define (sparse-array-set! a x y val)
-  (let ((row (sparse-vector-ref a x)))
-    (if row
-	(sparse-vector-set! row y val)
-	(let ((new-row (make-sparse-vector)))
-	  (sparse-vector-set! a x new-row)
-	  (sparse-vector-set! new-row y val)))))
-
 ;; data for runs, tests etc
 ;;
 (defstruct d:rundat
@@ -1899,6 +1874,7 @@ Misc
       (load debugcontrolf)))
 
 (define (main)
+  (common:exit-on-version-changed)
   (let* ((runs-sum-dat (d:data-init (make-d:data))) ;; data for run-summary tab
 	 (new-view-dat (d:data-init (make-d:data)))
 	 (data         *alldat*))
