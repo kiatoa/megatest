@@ -1811,7 +1811,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (if (not (launch:setup))
 	  (begin
-	    (debug:print 0 "Failed to setup, exiting") b
+	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
       (open-run-close db:find-and-mark-incomplete #f)
       (set! *didsomething* #t)))

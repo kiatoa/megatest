@@ -1041,7 +1041,7 @@
        (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
        ;; Must do this *after* running patch db !! No more. 
        ;; cannot use db:set-var since it will deadlock, hardwire the code here
-       (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" "MEGATEST_VERSION" megatest-version)
+       (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" "MEGATEST_VERSION" (common:version-signature))
        (debug:print-info 11 "db:initialize END")))))
 
 ;;======================================================================
@@ -1114,7 +1114,7 @@
                                 type TEXT DEFAULT '',
                                 last_update  INTEGER DEFAULT (strftime('%s','now')),
                               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
-     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS test_data_index ON test_data (run_id, testname, item_path);")
+     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS test_data_index ON test_data (test_id);")
      (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_test_data_trigger AFTER UPDATE ON test_data
                              FOR EACH ROW
                                BEGIN 

@@ -778,8 +778,13 @@
 	     (first-rundat  (let ((toppath (if toppath 
 					       toppath
 					       (car first-pass))))
-			      (read-config (conc toppath "/runconfigs.config") *runconfigdat* #t 
-					   sections: sections))))
+			      (read-config ;; (conc toppath "/runconfigs.config")
+			       (conc (if (string? toppath)
+					 toppath
+					 (get-environment-variable "MT_RUN_AREA_HOME"))
+				     "/runconfigs.config")
+			       *runconfigdat* #t 
+			       sections: sections))))
 	(set! *runconfigdat* first-rundat)
 	(if first-pass  ;; 
 	    (begin
