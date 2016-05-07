@@ -336,7 +336,7 @@
 
 (set-signal-handler! signal/int  std-signal-handler)  ;; ^C
 (set-signal-handler! signal/term std-signal-handler)
-(set-signal-handler! signal/stop std-signal-handler)  ;; ^Z
+;; (set-signal-handler! signal/stop std-signal-handler)  ;; ^Z NO, do NOT handle ^Z!
 
 ;;======================================================================
 ;; M I S C   U T I L S
@@ -527,7 +527,7 @@
 
 
 ;;======================================================================
-;; Munge data into nice forms
+;; M U N G E   D A T A   I N T O   N I C E   F O R M S
 ;;======================================================================
 
 ;; Generate an index for a sparse list of key values
@@ -570,7 +570,7 @@
 		    ))))))
 
 ;;======================================================================
-;; System stuff
+;; S Y S T E M   S T U F F
 ;;======================================================================
 
 ;; return a nice clean pathname made absolute
@@ -840,7 +840,7 @@
     vars))
 		  
 ;;======================================================================
-;; time and date nice to have stuff
+;; T I M E   A N D   D A T E
 ;;======================================================================
 
 (define (seconds->hr-min-sec secs)
@@ -883,7 +883,7 @@
     (else #f)))
 
 ;;======================================================================
-;; Colors
+;; C O L O R S
 ;;======================================================================
       
 (define (common:name->iup-color name)

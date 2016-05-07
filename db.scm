@@ -846,26 +846,29 @@
 		     (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
 		     (db:clean-up-rundb (db:get-db fromdb run-id))
 		     ;;
-		     ;; Feb 18, 2016: add field last_update to tests
+		     ;; Feb 18, 2016: add field last_update to tests, test_steps and test_data
 		     ;;
 		     ;; remove this some time after September 2016 (added in version v1.6031
 		     ;;
-		     (handle-exceptions
-		      exn
-		      (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
-			  (debug:print 0 "Column last_update already added to tests table")
-			  (db:general-sqlite-error-dump exn "alter table tests ..." #f "none"))
-		      (sqlite3:execute
-		       frundb
-		       "ALTER TABLE tests ADD COLUMN last_update INTEGER DEFAULT 0"))
-		     (sqlite3:execute
-		      frundb
-		       "CREATE TRIGGER IF NOT EXISTS update_tests_trigger AFTER UPDATE ON tests
+		     (for-each
+		      (lambda (table-name)
+			(handle-exceptions
+			 exn
+			 (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
+			     (debug:print 0 "Column last_update already added to " table-name " table")
+			     (db:general-sqlite-error-dump exn "alter table " table-name " ..." #f "none"))
+			 (sqlite3:execute
+			  frundb
+			  (conc "ALTER TABLE " table-name " ADD COLUMN last_update INTEGER DEFAULT 0"))
+			 (sqlite3:execute
+			  frundb
+			  (conc "CREATE TRIGGER IF NOT EXISTS update_" table-name "_trigger AFTER UPDATE ON " table-name "
                              FOR EACH ROW
                                BEGIN 
-                                 UPDATE tests SET last_update=(strftime('%s','now'));
-                               END;")
-		     ))))
+                                 UPDATE " table-name " SET last_update=(strftime('%s','now'));
+                               END;"))
+			 ))
+		      '("tests" "test_steps" "test_data"))))))
 	   all-run-ids)
 	  ;; removed deleted runs
 	  (let ((dbdir (tasks:get-task-db-path)))
@@ -1089,16 +1092,15 @@
                                event_time TIMESTAMP,
                                comment TEXT DEFAULT '',
                                logfile TEXT DEFAULT '',
+                               last_update  INTEGER DEFAULT (strftime('%s','now')),
                                CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
-     ;;   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data 
-     ;;                               (id          INTEGER PRIMARY KEY,
-     ;;                                      reviewed    TIMESTAMP DEFAULT (strftime('%s','now')),
-     ;;                                      iterated    TEXT DEFAULT '',
-     ;;                                      avg_runtime REAL DEFAULT -1,
-     ;;                                      avg_disk    REAL DEFAULT -1,
-     ;;                                      tags        TEXT DEFAULT '',
-     ;;                                      jobgroup    TEXT DEFAULT 'default',
-     ;;                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
+     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS teststeps_index ON tests (run_id, testname, item_path);")
+     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_teststeps_trigger AFTER UPDATE ON test_steps
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE test_steps SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;")
      (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
                                 test_id INTEGER,
                                 category TEXT DEFAULT '',
@@ -1110,9 +1112,15 @@
                                 comment TEXT DEFAULT '',
                                 status TEXT DEFAULT 'n/a',
                                 type TEXT DEFAULT '',
+                                last_update  INTEGER DEFAULT (strftime('%s','now')),
                               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
-     ;; Why use FULL here? This data is not that critical
-     ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
+     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS test_data_index ON test_data (run_id, testname, item_path);")
+     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_test_data_trigger AFTER UPDATE ON test_data
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE test_data SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;")
      (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_rundat (
                               id           INTEGER PRIMARY KEY,
                               test_id      INTEGER,
