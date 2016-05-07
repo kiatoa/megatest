@@ -2815,8 +2815,63 @@
     ;; if the test is not FAIL then set status based on the fail and pass counts.
     (db:general-call dbdat 'test_data-pf-rollup (list test-id test-id test-id test-id))))
 
-;; NOT USED!?
+;; each section is a rule except "final" which is the final result
 ;;
+;; [rule-5]
+;; operator in
+;; section LogFileBody
+;; desc Output voltage
+;; status OK
+;; expected 1.9
+;; measured 1.8
+;; type +/-
+;; tolerance 0.1
+;; pass 1
+;; fail 0
+;; 
+;; [final]
+;; exit-code 6
+;; exit-status SKIP
+;; message If flagged we are asking for this to exit with code 6
+;;
+;; recorded in steps table:
+;;   category: stepname
+;;   variable: rule-N
+;;   value:    measured
+;;   expected: expected
+;;   tol:      tolerance
+;;   units:    -
+;;   comment:  desc or message
+;;   status:   status
+;;   type:     type
+;; 
+(define (db:logpro-dat->csv dat stepname)
+  (let ((res '()))
+    (for-each
+     (lambda (entry-name)
+       (let* ((var       entry-name)
+	      (value     (or (configf:lookup dat entry-name "measured")  "n/a"))
+	      (expected  (or (configf:lookup dat entry-name "expected")  "n/a"))
+	      (tolerance (or (configf:lookup dat entry-name "tolerance") "n/a"))
+	      (comment   (or (configf:lookup dat entry-name "comment")
+			     (configf:lookup dat entry-name "desc")      "n/a"))
+	      (status    (or (configf:lookup dat entry-name "status")    "n/a"))
+	      (type      (or (configf:lookup dat entry-name "expected")  "n/a")))
+	 #f))
+     (hash-table-keys dat))
+    res))
+
+;; $MT_MEGATEST -load-test-data << EOF
+;; foo,bar,   1.2,  1.9, >
+;; foo,rab, 1.0e9, 10e9, 1e9
+;; foo,bla,   1.2,  1.9, <
+;; foo,bal,   1.2,  1.2, <   ,     ,Check for overload
+;; foo,alb,   1.2,  1.2, <=  , Amps,This is the high power circuit test
+;; foo,abl,   1.2,  1.3, 0.1
+;; foo,bra,   1.2, pass, silly stuff
+;; faz,bar,    10,  8mA,     ,     ,"this is a comment"
+;; EOF
+
 (define (db:csv->test-data dbstruct run-id test-id csvdata)
   (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
   (let* ((dbdat   (db:get-db dbstruct run-id))
@@ -2825,7 +2880,7 @@
 			      (open-input-string csvdata)
 			      '((strip-leading-whitespace? #t)
 				(strip-trailing-whitespace? #t)))))) ;; (csv->list csvdata)))
-    (for-each 
+    (for-each
      (lambda (csvrow)
        (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f #f)) 9))
 	      (category    (list-ref padded-row 0))
