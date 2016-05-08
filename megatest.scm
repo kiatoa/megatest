@@ -410,7 +410,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-version")
     (begin
-      (print megatest-version)
+      (print (common:version-signature)) ;; (print megatest-version)
       (exit)))
 
 (define *didsomething* #f)
