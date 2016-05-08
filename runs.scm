@@ -197,7 +197,7 @@
     (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 
     (let ((sighand (lambda (signum)
-		    y ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
+		     ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
 		     (set! *time-to-exit* #t)
 		     (print "Received signal " signum ", cleaning up before exit. Please wait...")
 		     (let ((th1 (make-thread (lambda ()
@@ -375,16 +375,17 @@
 	  (let* ((keep-going        #t)
 		 (run-queue-retries 5)
 		 (th1        (make-thread (lambda ()
-					    (handle-exceptions
-					     exn
-					     (begin
-					       (print-call-chain (current-error-port))
-					       (debug:print 0 "ERROR: failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
-					       (if (> run-queue-retries 0)
-						   (begin
-						     (set! run-queue-retries (- run-queue-retries 1))
-						     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))))
-					     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)))
+					    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
+					    ;; (handle-exceptions
+					    ;;  exn
+					    ;;  (begin
+					    ;;    (print-call-chain (current-error-port))
+					    ;;    (debug:print 0 "ERROR: failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
+					    ;;    (if (> run-queue-retries 0)
+					    ;; 	   (begin
+					    ;; 	     (set! run-queue-retries (- run-queue-retries 1))
+					    ;; 	     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))))
+					    ;;  (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)))
 					  "runs:run-tests-queue"))
 		 (th2        (make-thread (lambda ()				    
 					    ;; (rmt:find-and-mark-incomplete-all-runs))))) CAN'T INTERRUPT IT ...
