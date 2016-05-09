@@ -640,9 +640,9 @@
 	     (fulldir  (conc linktree "/"
 			     target "/"
 			     runname)))
-	(debug:print-info 0 "Have -runtests with target=" target ", runname=" runname ", fulldir=" fulldir ", testpatt=" (or (args:get-arg "-testpatt") "%"))
 	(if (and linktree (file-exists? linktree)) ;; can't proceed without linktree
 	    (begin
+	      (debug:print-info 0 "Have -run with target=" target ", runname=" runname ", fulldir=" fulldir ", testpatt=" (or (args:get-arg "-testpatt") "%"))
 	      (if (not (file-exists? fulldir))
 		  (create-directory fulldir #t)) ;; need to protect with exception handler 
 	      (if (and target
@@ -653,80 +653,12 @@
 			(rconfig  (conc fulldir "/.runconfig." megatest-version "-" megatest-fossil-hash)))
 		    (if (file-exists? rconfig) ;; only cache megatest.config AFTER runconfigs has been cached
 			(begin
-			  (debug:print-info 0 "Caching megatest.config in " fulldir "/.megatest.cfg")
+			  (debug:print-info 0 "Caching megatest.config in " tmpfile)
 			  (configf:write-alist *configdat* tmpfile)
 			  (system (conc "ln -sf " tmpfile " " targfile))))
-		    )))))))
+		    )))
+	    (debug:print-info 1 "No linktree yet, no caching configs.")))))
 
-;; set up the very basics needed for doing anything here.
-;;
-(define (launch:setup-old #!key (force #f))
-  ;; would set values for KEYS in the environment here for better support of env-override but 
-  ;; have chicken/egg scenario. need to read megatest.config then read it again. Going to 
-  ;; pass on that idea for now
-  ;; special case
-  (if (or force (not (hash-table? *configdat*)))  ;; no need to re-open on every call
-      (begin
-	(set! *configinfo* (or (if (get-environment-variable "MT_CMDINFO") ;; we are inside a test - do not reprocess configs
-				   (let ((alistconfig (conc (get-environment-variable "MT_LINKTREE") "/"
-							    (get-environment-variable "MT_TARGET")   "/"
-							    (get-environment-variable "MT_RUNNAME")  "/"
-							    ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
-				     (if (file-exists? alistconfig)
-					 (list (configf:read-alist alistconfig)
-					       (get-environment-variable "MT_RUN_AREA_HOME"))
-					 #f))
-				   #f) ;; no config cached - give up
-			       (let ((runname (or (args:get-arg "-runname")(args:get-arg ":runname"))))
-				 (if runname (setenv "MT_RUNNAME" runname))
-				 (find-and-read-config 
-				  (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
-				  environ-patt: "env-override"
-				  given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
-				  pathenvvar: "MT_RUN_AREA_HOME"))))
-	(set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
-	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
-	(let* ((tmptransport (configf:lookup *configdat* "server" "transport"))
-	       (transport    (if tmptransport (string->symbol tmptransport) 'http)))
-	  (if (member transport '(http rpc nmsg))
-	      (set! *transport-type* transport)
-	      (begin
-		(debug:print 0 "ERROR: Unrecognised transport " transport)
-		(exit))))
-	(let ((linktree (configf:lookup *configdat* "setup" "linktree"))) ;; link tree is critical
-	  (if linktree
-	      (if (not (file-exists? linktree))
-		  (begin
-		    (handle-exceptions
-		     exn
-		     (begin
-		       (debug:print 0 "ERROR: Something went wrong when trying to create linktree dir at " linktree)
-		       (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-		       (exit 1))
-		     (create-directory linktree #t))))
-	      (begin
-		(debug:print 0 "ERROR: linktree not defined in [setup] section of megatest.config")
-		(exit 1)))
-	  (if linktree
-	      (let ((dbdir (conc linktree "/.db")))
-		(handle-exceptions
-		 exn
-		 (begin
-		   (debug:print 0 "ERROR: failed to create the " dbdir " area for your database files")
-		   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn)))
-		 (if (not (directory-exists? dbdir))(create-directory dbdir)))
-		(setenv "MT_LINKTREE" linktree))
-	      (begin
-		(debug:print 0 "ERROR: linktree is required in your megatest.config [setup] section")
-		(exit 1)))
-	  (if (and *toppath*
-		   (directory-exists? *toppath*))
-	      (setenv "MT_RUN_AREA_HOME" *toppath*)
-	      (begin
-		(debug:print 0 "ERROR: failed to find the top path to your Megatest area.")
-		(exit 1)))
-	  )))
-  *toppath*)
 
 ;; gather available information, if legit read configs in this order:
 ;;

@@ -613,6 +613,7 @@
 				   " -run -testpatt " (conc testname "/" (if (equal? item-path "")
 									"%" 
 									item-path))
+				   " -clean-cache"
 				   ))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
@@ -631,6 +632,7 @@
 						      " -run -preclean -testpatt " (conc testname "/" (if (equal? item-path "")
 											   "%" 
 											   item-path))
+						      " -clean-cache"
 						      )))
 				       (common:without-vars
 					(conc (dtests:get-pre-command)

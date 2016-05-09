@@ -84,6 +84,7 @@ Launching and managing runs
   -get-run-status         : gets status for run specified by target and runname
   -run-wait               : wait on run specified by target and runname
   -preclean               : remove the existing test directory before running the test
+  -clean-cache            : remove the cached megatest.config and runconfig.config files
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
@@ -272,6 +273,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-daemonize"
 			"-preclean"
 			"-rerun-clean"
+			"-clean-cache"
 
 			;; misc
 			"-repl"
@@ -388,6 +390,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (thread-start! *watchdog*)
 
+
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))
       (debug:print-info 0 "Sending log output to " (args:get-arg "-log"))
@@ -465,6 +468,35 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Misc general calls
 ;;======================================================================
 
+;; handle a clean-cache request as early as possible
+;;
+(if (args:get-arg "-clean-cache")
+    (begin
+      (set! *didsomething* #t) ;; suppress the help output.
+      (if (getenv "MT_TARGET") ;; no point in trying if no target
+	  (if (args:get-arg "-runname")
+	      (let* ((toppath  (launch:setup))
+		     (linktree (if toppath (configf:lookup *configdat* "setup" "linktree")))
+		     (runtop   (conc linktree "/" (getenv "MT_TARGET") "/" (args:get-arg "-runname")))
+		     (files    (if (file-exists? runtop)
+				   (append (glob (conc runtop "/.megatest*"))
+					   (glob (conc runtop "/.runconfig*")))
+				   '())))
+		(if (null? files)
+		    (debug:print-info 0 "No cached megatest or runconfigs files found. None removed.")
+		    (begin
+		      (debug:print-info 0 "Removing cached files:\n    " (string-intersperse files "\n    "))
+		      (for-each 
+		       (lambda (f)
+			 (handle-exceptions
+			     exn
+			     (debug:print 0 "WARNING: Failed to remove file " f)
+			   (delete-file f)))
+		       files))))
+	      (debug:print 0 "ERROR: -clean-cache requires -runname."))
+	  (debug:print 0 "ERROR: -clean-cache requires -target or -reqtarg"))))
+	    
+	  
 (if (args:get-arg "-env2file")
     (begin
       (save-environment-as-files (args:get-arg "-env2file"))

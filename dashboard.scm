@@ -814,14 +814,14 @@ Misc
 	 (states-str   (if (or (not states)
 			       (null? states))
 			   ""
-			   (conc " :state "  (string-intersperse states ","))))
+			   (conc " -state "  (string-intersperse states ","))))
 	 (statuses-str (if (or (not statuses)
 			       (null? statuses))
 			   ""
-			   (conc " :status " (string-intersperse statuses ","))))
+			   (conc " -status " (string-intersperse statuses ","))))
 	 (full-cmd  "megatest"))
     (case (string->symbol cmd)
-      ((runtests)
+      ((run)
        (set! full-cmd (conc full-cmd 
 			    " -run"
 			    " -testpatt "
@@ -830,6 +830,7 @@ Misc
 			    target
 			    " -runname "
 			    run-name
+			    " -clean-cache"
 			    )))
       ((remove-runs)
        (set! full-cmd (conc full-cmd
@@ -877,7 +878,7 @@ Misc
 	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests *toppath* '()))
 	 (test-names    (hash-table-keys all-tests-registry))
 	 (sorted-testnames #f)
-	 (action        "-runtests")
+	 (action        "-run")
 	 (cmdln         "")
 	 (runlogs       (make-hash-table))
 	 (key-listboxes #f)
@@ -940,7 +941,7 @@ Misc
 	 #:title "Set the action to take"
 	 (iup:hbox
 	  ;; (iup:label "Command to run" #:expand "HORIZONTAL" #:size "70x" #:alignment "LEFT:ACENTER")
-	  (let* ((cmds-list '("runtests" "remove-runs" "set-state-status" "lock-runs" "unlock-runs"))
+	  (let* ((cmds-list '("run" "remove-runs" "set-state-status" "lock-runs" "unlock-runs"))
 		 (lb         (iup:listbox #:expand "HORIZONTAL"
 					  #:dropdown "YES"
 					  #:action (lambda (obj val index lbstate)
