@@ -755,18 +755,19 @@
 ;; 		  tests)))))
 
 (define (tests:get-test-path-from-environment)
-  (and (getenv "MT_LINKTREE")
-       (getenv "MT_TARGET")
-       (getenv "MT_RUNNAME")
-       (getenv "MT_TEST_NAME")
-       (getenv "MT_ITEMPATH")
-       (conc (getenv "MT_LINKTREE")  "/"
-	     (getenv "MT_TARGET")    "/"
-	     (getenv "MT_RUNNAME")   "/"
-	     (getenv "MT_TEST_NAME") "/"
-	     (if (or (getenv "MT_ITEMPATH")
-		     (not (string=? "" (getenv "MT_ITEMPATH"))))
-		 (conc "/" (getenv "MT_ITEMPATH"))))))
+  (if (and (getenv "MT_LINKTREE")
+	   (getenv "MT_TARGET")
+	   (getenv "MT_RUNNAME")
+	   (getenv "MT_TEST_NAME")
+	   (getenv "MT_ITEMPATH"))
+      (conc (getenv "MT_LINKTREE")  "/"
+	    (getenv "MT_TARGET")    "/"
+	    (getenv "MT_RUNNAME")   "/"
+	    (getenv "MT_TEST_NAME") "/"
+	    (if (or (getenv "MT_ITEMPATH")
+		    (not (string=? "" (getenv "MT_ITEMPATH"))))
+		(conc "/" (getenv "MT_ITEMPATH"))))
+      #f))
 
 ;; if .testconfig exists in test directory read and return it
 ;; else if have cached copy in *testconfigs* return it IFF there is a section "have fulldata"
