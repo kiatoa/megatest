@@ -58,6 +58,14 @@
 ;;                       0           1              2              3
 (defstruct launch:einf (pid #t)(exit-status #t)(exit-code #t)(rollup-status 0))
 
+(define (launch:load-logpro-dat stepname)
+  (let* ((dat  (read-config (conc stepname ".dat") #f #f))
+	 (csvr (db:logpro-dat->csv dat stepname))
+	 (csvt (let-values (( (fmt-cell fmt-record fmt-csv) (make-format ",")))
+			   (fmt-csv (map list->csv-record csvr)))))
+    (rmt:csv->test-data run-id test-id csvt)))
+
+
 (define (launch:runstep ezstep run-id test-id exit-info m tal testconfig)
   (let* ((stepname       (car ezstep))  ;; do stuff to run the step
 	 (stepinfo       (cadr ezstep))
@@ -67,6 +75,7 @@
 	 (script         "") ; "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!\
 	 (logpro-file    (conc stepname ".logpro"))
 	 (html-file      (conc stepname ".html"))
+	 (dat-file       (conc stepname ".dat"))
 	 (tconfig-logpro (configf:lookup testconfig "logpro" stepname))
 	 (logpro-used    (file-exists? logpro-file)))
 
@@ -136,7 +145,11 @@
 	  (logfna (if logpro-used (conc stepname ".html") "")))
       (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
     (if logpro-used
-	(rmt:test-set-log! run-id test-id (conc stepname ".html")))
+	(let ((datfile (conc stepname ".dat")))
+	  ;; load the .dat file into the test_data table if it exists
+	  (if (file-exists? datfile)
+	      (launch:load-logpro-dat stepname))
+	(rmt:test-set-log! run-id test-id (conc stepname ".html"))))
     ;; set the test final status
     (let* ((process-exit-status (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
 	   (this-step-status (cond
@@ -276,10 +289,8 @@
 			     (thread-join! th2)))))
 	    (set-signal-handler! signal/int sighand)
 	    (set-signal-handler! signal/term sighand)
-	    (set-signal-handler! signal/stop sighand))
+	    ) ;; (set-signal-handler! signal/stop sighand)
 	  
-	  ;; (set-signal-handler! signal/int (lambda ()
-					    
 	  ;; Do not run the test if it is REMOVING, RUNNING, KILLREQ or REMOTEHOSTSTART,
 	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
 	  ;;
@@ -392,7 +403,7 @@
 	  ;; (tests:set-full-meta-info test-id run-id 0 work-area)
 	  (tests:set-full-meta-info #f test-id run-id 0 work-area 10)
 
-	  (thread-sleep! 0.3) ;; NFS slowness has caused grief here
+	  ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
@@ -405,7 +416,7 @@
 	  ;; so this is a good place to remove the records for 
 	  ;; any previous runs
 	  ;; (db:test-remove-steps db run-id testname itemdat)
-	  
+	  ;; 
 	  (let* ((m            (make-mutex))
 		 (kill-job?    #f)
 		 (exit-info    (make-launch:einf pid: #t exit-status: #t exit-code: #t rollup-status: 0)) ;; pid exit-status exit-code (i.e. process was successfully run) rollup-status
@@ -478,11 +489,7 @@
 						       (stepname    (car ezstep)))
 						   ;; if logpro-used read in the stepname.dat file
 						   (if (and logpro-used (file-exists? (conc stepname ".dat")))
-						       (let* ((dat  (read-config (conc stepname ".dat") #f #f))
-							      (csvr (db:logpro-dat->csv dat stepname))
-							      (csvt (let-values (( (fmt-cell fmt-record fmt-csv) (make-format ",")))
-								      (fmt-csv (map list->csv-record csvr)))))
-							 (rmt:csv->test-data run-id test-id csvt)))
+						       (launch:load-logpro-dat stepname))
 						   (if (steprun-good? logpro-used (launch:einf-exit-code exit-info))
 						       (if (not (null? tal))
 							   (loop (car tal) (cdr tal) stepname))
