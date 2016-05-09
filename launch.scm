@@ -217,9 +217,165 @@
 	 )))
     logpro-used))
 
+(define (launch:manage-steps run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m)
+  ;; (let-values
+  ;;  (((pid exit-status exit-code)
+  ;;    (run-n-wait fullrunscript)))
+  ;; (tests:test-set-status! test-id "RUNNING" "n/a" #f #f)
+  ;; Since we should have a clean slate at this time there is no need to do 
+  ;; any of the other stuff that tests:test-set-status! does. Let's just 
+  ;; force RUNNING/n/a
+
+  ;; (thread-sleep! 0.3)
+  (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
+  (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "RUNNING")
+  ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
+
+  ;; if there is a runscript do it first
+  (if fullrunscript
+      (let ((pid (process-run fullrunscript)))
+	(rmt:test-set-top-process-pid run-id test-id pid)
+	(let loop ((i 0))
+	  (let-values
+	   (((pid-val exit-status exit-code) (process-wait pid #t)))
+	   (mutex-lock! m)
+	   (launch:einf-pid-set!           exit-info  pid)         ;; (vector-set! exit-info 0 pid)
+	   (launch:einf-exit-status-set!   exit-info  exit-status) ;; (vector-set! exit-info 1 exit-status)
+	   (launch:einf-exit-code-set!     exit-info  exit-code)   ;; (vector-set! exit-info 2 exit-code)
+	   (launch:einf-rollup-status-set! exit-info  exit-code)   ;; (vector-set! exit-info 3 exit-code)  ;; rollup status
+	   (mutex-unlock! m)
+	   (if (eq? pid-val 0)
+	       (begin
+		 (thread-sleep! 2)
+		 (loop (+ i 1)))
+	       )))))
+  ;; then, if runscript ran ok (or did not get called)
+  ;; do all the ezsteps (if any)
+  (if ezsteps
+      (let* ((testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
+	      ;; NOTE: it is tempting to turn off force-create of testconfig but dynamic
+	      ;;       ezstep names need a full re-eval here.
+	      (tests:get-testconfig test-name tconfigreg #t force-create: #t)) ;; 'return-procs)))
+	     (ezstepslst (if (hash-table? testconfig)
+			     (hash-table-ref/default testconfig "ezsteps" '())
+			     #f)))
+	(if testconfig
+	    (hash-table-set! *testconfigs* test-name testconfig) ;; cached for lazy reads later ...
+	    (begin
+	      (launch:setup)
+	      (debug:print 0 "WARNING: no testconfig found for " test-name " in search path:\n  "
+			   (string-intersperse (tests:get-tests-search-path *configdat*) "\n  "))))
+	;; after all that, still no testconfig? Time to abort
+	(if (not testconfig)
+	    (begin
+	      (debug:print 0 "ERROR: Failed to resolve megatest.config, runconfigs.config and testconfig issues. Giving up now")
+	      (exit 1)))
+	(if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
+	;; if ezsteps was defined then we are sure to have at least one step but check anyway
+	(if (not (> (length ezstepslst) 0))
+	    (debug:print 0 "ERROR: ezsteps defined but ezstepslst is zero length")
+	    (let loop ((ezstep (car ezstepslst))
+		       (tal    (cdr ezstepslst))
+		       (prevstep #f))
+	      ;; check exit-info (vector-ref exit-info 1)
+	      (if (launch:einf-exit-status exit-info) ;; (vector-ref exit-info 1)
+		  (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig))
+			(stepname    (car ezstep)))
+		    ;; if logpro-used read in the stepname.dat file
+		    (if (and logpro-used (file-exists? (conc stepname ".dat")))
+			(launch:load-logpro-dat stepname))
+		    (if (steprun-good? logpro-used (launch:einf-exit-code exit-info))
+			(if (not (null? tal))
+			    (loop (car tal) (cdr tal) stepname))
+			(debug:print 4 "WARNING: step " (car ezstep) " failed. Stopping")))
+		  (debug:print 4 "WARNING: a prior step failed, stopping at " ezstep)))))))
+
+(define (launch:monitor-job run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m work-area runtlim misc-flags)
+  (let* ((start-seconds (current-seconds))
+	 (calc-minutes  (lambda ()
+			  (inexact->exact 
+			   (round 
+			    (- 
+			     (current-seconds) 
+			     start-seconds)))))
+	 (kill-tries 0))
+    ;; (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area)
+    ;; (tests:set-full-meta-info test-id run-id (calc-minutes) work-area)
+    (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
+    (let loop ((minutes   (calc-minutes))
+	       (cpu-load  (get-cpu-load))
+	       (disk-free (get-df (current-directory))))
+      (let ((new-cpu-load (let* ((load  (get-cpu-load))
+				 (delta (abs (- load cpu-load))))
+			    (if (> delta 0.6) ;; don't bother updating with small changes
+				load
+				#f)))
+	    (new-disk-free (let* ((df    (get-df (current-directory)))
+				  (delta (abs (- df disk-free))))
+			     (if (> delta 200) ;; ignore changes under 200 Meg
+				 df
+				 #f))))
+	(set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
+			    (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
+						(time-exceeded (> run-seconds runtlim)))
+					   (if time-exceeded
+					       (begin
+						 (debug:print-info 0 "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
+						 #t)
+					       #f)))))
+	(tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f)
+	(if kill-job? 
+	    (begin
+	      (mutex-lock! m)
+	      ;; NOTE: The pid can change as different steps are run. Do we need handshaking between this
+	      ;;       section and the runit section? Or add a loop that tries three times with a 1/4 second
+	      ;;       between tries?
+	      (let* ((pid1 (launch:einf-pid exit-info)) ;; (vector-ref exit-info 0))
+		     (pid2 (rmt:test-get-top-process-pid run-id test-id))
+		     (pids (delete-duplicates (filter number? (list pid1 pid2)))))
+		(if (not (null? pids))
+		    (begin
+		      (for-each
+		       (lambda (pid)
+			 (handle-exceptions
+			  exn
+			  (begin
+			    (debug:print-info 0 "Unable to kill process with pid " pid ", possibly already killed.")
+			    (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn)))
+			  (debug:print 0 "WARNING: Request received to kill job " pid) ;;  " (attempt # " kill-tries ")")
+			  (debug:print-info 0 "Signal mask=" (signal-mask))
+			  ;; (if (process:alive? pid)
+			  ;;     (begin
+			  (map (lambda (pid-num)
+				 (process-signal pid-num signal/term))
+			       (process:get-sub-pids pid))
+			  (thread-sleep! 5)
+			  ;; (if (process:process-alive? pid)
+			  (map (lambda (pid-num)
+				 (handle-exceptions
+				  exn
+				  #f
+				  (process-signal pid-num signal/kill)))
+			       (process:get-sub-pids pid))))
+		       ;;    (debug:print-info 0 "not killing process " pid " as it is not alive"))))
+		       pids)
+		      (tests:test-set-status! run-id test-id "KILLED"  "KILLED" (args:get-arg "-m") #f))
+		    (begin
+		      (debug:print 0 "ERROR: Nothing to kill, pid1=" pid1 ", pid2=" pid2)
+		      (tests:test-set-status! run-id test-id "KILLED"  "FAILED TO KILL" (args:get-arg "-m") #f)
+		      )))
+	      (mutex-unlock! m)
+	      ;; no point in sticking around. Exit now.
+	      (exit)))
+	(if (hash-table-ref/default misc-flags 'keep-going #f)
+	    (begin
+	      (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
+	      (if (hash-table-ref/default misc-flags 'keep-going #f)  ;; keep originals for cpu-load and disk-free unless they change more than the allowed delta
+		  (loop (calc-minutes) (or new-cpu-load cpu-load) (or new-disk-free disk-free)))))))
+    (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f))) ;; NOTE: Checking twice for keep-going is intentional
+
 (define (launch:execute encoded-cmd)
-  
-   (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
+     (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
 	  (tconfigreg (tests:get-all)))
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
@@ -256,8 +412,7 @@
                                                    (file-execute-access? fulln))
                                               fulln
                                               runscript))))) ;; assume it is on the path
-	       ;; (rollup-status 0)
-	       )
+	       ) ;; (rollup-status 0)
 
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
@@ -421,163 +576,14 @@
 		 (kill-job?    #f)
 		 (exit-info    (make-launch:einf pid: #t exit-status: #t exit-code: #t rollup-status: 0)) ;; pid exit-status exit-code (i.e. process was successfully run) rollup-status
 		 (job-thread   #f)
-		 (keep-going   #t)
+		 ;; (keep-going   #t)
+		 (misc-flags   (let ((ht (make-hash-table)))
+				 (hash-table-set! ht 'keep-going #t)
+				 ht))
 		 (runit        (lambda ()
-				 ;; (let-values
-				 ;;  (((pid exit-status exit-code)
-				 ;;    (run-n-wait fullrunscript)))
-				 ;; (tests:test-set-status! test-id "RUNNING" "n/a" #f #f)
-				 ;; Since we should have a clean slate at this time there is no need to do 
-				 ;; any of the other stuff that tests:test-set-status! does. Let's just 
-				 ;; force RUNNING/n/a
-				 
-
-				 ;; (thread-sleep! 0.3)
-				 (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
-				 (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "RUNNING")
-				 ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
-
-				 ;; if there is a runscript do it first
-				 (if fullrunscript
-				     (let ((pid (process-run fullrunscript)))
-				       (rmt:test-set-top-process-pid run-id test-id pid)
-				       (let loop ((i 0))
-					 (let-values
-					  (((pid-val exit-status exit-code) (process-wait pid #t)))
-					  (mutex-lock! m)
-					  (launch:einf-pid-set!           exit-info  pid)         ;; (vector-set! exit-info 0 pid)
-					  (launch:einf-exit-status-set!   exit-info  exit-status) ;; (vector-set! exit-info 1 exit-status)
-					  (launch:einf-exit-code-set!     exit-info  exit-code)   ;; (vector-set! exit-info 2 exit-code)
-					  (launch:einf-rollup-status-set! exit-info  exit-code)   ;; (vector-set! exit-info 3 exit-code)  ;; rollup status
-					  (mutex-unlock! m)
-					  (if (eq? pid-val 0)
-					      (begin
-						(thread-sleep! 2)
-						(loop (+ i 1)))
-					      )))))
-				 ;; then, if runscript ran ok (or did not get called)
-				 ;; do all the ezsteps (if any)
-				 (if ezsteps
-				     (let* ((testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
-					     ;; NOTE: it is tempting to turn off force-create of testconfig but dynamic
-					     ;;       ezstep names need a full re-eval here.
-					     (tests:get-testconfig test-name tconfigreg #t force-create: #t)) ;; 'return-procs)))
-					    (ezstepslst (if (hash-table? testconfig)
-							    (hash-table-ref/default testconfig "ezsteps" '())
-							    #f)))
-				       (if testconfig
-					   (hash-table-set! *testconfigs* test-name testconfig) ;; cached for lazy reads later ...
-					   (begin
-					     (launch:setup)
-					     (debug:print 0 "WARNING: no testconfig found for " test-name " in search path:\n  "
-							  (string-intersperse (tests:get-tests-search-path *configdat*) "\n  "))))
-				       ;; after all that, still no testconfig? Time to abort
-				       (if (not testconfig)
-					   (begin
-					     (debug:print 0 "ERROR: Failed to resolve megatest.config, runconfigs.config and testconfig issues. Giving up now")
-					     (exit 1)))
-				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
-				       ;; if ezsteps was defined then we are sure to have at least one step but check anyway
-				       (if (not (> (length ezstepslst) 0))
-					   (debug:print 0 "ERROR: ezsteps defined but ezstepslst is zero length")
-					   (let loop ((ezstep (car ezstepslst))
-						      (tal    (cdr ezstepslst))
-						      (prevstep #f))
-					     ;; check exit-info (vector-ref exit-info 1)
-					     (if (launch:einf-exit-status exit-info) ;; (vector-ref exit-info 1)
-						 (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig))
-						       (stepname    (car ezstep)))
-						   ;; if logpro-used read in the stepname.dat file
-						   (if (and logpro-used (file-exists? (conc stepname ".dat")))
-						       (launch:load-logpro-dat stepname))
-						   (if (steprun-good? logpro-used (launch:einf-exit-code exit-info))
-						       (if (not (null? tal))
-							   (loop (car tal) (cdr tal) stepname))
-						       (debug:print 4 "WARNING: step " (car ezstep) " failed. Stopping")))
-						 (debug:print 4 "WARNING: a prior step failed, stopping at " ezstep))))))))
+				 (launch:manage-steps run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m)))
 		 (monitorjob   (lambda ()
-				 (let* ((start-seconds (current-seconds))
-					(calc-minutes  (lambda ()
-							 (inexact->exact 
-							  (round 
-							   (- 
-							    (current-seconds) 
-							    start-seconds)))))
-					(kill-tries 0))
-				   ;; (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area)
-				   ;; (tests:set-full-meta-info test-id run-id (calc-minutes) work-area)
-				   (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
-				   (let loop ((minutes   (calc-minutes))
-					      (cpu-load  (get-cpu-load))
-					      (disk-free (get-df (current-directory))))
-				     (let ((new-cpu-load (let* ((load  (get-cpu-load))
-								(delta (abs (- load cpu-load))))
-							   (if (> delta 0.6) ;; don't bother updating with small changes
-							       load
-							       #f)))
-					   (new-disk-free (let* ((df    (get-df (current-directory)))
-								 (delta (abs (- df disk-free))))
-							    (if (> delta 200) ;; ignore changes under 200 Meg
-								df
-								#f))))
-				       (set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
-							   (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
-									       (time-exceeded (> run-seconds runtlim)))
-									  (if time-exceeded
-									      (begin
-										(debug:print-info 0 "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
-										#t)
-									      #f)))))
-				       (tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f)
-				       (if kill-job? 
-					   (begin
-					     (mutex-lock! m)
-					     ;; NOTE: The pid can change as different steps are run. Do we need handshaking between this
-					     ;;       section and the runit section? Or add a loop that tries three times with a 1/4 second
-					     ;;       between tries?
-					     (let* ((pid1 (launch:einf-pid exit-info)) ;; (vector-ref exit-info 0))
-						    (pid2 (rmt:test-get-top-process-pid run-id test-id))
-						    (pids (delete-duplicates (filter number? (list pid1 pid2)))))
-					       (if (not (null? pids))
-						   (begin
-						     (for-each
-						      (lambda (pid)
-							(handle-exceptions
-							 exn
-							 (begin
-							   (debug:print-info 0 "Unable to kill process with pid " pid ", possibly already killed.")
-							   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn)))
-							 (debug:print 0 "WARNING: Request received to kill job " pid) ;;  " (attempt # " kill-tries ")")
-							 (debug:print-info 0 "Signal mask=" (signal-mask))
-							 ;; (if (process:alive? pid)
-							 ;;     (begin
-							 (map (lambda (pid-num)
-								(process-signal pid-num signal/term))
-							      (process:get-sub-pids pid))
-							 (thread-sleep! 5)
-							 ;; (if (process:process-alive? pid)
-							 (map (lambda (pid-num)
-								(handle-exceptions
-								 exn
-								 #f
-								 (process-signal pid-num signal/kill)))
-							      (process:get-sub-pids pid))))
-							 ;;    (debug:print-info 0 "not killing process " pid " as it is not alive"))))
-						      pids)
-						     (tests:test-set-status! run-id test-id "KILLED"  "KILLED" (args:get-arg "-m") #f))
-						   (begin
-						     (debug:print 0 "ERROR: Nothing to kill, pid1=" pid1 ", pid2=" pid2)
-						     (tests:test-set-status! run-id test-id "KILLED"  "FAILED TO KILL" (args:get-arg "-m") #f)
-						     )))
-					     (mutex-unlock! m)
-					     ;; no point in sticking around. Exit now.
-					     (exit)))
-				       (if keep-going
-					   (begin
-					     (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
-					     (if keep-going    ;; keep originals for cpu-load and disk-free unless they change more than the allowed delta
-						 (loop (calc-minutes) (or new-cpu-load cpu-load) (or new-disk-free disk-free)))))))
-				   (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)))) ;; NOTE: Checking twice for keep-going is intentional
+				 (launch:monitor-job  run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m work-area runtlim misc-flags)))
 		 (th1          (make-thread monitorjob "monitor job"))
 		 (th2          (make-thread runit "run job")))
 	    (set! job-thread th2)
@@ -585,7 +591,7 @@
 	    (thread-start! th2)
 	    (thread-join! th2)
 	    (debug:print-info 0 "Megatest exectute of test " test-name ", item path " item-path " complete. Notifying the db ...")
-	    (set! keep-going #f)
+	    (hash-table-set! misc-flags 'keep-going #f)
 	    (thread-join! th1)
 	    (thread-sleep! 1)       ;; givbe thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.
 	    (mutex-lock! m)
