@@ -859,15 +859,19 @@
 			     (db:general-sqlite-error-dump exn "alter table " table-name " ..." #f "none"))
 			 (sqlite3:execute
 			  frundb
-			  (conc "ALTER TABLE " table-name " ADD COLUMN last_update INTEGER DEFAULT 0"))
-			 (sqlite3:execute
-			  frundb
-			  (conc "CREATE TRIGGER IF NOT EXISTS update_" table-name "_trigger AFTER UPDATE ON " table-name "
+			  (conc "ALTER TABLE " table-name " ADD COLUMN last_update INTEGER DEFAULT 0")))
+			(sqlite3:execute
+			 frundb
+			 (conc "DROP TRIGGER IF EXISTS update_" table-name "_trigger;"))
+			(sqlite3:execute
+			 frundb
+			 (conc "CREATE TRIGGER IF NOT EXISTS update_" table-name "_trigger AFTER UPDATE ON " table-name "
                              FOR EACH ROW
                                BEGIN 
-                                 UPDATE " table-name " SET last_update=(strftime('%s','now'));
+                                 UPDATE " table-name " SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
                                END;"))
-			 ))
+			)
 		      '("tests" "test_steps" "test_data"))))))
 	   all-run-ids)
 	  ;; removed deleted runs

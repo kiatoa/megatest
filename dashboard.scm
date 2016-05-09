@@ -372,7 +372,8 @@ Misc
 			(if (eq? *tests-sort-reverse* 3) ;; +event_time
 			    (sort newdat dboard:compare-tests)
 			    newdat))))
-    (debug:print 0 "(dboard:get-tests-for-run-duplicate: got " (length tests) " test records for run " run-id)
+    (vector-set! prev-dat 3 (- (current-seconds) 2)) ;; go back two seconds in time to ensure all changes are captured.
+    ;; (debug:print 0 "(dboard:get-tests-for-run-duplicate: filters-changed=" (d:alldat-filters-changed data) " last-update=" last-update " got " (length tmptests) " test records for run " run-id)
     tests))
 
 ;; create a virtual table of all the tests
