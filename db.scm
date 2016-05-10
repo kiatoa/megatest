@@ -2862,17 +2862,30 @@
   (let ((res '()))
     (for-each
      (lambda (entry-name)
-       (let* ((value     (or (configf:lookup dat entry-name "measured")  "n/a"))
-	      (expected  (or (configf:lookup dat entry-name "expected")  "n/a"))
-	      (tolerance (or (configf:lookup dat entry-name "tolerance") "n/a"))
-	      (comment   (or (configf:lookup dat entry-name "comment")
-			     (configf:lookup dat entry-name "desc")      "n/a"))
-	      (status    (or (configf:lookup dat entry-name "status")    "n/a"))
-	      (type      (or (configf:lookup dat entry-name "expected")  "n/a")))
-	 (set! res (append
-		    res
-		    (list (list stepname entry-name expected tolerance comment status type))))
-	 ))
+       (if (equal? entry-name "final")
+	   (set! res (append 
+		      res
+		      (list
+		       (list stepname
+			     entry-name
+			     (configf:lookup dat entry-name "exit-code")    ;; 0 ;; Value
+			     0                                              ;; 1 ;; Expected
+			     0                                              ;; 2 ;; Tolerance
+			     "n/a"					    ;; 3 ;; Units
+			     (configf:lookup dat entry-name "message")      ;; 4 ;; Comment
+			     (configf:lookup dat entry-name "exit-status")  ;; 5 ;; Status
+			     "logpro"                                       ;; 6 ;; Type
+			     ))))
+	   (let* ((value     (or (configf:lookup dat entry-name "measured")  "n/a"))
+		  (expected  (or (configf:lookup dat entry-name "expected")  "n/a"))
+		  (tolerance (or (configf:lookup dat entry-name "tolerance") "n/a"))
+		  (comment   (or (configf:lookup dat entry-name "comment")
+				 (configf:lookup dat entry-name "desc")      "n/a"))
+		  (status    (or (configf:lookup dat entry-name "status")    "n/a"))
+		  (type      (or (configf:lookup dat entry-name "expected")  "n/a")))
+	     (set! res (append
+			res
+			(list (list stepname entry-name expected tolerance comment status type)))))))
      (hash-table-keys dat))
     res))
 
