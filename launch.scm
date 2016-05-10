@@ -73,7 +73,7 @@
 	  (rmt:csv->test-data run-id test-id csvt)
 	  (cond
 	   ((equal? status "PASS") "PASS") ;; skip the message part if status is pass
-	   (status (conc (configf:lookup dat "final" "exit-status") ": " (configf:lookup dat "final" "message")))
+	   (status (conc (configf:lookup dat "final" "exit-status") ": " (if msg msg "no message")))
 	   (else #f)))
 	#f)))
 
