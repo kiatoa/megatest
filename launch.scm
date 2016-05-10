@@ -58,13 +58,21 @@
 ;;                       0           1              2              3
 (defstruct launch:einf (pid #t)(exit-status #t)(exit-code #t)(rollup-status 0))
 
-(define (launch:load-logpro-dat stepname)
+;; return (conc status ": " comment) from the final section so that
+;;   the comment can be set in the step record in launch.scm
+;;
+(define (launch:load-logpro-dat run-id test-id stepname)
   (let* ((dat  (read-config (conc stepname ".dat") #f #f))
 	 (csvr (db:logpro-dat->csv dat stepname))
 	 (csvt (let-values (( (fmt-cell fmt-record fmt-csv) (make-format ",")))
-			   (fmt-csv (map list->csv-record csvr)))))
-    (rmt:csv->test-data run-id test-id csvt)))
-
+			   (fmt-csv (map list->csv-record csvr))))
+	 (status (configf:lookup dat "final" "exit-status"))
+	 (msg     (configf:lookup dat "final" "message")))
+    (rmt:csv->test-data run-id test-id csvt)
+    (cond
+     ((equal? status "PASS") "PASS") ;; skip the message part if status is pass
+     (status (conc (configf:lookup dat "final" "exit-status") ": " (configf:lookup dat "final" "message")))
+     (else #f))))
 
 (define (launch:runstep ezstep run-id test-id exit-info m tal testconfig)
   (let* ((stepname       (car ezstep))  ;; do stuff to run the step
@@ -142,14 +150,15 @@
 	    (debug:print-info 0 "logpro for step " stepname " exited with code " (launch:einf-exit-code exit-info))))) ;; (vector-ref exit-info 2)))))
     
     (let ((exinfo (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
-	  (logfna (if logpro-used (conc stepname ".html") "")))
-      (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
-    (if logpro-used
-	(let ((datfile (conc stepname ".dat")))
-	  ;; load the .dat file into the test_data table if it exists
-	  (if (file-exists? datfile)
-	      (launch:load-logpro-dat stepname))
-	(rmt:test-set-log! run-id test-id (conc stepname ".html"))))
+	  (logfna (if logpro-used (conc stepname ".html") ""))
+	  (comment #f))
+      (if logpro-used
+	  (let ((datfile (conc stepname ".dat")))
+	    ;; load the .dat file into the test_data table if it exists
+	    (if (file-exists? datfile)
+		(set! comment (launch:load-logpro-dat run-id test-id stepname)))
+	    (rmt:test-set-log! run-id test-id (conc stepname ".html"))))
+      (rmt:teststep-set-status! run-id test-id stepname "end" exinfo comment logfna))
     ;; set the test final status
     (let* ((process-exit-status (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
 	   (this-step-status (cond
@@ -283,7 +292,7 @@
 			(stepname    (car ezstep)))
 		    ;; if logpro-used read in the stepname.dat file
 		    (if (and logpro-used (file-exists? (conc stepname ".dat")))
-			(launch:load-logpro-dat stepname))
+			(launch:load-logpro-dat run-id test-id stepname))
 		    (if (steprun-good? logpro-used (launch:einf-exit-code exit-info))
 			(if (not (null? tal))
 			    (loop (car tal) (cdr tal) stepname))

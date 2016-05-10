@@ -2778,10 +2778,10 @@
    (lambda (db)
      (let* ((res '()))
        (sqlite3:for-each-row 
-	(lambda (id test-id stepname state status event-time logfile)
-	  (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
+	(lambda (id test-id stepname state status event-time logfile comment)
+	  (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "") comment) res)))
 	db
-	"SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE status != 'DELETED' AND test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+	"SELECT id,test_id,stepname,state,status,event_time,logfile,comment FROM test_steps WHERE status != 'DELETED' AND test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
 	test-id)
        (reverse res)))))
 

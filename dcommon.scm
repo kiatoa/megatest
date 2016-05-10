@@ -882,7 +882,8 @@
 ;;======================================================================
 
 (define (dcommon:populate-steps teststeps steps-matrix)
-  (let ((max-row 0))
+  (let ((max-row 0)
+	(max-col 7))
     (if (null? teststeps)
 	(iup:attribute-set! steps-matrix "CLEARVALUE" "CONTENTS")
 	(let loop ((hed    (car teststeps))
@@ -893,7 +894,7 @@
 	  (let ((val     (vector-ref hed (- colnum 1)))
 		(mtrx-rc (conc rownum ":" colnum)))
 	    (iup:attribute-set! steps-matrix  mtrx-rc (if val (conc val) ""))
-	    (if (< colnum 6)
+	    (if (< colnum max-col)
 		(loop hed tal rownum (+ colnum 1))
 		(if (not (null? tal))
 		    (loop (car tal)(cdr tal)(+ rownum 1) 1))))))
@@ -904,8 +905,8 @@
 		     (colnum  0)
 		     (deleted #f))
 	    ;; (debug:print-info 0 "cleaning " rownum ":" colnum)
-	    (let* ((next-row (if (eq? colnum 6) (+ rownum 1) rownum))
-		   (next-col (if (eq? colnum 6) 1 (+ colnum 1)))
+	    (let* ((next-row (if (eq? colnum max-col) (+ rownum 1) rownum))
+		   (next-col (if (eq? colnum max-col) 1 (+ colnum 1)))
 		   (mtrx-rc  (conc rownum ":" colnum))
 		   (curr-val (iup:attribute steps-matrix mtrx-rc)))
 	      ;; (debug:print-info 0 "cleaning " rownum ":" colnum " currval= " curr-val)
@@ -914,7 +915,7 @@
 		  (begin
 		    (iup:attribute-set! steps-matrix mtrx-rc "")
 		    (loop next-row next-col #t))
-		  (if (eq? colnum 6) ;; not done, didn't get a full blank row
+		  (if (eq? colnum max-col) ;; not done, didn't get a full blank row
 		      (if deleted (loop next-row next-col #f)) ;; exit on this not met
 		      (loop next-row next-col deleted)))))
 	  (iup:attribute-set! steps-matrix "REDRAW" "ALL")))))
