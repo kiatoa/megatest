@@ -585,8 +585,8 @@
 	 (let ((record (hash-table-ref/default 
 			res 
 			(tdb:step-get-stepname step) 
-			;;        stepname                start end status Duration  Logfile 
-			(vector (tdb:step-get-stepname step) ""   "" ""     ""        ""))))
+			;;        stepname                start end status Duration  Logfile Comment
+			(vector (tdb:step-get-stepname step) ""   "" ""     ""        ""     ""))))
 	   (debug:print 6 "record(before) = " record 
 			"\nid:       " (tdb:step-get-id step)
 			"\nstepname: " (tdb:step-get-stepname step)
@@ -612,11 +612,15 @@
 					  (seconds->hr-min-sec (- endt startt)) "-1")))
 	      (if (> (string-length (tdb:step-get-logfile step))
 		     0)
-		  (vector-set! record 5 (tdb:step-get-logfile step))))
+		  (vector-set! record 5 (tdb:step-get-logfile step)))
+	      (if (> (string-length (tdb:step-get-comment step))
+		     0)
+		  (vector-set! record 6 (tdb:step-get-comment step))))
 	     (else
 	      (vector-set! record 2 (tdb:step-get-state step))
 	      (vector-set! record 3 (tdb:step-get-status step))
-	      (vector-set! record 4 (tdb:step-get-event_time step))))
+	      (vector-set! record 4 (tdb:step-get-event_time step))
+	      (vector-set! record 6 (tdb:step-get-comment step))))
 	   (hash-table-set! res (tdb:step-get-stepname step) record)
 	   (debug:print 6 "record(after)  = " record 
 			"\nid:       " (tdb:step-get-id step)
@@ -634,12 +638,10 @@
       res))
 
 
-;; temporarily passing in dbstruct to support direct access (i.e. bypassing servers)
+;; 
 ;;
-(define (tests:get-compressed-steps dbstruct run-id test-id)
-  (let* ((steps-data  (if dbstruct 
-			  (db:get-steps-for-test dbstruct run-id test-id)
-			  (rmt:get-steps-for-test run-id test-id))) 
+(define (tests:get-compressed-steps run-id test-id)
+  (let* ((steps-data  (rmt:get-steps-for-test run-id test-id))
 	 (comprsteps  (tests:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
     (map (lambda (x)
 	   ;; take advantage of the \n on time->string
@@ -651,7 +653,8 @@
 	      (if (number? s)(seconds->time-string s) s))
 	    (vector-ref x 3)    ;; status
 	    (vector-ref x 4)
-	    (vector-ref x 5)))  ;; time delta
+	    (vector-ref x 5)  ;; time delta
+	    (vector-ref x 6)))
 	 (sort (hash-table-values comprsteps)
 	       (lambda (a b)
 		 (let ((time-a (vector-ref a 1))
@@ -677,7 +680,7 @@
 	 (status    (db:test-get-status   test-dat))
 	 (color     (common:get-color-from-status status))
 	 (logf      (db:test-get-final_logf test-dat))
-	 (steps-dat (tests:get-compressed-steps #f run-id test-id)))
+	 (steps-dat (tests:get-compressed-steps run-id test-id)))
     ;; (dcommon:get-compressed-steps #f 1 30045)
     ;; (#("wasting_time" "23:36:13" "23:36:21" "0" "8.0s" "wasting_time.log"))
 

@@ -443,7 +443,7 @@
 				  (db:test-get-rundir testdat)
 				  logfile))
 	       ;; (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
-	       (teststeps     (if testdat (tests:get-compressed-steps #f run-id test-id) '()))
+	       (teststeps     (if testdat (tests:get-compressed-steps run-id test-id) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       ;; (tests:get-testconfig testdat testname 'return-procs))
@@ -519,7 +519,7 @@
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (tests:get-compressed-steps #f run-id test-id))
+				 (set! teststeps    (tests:get-compressed-steps run-id test-id))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 				 (set! rundir       ;; (filedb:get-path *fdb* 
 				       (db:test-get-rundir testdat)) ;; )
@@ -695,9 +695,9 @@
 							    #:font   "Courier New, -8"
 							    #:expand "YES"
 							    #:scrollbar "YES"
-							    #:numcol 6
-							    #:numlin 30
-							    #:numcol-visible 6
+							    #:numcol 7
+							    #:numlin 100
+							    #:numcol-visible 7
 							    #:numlin-visible 5
 							    #:click-cb (lambda (obj lin col status)
 									 ;; (if (equal? col 6)
@@ -722,6 +722,7 @@
 					 (iup:attribute-set! steps-matrix "WIDTH4" "50")
 					 (iup:attribute-set! steps-matrix "0:5" "Duration")
 					 (iup:attribute-set! steps-matrix "0:6" "Log File")
+					 (iup:attribute-set! steps-matrix "0:7" "Comment")
 					 (iup:attribute-set! steps-matrix "ALIGNMENT1" "ALEFT")
 					 ;; (iup:attribute-set! steps-matrix "FIXTOTEXT" "C1")
 					 (iup:attribute-set! steps-matrix "RESIZEMATRIX" "YES")
