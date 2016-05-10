@@ -62,17 +62,20 @@
 ;;   the comment can be set in the step record in launch.scm
 ;;
 (define (launch:load-logpro-dat run-id test-id stepname)
-  (let* ((dat  (read-config (conc stepname ".dat") #f #f))
-	 (csvr (db:logpro-dat->csv dat stepname))
-	 (csvt (let-values (( (fmt-cell fmt-record fmt-csv) (make-format ",")))
-			   (fmt-csv (map list->csv-record csvr))))
-	 (status (configf:lookup dat "final" "exit-status"))
-	 (msg     (configf:lookup dat "final" "message")))
-    (rmt:csv->test-data run-id test-id csvt)
-    (cond
-     ((equal? status "PASS") "PASS") ;; skip the message part if status is pass
-     (status (conc (configf:lookup dat "final" "exit-status") ": " (configf:lookup dat "final" "message")))
-     (else #f))))
+  (let ((cname (conc stepname ".dat")))
+    (if (file-exists? cname)
+	(let* ((dat  (read-config cname #f #f))
+	       (csvr (db:logpro-dat->csv dat stepname))
+	       (csvt (let-values (( (fmt-cell fmt-record fmt-csv) (make-format ",")))
+				 (fmt-csv (map list->csv-record csvr))))
+	       (status (configf:lookup dat "final" "exit-status"))
+	       (msg     (configf:lookup dat "final" "message")))
+	  (rmt:csv->test-data run-id test-id csvt)
+	  (cond
+	   ((equal? status "PASS") "PASS") ;; skip the message part if status is pass
+	   (status (conc (configf:lookup dat "final" "exit-status") ": " (configf:lookup dat "final" "message")))
+	   (else #f)))
+	#f)))
 
 (define (launch:runstep ezstep run-id test-id exit-info m tal testconfig)
   (let* ((stepname       (car ezstep))  ;; do stuff to run the step
