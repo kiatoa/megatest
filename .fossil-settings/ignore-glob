@@ -1,3 +1,4 @@
+altdb.scm
 utils/build/*
 *~
 *.o
