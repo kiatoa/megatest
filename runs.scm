@@ -175,6 +175,7 @@
 	 ;; (deferred          '()) ;; delay running these since they have a waiton clause
 	 (runconfigf         (conc  *toppath* "/runconfigs.config"))
 	 (test-records       (make-hash-table))
+         (test-deps          (make-hash-table))
 	 ;; need to process runconfigs before generating these lists
 	 (all-tests-registry #f)  ;; (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
 	 (all-test-names     #f)  ;; (hash-table-keys all-tests-registry))
@@ -234,7 +235,7 @@
     (set! all-tests-registry (tests:get-all))   ;; hash of testname => path-to-test
     (set! all-test-names     (hash-table-keys all-tests-registry))
     (set! test-names         (tests:filter-test-names all-test-names test-patts))
-
+    
     ;; I think seeding required-tests with all test-names makes sense but lack analysis to back that up.
 
     ;; NEW STRATEGY HERE:
@@ -324,8 +325,11 @@
 						(or (hash-table-ref/default waiton-tconfig "items" #f)
 						    (hash-table-ref/default waiton-tconfig "itemstable" #f))))
 			  (itemmaps        (tests:get-itemmaps config))  ;; (configf:lookup config "requirements" "itemmap"))
+                          (mode        (tests:get-mode config))
 			  (new-test-patts  (tests:extend-test-patts test-patts hed waiton itemmaps)))
 		     (debug:print-info 0 "Test " waiton " has " (if waiton-record "a" "no") " waiton-record and" (if waiton-itemized " " " no ") "items")
+                     ;;(debug:print-info 0 "BB> Test is "hed" test-patts is "test-patts)
+                     ;;(debug:print-info 0 "BB>    waiton is " waiton " mode is " mode" and new-test-patts is "new-test-patts)
 		     ;; need to account for test-patt here, if I am test "a", selected with a test-patt of "hed/b%"
 		     ;; and we are waiting on "waiton" we need to add "waiton/,waiton/b%" to test-patt
 		     ;; is this satisfied by merely appending "/" to the waiton name added to the list?
@@ -337,22 +341,45 @@
 		     ;; initially added we add them again to be processed on second round AND add the hed
 		     ;; back in to also be processed on second round
 		     ;;
-		     (if waiton-tconfig
-			 (begin
-			   (set! test-names (cons waiton test-names)) ;; need to process this one, only add once the waiton tconfig read
-			   (if waiton-itemized
-			       (begin
-				 (debug:print-info 0 "New test patts: " new-test-patts ", prev test patts: " test-patts)
-				 (set! required-tests (cons (conc waiton "/") required-tests))
-				 (set! test-patts new-test-patts))
-			       (begin
-				 (debug:print-info 0 "Adding non-itemized test " waiton " to required-tests")
-				 (set! required-tests (cons waiton required-tests))
-				 (set! test-patts new-test-patts))))
-			 (begin
-			   (debug:print-info 0 "No testconfig info yet for " waiton ", setting up to re-process it")
-			   (set! tal (append (cons waiton tal)(list hed))))) ;; (cons (conc waiton "/") required-tests))
-			 
+
+                     ;;(debug:print-info 0 "BB>     remaining tests: "tal)
+                     (let ((hed-depended-on-by-remaining-test
+                            ;; BB>> don't set testpatt if hed is waited on by another test in testnames
+                            
+                            (foldr
+                             (lambda (remaining-test previous-result)
+                               (let ((dependencies-on-remaining-test
+                                      (hash-table-ref/default test-deps remaining-test '()))
+                                     (mode        (tests:get-mode config)))
+                                 ;;(debug:print-info 0 "BB>     remaining-test="remaining-test" dependencies-on-remaining-test: "dependencies-on-remaining-test)
+                                 (or previous-result
+                                     (if (or
+                                          (not (equal? "itemwait" mode))
+                                          (member hed dependencies-on-remaining-test))
+                                         #t
+                                         #f))))
+                             #f
+                             tal)))
+                       
+                       ;;(debug:print-info 0 "BB>    hed="hed"  hed-depended-on-by-remaining-test="hed-depended-on-by-remaining-test)
+                       (if (and waiton-tconfig (not hed-depended-on-by-remaining-test))
+                           (begin
+                             (set! test-names (cons waiton test-names)) ;; need to process this one, only add once the waiton tconfig read
+                             (if waiton-itemized
+                                 (begin
+                                   (debug:print-info 0 "New test patts: " new-test-patts ", prev test patts: " test-patts)
+                                   (set! required-tests (cons (conc waiton "/") required-tests))
+                                   ;;(debug:print-info 0 "BB> set1 test-patts <- " test-patts)
+                                   (set! test-patts new-test-patts))
+                                 (begin
+                                   (debug:print-info 0 "Adding non-itemized test " waiton " to required-tests")
+                                   (set! required-tests (cons waiton required-tests))
+                                   ;;(debug:print-info 0 "BB> set2 test-patts <- " test-patts)
+                                   (set! test-patts new-test-patts))))
+                           (begin
+                             (debug:print-info 0 "No testconfig info yet for " waiton ", setting up to re-process it")
+                             (set! tal (append (cons waiton tal)(list hed)))))) ;; (cons (conc waiton "/") required-tests))
+                     
 		     ;; NOPE: didn't work. required needs to be plain test names. Try tacking on to test-patts
 		     ;;  - doesn't work
 		     ;; (set! test-patts (conc test-patts "," waiton "/"))
@@ -360,12 +387,19 @@
 		     ;; (set! test-names (cons waiton test-names))))) ;; was an append, now a cons
 		     )))
 	     (delete-duplicates (append waitons waitors)))
+
+            ;; remember deps
+            (hash-table-set!
+             test-deps
+             hed
+             (delete-duplicates (append waitons waitors (hash-table-ref/default test-deps hed '()))))
+
 	    (let ((remtests (delete-duplicates (append waitons tal))))
 	      (if (not (null? remtests))
 		  (begin
 		    ;; (debug:print-info 0 "Preprocessing continues for " (string-intersperse remtests ", "))
 		    (loop (car remtests)(cdr remtests))))))))
-
+        
     (if (not (null? required-tests))
 	(debug:print-info 1 "Adding \"" (string-intersperse required-tests " ") "\" to the run queue"))
     ;; NOTE: these are all parent tests, items are not expanded yet.

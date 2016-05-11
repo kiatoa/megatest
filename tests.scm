@@ -94,6 +94,10 @@
 		itemmap-table
 		'()))))
 
+(define (tests:get-mode tconfig)
+  (let ((itemwait  (configf:lookup tconfig "requirements" "mode")))
+        itemwait))
+
 ;; given a list of itemmaps (testname . map), return the first match
 ;;
 (define (tests:lookup-itemmap itemmaps testname)
