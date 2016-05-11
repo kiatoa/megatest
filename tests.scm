@@ -641,7 +641,6 @@
 		      (else #f)))))
       res))
 
-
 ;; 
 ;;
 (define (tests:get-compressed-steps run-id test-id)
