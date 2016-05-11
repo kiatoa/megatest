@@ -2884,8 +2884,17 @@
 		  (status    (or (configf:lookup dat entry-name "status")    "n/a"))
 		  (type      (or (configf:lookup dat entry-name "expected")  "n/a")))
 	     (set! res (append
-			res
-			(list (list stepname entry-name expected tolerance comment status type)))))))
+			res  
+			(list (list stepname
+				    entry-name 
+				    value        ;; 0
+				    expected     ;; 1
+				    tolerance    ;; 2
+				    "n/a"        ;; 3 Units
+				    comment      ;; 4
+				    status       ;; 5
+				    type         ;; 6
+				    )))))))
      (hash-table-keys dat))
     res))
 
