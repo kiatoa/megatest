@@ -11,6 +11,8 @@
 
 ;; (use trace)
 
+(include "altdb.scm")
+
 ;; Some of these routines use:
 ;;
 ;;     http://www.cs.toronto.edu/~gfb/scheme/simple-macros.html

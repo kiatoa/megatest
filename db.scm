@@ -388,35 +388,7 @@
     (if (hash-table? locdbs)
 	(for-each (lambda (run-id)
 		    (db:close-run-db dbstruct run-id))
-		  (hash-table-keys locdbs))))
-
-  ;; (let* ((local (dbr:dbstruct-get-local dbstruct))
-  ;;        (rundb (db:dbdat-get-db (dbr:dbstruct-get-rundb dbstruct))))
-  ;;   (if local
-  ;;       (for-each
-  ;;        (lambda (dbdat)
-  ;;          (let ((db (db:dbdat-get-db dbdat)))
-  ;;            (if (sqlite3:database? db)
-  ;;       	 (begin
-  ;;       	   (sqlite3:interrupt! db)
-  ;;       	   (sqlite3:finalize! db #t)))))
-  ;;        ;; TODO: Come back to this and rework to delete from hashtable when finalized
-  ;;        (hash-table-values (dbr:dbstruct-get-locdbs dbstruct))))
-  ;;   (thread-sleep! 3)
-  ;;   (if (and rundb
-  ;;            (sqlite3:database? rundb))
-  ;;       (handle-exceptions
-  ;;        exn
-  ;;        (begin 
-  ;;          (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
-  ;;          (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-  ;;          (debug:print 0 " db: " rundb)
-  ;;          (print-call-chain (current-error-port))
-  ;;          #f)
-  ;;        (sqlite3:interrupt! rundb)
-  ;;        (sqlite3:finalize! rundb #t))))
-  ;; ;; (mutex-unlock! *db-sync-mutex*)
-  )
+		  (hash-table-keys locdbs)))))
 
 (define (db:open-inmem-db)
   (let* ((db      (sqlite3:open-database ":memory:"))
@@ -1822,51 +1794,6 @@
 		    (debug:print 2 "WARNING: Failed to process " dbfile " for run-id")
 		    0))))
 	  changed))))
-
-;; db:get-runs-by-patt
-;; get runs by list of criteria
-;; register a test run with the db
-;;
-;; Use: (db:get-value-by-header (db:get-header runinfo)(db:get-rows runinfo))
-;;  to extract info from the structure returned
-;;
-;; NOTE: THIS IS COMPLETELY UNFINISHED. IT GOES WITH rmt:get-get-paths-matching-keynames
-;;
-;; (define (db:get-run-ids-matching dbstruct keynames target res)
-;; ;; (define (db:get-runs-by-patt dbstruct keys runnamepatt targpatt offset limit) ;; test-name)
-;;   (let* ((tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
-;; 	 (keystr   (car tmp))
-;; 	 (header   (cadr tmp))
-;; 	 (res     '())
-;; 	 (key-patt "")
-;; 	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
-;; 	 (qry-str  #f)
-;; 	 (keyvals  (if targpatt (keys:target->keyval keys targpatt) '())))
-;;     (for-each (lambda (keyval)
-;; 		(let* ((key    (car keyval))
-;; 		       (patt   (cadr keyval))
-;; 		       (fulkey (conc ":" key))
-;; 		       (wildtype (if (substring-index "%" patt) "like" "glob")))
-;; 		  (if patt
-;; 		      (set! key-patt (conc key-patt " AND " key " " wildtype " '" patt "'"))
-;; 		      (begin
-;; 			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
-;; 			(exit 6)))))
-;; 	      keyvals)
-;;     (set! qry-str (conc "SELECT " keystr " FROM runs WHERE state != 'deleted' AND runname " runwildtype " ? " key-patt " ORDER BY event_time "
-;; 			(if limit  (conc " LIMIT " limit)   "")
-;; 			(if offset (conc " OFFSET " offset) "")
-;; 			";"))
-;;     (debug:print-info 4 "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
-;;     (db:with-db dbstruct #f #f ;; reads db, does not write to it.
-;; 		(lambda (db)
-;; 		  (sqlite3:for-each-row
-;; 		   (lambda (a . r)
-;; 		     (set! res (cons (list->vector (cons a r)) res)))
-;; 		   (db:get-db dbstruct #f)
-;; 		   qry-str
-;; 		   runnamepatt)))
-;;     (vector header res)))
 
 ;; Get all targets from the db
 ;;
@@ -3764,25 +3691,4 @@
 
 ;; (db:extract-ods-file db "outputfile.ods" '(("sysname" "%")("fsname" "%")("datapath" "%")) "%")
 
-;; This is a list of all procs that write to the db
-;;
-;; (define *db:all-write-procs*
-;;   (list 
-;;    db:set-var 
-;;    db:del-var
-;;    db:register-run
-;;    db:set-comment-for-run
-;;    db:delete-run
-;;    db:update-run-event_time
-;;    db:lock/unlock-run 
-;;    db:delete-test-step-records
-;;    db:delete-test-records
-;;    db:delete-tests-for-run
-;;    db:delete-old-deleted-test-records
-;;    db:set-tests-state-status
-;;    db:test-set-state-status-by-id
-;;    db:test-set-state-status-by-run-id-testname
-;;    db:testmeta-add-record
-;;    db:csv->test-data
-;;    ))
 
