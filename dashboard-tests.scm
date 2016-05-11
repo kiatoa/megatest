@@ -745,7 +745,7 @@
 					  (hash-table-set! widgets "Test Data"
 							   (lambda (testdat) ;; 
 							     (let* ((currval (iup:attribute test-data "VALUE")) ;; "TITLE"))
-								    (fmtstr  "~10a~10a~10a~10a~7a~7a~6a~6a~a") ;; category,variable,value,expected,tol,units,type,comment
+								    (fmtstr  "~10a~10a~10a~10a~7a~7a~6a~7a~a") ;; category,variable,value,expected,tol,units,type,comment
 								    (newval  (string-intersperse 
 									      (append
 									       (list 
