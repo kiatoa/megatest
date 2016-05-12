@@ -1188,7 +1188,7 @@
 		      (host-type (cadr hed)))
 		  (if (tests:match patt testname itempath)
 		      (begin
-			(debug:print-info 0 "Have flexi-launcher match for " testname "/" itempath " = " host-type)
+			(debug:print-info 2 "Have flexi-launcher match for " testname "/" itempath " = " host-type)
 			(let ((launcher (configf:lookup configdat "host-types" host-type)))
 			  (if launcher
 			      launcher
