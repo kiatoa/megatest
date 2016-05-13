@@ -492,7 +492,8 @@
 		      "\n can-run-more:    " can-run-more)
 
     ;; lets use the debugger eh?
-    (debugger-start)
+    (debugger-start start: 2)
+    (debugger-trace-var "runs:expand-items" "")
     (debugger-trace-var "can-run-more"     can-run-more)
     (debugger-trace-var "hed"              hed)
     (debugger-trace-var "prereqs-not-met"  (runs:pretty-string prereqs-not-met))
@@ -1043,10 +1044,12 @@
 		     "\n  reg:         " reg)
 
 	;; lets use the debugger eh?
-	(debugger-start start: 5)
+	(debugger-start start: 7)
 	(debugger-trace-var "runs:run-tests-queue" "")
-	(debugger-trace-var "items"            items)
 	(debugger-trace-var "hed"              hed)
+	(debugger-trace-var "tal"              tal)
+	(debugger-trace-var "items"            items)
+	(debugger-trace-var "item-path"        item-path)
 	(debugger-trace-var "waitons"          waitons) 
 	(debugger-pauser)
 
