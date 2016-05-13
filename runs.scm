@@ -30,6 +30,8 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
+(include "debugger.scm")
+
 (define (runs:test-get-full-path test)
   (let* ((testname (db:test-get-testname   test))
 	 (itempath (db:test-get-item-path test)))
@@ -161,6 +163,14 @@
 						   " in jobgroup \"" jobgroup "\" exceeds limit of " job-group-limit))
 				  #t)
 				 (else #f))))
+	  ;; lets use the debugger eh?
+	  (debugger-start start: 15)
+	  (debugger-trace-var "runs:can-run-more-tests" "")
+	  (debugger-trace-var "can-not-run-more"         can-not-run-more)
+	  (debugger-trace-var "num-running"              num-running)
+	  (debugger-trace-var "num-running-in-jobgroup"  num-running-in-jobgroup)
+	  (debugger-trace-var "job-group-limit"          job-group-limit)
+	  (debugger-pauser)
 	  (list (not can-not-run-more) num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)))))
 
 
@@ -522,6 +532,14 @@
 		      "\n reruns:          " reruns
 		      "\n items:           " items
 		      "\n can-run-more:    " can-run-more)
+
+    ;; lets use the debugger eh?
+    (debugger-start start: 2)
+    (debugger-trace-var "runs:expand-items" "")
+    (debugger-trace-var "can-run-more"     can-run-more)
+    (debugger-trace-var "hed"              hed)
+    (debugger-trace-var "prereqs-not-met"  (runs:pretty-string prereqs-not-met))
+    (debugger-pauser)
 
     (cond
      ;; all prereqs met, fire off the test
@@ -1066,6 +1084,17 @@
 		     "\n  reglen:      " reglen
 		     "\n  length reg:  " (length reg)
 		     "\n  reg:         " reg)
+
+	;; lets use the debugger eh?
+	(debugger-start start: 7)
+	(debugger-trace-var "runs:run-tests-queue" "")
+	(debugger-trace-var "hed"              hed)
+	(debugger-trace-var "tal"              tal)
+	(debugger-trace-var "items"            items)
+	(debugger-trace-var "item-path"        item-path)
+	(debugger-trace-var "waitons"          waitons) 
+	(debugger-pauser)
+
 
 	;; check for hed in waitons => this would be circular, remove it and issue an
 	;; error
