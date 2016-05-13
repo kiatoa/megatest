@@ -30,6 +30,8 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
+(include "debugger.scm")
+
 (define (runs:test-get-full-path test)
   (let* ((testname (db:test-get-testname   test))
 	 (itempath (db:test-get-item-path test)))
@@ -488,6 +490,13 @@
 		      "\n reruns:          " reruns
 		      "\n items:           " items
 		      "\n can-run-more:    " can-run-more)
+
+    ;; lets use the debugger eh?
+    (debugger-start)
+    (debugger-trace-var "can-run-more"     can-run-more)
+    (debugger-trace-var "hed"              hed)
+    (debugger-trace-var "prereqs-not-met"  (runs:pretty-string prereqs-not-met))
+    (debugger-pauser)
 
     (cond
      ;; all prereqs met, fire off the test
@@ -1032,6 +1041,15 @@
 		     "\n  reglen:      " reglen
 		     "\n  length reg:  " (length reg)
 		     "\n  reg:         " reg)
+
+	;; lets use the debugger eh?
+	(debugger-start start: 5)
+	(debugger-trace-var "runs:run-tests-queue" "")
+	(debugger-trace-var "items"            items)
+	(debugger-trace-var "hed"              hed)
+	(debugger-trace-var "waitons"          waitons) 
+	(debugger-pauser)
+
 
 	;; check for hed in waitons => this would be circular, remove it and issue an
 	;; error
