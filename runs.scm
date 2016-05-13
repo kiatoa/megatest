@@ -163,6 +163,14 @@
 						   " in jobgroup \"" jobgroup "\" exceeds limit of " job-group-limit))
 				  #t)
 				 (else #f))))
+	  ;; lets use the debugger eh?
+	  (debugger-start start: 15)
+	  (debugger-trace-var "runs:can-run-more-tests" "")
+	  (debugger-trace-var "can-not-run-more"         can-not-run-more)
+	  (debugger-trace-var "num-running"              num-running)
+	  (debugger-trace-var "num-running-in-jobgroup"  num-running-in-jobgroup)
+	  (debugger-trace-var "job-group-limit"          job-group-limit)
+	  (debugger-pauser)
 	  (list (not can-not-run-more) num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)))))
 
 
