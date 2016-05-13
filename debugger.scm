@@ -19,7 +19,8 @@
 				#:numlin 30
 				#:numcol 3
 				#:numlin-visible 20
-				#:numcol-visible 3
+				#:numcol-visible 2
+				#:alignment1 "ALEFT"
 				)))
 		    (set! pause (button "Pause" 
 					#:action (lambda (obj)
@@ -28,14 +29,14 @@
 										       "200 0 0"
 										       "0 0 200")))))
 		    (set! *debugger-matrix* mtrx)
-		    (attribute-set! mtrx "WIDTH1" "200")
+		    (attribute-set! mtrx "WIDTH1" "300")
 		    (vbox
 		     mtrx
 		     (hbox
 		      pause)))))
 		(main-loop)))))))
 
-(define (debugger-start #!key (start 1))
+(define (debugger-start #!key (start 2))
   (set! *debugger-rownum* start))
 
 (define (debugger-trace-var varname varval)
@@ -60,7 +61,8 @@
 	  (print "PAUSED!")
 	  (thread-sleep! 1)
 	  (loop))
-	(thread-sleep! 0.01))))
+	;;(thread-sleep! 0.01)
+	)))
 		  
 ;;    ;; lets use the debugger eh?
 ;;    (debugger-start)

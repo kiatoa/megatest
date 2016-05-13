@@ -75,7 +75,7 @@
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
 (define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
   ;; clean out old connections
-  (mutex-lock! *db-multi-sync-mutex*)
+  ;; (mutex-lock! *db-multi-sync-mutex*)
   (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
     (for-each 
      (lambda (run-id)
@@ -90,7 +90,7 @@
 				   (hash-table-ref *runremote* run-id)))))
                (hash-table-delete! *runremote* run-id)))))
      (hash-table-keys *runremote*)))
-  (mutex-unlock! *db-multi-sync-mutex*)
+  ;; (mutex-unlock! *db-multi-sync-mutex*)
   ;; (mutex-lock! *send-receive-mutex*)
   (let* ((run-id          (if rid rid 0))
 	 (connection-info (rmt:get-connection-info run-id)))
