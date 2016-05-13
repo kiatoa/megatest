@@ -98,12 +98,12 @@
   (if (debug:debug-mode n)
       (with-output-to-port (current-error-port)
 	(lambda ()
-	  (let ((res (format#format #f "INFO: (~a) ~a" n (apply conc params))))
-	    (if *logging*
-		(db:log-event res)
-		;; (apply print "pid:" (current-process-id) " " "INFO: (" n ") " params) ;; res)
-		(apply print "INFO: (" n ") " params) ;; res)
-		))))))
+	  (if *logging*
+	      (let ((res (format#format #f "INFO: (~a) ~a" n (apply conc params))))
+		(db:log-event res))
+	      ;; (apply print "pid:" (current-process-id) " " "INFO: (" n ") " params) ;; res)
+	      (apply print "INFO: (" n ") " params) ;; res)
+	      )))))
 
 ;; if a value is printable (i.e. string or number) return the value
 ;; else return an empty string

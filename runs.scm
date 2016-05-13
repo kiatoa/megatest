@@ -496,7 +496,14 @@
 
 (define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmaps)
   (let* ((loop-list       (list hed tal reg reruns))
-	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps))
+	 (prereqs-not-met (let ((res (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps)))
+			    (if (list? res)
+				res
+				(begin
+				  (debug:print 0
+					       "ERROR: rmt:get-prereqs-not-met returned non-list!\n"
+					       "  res=" res " run-id=" run-id " waitons=" waitons " hed=" hed " item-path=" item-path " testmode=" testmode " itemmaps=" itemmaps)
+				  '()))))
 	 ;; (prereqs-not-met (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails           (runs:calc-fails prereqs-not-met))
 	 (prereq-fails    (runs:calc-prereq-fail prereqs-not-met))
@@ -689,7 +696,11 @@
 	 (job-group-limit         (list-ref run-limits-info 4))
 	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps))
 	 ;; (prereqs-not-met         (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
-	 (fails                   (runs:calc-fails prereqs-not-met))
+	 (fails                   (if (list? prereqs-not-met)
+				      (runs:calc-fails prereqs-not-met)
+				      (begin
+					(debug:print 0 "ERROR: prereqs-not-met is not a list! " prereqs-not-met)
+					'())))
 	 (non-completed           (filter (lambda (x)             ;; remove hed from not completed list, duh, of course it is not completed!
 					    (not (equal? x hed)))
 					  (runs:calc-not-completed prereqs-not-met)))

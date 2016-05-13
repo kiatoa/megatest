@@ -365,7 +365,7 @@
 			   #:numcol 1
 			   #:numlin (length key-vals)
 			   #:numcol-visible 1
-			   #:numlin-visible (length key-vals)
+			   #:numlin-visible (min 10 (length key-vals))
 			   #:scrollbar "YES")))
     (iup:attribute-set! section-matrix "0:0" varcolname)
     (iup:attribute-set! section-matrix "0:1" valcolname)
