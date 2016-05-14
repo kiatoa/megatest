@@ -630,10 +630,24 @@
 ;;======================================================================
 
 ;; return a nice clean pathname made absolute
-(define (nice-path dir)
-  (normalize-pathname (if (absolute-pathname? dir)
-			  dir
-			  (conc (current-directory) "/" dir))))
+(define (common:nice-path dir)
+  (let ((match (string-match "^(~[^\\/]*)(\\/.*|)$" dir)))
+    (if match ;; using ~ for home?
+	(common:nice-path (conc (common:read-link-f (cadr match)) "/" (caddr match)))
+	(normalize-pathname (if (absolute-pathname? dir)
+				dir
+				(conc (current-directory) "/" dir))))))
+
+(define (common:read-link-f path)
+  (handle-exceptions
+      exn
+      (begin
+	(debug:print 0 "ERROR: command \"/bin/readlink -f " path "\" failed.")
+	path) ;; just give up
+    (with-input-from-pipe
+	(conc "/bin/readlink -f " path)
+      (lambda ()
+	(read-line)))))
 
 (define (get-cpu-load)
   (car (common:get-cpu-load)))
