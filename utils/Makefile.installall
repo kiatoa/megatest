@@ -279,15 +279,31 @@ $(PREFIX)/lib/libavcall.a : ffcall/README
 #======================================================================
 
 iuplib.fossil :
-	#fossil clone http://www.kiatoa.com/fossils/iuplib iuplib.fossil
-	touch iuplib.fossil
-iup/installall.sh : iuplib.fossil $(PREFIX)/lib/libiup.so
+	fossil clone http://www.kiatoa.com/fossils/iuplib iuplib.fossil
+
+cd-5.9_Linux26g4_64_lib.tar.gz :
+	wget -c http://sourceforge.net/projects/canvasdraw/files/5.9/Linux%20Libraries/cd-5.9_Linux26g4_64_lib.tar.gz/download
+	mv download cd-5.9_Linux26g4_64_lib.tar.gz
+
+iup-3.17_Linux26g4_64_lib.tar.gz :
+	wget -c http://sourceforge.net/projects/iup/files/3.17/Linux%20Libraries/iup-3.17_Linux26g4_64_lib.tar.gz/download
+	mv download iup-3.17_Linux26g4_64_lib.tar.gz
+
+im-3.10_Linux26g4_64_lib.tar.gz :
+	wget -c http://sourceforge.net/projects/imtoolkit/files/3.10/Linux%20Libraries/im-3.10_Linux26g4_64_lib.tar.gz/download
+	mv download im-3.10_Linux26g4_64_lib.tar.gz
+
+lua-5.3.2_Linux26g4_64_lib.tar.gz :
+	wget -c http://sourceforge.net/projects/luabinaries/files/5.3.2/Linux%20Libraries/lua-5.3.2_Linux26g4_64_lib.tar.gz/download
+	mv download lua-5.3.2_Linux26g4_64_lib.tar.gz
+
+iup/installall.sh : $(PREFIX)/lib/libiup.so \
+                       cd-5.9_Linux26g4_64_lib.tar.gz \
+                       iup-3.17_Linux26g4_64_lib.tar.gz \
+                       im-3.10_Linux26g4_64_lib.tar.gz \
+		       lua-5.3.2_Linux26g4_64_lib.tar.gz	# iuplib.fossil
 	mkdir -p iup
 	pwd
-	#wget -c http://sourceforge.net/projects/canvasdraw/files/5.9/Linux%20Libraries/cd-5.9_Linux26g4_64_lib.tar.gz/download
-	#wget -c http://sourceforge.net/projects/iup/files/3.17/Linux%20Libraries/iup-3.17_Linux26g4_64_lib.tar.gz/download
-	#wget -c http://sourceforge.net/projects/imtoolkit/files/3.10/Linux%20Libraries/im-3.10_Linux26g4_64_lib.tar.gz/download
-	#wget -c http://sourceforge.net/projects/luabinaries/files/5.3.2/Linux%20Libraries/lua-5.3.2_Linux26g4_64_lib.tar.gz/download
 	tar -xzvf cd-5.9_Linux26g4_64_lib.tar.gz -C iup/
 	tar -xzvf im-3.10_Linux26g4_64_lib.tar.gz -C iup/
 	tar -xzvf iup-3.17_Linux26g4_64_lib.tar.gz -C iup/
@@ -298,7 +314,7 @@ iup/installall.sh : iuplib.fossil $(PREFIX)/lib/libiup.so
 
 #	cd iup && if [ -e makeall.sh ];then fossil update $(IUPBRANCH); else fossil open ../iuplib.fossil;fossil update $(IUPBRANCH); fi
 
-iup/alldone : iup/makeall.sh $(PREFIX)/include/iup.h $(PREFIX)/lib/libiup.so
+iup/alldone :  $(PREFIX)/include/iup.h $(PREFIX)/lib/libiup.so # iup/makeall.sh
 #	cd iup && ./makeall.sh $(IUPCONFIG)
 
 $(PREFIX)/lib/libiup.so $(PREFIX)/include/iup.h : iup/installall.sh iup/alldone
