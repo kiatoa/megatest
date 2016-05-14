@@ -214,7 +214,7 @@
 	       (configf:include-rx ( x include-file ) (let* ((curr-conf-dir (pathname-directory path))
 							     (full-conf     (if (absolute-pathname? include-file)
 										include-file
-										(nice-path 
+										(common:nice-path 
 										 (conc (if curr-conf-dir
 											   curr-conf-dir
 											   ".")
