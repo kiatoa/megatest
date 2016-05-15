@@ -638,6 +638,9 @@
 				dir
 				(conc (current-directory) "/" dir))))))
 
+;; make "nice-path" available in config files and the repl
+(define nice-path common:nice-path)
+
 (define (common:read-link-f path)
   (handle-exceptions
       exn
