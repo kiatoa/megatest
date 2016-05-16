@@ -1543,62 +1543,80 @@ Misc
 	    (iup:frame 
 	     #:title "filter test and items"
 	     (iup:hbox
-	      (iup:textbox #:size "120x15" #:fontsize "10" #:value "%"
-			   #:action (lambda (obj unk val)
-				      (mark-for-update)
-				      (update-search "test-name" val)))
-	      ;;(iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
-	      ;;  	   #:action (lambda (obj unk val)
-	      ;;  		      (mark-for-update)
-	      ;;  		      (update-search "item-name" val))
-	      ))
-	    (iup:vbox
-	     (iup:hbox
-	      (let* ((cmds-list '("+testname" "-testname" "+event_time" "-event_time" "+statestatus" "-statestatus"))
-		     (lb         (iup:listbox #:expand "HORIZONTAL"
-					      #:dropdown "YES"
-					      #:action (lambda (obj val index lbstate)
-							 (set! *tests-sort-reverse* index)
+	      (iup:vbox
+	       (iup:textbox #:size "120x15" #:fontsize "10" #:value "%"
+			    #:action (lambda (obj unk val)
+				       (mark-for-update)
+				       (update-search "test-name" val)))
+	       (iup:hbox
+		(iup:button "Quit"      #:action (lambda (obj)
+						   ;; (if (d:alldat-dblocal data) (db:close-all (d:alldat-dblocal data)))
+						   (exit)))
+		(iup:button "Refresh"   #:action (lambda (obj)
+						   (mark-for-update)))
+		(iup:button "Collapse"  #:action (lambda (obj)
+						   (let ((myname (iup:attribute obj "TITLE")))
+						     (if (equal? myname "Collapse")
+							 (begin
+							   (for-each (lambda (tname)
+								       (hash-table-set! *collapsed* tname #t))
+								     (d:alldat-item-test-names data))
+							   (iup:attribute-set! obj "TITLE" "Expand"))
+							 (begin
+							   (for-each (lambda (tname)
+								       (hash-table-delete! *collapsed* tname))
+								     (hash-table-keys *collapsed*))
+							   (iup:attribute-set! obj "TITLE" "Collapse"))))
+						   (mark-for-update))))
+	       )
+	      (iup:vbox
+	       ;; (iup:button "Sort -t"   #:action (lambda (obj)
+	       ;;   				 (next-sort-option)
+	       ;;   				 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
+	       ;;   				 (mark-for-update)))
+	       
+	       (let* ((hide #f)
+		      (show #f)
+		      (hide-empty #f)
+		      (sel-color    "180 100 100")
+		      (nonsel-color "170 170 170")
+		      (cmds-list '("+testname" "-testname" "+event_time" "-event_time" "+statestatus" "-statestatus"))
+		      (sort-lb    (iup:listbox #:expand "HORIZONTAL"
+					       #:dropdown "YES"
+					       #:action (lambda (obj val index lbstate)
+							  (set! *tests-sort-reverse* index)
+							  (mark-for-update))))
+		      (default-cmd (car (list-ref *tests-sort-type-index* *tests-sort-reverse*))))
+		 (iuplistbox-fill-list sort-lb cmds-list selected-item: default-cmd)
+		 
+		 (set! hide-empty (iup:button "HideEmpty"
+					      #:expand "YES"
+					      #:action (lambda (obj)
+							 (d:alldat-hide-empty-runs-set! data (not (d:alldat-hide-empty-runs data)))
+							 (iup:attribute-set! obj "TITLE" (if (d:alldat-hide-empty-runs data) "+HideE" "-HideE"))
 							 (mark-for-update))))
-		     (default-cmd (car (list-ref *tests-sort-type-index* *tests-sort-reverse*))))
-		(iuplistbox-fill-list lb cmds-list selected-item: default-cmd)
-		(mark-for-update)
-		;; (set! *tests-sort-reverse* *tests-sort-reverse*0)
-		lb)
-	      ;; (iup:button "Sort -t"   #:action (lambda (obj)
-	      ;;   				 (next-sort-option)
-	      ;;   				 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
-	      ;;   				 (mark-for-update)))
-	      (iup:button "HideEmpty" #:action (lambda (obj)
-						 (d:alldat-hide-empty-runs-set! data (not (d:alldat-hide-empty-runs data)))
-						 (iup:attribute-set! obj "TITLE" (if (d:alldat-hide-empty-runs data) "+HideE" "-HideE"))
-						 (mark-for-update)))
-	      (let ((hideit (iup:button "HideTests" #:action (lambda (obj)
-							       (d:alldat-hide-not-hide-set! data (not (d:alldat-hide-not-hide data)))
-							       (iup:attribute-set! obj "TITLE" (if (d:alldat-hide-not-hide data) "HideTests" "NotHide"))
-							       (mark-for-update)))))
-		(d:alldat-hide-not-hide-button-set! data hideit) ;; never used, can eliminate ...
-		hideit))
-	     (iup:hbox
-	      (iup:button "Quit"      #:action (lambda (obj)
-						 ;; (if (d:alldat-dblocal data) (db:close-all (d:alldat-dblocal data)))
-						 (exit)))
-	      (iup:button "Refresh"   #:action (lambda (obj)
-						 (mark-for-update)))
-	      (iup:button "Collapse"  #:action (lambda (obj)
-						 (let ((myname (iup:attribute obj "TITLE")))
-						   (if (equal? myname "Collapse")
-						       (begin
-							 (for-each (lambda (tname)
-								     (hash-table-set! *collapsed* tname #t))
-								   (d:alldat-item-test-names data))
-							 (iup:attribute-set! obj "TITLE" "Expand"))
-						       (begin
-							 (for-each (lambda (tname)
-								     (hash-table-delete! *collapsed* tname))
-								   (hash-table-keys *collapsed*))
-							 (iup:attribute-set! obj "TITLE" "Collapse"))))
-						 (mark-for-update))))))
+		 (set! hide (iup:button "Hide"
+					#:expand "YES"
+					#:action (lambda (obj)
+						   (d:alldat-hide-not-hide-set! data #t) ;; (not (d:alldat-hide-not-hide data)))
+						   ;; (iup:attribute-set! obj "TITLE" (if (d:alldat-hide-not-hide data) "HideTests" "NotHide"))
+						   (iup:attribute-set! hide "BGCOLOR" sel-color)
+						   (iup:attribute-set! show "BGCOLOR" nonsel-color)
+						   (mark-for-update))))
+		 (set! show (iup:button "Show"
+					#:expand "YES"
+					#:action (lambda (obj)
+						   (d:alldat-hide-not-hide-set! data (not (d:alldat-hide-not-hide data)))
+						   (iup:attribute-set! show "BGCOLOR" sel-color)
+						   (iup:attribute-set! hide "BGCOLOR" nonsel-color)
+						   (mark-for-update))))
+		 (iup:attribute-set! hide "BGCOLOR" sel-color)
+		 (iup:attribute-set! show "BGCOLOR" nonsel-color)
+		 ;; (d:alldat-hide-not-hide-button-set! data hideit) ;; never used, can eliminate ...
+		 (iup:vbox
+		  (iup:hbox hide show)
+		  hide-empty sort-lb)))
+	      )))
 	   (iup:frame 
 	    #:title "state/status filter"
 	    (iup:vbox
