@@ -163,14 +163,14 @@
 						   " in jobgroup \"" jobgroup "\" exceeds limit of " job-group-limit))
 				  #t)
 				 (else #f))))
-	  ;; lets use the debugger eh?
-	  (debugger-start start: 15)
-	  (debugger-trace-var "runs:can-run-more-tests" "")
-	  (debugger-trace-var "can-not-run-more"         can-not-run-more)
-	  (debugger-trace-var "num-running"              num-running)
-	  (debugger-trace-var "num-running-in-jobgroup"  num-running-in-jobgroup)
-	  (debugger-trace-var "job-group-limit"          job-group-limit)
-	  (debugger-pauser)
+;;	  ;; lets use the debugger eh?
+;;	  (debugger-start start: 15)
+;;	  (debugger-trace-var "runs:can-run-more-tests" "")
+;;	  (debugger-trace-var "can-not-run-more"         can-not-run-more)
+;;	  (debugger-trace-var "num-running"              num-running)
+;;	  (debugger-trace-var "num-running-in-jobgroup"  num-running-in-jobgroup)
+;;	  (debugger-trace-var "job-group-limit"          job-group-limit)
+;;	  (debugger-pauser)
 	  (list (not can-not-run-more) num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)))))
 
 
@@ -404,6 +404,13 @@
              hed
              (delete-duplicates (append waitons waitors (hash-table-ref/default test-deps hed '()))))
 
+	    ;; (print "INFO::: test-deps")
+	    ;; (pp (hash-table->alist test-deps))
+;; 	    (debugger-start start: 21)
+;; 	    (debugger-trace-var "waiton processing" "")
+;; 	    (debugger-trace-var "test-deps"     (hash-table->alist test-deps))
+;; 	    (debugger-pauser)
+
 	    (let ((remtests (delete-duplicates (append waitons tal))))
 	      (if (not (null? remtests))
 		  (begin
@@ -419,7 +426,7 @@
 	  (let* ((keep-going        #t)
 		 (run-queue-retries 5)
 		 (th1        (make-thread (lambda ()
-					    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
+					    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry test-deps))
 					    ;; (handle-exceptions
 					    ;;  exn
 					    ;;  (begin
@@ -533,13 +540,13 @@
 		      "\n items:           " items
 		      "\n can-run-more:    " can-run-more)
 
-    ;; lets use the debugger eh?
-    (debugger-start start: 2)
-    (debugger-trace-var "runs:expand-items" "")
-    (debugger-trace-var "can-run-more"     can-run-more)
-    (debugger-trace-var "hed"              hed)
-    (debugger-trace-var "prereqs-not-met"  (runs:pretty-string prereqs-not-met))
-    (debugger-pauser)
+;;     ;; lets use the debugger eh?
+;;     (debugger-start start: 2)
+;;     (debugger-trace-var "runs:expand-items" "")
+;;     (debugger-trace-var "can-run-more"     can-run-more)
+;;     (debugger-trace-var "hed"              hed)
+;;     (debugger-trace-var "prereqs-not-met"  (runs:pretty-string prereqs-not-met))
+;;     (debugger-pauser)
 
     (cond
      ;; all prereqs met, fire off the test
@@ -965,7 +972,7 @@
 (define *max-tries-hash* (make-hash-table))
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
-(define (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests reglen-in all-tests-registry)
+(define (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests reglen-in all-tests-registry test-deps)
   ;; At this point the list of parent tests is expanded 
   ;; NB// Should expand items here and then insert into the run queue.
   (debug:print 5 "test-records: " test-records ", flags: " (hash-table->alist flags))
@@ -978,6 +985,7 @@
 	(tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
 	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
 	(test-registry         (make-hash-table))
+	(no-can-run            (make-hash-table)) ;; test/test/patt => #t hash of tests that can not run
 	(registry-mutex        (make-mutex))
 	(num-retries           0)
 	(max-retries           (config-lookup *configdat* "setup" "maxretries"))
@@ -1007,6 +1015,8 @@
 	       (reg         '()) ;; registered, put these at the head of tal 
 	       (reruns      '()))
 
+      (set! reruns '()) ;; force it to test impact!!
+      
       (if (not (null? reruns))(debug:print-info 4 "reruns=" reruns))
 
       ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
@@ -1090,9 +1100,11 @@
 	(debugger-trace-var "runs:run-tests-queue" "")
 	(debugger-trace-var "hed"              hed)
 	(debugger-trace-var "tal"              tal)
+	(debugger-trace-var "reruns"           reruns)
 	(debugger-trace-var "items"            items)
 	(debugger-trace-var "item-path"        item-path)
-	(debugger-trace-var "waitons"          waitons) 
+	(debugger-trace-var "waitons"          waitons)
+	(debugger-trace-var "no-can-run"       (hash-table->alist no-can-run))
 	(debugger-pauser)
 
 
@@ -1104,7 +1116,8 @@
 	      (set! waiton (filter (lambda (x)(not (equal? x hed))) waitons))))
 
 	(cond 
-	 
+
+	 ;; hed, test-deps :: hed -> ( waitons )
 	 ;; We want to catch tests that have waitons that are NOT in the queue and discard them IFF 
 	 ;; they have been through the wringer 10 or more times
 	 ((and (list? waitons)
@@ -1119,7 +1132,12 @@
 				       #f))
 				 waitons))))) ;; could do this more elegantly with a marker....
 	  (debug:print 0 "WARNING: Marking test " tfullname " as not runnable. It is waiting on tests that cannot be run. Giving up now.")
-	  (hash-table-set! test-registry tfullname 'removed))
+	  (hash-table-set! test-registry tfullname 'removed)
+	  (hash-table-set! no-can-run tfullname #t)
+	  (for-each
+	   (lambda (waiton)
+	     (hash-table-set! no-can-run waiton #t)) ;; NB// this does not account for itemmap and itemwait
+	   waitons))
 
 	 ;; items is #f then the test is ok to be handed off to launch (but not before)
 	 ;; 
