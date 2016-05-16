@@ -217,6 +217,7 @@ Misc
 				    (let ((ans (config:lookup *configdat* "dashboard" "use-server")))
 				      (if (equal? ans "yes") #t #f)))
 				   (else #t)))
+(define *dashboard-mode* (string->symbol (or (configf:lookup *configdat* "dashboard" "mode") "dashboard")))
 
 (d:alldat-dbdir-set! *alldat* (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 (d:alldat-dblocal-set! *alldat* (make-dbr:dbstruct path:  (d:alldat-dbdir *alldat*)
@@ -351,7 +352,8 @@ Misc
 						 'shortlist
 						 (if (d:alldat-filters-changed data)
 						     0
-						     last-update))
+						     last-update)
+						 *dashboard-mode*) ;; use dashboard mode
 			  (db:get-tests-for-run (d:alldat-dblocal data) run-id testnamepatt states statuses
 						#f #f
 						(d:alldat-hide-not-hide data)
@@ -360,7 +362,8 @@ Misc
 						'shortlist
 						(if (d:alldat-filters-changed data)
 						    0
-						    last-update))))
+						    last-update)
+						*dashboard-mode*)))
 	 (tests       (let ((newdat (filter
 				     (lambda (x)
 				       (not (equal? (db:test-get-state x) "DELETED"))) ;; remove deleted tests but do it after merging
@@ -403,14 +406,16 @@ Misc
 		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
 		  ;; (debug:print 0 "Getting data for run " run-id " with key-vals=" key-vals)
 		  ;; Not sure this is needed?
-		  (set! referenced-run-ids (cons run-id referenced-run-ids))
-		  (if (> (length tests) maxtests)
-		      (set! maxtests (length tests)))
-		  (if (or (not (d:alldat-hide-empty-runs data)) ;; this reduces the data burden when set
-			  (not (null? tests)))
-		      (let ((dstruct (vector run tests key-vals (- (current-seconds) 10))))
-			(hash-table-set! (d:alldat-allruns-by-id data) run-id dstruct)
-			(set! result (cons dstruct result))))))
+		  (if (not (null? tests))
+		      (begin
+			(set! referenced-run-ids (cons run-id referenced-run-ids))
+			(if (> (length tests) maxtests)
+			    (set! maxtests (length tests)))
+			(if (or (not (d:alldat-hide-empty-runs data)) ;; this reduces the data burden when set
+				(not (null? tests)))
+			    (let ((dstruct (vector run tests key-vals (- (current-seconds) 10))))
+			      (hash-table-set! (d:alldat-allruns-by-id data) run-id dstruct)
+			      (set! result (cons dstruct result))))))))
 	      runs)
 
     (d:alldat-header-set! data header)
@@ -682,6 +687,7 @@ Misc
   (set-bg-on-filter))
 
 (define (mark-for-update)
+  (d:alldat-filters-changed-set! *alldat* #t)
   (d:alldat-last-db-update-set! *alldat* 0))
 
 ;;======================================================================
@@ -1209,7 +1215,8 @@ Misc
 					     "id,testname,item_path,state,status"
 					     (if (d:alldat-filters-changed data)
 						 0
-						 last-update)) ;; get 'em all
+						 last-update)
+					     *dashboard-mode*) ;; get 'em all
 		      (db:get-tests-for-run db run-id 
 					    (hash-table-ref/default (d:alldat-searchpatts data) "test-name" "%/%")
 					    (hash-table-keys (d:alldat-state-ignore-hash data)) ;; '()
@@ -1220,7 +1227,8 @@ Misc
 					    "id,testname,item_path,state,status"
 					    (if (d:alldat-filters-changed data)
 						0
-						last-update)))
+						last-update)
+					    *dashboard-mode*))
 		  '()))) ;; get 'em all
     (debug:print 0 "dboard:get-tests-dat: got " (length tdat) " test records for run " run-id)
     (sort tdat (lambda (a b)
@@ -1597,22 +1605,24 @@ Misc
 	     (apply 
 	      iup:hbox
 	      (map (lambda (status)
-		     (iup:toggle status  #:action   (lambda (obj val)
-						      (mark-for-update)
-						      (if (eq? val 1)
-							  (hash-table-set! (d:alldat-status-ignore-hash data) status #t)
-							  (hash-table-delete! (d:alldat-status-ignore-hash data) status))
-						      (set-bg-on-filter))))
+		     (iup:toggle (conc status "  ")
+				 #:action   (lambda (obj val)
+					      (mark-for-update)
+					      (if (eq? val 1)
+						  (hash-table-set! (d:alldat-status-ignore-hash data) status #t)
+						  (hash-table-delete! (d:alldat-status-ignore-hash data) status))
+					      (set-bg-on-filter))))
 		   (map cadr *common:std-statuses*))) ;; '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
 	     (apply 
 	      iup:hbox
 	      (map (lambda (state)
-		     (iup:toggle state   #:action   (lambda (obj val)
-						      (mark-for-update)
-						      (if (eq? val 1)
-							  (hash-table-set! (d:alldat-state-ignore-hash data) state #t)
-							  (hash-table-delete! (d:alldat-state-ignore-hash data) state))
-						      (set-bg-on-filter))))
+		     (iup:toggle (conc state "  ")
+				 #:action   (lambda (obj val)
+					      (mark-for-update)
+					      (if (eq? val 1)
+						  (hash-table-set! (d:alldat-state-ignore-hash data) state #t)
+						  (hash-table-delete! (d:alldat-state-ignore-hash data) state))
+					      (set-bg-on-filter))))
 		   (map cadr *common:std-states*))) ;; '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
 	     (iup:valuator #:valuechanged_cb (lambda (obj)
 					       (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))

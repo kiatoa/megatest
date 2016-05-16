@@ -749,6 +749,10 @@
 	      (set! *configinfo* first-pass)
 	      (set! *toppath*    (or toppath (cadr first-pass))) ;; use the gathered data unless already have it
 	      (set! toppath      *toppath*)
+	      (if (not *toppath*)
+		  (begin
+		    (debug:print "ERROR: you are not in a megatest area!")
+		    (exit 1)))
 	      (setenv "MT_RUN_AREA_HOME" *toppath*)
 	      ;; the seed read is done, now read runconfigs, cache it then read megatest.config one more time and cache it
 	      (let* ((keys         (rmt:get-keys))
