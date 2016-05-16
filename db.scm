@@ -2164,7 +2164,10 @@
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
-(define (db:get-tests-for-run dbstruct run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update)
+;; mode:
+;;  'dashboard - use state = 'COMPLETED' AND status in ( statuses ) OR state in ( states )
+;;
+(define (db:get-tests-for-run dbstruct run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)
   (if (not (number? run-id))
       (begin ;; no need to treat this as an error by default
 	(debug:print 4 "WARNING: call to db:get-tests-for-run with bad run-id=" run-id)
@@ -2179,23 +2182,29 @@
 	     (states-qry      (if (null? states) 
 				  #f
 				  (conc " state "  
-					(if not-in
-					    " NOT IN ('"
-					    " IN ('") 
+					(if (eq? mode 'dashboard)
+					    " IN ('"
+					    (if not-in
+						" NOT IN ('"
+						" IN ('")) 
 					(string-intersperse states   "','")
 					"')")))
 	     (statuses-qry    (if (null? statuses)
 				  #f
 				  (conc " status "
-					(if not-in 
-					    " NOT IN ('"
-					    " IN ('") 
+					(if (eq? mode 'dashboard)
+					    " IN ('"
+					    (if not-in 
+						" NOT IN ('"
+						" IN ('") )
 					(string-intersperse statuses "','")
 					"')")))
 	     (states-statuses-qry 
 	      (cond 
 	       ((and states-qry statuses-qry)
-		(conc " AND ( " states-qry " AND " statuses-qry " ) "))
+		(case mode
+		  ((dashboard)(conc " AND " (if not-in "NOT " "") "( ( state='COMPLETED' AND " statuses-qry " ) OR " states-qry " ) "))
+		  (else       (conc " AND ( " states-qry " AND " statuses-qry " ) "))))
 	       (states-qry  
 		(conc " AND " states-qry))
 	       (statuses-qry 
@@ -2207,7 +2216,7 @@
 				    (if last-update " " " AND state != 'DELETED' ") ;; if using last-update we want deleted tests?
 				    states-statuses-qry
 				    (if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
-				    (if last-update (conc " AND last_update > " last-update " ") "")
+				    (if last-update (conc " AND last_update >= " last-update " ") "")
 				    (case sort-by
 				      ((rundir)      " ORDER BY length(rundir) ")
 				      ((testname)    (conc " ORDER BY testname " (if sort-order (conc sort-order ",") "") " item_path "))
@@ -2300,7 +2309,7 @@
      (lambda (run-id)
        (set! res (append 
 		  res 
-		  (db:get-tests-for-run dbstruct run-id testpatt states statuses #f #f not-in #f #f qryvals))))
+		  (db:get-tests-for-run dbstruct run-id testpatt states statuses #f #f not-in #f #f qryvals #f 'normal))))
      (if run-ids
 	 run-ids
 	 (db:get-all-run-ids dbstruct)))
@@ -3313,7 +3322,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run dbstruct hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f #f)))
+		(let ((results (db:get-tests-for-run dbstruct hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f #f 'normal)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination

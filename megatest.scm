@@ -1117,7 +1117,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 								 (string-intersperse adj-tests-spec ",")
 								 ;; db:test-record-fields
 								 #f)
-							     #f)
+							     #f
+							     'normal)
 				       '())))
 		     (case dmode
 		       ((json ods)
