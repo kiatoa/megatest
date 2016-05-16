@@ -139,7 +139,8 @@
 	       (tconfig       #f)
 	       (state         (if newstate  newstate  (db:test-get-state  test-dat)))
 	       (status        (if newstatus newstatus (db:test-get-status test-dat))))
-	  (if (and test-rundir   ;; #f means no dir set yet
+	  (if (and test-name
+		   test-rundir   ;; #f means no dir set yet
 		   (file-exists? test-rundir)
 		   (directory? test-rundir))
 	      (call-with-environment-variables
