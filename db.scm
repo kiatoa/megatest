@@ -2203,7 +2203,7 @@
 	      (cond 
 	       ((and states-qry statuses-qry)
 		(case mode
-		  ((dashboard)(conc " AND " (if not-in "NOT " "") "( ( state='COMPLETED' AND " statuses-qry " ) OR " states-qry " ) "))
+		  ((dashboard)(conc " AND " (if not-in "NOT " "") "( ( state='COMPLETED' AND " statuses-qry " ) " (if not-in " AND " " OR ") states-qry " ) "))
 		  (else       (conc " AND ( " states-qry " AND " statuses-qry " ) "))))
 	       (states-qry  
 		(conc " AND " states-qry))
