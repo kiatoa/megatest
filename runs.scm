@@ -10,7 +10,8 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking (srfi 18) posix-extras directory-utils)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking (srfi 18) 
+     posix-extras directory-utils pathname-expand)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit runs))
@@ -29,6 +30,8 @@
 (include "db_records.scm")
 (include "run_records.scm")
 (include "test_records.scm")
+
+;; (include "debugger.scm")
 
 (define (runs:test-get-full-path test)
   (let* ((testname (db:test-get-testname   test))
@@ -161,6 +164,14 @@
 						   " in jobgroup \"" jobgroup "\" exceeds limit of " job-group-limit))
 				  #t)
 				 (else #f))))
+;;	  ;; lets use the debugger eh?
+;;	  (debugger-start start: 15)
+;;	  (debugger-trace-var "runs:can-run-more-tests" "")
+;;	  (debugger-trace-var "can-not-run-more"         can-not-run-more)
+;;	  (debugger-trace-var "num-running"              num-running)
+;;	  (debugger-trace-var "num-running-in-jobgroup"  num-running-in-jobgroup)
+;;	  (debugger-trace-var "job-group-limit"          job-group-limit)
+;;	  (debugger-pauser)
 	  (list (not can-not-run-more) num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)))))
 
 
@@ -197,7 +208,7 @@
     (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 
     (let ((sighand (lambda (signum)
-		    y ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
+		     ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
 		     (set! *time-to-exit* #t)
 		     (print "Received signal " signum ", cleaning up before exit. Please wait...")
 		     (let ((th1 (make-thread (lambda ()
@@ -375,16 +386,17 @@
 	  (let* ((keep-going        #t)
 		 (run-queue-retries 5)
 		 (th1        (make-thread (lambda ()
-					    (handle-exceptions
-					     exn
-					     (begin
-					       (print-call-chain (current-error-port))
-					       (debug:print 0 "ERROR: failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
-					       (if (> run-queue-retries 0)
-						   (begin
-						     (set! run-queue-retries (- run-queue-retries 1))
-						     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))))
-					     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)))
+					    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
+					    ;; (handle-exceptions
+					    ;;  exn
+					    ;;  (begin
+					    ;;    (print-call-chain (current-error-port))
+					    ;;    (debug:print 0 "ERROR: failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
+					    ;;    (if (> run-queue-retries 0)
+					    ;; 	   (begin
+					    ;; 	     (set! run-queue-retries (- run-queue-retries 1))
+					    ;; 	     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))))
+					    ;;  (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)))
 					  "runs:run-tests-queue"))
 		 (th2        (make-thread (lambda ()				    
 					    ;; (rmt:find-and-mark-incomplete-all-runs))))) CAN'T INTERRUPT IT ...
@@ -461,7 +473,14 @@
 
 (define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmaps)
   (let* ((loop-list       (list hed tal reg reruns))
-	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps))
+	 (prereqs-not-met (let ((res (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps)))
+			    (if (list? res)
+				res
+				(begin
+				  (debug:print 0
+					       "ERROR: rmt:get-prereqs-not-met returned non-list!\n"
+					       "  res=" res " run-id=" run-id " waitons=" waitons " hed=" hed " item-path=" item-path " testmode=" testmode " itemmaps=" itemmaps)
+				  '()))))
 	 ;; (prereqs-not-met (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails           (runs:calc-fails prereqs-not-met))
 	 (prereq-fails    (runs:calc-prereq-fail prereqs-not-met))
@@ -480,6 +499,14 @@
 		      "\n reruns:          " reruns
 		      "\n items:           " items
 		      "\n can-run-more:    " can-run-more)
+
+    ;; lets use the debugger eh?
+;;    (debugger-start start: 2)
+;;    (debugger-trace-var "runs:expand-items" "")
+;;    (debugger-trace-var "can-run-more"     can-run-more)
+;;    (debugger-trace-var "hed"              hed)
+;;    (debugger-trace-var "prereqs-not-met"  (runs:pretty-string prereqs-not-met))
+;;    (debugger-pauser)
 
     (cond
      ;; all prereqs met, fire off the test
@@ -654,7 +681,11 @@
 	 (job-group-limit         (list-ref run-limits-info 4))
 	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps))
 	 ;; (prereqs-not-met         (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
-	 (fails                   (runs:calc-fails prereqs-not-met))
+	 (fails                   (if (list? prereqs-not-met)
+				      (runs:calc-fails prereqs-not-met)
+				      (begin
+					(debug:print 0 "ERROR: prereqs-not-met is not a list! " prereqs-not-met)
+					'())))
 	 (non-completed           (filter (lambda (x)             ;; remove hed from not completed list, duh, of course it is not completed!
 					    (not (equal? x hed)))
 					  (runs:calc-not-completed prereqs-not-met)))
@@ -1020,6 +1051,17 @@
 		     "\n  reglen:      " reglen
 		     "\n  length reg:  " (length reg)
 		     "\n  reg:         " reg)
+
+	;; lets use the debugger eh?
+;;	(debugger-start start: 7)
+;;	(debugger-trace-var "runs:run-tests-queue" "")
+;;	(debugger-trace-var "hed"              hed)
+;;	(debugger-trace-var "tal"              tal)
+;;	(debugger-trace-var "items"            items)
+;;	(debugger-trace-var "item-path"        item-path)
+;;	(debugger-trace-var "waitons"          waitons) 
+;;	(debugger-pauser)
+
 
 	;; check for hed in waitons => this would be circular, remove it and issue an
 	;; error
@@ -1638,7 +1680,8 @@
 (define (runs:remove-test-directory test mode) ;; remove-data-only)
   (let* ((run-dir       (db:test-get-rundir test))    ;; run dir is from the link tree
 	 (real-dir      (if (file-exists? run-dir)
-			    (resolve-pathname run-dir)
+			    ;; (resolve-pathname run-dir)
+			    (common:nice-path run-dir)
 			    #f)))
     (case mode
       ((remove-data-only)(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "CLEANING" "LOCKED" #f))

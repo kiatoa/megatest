@@ -84,6 +84,7 @@ Launching and managing runs
   -get-run-status         : gets status for run specified by target and runname
   -run-wait               : wait on run specified by target and runname
   -preclean               : remove the existing test directory before running the test
+  -clean-cache            : remove the cached megatest.config and runconfig.config files
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
@@ -272,6 +273,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-daemonize"
 			"-preclean"
 			"-rerun-clean"
+			"-clean-cache"
 
 			;; misc
 			"-repl"
@@ -388,6 +390,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (thread-start! *watchdog*)
 
+
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))
       (debug:print-info 0 "Sending log output to " (args:get-arg "-log"))
@@ -410,7 +413,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-version")
     (begin
-      (print megatest-version)
+      (print (common:version-signature)) ;; (print megatest-version)
       (exit)))
 
 (define *didsomething* #f)
@@ -456,7 +459,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (hash-table-set! args:arg-hash "-testpatt" newval)
       (hash-table-delete! args:arg-hash "-itempatt")))
 
-
+(if (args:get-arg "-runtests")
+    (debug:print 0 "WARNING: \"-runtests\" is deprecated. Use \"-run\" with \"-testpatt\" instead"))
 
 (on-exit std-exit-procedure)
 
@@ -464,6 +468,35 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Misc general calls
 ;;======================================================================
 
+;; handle a clean-cache request as early as possible
+;;
+(if (args:get-arg "-clean-cache")
+    (begin
+      (set! *didsomething* #t) ;; suppress the help output.
+      (if (getenv "MT_TARGET") ;; no point in trying if no target
+	  (if (args:get-arg "-runname")
+	      (let* ((toppath  (launch:setup))
+		     (linktree (if toppath (configf:lookup *configdat* "setup" "linktree")))
+		     (runtop   (conc linktree "/" (getenv "MT_TARGET") "/" (args:get-arg "-runname")))
+		     (files    (if (file-exists? runtop)
+				   (append (glob (conc runtop "/.megatest*"))
+					   (glob (conc runtop "/.runconfig*")))
+				   '())))
+		(if (null? files)
+		    (debug:print-info 0 "No cached megatest or runconfigs files found. None removed.")
+		    (begin
+		      (debug:print-info 0 "Removing cached files:\n    " (string-intersperse files "\n    "))
+		      (for-each 
+		       (lambda (f)
+			 (handle-exceptions
+			     exn
+			     (debug:print 0 "WARNING: Failed to remove file " f)
+			   (delete-file f)))
+		       files))))
+	      (debug:print 0 "ERROR: -clean-cache requires -runname."))
+	  (debug:print 0 "ERROR: -clean-cache requires -target or -reqtarg"))))
+	    
+	  
 (if (args:get-arg "-env2file")
     (begin
       (save-environment-as-files (args:get-arg "-env2file"))
@@ -480,29 +513,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (common:get-disks *configdat*))
 	"\n"))
       (set! *didsomething* #t)))
-
-(define (make-sparse-array)
-  (let ((a (make-sparse-vector)))
-    (sparse-vector-set! a 0 (make-sparse-vector))
-    a))
-
-(define (sparse-array? a)
-  (and (sparse-vector? a)
-       (sparse-vector? (sparse-vector-ref a 0))))
-
-(define (sparse-array-ref a x y)
-  (let ((row (sparse-vector-ref a x)))
-    (if row
-	(sparse-vector-ref row y)
-	#f)))
-
-(define (sparse-array-set! a x y val)
-  (let ((row (sparse-vector-ref a x)))
-    (if row
-	(sparse-vector-set! row y val)
-	(let ((new-row (make-sparse-vector)))
-	  (sparse-vector-set! a x new-row)
-	  (sparse-vector-set! new-row y val)))))
 
 ;; csv processing record
 (define (make-refdb:csv)
@@ -662,14 +672,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (host:port     (args:get-arg "-ping")))
       (server:ping run-id host:port)))
 
-;;       (set! *did-something* #t)
-;; 	      (begin
-;; 		(print ((rpc:procedure 'testing (car host-port)(cadr host-port))))
-;; 		(case (server:get-transport)
-;; 		  ((http)(http:ping run-id host-port))
-;; 		  ((rpc) (rpc:procedure 'server:login (car host-port)(cadr host-port));;  *toppath*)) ;; (rpc-transport:ping  run-id (car host-port)(cadr host-port)))
-;; 		  (else  (debug:print 0 "ERROR: No transport set")(exit)))))
-
 ;;======================================================================
 ;; Capture, save and manipulate environments
 ;;======================================================================
@@ -710,8 +712,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (env:close-database db)
 	      (set! *didsomething* #t))
 	    (debug:print 0 "ERROR: Parameter to -envdelta should be new=star-end")))))
-
-
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
@@ -949,15 +949,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (debug:print 0 "ERROR: Attempted " action "on test(s) but run area config file not found")
 	    (exit 1))
 	  ;; put test parameters into convenient variables
-	  (runs:operate-on  action
-			    target
-			    (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
-			    (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
-			    state: (common:args-get-state)
-			    status: (common:args-get-status)
-			    new-state-status: (args:get-arg "-set-state-status")))
+	  (begin
+	    ;; check for correct version, exit with message if not correct
+	    (common:exit-on-version-changed)
+	    (runs:operate-on  action
+			      target
+			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+			      (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+			      state: (common:args-get-state)
+			      status: (common:args-get-status)
+			      new-state-status: (args:get-arg "-set-state-status"))))
       (set! *didsomething* #t)))))
-	  
+
 (if (args:get-arg "-remove-runs")
     (general-run-call 
      "-remove-runs"
@@ -1114,7 +1117,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 								 (string-intersperse adj-tests-spec ",")
 								 ;; db:test-record-fields
 								 #f)
-							     #f)
+							     #f
+							     'normal)
 				       '())))
 		     (case dmode
 		       ((json ods)
@@ -1628,7 +1632,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
 	(if (and state status)
-	    (rmt:teststep-set-status! run-id test-id step state status msg logfile)
+	    (let ((comment (launch:load-logpro-dat run-id test-id step)))
+	      ;; (rmt:test-set-log! run-id test-id (conc stepname ".html"))))
+	      (rmt:teststep-set-status! run-id test-id step state status (or comment msg) logfile))
 	    (begin
 	      (debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 	      (exit 6))))))
@@ -1670,7 +1676,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (work-area (assoc/default 'work-area cmdinfo))
 	       (db        #f) ;; (open-db))
 	       (state     (args:get-arg ":state"))
-	       (status    (args:get-arg ":status")))
+	       (status    (args:get-arg ":status"))
+	       (stepname  (args:get-arg "-step")))
 	  (if (not (launch:setup))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting")
@@ -1832,13 +1839,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        ;; 'old2new
        'new2old
        )
+      (if (common:version-changed?)
+	  (common:set-last-run-version))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-mark-incompletes")
     (begin
       (if (not (launch:setup))
 	  (begin
-	    (debug:print 0 "Failed to setup, exiting") b
+	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
       (open-run-close db:find-and-mark-incomplete #f)
       (set! *didsomething* #t)))

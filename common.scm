@@ -133,6 +133,74 @@
 (define *fdb* #f)
 
 ;;======================================================================
+;; V E R S I O N
+;;======================================================================
+
+(define (common:get-full-version)
+  (conc megatest-version "-" megatest-fossil-hash))
+
+(define (common:version-signature)
+  (conc megatest-version "-" (substring megatest-fossil-hash 0 4)))
+
+;; from metadat lookup MEGATEST_VERSION
+;;
+(define (common:get-last-run-version)
+  (rmt:get-var "MEGATEST_VERSION"))
+
+(define (common:set-last-run-version)
+  (rmt:set-var "MEGATEST_VERSION" (common:version-signature)))
+
+(define (common:version-changed?)
+  (not (equal? (common:get-last-run-version)
+	       (common:version-signature))))
+
+(define (common:exit-on-version-changed)
+  (if (common:version-changed?)
+      (begin
+        (debug:print 0
+		     "ERROR: Version mismatch!\n"
+		     "   expected: " (common:version-signature) "\n"
+		     "   got:      " (common:get-last-run-version) "\n"
+		     " to switch versions you can run: \"megatest -cleanup-db\"")
+        ;; megatest -cleanup-db IS NOT correcting the dbver.  Let's force it for now.
+        ;; Matt: please review this!
+        (db:multi-db-sync
+         #f 
+         'killservers
+         'dejunk
+         'new2old)
+        (rmt:set-var "MEGATEST_VERSION" (common:version-signature))
+
+	(exit 1))))
+
+;;======================================================================
+;; S P A R S E   A R R A Y S
+;;======================================================================
+
+(define (make-sparse-array)
+  (let ((a (make-sparse-vector)))
+    (sparse-vector-set! a 0 (make-sparse-vector))
+    a))
+
+(define (sparse-array? a)
+  (and (sparse-vector? a)
+       (sparse-vector? (sparse-vector-ref a 0))))
+
+(define (sparse-array-ref a x y)
+  (let ((row (sparse-vector-ref a x)))
+    (if row
+	(sparse-vector-ref row y)
+	#f)))
+
+(define (sparse-array-set! a x y val)
+  (let ((row (sparse-vector-ref a x)))
+    (if row
+	(sparse-vector-set! row y val)
+	(let ((new-row (make-sparse-vector)))
+	  (sparse-vector-set! a x new-row)
+	  (sparse-vector-set! new-row y val)))))
+
+;;======================================================================
 ;; L O C K E R S   A N D   B L O C K E R S 
 ;;======================================================================
 
@@ -336,7 +404,7 @@
 
 (set-signal-handler! signal/int  std-signal-handler)  ;; ^C
 (set-signal-handler! signal/term std-signal-handler)
-(set-signal-handler! signal/stop std-signal-handler)  ;; ^Z
+;; (set-signal-handler! signal/stop std-signal-handler)  ;; ^Z NO, do NOT handle ^Z!
 
 ;;======================================================================
 ;; M I S C   U T I L S
@@ -364,9 +432,6 @@
 	      parts)
     time-secs))
 		       
-(define (common:version-signature)
-  (conc megatest-version "-" (substring megatest-fossil-hash 0 4)))
-
 ;; one-of args defined
 (define (args-defined? . param)
   (let ((res #f))
@@ -527,7 +592,7 @@
 
 
 ;;======================================================================
-;; Munge data into nice forms
+;; M U N G E   D A T A   I N T O   N I C E   F O R M S
 ;;======================================================================
 
 ;; Generate an index for a sparse list of key values
@@ -570,14 +635,31 @@
 		    ))))))
 
 ;;======================================================================
-;; System stuff
+;; S Y S T E M   S T U F F
 ;;======================================================================
 
 ;; return a nice clean pathname made absolute
-(define (nice-path dir)
-  (normalize-pathname (if (absolute-pathname? dir)
-			  dir
-			  (conc (current-directory) "/" dir))))
+(define (common:nice-path dir)
+  (let ((match (string-match "^(~[^\\/]*)(\\/.*|)$" dir)))
+    (if match ;; using ~ for home?
+	(common:nice-path (conc (common:read-link-f (cadr match)) "/" (caddr match)))
+	(normalize-pathname (if (absolute-pathname? dir)
+				dir
+				(conc (current-directory) "/" dir))))))
+
+;; make "nice-path" available in config files and the repl
+(define nice-path common:nice-path)
+
+(define (common:read-link-f path)
+  (handle-exceptions
+      exn
+      (begin
+	(debug:print 0 "ERROR: command \"/bin/readlink -f " path "\" failed.")
+	path) ;; just give up
+    (with-input-from-pipe
+	(conc "/bin/readlink -f " path)
+      (lambda ()
+	(read-line)))))
 
 (define (get-cpu-load)
   (car (common:get-cpu-load)))
@@ -735,15 +817,15 @@
        (let* ((dirpath    (cadr (assoc disk-num disks)))
 	      (freespc    (cond
 			   ((not (directory? dirpath))
-			    (if (common:low-noise-print 50 "disks not a dir " disk-num)
+			    (if (common:low-noise-print 300 "disks not a dir " disk-num)
 				(debug:print 0 "WARNING: disk " disk-num " at path \"" dirpath "\" is not a directory - ignoring it."))
 			    -1)
 			   ((not (file-write-access? dirpath))
-			    (if (common:low-noise-print 50 "disks not writeable " disk-num)
+			    (if (common:low-noise-print 300 "disks not writeable " disk-num)
 				(debug:print 0 "WARNING: disk " disk-num " at path \"" dirpath "\" is not writeable - ignoring it."))
 			    -1)
 			   ((not (eq? (string-ref dirpath 0) #\/))
-			    (if (common:low-noise-print 50 "disks not a proper path " disk-num)
+			    (if (common:low-noise-print 300 "disks not a proper path " disk-num)
 				(debug:print 0 "WARNING: disk " disk-num " at path \"" dirpath "\" is not a fully qualified path - ignoring it."))
 			    -1)
 			   (else
@@ -840,7 +922,7 @@
     vars))
 		  
 ;;======================================================================
-;; time and date nice to have stuff
+;; T I M E   A N D   D A T E
 ;;======================================================================
 
 (define (seconds->hr-min-sec secs)
@@ -883,7 +965,7 @@
     (else #f)))
 
 ;;======================================================================
-;; Colors
+;; C O L O R S
 ;;======================================================================
       
 (define (common:name->iup-color name)
@@ -1132,7 +1214,7 @@
 		      (host-type (cadr hed)))
 		  (if (tests:match patt testname itempath)
 		      (begin
-			(debug:print-info 0 "Have flexi-launcher match for " testname "/" itempath " = " host-type)
+			(debug:print-info 2 "Have flexi-launcher match for " testname "/" itempath " = " host-type)
 			(let ((launcher (configf:lookup configdat "host-types" host-type)))
 			  (if launcher
 			      launcher

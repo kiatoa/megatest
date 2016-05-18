@@ -63,6 +63,7 @@ tests.o tasks.o dashboard-tasks.o : task_records.scm
 runs.o : test_records.scm
 megatest.o : megatest-fossil-hash.scm
 client.scm common.scm configf.scm dashboard-guimonitor.scm dashboard-tests.scm dashboard.scm db.scm dcommon.scm ezsteps.scm fs-transport.scm http-transport.scm index-tree.scm items.scm keys.scm launch.scm megatest.scm monitor.scm mt.scm newdashboard.scm runconfig.scm runs.scm server.scm tdb.scm tests.scm tree.scm : common_records.scm rpc-transport.scm
+common_records.scm : altdb.scm
 
 # Temporary while transitioning to new routine
 # runs.o : run-tests-queue-classic.scm  run-tests-queue-new.scm
@@ -166,7 +167,7 @@ $(MTQA_FOSSIL) :
 	fossil clone https://www.kiatoa.com/fossils/megatest_qa $(MTQA_FOSSIL)
 
 clean : 
-	rm -f $(OFILES) $(GOFILES) megatest dboard dboard.o megatest.o dashboard.o
+	rm -f $(OFILES) $(GOFILES) megatest dboard dboard.o megatest.o dashboard.o megatest-fossil-hash.* altdb.scm
 
 # Deploy section (not complete yet)
 #
@@ -234,6 +235,16 @@ readline-fix.scm :
            echo "(use-legacy-bindings)" > readline-fix.scm; \
 	else \
 	   echo "" > readline-fix.scm;\
+	fi
+
+altdb.scm :
+	echo ";; optional alternate db setup" > altdb.scm
+	echo "(define *available-db* (make-hash-table))" >> altdb.scm
+	if  csi -ne '(use mysql-client)';then \
+           echo "(use mysql-client)(hash-table-set! *available-db* 'mysql #t)" >> altdb.scm; \
+	fi
+	if csi -ne '(use postgresql)';then \
+	   echo "(use postgresql)(hash-table-set! *available-db* 'postgresql #t)" >> altdb.scm;\
 	fi
 
 portlogger-example : portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o nmsg-transport.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o

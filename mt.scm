@@ -69,7 +69,7 @@
 ;;======================================================================
 
 (define (mt:get-tests-for-run run-id testpatt states status #!key (not-in #t) (sort-by 'event_time) (sort-order "ASC") (qryvals #f)(last-update #f))
-  (let loop ((testsdat (rmt:get-tests-for-run run-id testpatt states status 0 500 not-in sort-by sort-order qryvals last-update))
+  (let loop ((testsdat (rmt:get-tests-for-run run-id testpatt states status 0 500 not-in sort-by sort-order qryvals last-update 'normal))
 	     (res      '())
 	     (offset   0)
 	     (limit    500))
@@ -78,7 +78,7 @@
       (if have-more 
 	  (let ((new-offset (+ offset limit)))
 	    (debug:print-info 4 "More than " limit " tests, have " (length full-list) " tests so far.")
-	    (loop (rmt:get-tests-for-run run-id testpatt states status new-offset limit not-in sort-by sort-order qryvals last-update)
+	    (loop (rmt:get-tests-for-run run-id testpatt states status new-offset limit not-in sort-by sort-order qryvals last-update 'normal)
 		  full-list
 		  new-offset
 		  limit))
@@ -139,7 +139,8 @@
 	       (tconfig       #f)
 	       (state         (if newstate  newstate  (db:test-get-state  test-dat)))
 	       (status        (if newstatus newstatus (db:test-get-status test-dat))))
-	  (if (and test-rundir   ;; #f means no dir set yet
+	  (if (and test-name
+		   test-rundir   ;; #f means no dir set yet
 		   (file-exists? test-rundir)
 		   (directory? test-rundir))
 	      (call-with-environment-variables

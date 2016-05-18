@@ -388,35 +388,7 @@
     (if (hash-table? locdbs)
 	(for-each (lambda (run-id)
 		    (db:close-run-db dbstruct run-id))
-		  (hash-table-keys locdbs))))
-
-  ;; (let* ((local (dbr:dbstruct-get-local dbstruct))
-  ;;        (rundb (db:dbdat-get-db (dbr:dbstruct-get-rundb dbstruct))))
-  ;;   (if local
-  ;;       (for-each
-  ;;        (lambda (dbdat)
-  ;;          (let ((db (db:dbdat-get-db dbdat)))
-  ;;            (if (sqlite3:database? db)
-  ;;       	 (begin
-  ;;       	   (sqlite3:interrupt! db)
-  ;;       	   (sqlite3:finalize! db #t)))))
-  ;;        ;; TODO: Come back to this and rework to delete from hashtable when finalized
-  ;;        (hash-table-values (dbr:dbstruct-get-locdbs dbstruct))))
-  ;;   (thread-sleep! 3)
-  ;;   (if (and rundb
-  ;;            (sqlite3:database? rundb))
-  ;;       (handle-exceptions
-  ;;        exn
-  ;;        (begin 
-  ;;          (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
-  ;;          (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-  ;;          (debug:print 0 " db: " rundb)
-  ;;          (print-call-chain (current-error-port))
-  ;;          #f)
-  ;;        (sqlite3:interrupt! rundb)
-  ;;        (sqlite3:finalize! rundb #t))))
-  ;; ;; (mutex-unlock! *db-sync-mutex*)
-  )
+		  (hash-table-keys locdbs)))))
 
 (define (db:open-inmem-db)
   (let* ((db      (sqlite3:open-database ":memory:"))
@@ -846,26 +818,33 @@
 		     (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
 		     (db:clean-up-rundb (db:get-db fromdb run-id))
 		     ;;
-		     ;; Feb 18, 2016: add field last_update to tests
+		     ;; Feb 18, 2016: add field last_update to tests, test_steps and test_data
 		     ;;
 		     ;; remove this some time after September 2016 (added in version v1.6031
 		     ;;
-		     (handle-exceptions
-		      exn
-		      (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
-			  (debug:print 0 "Column last_update already added to tests table")
-			  (db:general-sqlite-error-dump exn "alter table tests ..." #f "none"))
-		      (sqlite3:execute
-		       frundb
-		       "ALTER TABLE tests ADD COLUMN last_update INTEGER DEFAULT 0"))
-		     (sqlite3:execute
-		      frundb
-		       "CREATE TRIGGER IF NOT EXISTS update_tests_trigger AFTER UPDATE ON tests
+		     (for-each
+		      (lambda (table-name)
+			(handle-exceptions
+			 exn
+			 (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
+			     (debug:print 0 "Column last_update already added to " table-name " table")
+			     (db:general-sqlite-error-dump exn "alter table " table-name " ..." #f "none"))
+			 (sqlite3:execute
+			  frundb
+			  (conc "ALTER TABLE " table-name " ADD COLUMN last_update INTEGER DEFAULT 0")))
+			(sqlite3:execute
+			 frundb
+			 (conc "DROP TRIGGER IF EXISTS update_" table-name "_trigger;"))
+			(sqlite3:execute
+			 frundb
+			 (conc "CREATE TRIGGER IF NOT EXISTS update_" table-name "_trigger AFTER UPDATE ON " table-name "
                              FOR EACH ROW
                                BEGIN 
-                                 UPDATE tests SET last_update=(strftime('%s','now'));
-                               END;")
-		     ))))
+                                 UPDATE " table-name " SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;"))
+			)
+		      '("tests" "test_steps" "test_data"))))))
 	   all-run-ids)
 	  ;; removed deleted runs
 	  (let ((dbdir (tasks:get-task-db-path)))
@@ -1038,7 +1017,7 @@
        (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
        ;; Must do this *after* running patch db !! No more. 
        ;; cannot use db:set-var since it will deadlock, hardwire the code here
-       (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" "MEGATEST_VERSION" megatest-version)
+       (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" "MEGATEST_VERSION" (common:version-signature))
        (debug:print-info 11 "db:initialize END")))))
 
 ;;======================================================================
@@ -1089,16 +1068,15 @@
                                event_time TIMESTAMP,
                                comment TEXT DEFAULT '',
                                logfile TEXT DEFAULT '',
+                               last_update  INTEGER DEFAULT (strftime('%s','now')),
                                CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
-     ;;   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data 
-     ;;                               (id          INTEGER PRIMARY KEY,
-     ;;                                      reviewed    TIMESTAMP DEFAULT (strftime('%s','now')),
-     ;;                                      iterated    TEXT DEFAULT '',
-     ;;                                      avg_runtime REAL DEFAULT -1,
-     ;;                                      avg_disk    REAL DEFAULT -1,
-     ;;                                      tags        TEXT DEFAULT '',
-     ;;                                      jobgroup    TEXT DEFAULT 'default',
-     ;;                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
+     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS teststeps_index ON tests (run_id, testname, item_path);")
+     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_teststeps_trigger AFTER UPDATE ON test_steps
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE test_steps SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;")
      (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
                                 test_id INTEGER,
                                 category TEXT DEFAULT '',
@@ -1110,9 +1088,15 @@
                                 comment TEXT DEFAULT '',
                                 status TEXT DEFAULT 'n/a',
                                 type TEXT DEFAULT '',
+                                last_update  INTEGER DEFAULT (strftime('%s','now')),
                               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
-     ;; Why use FULL here? This data is not that critical
-     ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
+     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS test_data_index ON test_data (test_id);")
+     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_test_data_trigger AFTER UPDATE ON test_data
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE test_data SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;")
      (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_rundat (
                               id           INTEGER PRIMARY KEY,
                               test_id      INTEGER,
@@ -1585,13 +1569,10 @@
 ;; returns number if string->number is successful, string otherwise
 ;; also updates *global-delta*
 ;;
-;; Operates on megatestdb
-;;
 (define (db:get-var dbstruct var)
   (let* ((res      #f)
 	 (dbdat    (db:get-db dbstruct #f))
 	 (db       (db:dbdat-get-db dbdat)))
-    ;; (db:delay-if-busy dbdat)
     (sqlite3:for-each-row
      (lambda (val)
        (set! res val))
@@ -1601,7 +1582,12 @@
     (if (string? res)
 	(let ((valnum (string->number res)))
 	  (if valnum (set! res valnum))))
-    ;; scale by 10, average with current value.
+    res))
+
+;; This was part of db:get-var. It was used to estimate the load on
+;; the database files.
+;;
+;; scale by 10, average with current value.
 ;;     (set! *global-delta* (/ (+ *global-delta* (* (- (current-milliseconds) start-ms)
 ;; 						 (if throttle throttle 0.01)))
 ;; 			    2))
@@ -1609,7 +1595,6 @@
 ;; 	(begin
 ;; 	  (debug:print-info 4 "launch throttle factor=" *global-delta*)
 ;; 	  (set! *last-global-delta-printed* *global-delta*)))
-    res))
 
 (define (db:set-var dbstruct var val)
   (let* ((dbdat (db:get-db dbstruct #f))
@@ -1809,51 +1794,6 @@
 		    (debug:print 2 "WARNING: Failed to process " dbfile " for run-id")
 		    0))))
 	  changed))))
-
-;; db:get-runs-by-patt
-;; get runs by list of criteria
-;; register a test run with the db
-;;
-;; Use: (db:get-value-by-header (db:get-header runinfo)(db:get-rows runinfo))
-;;  to extract info from the structure returned
-;;
-;; NOTE: THIS IS COMPLETELY UNFINISHED. IT GOES WITH rmt:get-get-paths-matching-keynames
-;;
-;; (define (db:get-run-ids-matching dbstruct keynames target res)
-;; ;; (define (db:get-runs-by-patt dbstruct keys runnamepatt targpatt offset limit) ;; test-name)
-;;   (let* ((tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
-;; 	 (keystr   (car tmp))
-;; 	 (header   (cadr tmp))
-;; 	 (res     '())
-;; 	 (key-patt "")
-;; 	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
-;; 	 (qry-str  #f)
-;; 	 (keyvals  (if targpatt (keys:target->keyval keys targpatt) '())))
-;;     (for-each (lambda (keyval)
-;; 		(let* ((key    (car keyval))
-;; 		       (patt   (cadr keyval))
-;; 		       (fulkey (conc ":" key))
-;; 		       (wildtype (if (substring-index "%" patt) "like" "glob")))
-;; 		  (if patt
-;; 		      (set! key-patt (conc key-patt " AND " key " " wildtype " '" patt "'"))
-;; 		      (begin
-;; 			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
-;; 			(exit 6)))))
-;; 	      keyvals)
-;;     (set! qry-str (conc "SELECT " keystr " FROM runs WHERE state != 'deleted' AND runname " runwildtype " ? " key-patt " ORDER BY event_time "
-;; 			(if limit  (conc " LIMIT " limit)   "")
-;; 			(if offset (conc " OFFSET " offset) "")
-;; 			";"))
-;;     (debug:print-info 4 "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
-;;     (db:with-db dbstruct #f #f ;; reads db, does not write to it.
-;; 		(lambda (db)
-;; 		  (sqlite3:for-each-row
-;; 		   (lambda (a . r)
-;; 		     (set! res (cons (list->vector (cons a r)) res)))
-;; 		   (db:get-db dbstruct #f)
-;; 		   qry-str
-;; 		   runnamepatt)))
-;;     (vector header res)))
 
 ;; Get all targets from the db
 ;;
@@ -2224,7 +2164,10 @@
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
-(define (db:get-tests-for-run dbstruct run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update)
+;; mode:
+;;  'dashboard - use state = 'COMPLETED' AND status in ( statuses ) OR state in ( states )
+;;
+(define (db:get-tests-for-run dbstruct run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)
   (if (not (number? run-id))
       (begin ;; no need to treat this as an error by default
 	(debug:print 4 "WARNING: call to db:get-tests-for-run with bad run-id=" run-id)
@@ -2239,23 +2182,29 @@
 	     (states-qry      (if (null? states) 
 				  #f
 				  (conc " state "  
-					(if not-in
-					    " NOT IN ('"
-					    " IN ('") 
+					(if (eq? mode 'dashboard)
+					    " IN ('"
+					    (if not-in
+						" NOT IN ('"
+						" IN ('")) 
 					(string-intersperse states   "','")
 					"')")))
 	     (statuses-qry    (if (null? statuses)
 				  #f
 				  (conc " status "
-					(if not-in 
-					    " NOT IN ('"
-					    " IN ('") 
+					(if (eq? mode 'dashboard)
+					    " IN ('"
+					    (if not-in 
+						" NOT IN ('"
+						" IN ('") )
 					(string-intersperse statuses "','")
 					"')")))
 	     (states-statuses-qry 
 	      (cond 
 	       ((and states-qry statuses-qry)
-		(conc " AND ( " states-qry " AND " statuses-qry " ) "))
+		(case mode
+		  ((dashboard)(conc " AND " (if not-in "NOT " "") "( ( state='COMPLETED' AND " statuses-qry " ) OR " states-qry " ) "))
+		  (else       (conc " AND ( " states-qry " AND " statuses-qry " ) "))))
 	       (states-qry  
 		(conc " AND " states-qry))
 	       (statuses-qry 
@@ -2267,7 +2216,7 @@
 				    (if last-update " " " AND state != 'DELETED' ") ;; if using last-update we want deleted tests?
 				    states-statuses-qry
 				    (if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
-				    (if last-update (conc " AND last_update > " last-update " ") "")
+				    (if last-update (conc " AND last_update >= " last-update " ") "")
 				    (case sort-by
 				      ((rundir)      " ORDER BY length(rundir) ")
 				      ((testname)    (conc " ORDER BY testname " (if sort-order (conc sort-order ",") "") " item_path "))
@@ -2360,7 +2309,7 @@
      (lambda (run-id)
        (set! res (append 
 		  res 
-		  (db:get-tests-for-run dbstruct run-id testpatt states statuses #f #f not-in #f #f qryvals))))
+		  (db:get-tests-for-run dbstruct run-id testpatt states statuses #f #f not-in #f #f qryvals #f 'normal))))
      (if run-ids
 	 run-ids
 	 (db:get-all-run-ids dbstruct)))
@@ -2765,10 +2714,10 @@
    (lambda (db)
      (let* ((res '()))
        (sqlite3:for-each-row 
-	(lambda (id test-id stepname state status event-time logfile)
-	  (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
+	(lambda (id test-id stepname state status event-time logfile comment)
+	  (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "") comment) res)))
 	db
-	"SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE status != 'DELETED' AND test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+	"SELECT id,test_id,stepname,state,status,event_time,logfile,comment FROM test_steps WHERE status != 'DELETED' AND test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
 	test-id)
        (reverse res)))))
 
@@ -2815,8 +2764,87 @@
     ;; if the test is not FAIL then set status based on the fail and pass counts.
     (db:general-call dbdat 'test_data-pf-rollup (list test-id test-id test-id test-id))))
 
-;; NOT USED!?
+;; each section is a rule except "final" which is the final result
 ;;
+;; [rule-5]
+;; operator in
+;; section LogFileBody
+;; desc Output voltage
+;; status OK
+;; expected 1.9
+;; measured 1.8
+;; type +/-
+;; tolerance 0.1
+;; pass 1
+;; fail 0
+;; 
+;; [final]
+;; exit-code 6
+;; exit-status SKIP
+;; message If flagged we are asking for this to exit with code 6
+;;
+;; recorded in steps table:
+;;   category: stepname
+;;   variable: rule-N
+;;   value:    measured
+;;   expected: expected
+;;   tol:      tolerance
+;;   units:    -
+;;   comment:  desc or message
+;;   status:   status
+;;   type:     type
+;; 
+(define (db:logpro-dat->csv dat stepname)
+  (let ((res '()))
+    (for-each
+     (lambda (entry-name)
+       (if (equal? entry-name "final")
+	   (set! res (append 
+		      res
+		      (list
+		       (list stepname
+			     entry-name
+			     (configf:lookup dat entry-name "exit-code")    ;; 0 ;; Value
+			     0                                              ;; 1 ;; Expected
+			     0                                              ;; 2 ;; Tolerance
+			     "n/a"					    ;; 3 ;; Units
+			     (configf:lookup dat entry-name "message")      ;; 4 ;; Comment
+			     (configf:lookup dat entry-name "exit-status")  ;; 5 ;; Status
+			     "logpro"                                       ;; 6 ;; Type
+			     ))))
+	   (let* ((value     (or (configf:lookup dat entry-name "measured")  "n/a"))
+		  (expected  (or (configf:lookup dat entry-name "expected")  "n/a"))
+		  (tolerance (or (configf:lookup dat entry-name "tolerance") "n/a"))
+		  (comment   (or (configf:lookup dat entry-name "comment")
+				 (configf:lookup dat entry-name "desc")      "n/a"))
+		  (status    (or (configf:lookup dat entry-name "status")    "n/a"))
+		  (type      (or (configf:lookup dat entry-name "expected")  "n/a")))
+	     (set! res (append
+			res  
+			(list (list stepname
+				    entry-name 
+				    value        ;; 0
+				    expected     ;; 1
+				    tolerance    ;; 2
+				    "n/a"        ;; 3 Units
+				    comment      ;; 4
+				    status       ;; 5
+				    type         ;; 6
+				    )))))))
+     (hash-table-keys dat))
+    res))
+
+;; $MT_MEGATEST -load-test-data << EOF
+;; foo,bar,   1.2,  1.9, >
+;; foo,rab, 1.0e9, 10e9, 1e9
+;; foo,bla,   1.2,  1.9, <
+;; foo,bal,   1.2,  1.2, <   ,     ,Check for overload
+;; foo,alb,   1.2,  1.2, <=  , Amps,This is the high power circuit test
+;; foo,abl,   1.2,  1.3, 0.1
+;; foo,bra,   1.2, pass, silly stuff
+;; faz,bar,    10,  8mA,     ,     ,"this is a comment"
+;; EOF
+
 (define (db:csv->test-data dbstruct run-id test-id csvdata)
   (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
   (let* ((dbdat   (db:get-db dbstruct run-id))
@@ -2825,7 +2853,7 @@
 			      (open-input-string csvdata)
 			      '((strip-leading-whitespace? #t)
 				(strip-trailing-whitespace? #t)))))) ;; (csv->list csvdata)))
-    (for-each 
+    (for-each
      (lambda (csvrow)
        (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f #f)) 9))
 	      (category    (list-ref padded-row 0))
@@ -3294,7 +3322,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run dbstruct hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f #f)))
+		(let ((results (db:get-tests-for-run dbstruct hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f #f 'normal)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
@@ -3672,25 +3700,4 @@
 
 ;; (db:extract-ods-file db "outputfile.ods" '(("sysname" "%")("fsname" "%")("datapath" "%")) "%")
 
-;; This is a list of all procs that write to the db
-;;
-;; (define *db:all-write-procs*
-;;   (list 
-;;    db:set-var 
-;;    db:del-var
-;;    db:register-run
-;;    db:set-comment-for-run
-;;    db:delete-run
-;;    db:update-run-event_time
-;;    db:lock/unlock-run 
-;;    db:delete-test-step-records
-;;    db:delete-test-records
-;;    db:delete-tests-for-run
-;;    db:delete-old-deleted-test-records
-;;    db:set-tests-state-status
-;;    db:test-set-state-status-by-id
-;;    db:test-set-state-status-by-run-id-testname
-;;    db:testmeta-add-record
-;;    db:csv->test-data
-;;    ))
 

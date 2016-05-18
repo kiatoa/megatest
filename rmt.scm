@@ -75,7 +75,7 @@
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
 (define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
   ;; clean out old connections
-  (mutex-lock! *db-multi-sync-mutex*)
+  ;; (mutex-lock! *db-multi-sync-mutex*)
   (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
     (for-each 
      (lambda (run-id)
@@ -90,7 +90,7 @@
 				   (hash-table-ref *runremote* run-id)))))
                (hash-table-delete! *runremote* run-id)))))
      (hash-table-keys *runremote*)))
-  (mutex-unlock! *db-multi-sync-mutex*)
+  ;; (mutex-unlock! *db-multi-sync-mutex*)
   ;; (mutex-lock! *send-receive-mutex*)
   (let* ((run-id          (if rid rid 0))
 	 (connection-info (rmt:get-connection-info run-id)))
@@ -388,9 +388,9 @@
 (define (rmt:set-tests-state-status run-id testnames currstate currstatus newstate newstatus)
   (rmt:send-receive 'set-tests-state-status run-id (list run-id testnames currstate currstatus newstate newstatus)))
 
-(define (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update)
+(define (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)
   (if (number? run-id)
-      (rmt:send-receive 'get-tests-for-run run-id (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update))
+      (rmt:send-receive 'get-tests-for-run run-id (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode))
       (begin
 	(debug:print "ERROR: rmt:get-tests-for-run called with bad run-id=" run-id)
 	(print-call-chain (current-error-port))
@@ -621,7 +621,7 @@
 	  (if (null? prev-run-ids) #f
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (rmt:get-tests-for-run hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f #f)))
+		(let ((results (rmt:get-tests-for-run hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f #f 'normal)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
 			   (not (null? tal)))
@@ -661,10 +661,11 @@
 ;;======================================================================
 
 (define (rmt:read-test-data run-id test-id categorypatt #!key (work-area #f)) 
-  (let ((tdb  (rmt:open-test-db-by-test-id run-id test-id work-area: work-area)))
-    (if tdb
-	(tdb:read-test-data tdb test-id categorypatt)
-	'())))
+  (rmt:send-receive 'read-test-data run-id (list run-id test-id categorypatt)))
+;;   (let ((tdb  (rmt:open-test-db-by-test-id run-id test-id work-area: work-area)))
+;;     (if tdb
+;; 	(tdb:read-test-data tdb test-id categorypatt)
+;; 	'())))
 
 (define (rmt:testmeta-add-record testname)
   (rmt:send-receive 'testmeta-add-record #f (list testname)))
