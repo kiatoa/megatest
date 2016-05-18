@@ -157,11 +157,20 @@
 (define (common:exit-on-version-changed)
   (if (common:version-changed?)
       (begin
-	(debug:print 0
+        (debug:print 0
 		     "ERROR: Version mismatch!\n"
 		     "   expected: " (common:version-signature) "\n"
 		     "   got:      " (common:get-last-run-version) "\n"
 		     " to switch versions you can run: \"megatest -cleanup-db\"")
+        ;; megatest -cleanup-db IS NOT correcting the dbver.  Let's force it for now.
+        ;; Matt: please review this!
+        (db:multi-db-sync
+         #f 
+         'killservers
+         'dejunk
+         'new2old)
+        (rmt:set-var "MEGATEST_VERSION" (common:version-signature))
+
 	(exit 1))))
 
 ;;======================================================================
