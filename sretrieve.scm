@@ -114,7 +114,7 @@ Version: " megatest-fossil-hash)) ;; "
   (let ((path (configf:lookup configdat "database" "location")))
     (if (not path)
 	(begin
-	  (debug:print 0 "[database]\nlocation /some/path\n\n Is missing from the config file!")
+	  (debug:print 0 #f "[database]\nlocation /some/path\n\n Is missing from the config file!")
 	  (exit 1)))
     (if (and path
 	     (directory? path)
@@ -125,18 +125,18 @@ Version: " megatest-fossil-hash)) ;; "
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 2 "ERROR: problem accessing db " dbpath
+	     (debug:print 2 #f "ERROR: problem accessing db " dbpath
 			  ((condition-property-accessor 'exn 'message) exn))
 	     (exit 1))
-            ;;(debug:print 0 "calling proc " proc "db path " dbpath )
+            ;;(debug:print 0 #f "calling proc " proc "db path " dbpath )
 	   (call-with-database
             dbpath
 	    (lambda (db)
-	       ;;(debug:print 0 "calling proc " proc " on db " db)
+	       ;;(debug:print 0 #f "calling proc " proc " on db " db)
 	      (set-busy-handler! db (busy-timeout 10000)) ;; 10 sec timeout
 	      (if (not dbexists)(sretrieve:initialize-db db))
 	      (proc db)))))
-	(debug:print 0 "ERROR: invalid path for storing database: " path))))
+	(debug:print 0 #f "ERROR: invalid path for storing database: " path))))
 
 ;; copy in directory to dest, validation is done BEFORE calling this
 ;;
@@ -146,12 +146,12 @@ Version: " megatest-fossil-hash)) ;; "
     (if (or (not base-dir)
 	    (not (file-exists? base-dir)))
 	(begin
-	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
+	  (debug:print 0 #f "ERROR: Bad configuration! base-dir " base-dir " not found")
 	  (exit 1)))
     (print datadir)
     (if (not (file-exists? datadir))
 	(begin
-	  (debug:print 0 "ERROR: Bad version (" version "), no data found at " datadir "." )
+	  (debug:print 0 #f "ERROR: Bad version (" version "), no data found at " datadir "." )
 	  (exit 1)))
     
     (sretrieve:db-do
@@ -188,20 +188,20 @@ Version: " megatest-fossil-hash)) ;; "
     (if (or (not base-dir)
 	    (not (file-exists? base-dir)))
 	(begin
-	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
+	  (debug:print 0 #f "ERROR: Bad configuration! base-dir " base-dir " not found")
 	  (exit 1)))
     (print datadir)
     (if (not (file-exists? datadir))
 	(begin
-	  (debug:print 0 "ERROR: File  (" file "), not found at " base-dir "." )
+	  (debug:print 0 #f "ERROR: File  (" file "), not found at " base-dir "." )
 	  (exit 1)))
     (if (directory? datadir)
 	(begin
-	  (debug:print 0 "ERROR: (" file ") is a dirctory!! cp cmd works only on files ." )
+	  (debug:print 0 #f "ERROR: (" file ") is a dirctory!! cp cmd works only on files ." )
 	  (exit 1)))
     (if(not (string-match (regexp  allowed-sub-paths) file))
         (begin
-	  (debug:print 0 "ERROR: Access denied to file (" file ")!! " )
+	  (debug:print 0 #f "ERROR: Access denied to file (" file ")!! " )
 	  (exit 1)))
      
      (sretrieve:db-do
@@ -209,9 +209,9 @@ Version: " megatest-fossil-hash)) ;; "
      (lambda (db)
        (sretrieve:register-action db "cp" retriever datadir comment)))
       (sretrieve:do-as-calling-user
-      ;;  (debug:print 0 "ph:  "(pathname-directory datadir)  "!! " )
+      ;;  (debug:print 0 #f "ph:  "(pathname-directory datadir)  "!! " )
        (change-directory (pathname-directory datadir))  
-       ;;(debug:print 0 "ph: /bin/tar" (list "chfv" "-" filename) )
+       ;;(debug:print 0 #f "ph: /bin/tar" (list "chfv" "-" filename) )
       (process-execute "/bin/tar" (list "chfv" "-" filename)))
       ))
 
@@ -225,24 +225,24 @@ Version: " megatest-fossil-hash)) ;; "
     (if (or (not base-dir)
 	    (not (file-exists? base-dir)))
 	(begin
-	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
+	  (debug:print 0 #f "ERROR: Bad configuration! base-dir " base-dir " not found")
 	  (exit 1)))
     (print datadir)
     (if (not (file-exists? datadir))
 	(begin
-	  (debug:print 0 "ERROR: File  (" file "), not found at " base-dir "." )
+	  (debug:print 0 #f "ERROR: File  (" file "), not found at " base-dir "." )
 	  (exit 1)))
       (if(not (string-match (regexp  allowed-sub-paths) file))
         (begin
-	  (debug:print 0 "ERROR: Access denied to file (" file ")!! " )
+	  (debug:print 0 #f "ERROR: Access denied to file (" file ")!! " )
 	  (exit 1)))
    
         (sretrieve:do-as-calling-user
         (lambda ()
 	 ;;(change-directory datadir)
-         ;; (debug:print 0  "/usr/bin/find" (list datadir "-ls" "|" "grep" "-E" "'"allowed-file-patt"'"))
+         ;; (debug:print 0 #f  "/usr/bin/find" (list datadir "-ls" "|" "grep" "-E" "'"allowed-file-patt"'"))
          ;; (status (with-input-from-pipe "find " datadir " -ls | grep -E '" allowed-file-patt "'" (lambda () (read-line))))
-         ;; (debug:print 0 status) 
+         ;; (debug:print 0 #f status) 
 	  (process-execute "/bin/ls" (list "-ls"  "-lrt" datadir ))
  ))))
 
@@ -257,14 +257,14 @@ Version: " megatest-fossil-hash)) ;; "
         (targ-path (conc target-dir "/" normal-path)))
     (if (string-contains   normal-path "..")
     (begin
-      (debug:print 0 "ERROR: Path  " targ-mk " resolved outside target area "  target-dir )
+      (debug:print 0 #f "ERROR: Path  " targ-mk " resolved outside target area "  target-dir )
       (exit 1)))
 
     (if (not (string-contains targ-path target-dir))
     (begin
-      (debug:print 0 "ERROR: You cannot update data outside " target-dir ".")
+      (debug:print 0 #f "ERROR: You cannot update data outside " target-dir ".")
       (exit 1)))
-    (debug:print 0 "Path " targ-mk " is valid.")   
+    (debug:print 0 #f "Path " targ-mk " is valid.")   
  ))
 ;; make directory in dest
 ;;
@@ -274,7 +274,7 @@ Version: " megatest-fossil-hash)) ;; "
     
     (if (file-exists? targ-path)
 	(begin
-	  (debug:print 0 "ERROR: target Directory " targ-path " already exist!!")
+	  (debug:print 0 #f "ERROR: target Directory " targ-path " already exist!!")
 	  (exit 1)))
     (sretrieve:db-do
      configdat
@@ -283,7 +283,7 @@ Version: " megatest-fossil-hash)) ;; "
     (let* ((th1         (make-thread
 			 (lambda ()
 			   (create-directory targ-path #t)
-			   (debug:print 0 " ... dir " targ-path " created"))
+			   (debug:print 0 #f " ... dir " targ-path " created"))
 			 "mkdir thread"))
 	   (th2         (make-thread
 			 (lambda ()
@@ -304,11 +304,11 @@ Version: " megatest-fossil-hash)) ;; "
   (let ((targ-path (conc target-dir "/" link-name)))
     (if (file-exists? targ-path)
 	(begin
-	  (debug:print 0 "ERROR: target file " targ-path " already exist!!")
+	  (debug:print 0 #f "ERROR: target file " targ-path " already exist!!")
 	  (exit 1)))
      (if (not (file-exists? targ-link ))
 	(begin
-	  (debug:print 0 "ERROR: target file " targ-link " does not exist!!")
+	  (debug:print 0 #f "ERROR: target file " targ-link " does not exist!!")
 	  (exit 1)))
  
     (sretrieve:db-do
@@ -318,7 +318,7 @@ Version: " megatest-fossil-hash)) ;; "
     (let* ((th1         (make-thread
 			 (lambda ()
 			   (create-symbolic-link targ-link targ-path  )
-			   (debug:print 0 " ... link " targ-path " created"))
+			   (debug:print 0 #f " ... link " targ-path " created"))
 			 "symlink thread"))
 	   (th2         (make-thread
 			 (lambda ()
@@ -340,7 +340,7 @@ Version: " megatest-fossil-hash)) ;; "
   (let ((targ-path (conc target-dir "/" targ-file)))
     (if (not (file-exists? targ-path))
 	(begin
-	  (debug:print 0 "ERROR: target file " targ-path " not found, nothing to remove.")
+	  (debug:print 0 #f "ERROR: target file " targ-path " not found, nothing to remove.")
 	  (exit 1)))
     (sretrieve:db-do
      configdat
@@ -349,7 +349,7 @@ Version: " megatest-fossil-hash)) ;; "
     (let* ((th1         (make-thread
 			 (lambda ()
 			   (delete-file targ-path)
-			   (debug:print 0 " ... file " targ-path " removed"))
+			   (debug:print 0 #f " ... file " targ-path " removed"))
 			 "rm thread"))
 	   (th2         (make-thread
 			 (lambda ()
@@ -393,7 +393,7 @@ Version: " megatest-fossil-hash)) ;; "
         (cid (current-user-id)))
     (if (not (eq? eid cid)) ;; running suid
             (set! (current-effective-user-id) cid))
-    ;; (debug:print 0 "running as " (current-effective-user-id))
+    ;; (debug:print 0 #f "running as " (current-effective-user-id))
     (proc)
     (if (not (eq? eid cid))
         (set! (current-effective-user-id) eid))))
@@ -443,16 +443,16 @@ Version: " megatest-fossil-hash)) ;; "
 		(> (file-modification-time upstream-file)(file-modification-time package-config)))
 	    (handle-exceptions
 	     exn
-	     (debug:print 0 "ERROR: failed to run script " conversion-script " with params " upstream-file " " package-config)
+	     (debug:print 0 #f "ERROR: failed to run script " conversion-script " with params " upstream-file " " package-config)
 	     (let ((pid (process-run conversion-script (list upstream-file package-config))))
 	       (process-wait pid)))
-	    (debug:print 0 "Skipping update of " package-config " from " upstream-file))
-	(debug:print 0 "Skipping update of " package-config " as " upstream-file " not found"))
+	    (debug:print 0 #f "Skipping update of " package-config " from " upstream-file))
+	(debug:print 0 #f "Skipping update of " package-config " as " upstream-file " not found"))
     ;; (ini:property-separator-patt " *  *")
     ;; (ini:property-separator #\space)
     (let ((res (if (file-exists? package-config)
 		   (begin
-		     (debug:print 0 "Reading package config " package-config)
+		     (debug:print 0 #f "Reading package config " package-config)
 		     (read-config package-config #f #t))
 		   (make-hash-table))))
       (pop-directory)
@@ -469,21 +469,21 @@ Version: " megatest-fossil-hash)) ;; "
     
     (if (not base-dir)
 	(begin
-	  (debug:print 0 "[settings]\nbase-dir /some/path\n\n Is MISSING from the config file!")
+	  (debug:print 0 #f "[settings]\nbase-dir /some/path\n\n Is MISSING from the config file!")
 	  (exit)))
     (if (null? allowed-users)
 	(begin
-	  (debug:print 0 "[setings]\nallowed-users user1 user2 ...\n\n Is MISSING from the config file!")
+	  (debug:print 0 #f "[setings]\nallowed-users user1 user2 ...\n\n Is MISSING from the config file!")
 	  (exit)))
     (if (not (member user allowed-users))
 	(begin
-	  (debug:print 0 "User \"" (current-user-name) "\" does not have access. Exiting")
+	  (debug:print 0 #f "User \"" (current-user-name) "\" does not have access. Exiting")
 	  (exit 1)))
     (case (string->symbol action)
       ((get)
        (if (< (length args) 1)
 	   (begin 
-	     (debug:print 0 "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (debug:print 0 #f "ERROR: Missing arguments; " (string-intersperse args ", "))
 	     (exit 1)))
        (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
               (version     (car args))
@@ -493,32 +493,32 @@ Version: " megatest-fossil-hash)) ;; "
 	      (exe-dir     (configf:lookup configdat "exe-info" "exe-dir")))
 ;;	      (relconfig   (sretrieve:load-packages configdat exe-dir package-type)))
 
-	 (debug:print 0 "retrieving " version " of " package-type " as tar data on stdout")
+	 (debug:print 0 #f "retrieving " version " of " package-type " as tar data on stdout")
 	 (sretrieve:get configdat user version msg)))
          ((cp)
             (if (< (length args) 1)
              (begin 
-	     (debug:print 0 "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (debug:print 0 #f "ERROR: Missing arguments; " (string-intersperse args ", "))
 	     (exit 1)))
           (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
               (file     (car args))
 	      (msg         (or (args:get-arg "-m") "")) )
 
-	 (debug:print 0 "copinging " file " to current directory " )
+	 (debug:print 0 #f "copinging " file " to current directory " )
 	 (sretrieve:cp configdat user file msg)))
       ((ls)
             (if (< (length args) 1)
              (begin 
-	     (debug:print 0 "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (debug:print 0 #f "ERROR: Missing arguments; " (string-intersperse args ", "))
 	     (exit 1)))
           (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
               (dir     (car args))
 	      (msg         (or (args:get-arg "-m") "")) )
 
-	 (debug:print 0 "Listing files in " )
+	 (debug:print 0 #f "Listing files in " )
 	 (sretrieve:ls configdat user dir msg)))
  
-      (else (debug:print 0 "Unrecognised command " action)))))
+      (else (debug:print 0 #f "Unrecognised command " action)))))
   
 ;; ease debugging by loading ~/.dashboardrc - REMOVE FROM PRODUCTION!
 ;; (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.sretrieverc")))
@@ -566,6 +566,6 @@ Version: " megatest-fossil-hash)) ;; "
      ((null? rema)(print sretrieve:help))
      ((>= (length rema) 2)
       (apply sretrieve:process-action configdat (car rema)(cdr rema)))
-     (else (debug:print 0 "ERROR: Unrecognised command. Try \"sretrieve help\"")))))
+     (else (debug:print 0 #f "ERROR: Unrecognised command. Try \"sretrieve help\"")))))
 
 (main)
