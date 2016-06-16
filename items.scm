@@ -47,10 +47,10 @@
       (let ((itemlst (filter (lambda (x)
 			       (list? x))
 			     (map (lambda (x)
-				    (debug:print 6 "item-assoc->item-list x: " x)
+				    (debug:print 6 #f "item-assoc->item-list x: " x)
 				    (if (< (length x) 2)
 					(begin
-					  (debug:print 0 "ERROR: malformed items spec " (string-intersperse x " "))
+					  (debug:print 0 #f "ERROR: malformed items spec " (string-intersperse x " "))
 					  (list (car x)'()))
 					(let* ((name (car x))
 					       (items (cadr x))
@@ -58,11 +58,11 @@
 								     (string-split items)
 								     '()))))
 					  (if (null? ilist)
-					      (debug:print 0 "ERROR: No items specified for " name))
+					      (debug:print 0 #f "ERROR: No items specified for " name))
 					  ilist)))
 				  itemsdat))))
 	(let ((debuglevel 5))
-	  (debug:print 5 "item-assoc->item-list: itemsdat => itemlst ")
+	  (debug:print 5 #f "item-assoc->item-list: itemsdat => itemlst ")
 	  (if (debug:debug-mode 5)
 	      (begin
 		(pp itemsdat)
@@ -95,7 +95,7 @@
 				       (list 
 					(if (< indx (length rowdat))
 					    (let ((new (list rowname (list-ref rowdat indx))))
-					      ;; (debug:print 0 "New: " new)
+					      ;; (debug:print 0 #f "New: " new)
 					      (set! elflag #t)
 					      new
 					      ) ;; i.e. had at least on legit value to use
@@ -123,7 +123,7 @@
 	 (have-itable (hash-table-ref/default tconfig "itemstable" #f))
 	 (items       (hash-table-ref/default tconfig "items"      '()))
 	 (itemstable  (hash-table-ref/default tconfig "itemstable" '())))
-    (debug:print 5 "items: " items " itemstable: " itemstable)
+    (debug:print 5 #f "items: " items " itemstable: " itemstable)
     (set! items (map (lambda (item)
 		       (if (procedure? (cadr item))
 			   (list (car item)((cadr item)))  ;; evaluate the proc
@@ -134,8 +134,8 @@
 				(list (car item)((cadr item)))  ;; evaluate the proc
 				item))
 			  itemstable))
-    (if (and have-items  (null? items))     (debug:print 0 "ERROR: [items] section in testconfig but no entries defined"))
-    (if (and have-itable (null? itemstable))(debug:print 0 "ERROR: [itemstable] section in testconfig but no entries defined"))
+    (if (and have-items  (null? items))     (debug:print 0 #f "ERROR: [items] section in testconfig but no entries defined"))
+    (if (and have-itable (null? itemstable))(debug:print 0 #f "ERROR: [itemstable] section in testconfig but no entries defined"))
     (if (or (not (null? items))(not (null? itemstable)))
 	(append (item-assoc->item-list items)
 		(item-table->item-list itemstable))
