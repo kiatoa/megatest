@@ -390,8 +390,7 @@ Misc
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
 	 (result      '())
-	 (maxtests    0)
-)
+	 (maxtests    0))
     ;; 
     ;; trim runs to only those that are changing often here
     ;; 
@@ -1606,7 +1605,7 @@ Misc
 		 (set! show (iup:button "Show"
 					#:expand "YES"
 					#:action (lambda (obj)
-						   (d:alldat-hide-not-hide-set! data (not (d:alldat-hide-not-hide data)))
+						   (d:alldat-hide-not-hide-set! data #f) ;; (not (d:alldat-hide-not-hide data)))
 						   (iup:attribute-set! show "BGCOLOR" sel-color)
 						   (iup:attribute-set! hide "BGCOLOR" nonsel-color)
 						   (mark-for-update))))
