@@ -2199,11 +2199,15 @@
 						" IN ('") )
 					(string-intersperse statuses "','")
 					"')")))
+	     (interim-qry       (conc " AND " (if not-in "NOT " "") "( ( state='COMPLETED' AND " statuses-qry " ) "
+				      (if states-qry
+					  (conc (if not-in " AND " " OR ") states-qry " ) ")
+					  "")))
 	     (states-statuses-qry 
 	      (cond 
 	       ((and states-qry statuses-qry)
 		(case mode
-		  ((dashboard)(conc " AND " (if not-in "NOT " "") "( ( state='COMPLETED' AND " statuses-qry " ) " (if not-in " AND " " OR ") states-qry " ) "))
+		  ((dashboard) interim-qry)
 		  (else       (conc " AND ( " states-qry " AND " statuses-qry " ) "))))
 	       (states-qry  
 		(conc " AND " states-qry))
@@ -2289,13 +2293,6 @@
 
 ;; get a useful subset of the tests data (used in dashboard
 ;; use db:mintest-get-{id ,run_id,testname ...}
-;; 
-(define (db:get-tests-for-runs-mindata dbstruct run-ids testpatt states statuses not-in)
-  (debug:print 0 "ERROR: BROKN!")
-  ;; (db:get-tests-for-runs dbstruct run-ids testpatt states statuses not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
-)
-
-;; get a useful subset of the tests data (used in dashboard
 ;;
 (define (db:get-tests-for-run-mindata dbstruct run-id testpatt states statuses not-in)
   (db:get-tests-for-run dbstruct run-id testpatt states statuses #f #f not-in #f #f "id,run_id,testname,state,status,event_time,item_path" #f))
