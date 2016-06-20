@@ -1828,19 +1828,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
-      ;; keep this one local
-      ;; (open-run-close db:clean-up #f)
-      (db:multi-db-sync 
-       #f ;; do all run-ids
-       ;; 'new2old
-       'killservers
-       'dejunk
-       ;; 'adj-testids
-       ;; 'old2new
-       'new2old
-       )
-      (if (common:version-changed?)
-	  (common:set-last-run-version))
+      (common:cleanup-db)
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-mark-incompletes")
