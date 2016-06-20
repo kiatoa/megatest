@@ -9,7 +9,7 @@
 (delete-file* "logs/1.log")
 (define run-id 1)
 
-(test "setup for run" #t (begin (launch:setup-for-run)
+(test "setup for run" #t (begin (launch:setup)
  				(string? (getenv "MT_RUN_AREA_HOME"))))
 
 ;; NON Server tests go here
