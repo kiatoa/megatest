@@ -43,7 +43,7 @@
 	  (push-directory test-run-dir)
 	  (if (> count 0)
 	      (begin
-		(debug:print 0 #f "WARNING: ezsteps attempting to run but test run directory " test-run-dir " is not there. Waiting and trying again " count " more times")
+		(debug:print 0 *default-log-port* "WARNING: ezsteps attempting to run but test run directory " test-run-dir " is not there. Waiting and trying again " count " more times")
 		(sleep 3)
 		(loop (- count 1))))))
     (debug:print-info 0 #f "Running in directory " test-run-dir)
@@ -74,7 +74,7 @@
 			  (if (not (null? tal))
 			      (loop (car tal)(cdr tal) stepname #f))))
 
-		  (debug:print 4 #f "ezsteps:\n stepname: " stepname " stepinfo: " stepinfo " stepparts: " stepparts
+		  (debug:print 4 *default-log-port* "ezsteps:\n stepname: " stepname " stepinfo: " stepinfo " stepparts: " stepparts
 			       " stepparms: " stepparms " stepcmd: " stepcmd)
 		  
 		  (if (file-exists? (conc stepname ".logpro"))(set! logpro-used #t))
@@ -82,7 +82,7 @@
 		  ;; call the command using mt_ezstep
 		  (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "-") " " stepcmd))
 		  
-		  (debug:print 4 #f "script: " script)
+		  (debug:print 4 *default-log-port* "script: " script)
 		  (rmt:teststep-set-status! run-id test-id stepname "start" "-" #f #f)
 		  ;; now launch
 		  (let ((pid (process-run script)))
@@ -117,7 +117,7 @@
 					      ((eq? overall-status 'warn)
 					       (if (eq? this-step-status 'fail) 'fail 'warn))
 					      (else 'fail))))
-		      (debug:print 4 #f "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
+		      (debug:print 4 *default-log-port* "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
 				   " this-step-status: " this-step-status " overall-status: " overall-status 
 				   " next-status: " next-status " rollup-status: " rollup-status)
 		      (case next-status
@@ -137,7 +137,7 @@
 			   (not (null? tal)))
 		      (if (not run-one) ;; if we got here we completed the step, if run-one is true, stop
 			  (loop (car tal) (cdr tal) stepname runflag))))
-		(debug:print 4 #f "WARNING: a prior step failed, stopping at " ezstep)))
+		(debug:print 4 *default-log-port* "WARNING: a prior step failed, stopping at " ezstep)))
 	  
 	  ;; Once done with step/steps update the test record
 	  ;;

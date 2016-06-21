@@ -52,7 +52,7 @@
 	   (runslst   (vector-ref runsdat 1))
 	   (full-list (append res runslst))
 	   (have-more (eq? (length runslst) limit)))
-      ;; (debug:print 0 #f "header: " header " runslst: " runslst " have-more: " have-more)
+      ;; (debug:print 0 *default-log-port* "header: " header " runslst: " runslst " have-more: " have-more)
       (if have-more 
 	  (let ((new-offset (+ offset limit))
 		(next-batch (rmt:get-runs-by-patt keys runnamepatt targpatt offset limit #f)))
@@ -93,7 +93,7 @@
 		       #f))))
     (if useres
 	(let ((result (vector-ref res 1)))
-	  (debug:print 4 #f "Using lazy value res: " result)
+	  (debug:print 4 *default-log-port* "Using lazy value res: " result)
 	  result)
 	(let ((newres (rmt:get-prereqs-not-met run-id waitons ref-item-path mode: mode itemmaps: itemmaps)))
 	  (hash-table-set! *pre-reqs-met-cache* key (vector (current-seconds) newres))
@@ -122,7 +122,7 @@
 		      (cdr remt)
 		      (if (member failed-test waitons)
 			  (begin
-			    (debug:print 0 #f "Discarding test " testn "(" test-dat ") due to " failed-test)
+			    (debug:print 0 *default-log-port* "Discarding test " testn "(" test-dat ") due to " failed-test)
 			    res)
 			  (cons testn res)))))))))
 
@@ -175,7 +175,7 @@
 (define (mt:test-set-state-status-by-id run-id test-id newstate newstatus newcomment)
   (if (not (and run-id test-id))
       (begin
-	(debug:print 0 #f "ERROR: bad data handed to mt:test-set-state-status-by-id, run-id=" run-id ", test-id=" test-id ", newstate=" newstate)
+	(debug:print 0 *default-log-port* "ERROR: bad data handed to mt:test-set-state-status-by-id, run-id=" run-id ", test-id=" test-id ", newstate=" newstate)
 	(print-call-chain (current-error-port))
 	#f)
       (begin
@@ -217,7 +217,7 @@
 		      newtcfg))
 		  (if (null? tal)
 		      (begin
-			(debug:print 0 #f "ERROR: No readable testconfig found for " test-name)
+			(debug:print 0 *default-log-port* "ERROR: No readable testconfig found for " test-name)
 			#f)
 		      (loop (car tal)(cdr tal))))))))))
 

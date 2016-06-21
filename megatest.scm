@@ -326,7 +326,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (args:get-arg "-envdelta")
 	       )
 	      ))
-    (debug:print 0 #f "ERROR: Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
+    (debug:print 0 *default-log-port* "ERROR: Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
 ;; immediately set MT_TARGET if -reqtarg or -target are available
 ;;
@@ -408,7 +408,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (if (file-exists? (args:get-arg "-start-dir"))
 	(change-directory (args:get-arg "-start-dir"))
 	(begin
-	  (debug:print 0 #f "ERROR: non-existant start dir " (args:get-arg "-start-dir") " specified, exiting.")
+	  (debug:print 0 *default-log-port* "ERROR: non-existant start dir " (args:get-arg "-start-dir") " specified, exiting.")
 	  (exit 1))))
 
 (if (args:get-arg "-version")
@@ -455,12 +455,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-itempatt")
     (let ((newval (conc (args:get-arg "-testpatt") "/" (args:get-arg "-itempatt"))))
-      (debug:print 0 #f "WARNING: -itempatt has been deprecated, please use -testpatt testpatt/itempatt method, new testpatt is "newval)
+      (debug:print 0 *default-log-port* "WARNING: -itempatt has been deprecated, please use -testpatt testpatt/itempatt method, new testpatt is "newval)
       (hash-table-set! args:arg-hash "-testpatt" newval)
       (hash-table-delete! args:arg-hash "-itempatt")))
 
 (if (args:get-arg "-runtests")
-    (debug:print 0 #f "WARNING: \"-runtests\" is deprecated. Use \"-run\" with \"-testpatt\" instead"))
+    (debug:print 0 *default-log-port* "WARNING: \"-runtests\" is deprecated. Use \"-run\" with \"-testpatt\" instead"))
 
 (on-exit std-exit-procedure)
 
@@ -490,11 +490,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       (lambda (f)
 			 (handle-exceptions
 			     exn
-			     (debug:print 0 #f "WARNING: Failed to remove file " f)
+			     (debug:print 0 *default-log-port* "WARNING: Failed to remove file " f)
 			   (delete-file f)))
 		       files))))
-	      (debug:print 0 #f "ERROR: -clean-cache requires -runname."))
-	  (debug:print 0 #f "ERROR: -clean-cache requires -target or -reqtarg"))))
+	      (debug:print 0 *default-log-port* "ERROR: -clean-cache requires -runname."))
+	  (debug:print 0 *default-log-port* "ERROR: -clean-cache requires -target or -reqtarg"))))
 	    
 	  
 (if (args:get-arg "-env2file")
@@ -551,7 +551,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (data     (car res-data))
 	   (msg      (cadr res-data)))
       (if (not data)
-	  (debug:print 0 #f "Bad input? data=" data) ;; some error occurred
+	  (debug:print 0 *default-log-port* "Bad input? data=" data) ;; some error occurred
 	  (with-output-to-port out-port
 	    (lambda ()
 	      (case (string->symbol out-fmt)
@@ -711,7 +711,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  (env:print added removed changed))
 	      (env:close-database db)
 	      (set! *didsomething* #t))
-	    (debug:print 0 #f "ERROR: Parameter to -envdelta should be new=star-end")))))
+	    (debug:print 0 *default-log-port* "ERROR: Parameter to -envdelta should be new=star-end")))))
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
@@ -729,7 +729,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (server:launch run-id)
 	    (set! *didsomething* #t))
-	  (debug:print 0 #f "ERROR: server requires run-id be specified with -run-id")))
+	  (debug:print 0 *default-log-port* "ERROR: server requires run-id be specified with -run-id")))
 
     ;; Not a server? This section will decide how to communicate
     ;;
@@ -816,7 +816,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-list-targets")
     (let ((targets (common:get-runconfig-targets)))
-      (debug:print 1 #f "Found "(length targets) " targets")
+      (debug:print 1 *default-log-port* "Found "(length targets) " targets")
       (case (string->symbol (or (args:get-arg "-dumpmode") "alist"))
 	((alist)
 	 (for-each (lambda (x)
@@ -826,7 +826,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	((json)
 	 (json-write targets))
 	(else
-	 (debug:print 0 #f "ERROR: dump output format " (args:get-arg "-dumpmode") " not supported for -list-targets")))
+	 (debug:print 0 *default-log-port* "ERROR: dump output format " (args:get-arg "-dumpmode") " not supported for -list-targets")))
       (set! *didsomething* #t)))
 
 ;; cache the runconfigs in $MT_LINKTREE/$MT_TARGET/$MT_RUNNAME/.runconfig
@@ -886,7 +886,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 ((string=? (args:get-arg "-dumpmode") "ini")
 	  (configf:config->ini data))
 	 (else
-	  (debug:print 0 #f "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
+	  (debug:print 0 *default-log-port* "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
 	(set! *didsomething* #t))
       (pop-directory)))
 
@@ -910,7 +910,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        ((string=? (args:get-arg "-dumpmode") "ini")
 	(configf:config->ini data))
        (else
-	(debug:print 0 #f "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
+	(debug:print 0 *default-log-port* "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
       (set! *didsomething* #t)
       (pop-directory)))
 
@@ -934,19 +934,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (target (common:args-get-target)))
     (cond
      ((not target)
-      (debug:print 0 #f "ERROR: Missing required parameter for " action ", you must specify -target or -reqtarg")
+      (debug:print 0 *default-log-port* "ERROR: Missing required parameter for " action ", you must specify -target or -reqtarg")
       (exit 1))
      ((not (or (args:get-arg ":runname")
 	       (args:get-arg "-runname")))
-      (debug:print 0 #f "ERROR: Missing required parameter for " action ", you must specify the run name pattern with -runname patt")
+      (debug:print 0 *default-log-port* "ERROR: Missing required parameter for " action ", you must specify the run name pattern with -runname patt")
       (exit 2))
      ((not (args:get-arg "-testpatt"))
-      (debug:print 0 #f "ERROR: Missing required parameter for " action ", you must specify the test pattern with -testpatt")
+      (debug:print 0 *default-log-port* "ERROR: Missing required parameter for " action ", you must specify the test pattern with -testpatt")
       (exit 3))
      (else
       (if (not (car *configinfo*))
 	  (begin
-	    (debug:print 0 #f "ERROR: Attempted " action "on test(s) but run area config file not found")
+	    (debug:print 0 *default-log-port* "ERROR: Attempted " action "on test(s) but run area config file not found")
 	    (exit 1))
 	  ;; put test parameters into convenient variables
 	  (begin
@@ -1088,7 +1088,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (hash-table-set! test-field-index hed idx)
 		      (if (not (null? tal))(loop (car tal)(cdr tal)(+ idx 1))))
 		    (begin
-		      (debug:print 0 #f "ERROR: Invalid test fields specified: " (string-intersperse invalid-tests-spec ", "))
+		      (debug:print 0 *default-log-port* "ERROR: Invalid test fields specified: " (string-intersperse invalid-tests-spec ", "))
 		      (exit)))))
 
 	  ;; Each run
@@ -1157,9 +1157,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      	(handle-exceptions
 			 exn
 			 (begin
-			   (debug:print 0 #f "ERROR: Bad data in test record? " test)
+			   (debug:print 0 *default-log-port* "ERROR: Bad data in test record? " test)
 			   (print "exn=" (condition->list exn))
-			   (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
+			   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 			   (print-call-chain (current-error-port)))
 			 (let* ((test-id      (if (member "id"           tests-spec)(get-value-by-fieldname test test-field-index "id"          ) #f)) ;; (db:test-get-id         test))
 				(testname     (if (member "testname"     tests-spec)(get-value-by-fieldname test test-field-index "testname"    ) #f)) ;; (db:test-get-testname   test))
@@ -1303,7 +1303,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 							 (if tmp (cdr tmp) "")))
 						     metadat-fields)
 						(begin
-						  (debug:print 0 #f "WARNING: meta data for run " runname " not found")
+						  (debug:print 0 *default-log-port* "WARNING: meta data for run " runname " not found")
 						  '()))))
 					allrundat)))
 		 ;; '( ( "target" ( "runname" ( "data" ( "runid" ( "id . "37" ) ( ... ))))
@@ -1332,7 +1332,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 									 (cons '()
 									       (cons run-fields tests)))))
 							   (begin
-							     (debug:print 0 #f "WARNING: run " target "/" runname " appears to have no data")
+							     (debug:print 0 *default-log-port* "WARNING: run " target "/" runname " appears to have no data")
 							     ;; (pp rundat)
 							     '()))))
 						   runsdat)
@@ -1353,7 +1353,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       (ouf        (if (string-match (regexp "^[/~]+.*") outputfile) ;; full path?
 				       outputfile
 				       (begin
-					 (debug:print 0 #f "WARNING: path given, " outputfile " is relative, prefixing with current directory")
+					 (debug:print 0 *default-log-port* "WARNING: path given, " outputfile " is relative, prefixing with current directory")
 					 (conc (current-directory) "/" outputfile)))))
 		  (create-directory tempdir #t)
 		  (ods:list->ods tempdir ouf sheets))))
@@ -1519,11 +1519,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (change-directory toppath)
 	  (if (not target)
 	      (begin
-		(debug:print 0 #f "ERROR: -target is required.")
+		(debug:print 0 *default-log-port* "ERROR: -target is required.")
 		(exit 1)))
 	  (if (not (launch:setup))
 	      (begin
-		(debug:print 0 #f "Failed to setup, giving up on -test-paths or -test-files, exiting")
+		(debug:print 0 *default-log-port* "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
 	  (let* ((keys     (rmt:get-keys))
 		 ;; db:test-get-paths must not be run remote
@@ -1570,7 +1570,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (runspatt   (or (args:get-arg "-runname")(args:get-arg ":runname")))
 	     (pathmod    (args:get-arg "-pathmod")))
 	     ;; (keyvalalist (keys->alist keys "%")))
-	 (debug:print 2 #f "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvals: " keyvals)
+	 (debug:print 2 *default-log-port* "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvals: " keyvals)
 	 (db:extract-ods-file dbstruct outputfile keyvals (if runspatt runspatt "%") pathmod)
 	 (db:close-all dbstruct)
 	 (set! *didsomething* #t)))))
@@ -1603,7 +1603,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  (launch:recover-test run-id test-id)
 		  (set! *didsomething* #t))
 		(begin
-		  (debug:print 0 #f "ERROR: bad run-id or test-id, must be integers")
+		  (debug:print 0 *default-log-port* "ERROR: bad run-id or test-id, must be integers")
 		  (exit 1)))))))
 
 ;;======================================================================
@@ -1613,7 +1613,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (define (megatest:step step state status logfile msg)
   (if (not (getenv "MT_CMDINFO"))
       (begin
-	(debug:print 0 #f "ERROR: MT_CMDINFO env var not set, -step must be called *inside* a megatest invoked environment!")
+	(debug:print 0 *default-log-port* "ERROR: MT_CMDINFO env var not set, -step must be called *inside* a megatest invoked environment!")
 	(exit 5))
       (let* ((cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
 	     (transport (assoc/default 'transport cmdinfo))
@@ -1629,14 +1629,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(change-directory testpath)
 	(if (not (launch:setup))
 	    (begin
-	      (debug:print 0 #f "Failed to setup, exiting")
+	      (debug:print 0 *default-log-port* "Failed to setup, exiting")
 	      (exit 1)))
 	(if (and state status)
 	    (let ((comment (launch:load-logpro-dat run-id test-id step)))
 	      ;; (rmt:test-set-log! run-id test-id (conc stepname ".html"))))
 	      (rmt:teststep-set-status! run-id test-id step state status (or comment msg) logfile))
 	    (begin
-	      (debug:print 0 #f "ERROR: You must specify :state and :status with every call to -step")
+	      (debug:print 0 *default-log-port* "ERROR: You must specify :state and :status with every call to -step")
 	      (exit 6))))))
 
 (if (args:get-arg "-step")
@@ -1661,7 +1661,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(args:get-arg "-summarize-items"))
     (if (not (getenv "MT_CMDINFO"))
 	(begin
-	  (debug:print 0 #f "ERROR: MT_CMDINFO env var not set, commands -test-status, -runstep and -setlog must be called *inside* a megatest environment!")
+	  (debug:print 0 *default-log-port* "ERROR: MT_CMDINFO env var not set, commands -test-status, -runstep and -setlog must be called *inside* a megatest environment!")
 	  (exit 5))
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
@@ -1680,7 +1680,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (stepname  (args:get-arg "-step")))
 	  (if (not (launch:setup))
 	      (begin
-		(debug:print 0 #f "Failed to setup, exiting")
+		(debug:print 0 *default-log-port* "Failed to setup, exiting")
 		(exit 1)))
 
 	  (if (args:get-arg "-runstep")(debug:print-info 1 #f "Running -runstep, first change to directory " work-area))
@@ -1704,7 +1704,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin
-		    (debug:print 0 #f "ERROR: nothing specified to run!")
+		    (debug:print 0 *default-log-port* "ERROR: nothing specified to run!")
 		    (if db (sqlite3:finalize! db))
 		    (exit 6))
 		  (let* ((stepname   (args:get-arg "-runstep"))
@@ -1765,7 +1765,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (or (not state)
 			     (not status)))
 		    (begin
-		      (debug:print 0 #f "ERROR: You must specify :state and :status with every call to -test-status\n" help)
+		      (debug:print 0 *default-log-port* "ERROR: You must specify :state and :status with every call to -test-status\n" help)
 		      (if (sqlite3:database? db)(sqlite3:finalize! db))
 		      (exit 6)))
 		(let* ((msg    (args:get-arg "-m"))
@@ -1785,16 +1785,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (keys #f))
       (if (not (launch:setup))
 	  (begin
-	    (debug:print 0 #f "Failed to setup, exiting")
+	    (debug:print 0 *default-log-port* "Failed to setup, exiting")
 	    (exit 1)))
       (set! keys (rmt:get-keys)) ;;  db))
-      (debug:print 1 #f "Keys: " (string-intersperse keys ", "))
+      (debug:print 1 *default-log-port* "Keys: " (string-intersperse keys ", "))
       (if (sqlite3:database? db)(sqlite3:finalize! db))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-gui")
     (begin
-      (debug:print 0 #f "Look at the dashboard for now")
+      (debug:print 0 *default-log-port* "Look at the dashboard for now")
       ;; (megatest-gui)
       (set! *didsomething* #t)))
 
@@ -1816,7 +1816,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (if (not (launch:setup))
 	  (begin
-	    (debug:print 0 #f "Failed to setup, exiting") 
+	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
       ;; keep this one local
       (open-run-close patch-db #f)
@@ -1826,7 +1826,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (if (not (launch:setup))
 	  (begin
-	    (debug:print 0 #f "Failed to setup, exiting") 
+	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
       (common:cleanup-db)
       (set! *didsomething* #t)))
@@ -1835,7 +1835,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (if (not (launch:setup))
 	  (begin
-	    (debug:print 0 #f "Failed to setup, exiting")
+	    (debug:print 0 *default-log-port* "Failed to setup, exiting")
 	    (exit 1)))
       (open-run-close db:find-and-mark-incomplete #f)
       (set! *didsomething* #t)))
@@ -1848,7 +1848,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (if (not (launch:setup))
 	  (begin
-	    (debug:print 0 #f "Failed to setup, exiting") 
+	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
       ;; now can find our db
       ;; keep this one local
@@ -1916,7 +1916,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (if (not (launch:setup))
 	  (begin
-	    (debug:print 0 #f "Failed to setup, exiting") 
+	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
       (operate-on 'run-wait)
       (set! *didsomething* #t)))
@@ -1977,7 +1977,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if *runremote* (close-all-connections!))
 
 (if (not *didsomething*)
-    (debug:print 0 #f help))
+    (debug:print 0 *default-log-port* help))
 
 (set! *time-to-exit* #t)
 (thread-join! *watchdog*)
@@ -1985,7 +1985,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (not (eq? *globalexitstatus* 0))
     (if (or (args:get-arg "-run")(args:get-arg "-runtests")(args:get-arg "-runall"))
         (begin
-           (debug:print 0 #f "NOTE: Subprocesses with non-zero exit code detected: " *globalexitstatus*)
+           (debug:print 0 *default-log-port* "NOTE: Subprocesses with non-zero exit code detected: " *globalexitstatus*)
            (exit 0))
         (case *globalexitstatus*
          ((0)(exit 0))

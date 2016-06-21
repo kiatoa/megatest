@@ -36,9 +36,9 @@
   (if (and (string? val)(string? key))
       (handle-exceptions
        exn
-       (debug:print 0 #f "ERROR: bad value for setenv, key=" key ", value=" val)
+       (debug:print 0 *default-log-port* "ERROR: bad value for setenv, key=" key ", value=" val)
        (setenv key val))
-      (debug:print 0 #f "ERROR: bad value for setenv, key=" key ", value=" val)))
+      (debug:print 0 *default-log-port* "ERROR: bad value for setenv, key=" key ", value=" val)))
 
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
@@ -60,6 +60,7 @@
 (define *write-frequency*   (make-hash-table)) ;; run-id => (vector (current-seconds) 0))
 (define *alt-log-file* #f)  ;; used by -log
 (define *common:denoise*    (make-hash-table)) ;; for low noise printing
+(define *default-log-port*  (current-error-port))
 
 ;; DATABASE
 (define *dbstruct-db*  #f)
@@ -171,24 +172,24 @@
 (define (common:exit-on-version-changed)
   (if (common:version-changed?)
       (let ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config")))
-        (debug:print 0 #f
+        (debug:print 0 *default-log-port*
 		     "ERROR: Version mismatch!\n"
 		     "   expected: " (common:version-signature) "\n"
 		     "   got:      " (common:get-last-run-version))
 	(if (and (file-exists? mtconf)
 		 (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
 	    (begin
-	      (debug:print 0 #f "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
+	      (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
 	      (handle-exceptions
 	       exn
 	       (begin
-		 (debug:print 0 #f "Failed to switch versions.")
-		 (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
+		 (debug:print 0 *default-log-port* "Failed to switch versions.")
+		 (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 		 (print-call-chain (current-error-port))
 		 (exit 1))
 	       (common:cleanup-db)))
 	    (begin
-	      (debug:print 0 #f " to switch versions you can run: \"megatest -cleanup-db\"")
+	      (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
 	      (exit 1))))))
 
 ;;======================================================================
@@ -275,7 +276,7 @@
    (handle-exceptions
     exn
     (begin
-      (debug:print 0 #f "ERROR: received bad encoded string \"" instr "\", message: " ((condition-property-accessor 'exn 'message) exn))
+      (debug:print 0 *default-log-port* "ERROR: received bad encoded string \"" instr "\", message: " ((condition-property-accessor 'exn 'message) exn))
       (print-call-chain (current-error-port))
       #f)
     (read (open-input-string (base64:base64-decode instr))))
@@ -402,11 +403,11 @@
 					  (sqlite3:finalize! db #t)
 					  (vector-set! *task-db* 0 #f)))))) "Cleanup db exit thread"))
 	  (th2 (make-thread (lambda ()
-			      (debug:print 4 #f "Attempting clean exit. Please be patient and wait a few seconds...")
+			      (debug:print 4 *default-log-port* "Attempting clean exit. Please be patient and wait a few seconds...")
 			      (if no-hurry
 				  (thread-sleep! 5) ;; give the clean up few seconds to do it's stuff
 				  (thread-sleep! 2))
-			      (debug:print 4 #f " ... done")
+			      (debug:print 4 *default-log-port* " ... done")
 			      )
 			    "clean exit")))
       (thread-start! th1)
@@ -416,7 +417,7 @@
 (define (std-signal-handler signum)
   ;; (signal-mask! signum)
   (set! *time-to-exit* #t)
-  (debug:print 0 #f "ERROR: Received signal " signum " exiting promptly")
+  (debug:print 0 *default-log-port* "ERROR: Received signal " signum " exiting promptly")
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))
 
@@ -567,7 +568,7 @@
 	    target)
 	(if target
 	    (begin
-	      (debug:print 0 #f "ERROR: Invalid target, spaces or blanks not allowed \"" target "\", target should be: " (string-intersperse keys "/") ", have " tlist " for elements")
+	      (debug:print 0 *default-log-port* "ERROR: Invalid target, spaces or blanks not allowed \"" target "\", target should be: " (string-intersperse keys "/") ", have " tlist " for elements")
 	      #f)
 	    #f))))
 
@@ -672,7 +673,7 @@
   (handle-exceptions
       exn
       (begin
-	(debug:print 0 #f "ERROR: command \"/bin/readlink -f " path "\" failed.")
+	(debug:print 0 *default-log-port* "ERROR: command \"/bin/readlink -f " path "\" failed.")
 	path) ;; just give up
     (with-input-from-pipe
 	(conc "/bin/readlink -f " path)
@@ -822,7 +823,7 @@
 	 (dbdir    (cadddr spacedat)))
     (if (not is-ok)
 	(begin
-	  (debug:print 0 #f "ERROR: Insufficient space in " dbdir ", require " required ", have " dbspace  ", exiting now.")
+	  (debug:print 0 *default-log-port* "ERROR: Insufficient space in " dbdir ", require " required ", have " dbspace  ", exiting now.")
 	  (exit 1)))))
   
 ;; paths is list of lists ((name path) ... )
@@ -836,15 +837,15 @@
 	      (freespc    (cond
 			   ((not (directory? dirpath))
 			    (if (common:low-noise-print 300 "disks not a dir " disk-num)
-				(debug:print 0 #f "WARNING: disk " disk-num " at path \"" dirpath "\" is not a directory - ignoring it."))
+				(debug:print 0 *default-log-port* "WARNING: disk " disk-num " at path \"" dirpath "\" is not a directory - ignoring it."))
 			    -1)
 			   ((not (file-write-access? dirpath))
 			    (if (common:low-noise-print 300 "disks not writeable " disk-num)
-				(debug:print 0 #f "WARNING: disk " disk-num " at path \"" dirpath "\" is not writeable - ignoring it."))
+				(debug:print 0 *default-log-port* "WARNING: disk " disk-num " at path \"" dirpath "\" is not writeable - ignoring it."))
 			    -1)
 			   ((not (eq? (string-ref dirpath 0) #\/))
 			    (if (common:low-noise-print 300 "disks not a proper path " disk-num)
-				(debug:print 0 #f "WARNING: disk " disk-num " at path \"" dirpath "\" is not a fully qualified path - ignoring it."))
+				(debug:print 0 *default-log-port* "WARNING: disk " disk-num " at path \"" dirpath "\" is not a fully qualified path - ignoring it."))
 			    -1)
 			   (else
 			    (get-df dirpath)))))

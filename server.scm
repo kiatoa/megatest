@@ -54,8 +54,8 @@
     ((http)(http-transport:launch run-id))
     ((nmsg)(nmsg-transport:launch run-id))
     ((rpc)  (rpc-transport:launch run-id))
-    (else (debug:print 0 #f "ERROR: unknown server type " *transport-type*))))
-;;       (else   (debug:print 0 #f "ERROR: No known transport set, transport=" transport ", using rpc")
+    (else (debug:print 0 *default-log-port* "ERROR: unknown server type " *transport-type*))))
+;;       (else   (debug:print 0 *default-log-port* "ERROR: No known transport set, transport=" transport ", using rpc")
 ;; 	      (rpc-transport:launch run-id)))))
 
 ;;======================================================================
@@ -97,7 +97,7 @@
        (send-message pub-socket (db:obj->string (vector success/fail query-sig result)))))
     ((fs)   result)
     (else 
-     (debug:print 0 #f "ERROR: unrecognised transport type: " *transport-type*)
+     (debug:print 0 *default-log-port* "ERROR: unrecognised transport type: " *transport-type*)
      result)))
 
 ;; Given a run id start a server process    ### NOTE ### > file 2>&1 
@@ -115,7 +115,7 @@
 									      (conc " -daemonize -log " logfile)
 									      "")
 		      " -m testsuite:" testsuite))) ;; (conc " >> " logfile " 2>&1 &")))))
-    (debug:print 0 #f "INFO: Starting server (" cmdln ") as none running ...")
+    (debug:print 0 *default-log-port* "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
     (if (not (directory-exists? "logs"))(create-directory "logs"))
     ;; Rotate logs, logic: 
@@ -213,7 +213,7 @@
 	   (server-db-dat (if (not host-port)(tasks:get-server (db:delay-if-busy tdbdat) run-id) #f)))
       (if (not run-id)
 	  (begin
-	    (debug:print 0 #f "ERROR: must specify run-id when doing ping, -run-id n")
+	    (debug:print 0 *default-log-port* "ERROR: must specify run-id when doing ping, -run-id n")
 	    (print "ERROR: No run-id")
 	    (exit 1))
 	  (if (and (not host-port)

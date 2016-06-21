@@ -426,7 +426,7 @@
 	 (request-update #t))
     (if (not testdat)
 	(begin
-	  (debug:print 2 #f "ERROR: No test data found for test " test-id ", exiting")
+	  (debug:print 2 *default-log-port* "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
 	(let* (;; (run-id        (if testdat (db:test-get-run_id testdat) #f))
 	       (test-registry (tests:get-all))
@@ -524,7 +524,7 @@
 				 (set! rundir       ;; (filedb:get-path *fdb* 
 				       (db:test-get-rundir testdat)) ;; )
 				 (set! testfullname (db:test-get-fullname testdat))
-				 ;; (debug:print 0 #f "INFO: teststeps=" (intersperse teststeps "\n    "))
+				 ;; (debug:print 0 *default-log-port* "INFO: teststeps=" (intersperse teststeps "\n    "))
 				 
 				 ;; I don't see why this was implemented this way. Please comment it ...
 				 ;; (if (eq? curr-mod-time db-mod-time) ;; do only once if same
