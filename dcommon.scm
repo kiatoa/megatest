@@ -320,7 +320,33 @@
 	  (if (null? tal)
 	      (reverse (cons newitem res))
 	      (loop (car tal)(cdr tal)(cons newitem res)))))))
-	  
+
+(define (dcommon:examine-xterm run-id test-id)
+  (let*
+      ((testdat (rmt:get-test-info-by-id run-id test-id)))
+       (if (not testdat)
+	(begin
+	  (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
+	  (exit 1))
+        (let*
+            ((rundir        (if testdat 
+				  (db:test-get-rundir testdat)
+				  logfile))
+             (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
+             (xterm      (lambda ()
+                           (if (directory-exists? rundir)
+                               (let* ((shell (if (get-environment-variable "SHELL") 
+                                                (conc "-e " (get-environment-variable "SHELL"))
+                                                ""))
+                                      (command (conc "cd " rundir 
+                                                     ";mt_xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
+                                 (print "Command =" command)
+                                 (common:without-vars
+                                  command
+                                  "MT_.*"))
+                               (message-window  (conc "Directory " rundir " not found"))))))
+          (xterm)
+          (print "Adding xterm code")))))
 
 ;;======================================================================
 ;; D A T A   T A B L E S
