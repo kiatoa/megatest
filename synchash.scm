@@ -73,7 +73,7 @@
      (lambda (item)
        (let ((id  (car item))
 	     (dat (cadr item)))
-	 ;; (debug:print-info 2 "Processing item: " item)
+	 ;; (debug:print-info 2 #f "Processing item: " item)
 	 (hash-table-set! myhash id dat)))
      newdat)
     (for-each
@@ -87,7 +87,7 @@
 (define *synchashes* (make-hash-table))
 
 (define (synchash:server-get dbstruct run-id proc synckey keynum params)
-  ;; (debug:print-info 2 "synckey: " synckey ", keynum: " keynum ", params: " params)
+  ;; (debug:print-info 2 #f "synckey: " synckey ", keynum: " keynum ", params: " params)
   (let* ((dbdat     (db:get-db dbstruct run-id))
 	 (db        (db:dbdat-get-db dbdat))
 	 (synchash  (hash-table-ref/default *synchashes* synckey #f))
@@ -105,16 +105,16 @@
     ;; Now process newdat based on the query type
     (set! postdat (case proc
 		    ((db:get-runs)
-		     ;; (debug:print-info 2 "Get runs call")
+		     ;; (debug:print-info 2 #f "Get runs call")
 		     (let ((header (vector-ref newdat 0))
 			   (data   (vector-ref newdat 1)))
-		       ;; (debug:print-info 2 "header: " header ", data: " data)
+		       ;; (debug:print-info 2 #f "header: " header ", data: " data)
 		       (cons (list "header" header)         ;; add the header keyed by the word "header"
 			     (map make-indexed data))))        ;; add each element keyed by the keynum'th val
 		    (else 
-		     ;; (debug:print-info 2 "Non-get runs call")
+		     ;; (debug:print-info 2 #f "Non-get runs call")
 		     (map make-indexed newdat))))
-    ;; (debug:print-info 2 "postdat: " postdat)
+    ;; (debug:print-info 2 #f "postdat: " postdat)
     ;; (if (not indb)(sqlite3:finalize! db))
     (if (not synchash)
 	(begin

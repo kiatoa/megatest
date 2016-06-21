@@ -24,12 +24,30 @@ test-path test-path-file.sh
 # verify that vars with $ signs get expanded
 varwithdollar eval_vars.sh
 
+emptyvars bash -c 'if [[ $VARNOVAL == "" ]];then echo HAVE_VARNOVAL;else echo "ERROR: VARNOVAL not found";fi'
+emptyvar_withspace bash -c 'if [[ $VARNOVAL_WITHSPACE == "" ]];then echo HAVE_VARNOVAL_WITHSPACE;else echo "ERROR: VARNOVAL_WITHSPACE not found";fi'
+emptyvar_megatest.sh egrep VARNO megatest.sh
+
 [requirements]
 waiton runfirst
 priority 0
 
 [items]
 NUMNUM [system cat $MT_RUN_AREA_HOME/tmp/$USER/$sysname/$fsname/$datapath/$MT_RUNNAME/$PREDICTABLE]
+
+[logpro]
+emptyvars ;;
+  (expect:error in "LogFileBody" = 0 "VARNOVAL not found" #/ERROR: VARNOVAL not found/)
+  (expect:required in "LogFileBody" = 1 "HAVE_VARNOVAL"   #/HAVE_VARNOVAL/)
+
+emptyvar_withspace ;;
+  (expect:error in "LogFileBody" = 0 "VARNOVAL_WITHSPACE not found" #/ERROR: VARNOVAL_WITHSPACE not found/)
+  (expect:required in "LogFileBody" = 1 "HAVE_VARNOVAL_WITHSPACE"   #/HAVE_VARNOVAL_WITHSPACE/)
+
+emptyvar_megatest.sh ;;
+  (expect:error in "LogFileBody" = 0 "No errors expected" #/ERR/i)
+  (expect:required in "LogFileBody" = 1 "VARNOVAL_WITHSPACE"  #/VARNOVAL_WITHSPACE/)
+  (expect:required in "LogFileBody" = 1 "VARNOVAL"            #/VARNOVAL/)
 
 [test_meta]
 author matt

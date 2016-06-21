@@ -10,7 +10,7 @@ SRCFILES = common.scm items.scm launch.scm \
            client.scm gutils.scm synchash.scm daemon.scm mt.scm dcommon.scm \
 	   tree.scm ezsteps.scm lock-queue.scm sdb.scm \
 	   rmt.scm api.scm tdb.scm \
-	   portlogger.scm archive.scm
+	   portlogger.scm archive.scm env.scm
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
@@ -62,7 +62,8 @@ db.o ezsteps.o keys.o launch.o megatest.o monitor.o runs-for-ref.o runs.o tests.
 tests.o tasks.o dashboard-tasks.o : task_records.scm
 runs.o : test_records.scm
 megatest.o : megatest-fossil-hash.scm
-client.scm common.scm configf.scm dashboard-guimonitor.scm dashboard-tests.scm dashboard.scm db.scm dcommon.scm ezsteps.scm fs-transport.scm http-transport.scm index-tree.scm items.scm keys.scm launch.scm megatest.scm monitor.scm mt.scm newdashboard.scm runconfig.scm runs.scm server.scm tdb.scm tests.scm tree.scm zmq-transport.scm : common_records.scm 
+client.scm common.scm configf.scm dashboard-guimonitor.scm dashboard-tests.scm dashboard.scm db.scm dcommon.scm ezsteps.scm fs-transport.scm http-transport.scm index-tree.scm items.scm keys.scm launch.scm megatest.scm monitor.scm mt.scm newdashboard.scm runconfig.scm runs.scm server.scm tdb.scm tests.scm tree.scm : common_records.scm rpc-transport.scm
+common_records.scm : altdb.scm
 
 # Temporary while transitioning to new routine
 # runs.o : run-tests-queue-classic.scm  run-tests-queue-new.scm
@@ -166,7 +167,7 @@ $(MTQA_FOSSIL) :
 	fossil clone https://www.kiatoa.com/fossils/megatest_qa $(MTQA_FOSSIL)
 
 clean : 
-	rm -f $(OFILES) $(GOFILES) megatest dboard dboard.o megatest.o dashboard.o
+	rm -f $(OFILES) $(GOFILES) megatest dboard dboard.o megatest.o dashboard.o megatest-fossil-hash.* altdb.scm
 
 # Deploy section (not complete yet)
 #
@@ -175,7 +176,7 @@ $(DEPLOYHELPERS) : utils/mt_*
 	chmod a+X $@
 
 deploytarg/apropos.so : Makefile
-	chicken-install -p deploytarg -deploy $(EGGS)
+	chicken-install -p deploytarg -deploy -keep-installed $(EGGS)
 
 #	for i in apropos base64 canvas-draw csv-xml directory-utils dot-locking extras fmt format hostinfo http-client intarweb json md5 message-digest posix posix-extras readline regex regex-case s11n spiffy spiffy-request-vars sqlite3 srfi-1 srfi-18 srfi-69 tcp test uri-common check-errors synch matchable sql-null tcp-server rpc blob-utils string-utils variable-item defstruct uri-generic sendfile opensll openssl lookup-table list-utils stack; do \
 #	chicken-install -prefix deploytarg -deploy $$i;done
@@ -205,16 +206,48 @@ deploytarg/dboard :  $(OFILES) $(GOFILES) dashboard.scm deploytarg/apropos.so
 datashare-testing/sd : datashare.scm $(OFILES)
 	csc datashare.scm $(OFILES) -o datashare-testing/sd
 
+datashare-testing/sdat: sharedat.scm $(OFILES)
+	csc sharedat.scm $(OFILES) -o datashare-testing/sdat
+
 sd : datashare-testing/sd
 	mkdir -p /tmp/$(USER)/datashare/disk1 /tmp/$(USER)/basepath
 
 xterm : sd
 	(export BASEPATH=/tmp/$(USER)/basepath ; export PATH="$(PWD)/datashare-testing:$(PATH)" ; xterm &)
 
+datashare-testing/spublish : spublish.scm $(OFILES)
+	csc spublish.scm $(OFILES) -o datashare-testing/spublish
+
+datashare-testing/sretrieve : sretrieve.scm megatest-version.o margs.o configf.o process.o 
+	csc sretrieve.scm megatest-version.o margs.o configf.o process.o -o datashare-testing/sretrieve
+
+sretrieve/sretrieve : datashare-testing/sretrieve
+	csc -deploy -deployed sretrieve.scm megatest-version.o margs.o configf.o
+	chicken-install -keep-installed $(PROXY) -deploy -prefix sretrieve defstruct srfi-18 format sql-de-lite \
+             srfi-1 posix regex regex-case srfi-69
+
+# base64 dot-locking \
+#             csv-xml z3
+
 #  "(define (toplevel-command . a) #f)"
+# if egrep 'version.*3.0' $(shell dirname $(shell dirname $(shell which csi)))/lib/chicken/7/readline.setup-info;then \
+
 readline-fix.scm :
-	if egrep 'version.*3.0' $(shell dirname $(shell dirname $(shell which csi)))/lib/chicken/7/readline.setup-info;then \
-           echo "(use-legacy-bindings)" > readline-fix.scm; \
+	if [[ $(shell chicken-status | grep readline | awk '{print $4}' | cut -d. -f1) -gt 3 ]];then \
+	   echo "(define *use-new-readline* #f)" > readline-fix.scm; \
 	else \
-	   echo "" > readline-fix.scm;\
+	   echo "(define *use-new-readline* #t)" > readline-fix.scm;\
 	fi
+
+altdb.scm :
+	echo ";; optional alternate db setup" > altdb.scm
+	echo "(define *available-db* (make-hash-table))" >> altdb.scm
+	if  csi -ne '(use mysql-client)';then \
+           echo "(use mysql-client)(hash-table-set! *available-db* 'mysql #t)" >> altdb.scm; \
+	fi
+	if csi -ne '(use postgresql)';then \
+	   echo "(use postgresql)(hash-table-set! *available-db* 'postgresql #t)" >> altdb.scm;\
+	fi
+
+portlogger-example : portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o nmsg-transport.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
+	csc portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o nmsg-transport.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o

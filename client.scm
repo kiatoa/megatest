@@ -66,13 +66,13 @@
 ;;     (else   (rpc:login-no-auto-client-setup server-info run-id))))
 ;; 
 ;; (define (client:setup-rpc run-id)
-;;   (debug:print 0 "INFO: client:setup remaining-tries=" remaining-tries)
+;;   (debug:print 0 #f "INFO: client:setup remaining-tries=" remaining-tries)
 ;;   (if (<= remaining-tries 0)
 ;;       (begin
-;; 	(debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
+;; 	(debug:print 0 #f "ERROR: failed to start or connect to server for run-id " run-id)
 ;; 	(exit 1))
 ;;       (let ((host-info (hash-table-ref/default *runremote* run-id #f)))
-;; 	(debug:print-info 0 "client:setup host-info=" host-info ", remaining-tries=" remaining-tries)
+;; 	(debug:print-info 0 #f "client:setup host-info=" host-info ", remaining-tries=" remaining-tries)
 ;; 	(if host-info
 ;; 	    (let* ((iface     (car  host-info))
 ;; 		   (port      (cadr host-info))
@@ -85,7 +85,7 @@
 ;; 		    start-res)  ;; return the server info
 ;; 		  (if (member remaining-tries '(3 4 6))
 ;; 		      (begin    ;; login failed
-;; 			(debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" host-info)
+;; 			(debug:print 25 #f "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" host-info)
 ;; 			(hash-table-delete! *runremote* run-id)
 ;; 			(open-run-close tasks:server-force-clean-run-record
 ;; 			 		tasks:open-db
@@ -96,12 +96,12 @@
 ;; 			(thread-sleep! 5)
 ;; 			(client:setup run-id remaining-tries: 10)) ;; (- remaining-tries 1)))
 ;; 		      (begin
-;; 			(debug:print 25 "INFO: client:setup failed to connect, start-res=" start-res ", run-id=" run-id ", host-info=" host-info)
+;; 			(debug:print 25 #f "INFO: client:setup failed to connect, start-res=" start-res ", run-id=" run-id ", host-info=" host-info)
 ;; 			(thread-sleep! 5)
 ;; 			(client:setup run-id remaining-tries: (- remaining-tries 1))))))
 ;; 	    ;; YUK: rename server-dat here
 ;; 	    (let* ((server-dat (open-run-close tasks:get-server tasks:open-db run-id)))
-;; 	      (debug:print-info 0 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
+;; 	      (debug:print-info 0 #f "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
 ;; 	      (if server-dat
 ;; 		  (let* ((iface     (tasks:hostinfo-get-interface server-dat))
 ;; 			 (port      (tasks:hostinfo-get-port      server-dat))
@@ -114,7 +114,7 @@
 ;; 			  start-res)
 ;; 			(if (member remaining-tries '(2 5))
 ;; 			    (begin    ;; login failed
-;; 			      (debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
+;; 			      (debug:print 25 #f "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
 ;; 			      (hash-table-delete! *runremote* run-id)
 ;; 			      (open-run-close tasks:server-force-clean-run-record
 ;; 					      tasks:open-db
@@ -127,7 +127,7 @@
 ;; 			      (thread-sleep! 10) ;; give server a little time to start up
 ;; 			      (client:setup run-id remaining-tries: 10)) ;; (- remaining-tries 1)))
 ;; 			    (begin
-;; 			      (debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
+;; 			      (debug:print 25 #f "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
 ;; 			      (thread-sleep! 5)
 ;; 			      (client:setup run-id remaining-tries: (- remaining-tries 1))))))
 ;; 		  (begin    ;; no server registered
@@ -137,7 +137,7 @@
 ;; 			  (client:setup run-id remaining-tries: 10))
 ;; 			(begin
 ;; 			  (thread-sleep! 2) 
-;; 			  (debug:print 25 "INFO: client:setup start-res (not defined here), run-id=" run-id ", server-dat=" server-dat)
+;; 			  (debug:print 25 #f "INFO: client:setup start-res (not defined here), run-id=" run-id ", server-dat=" server-dat)
 ;; 			  (if (< (open-run-close tasks:num-in-available-state tasks:open-db run-id) 3)
 ;; 			      (begin
 ;; 				;; (open-run-close tasks:server-clean-out-old-records-for-run-id tasks:open-db run-id " client:setup (server-dat=#f)")
@@ -158,7 +158,7 @@
 ;; lookup_server, need to remove *runremote* stuff
 ;;
 (define (client:setup-http run-id #!key (remaining-tries 10) (failed-connects 0))
-  (debug:print-info 2 "client:setup remaining-tries=" remaining-tries)
+  (debug:print-info 2 #f "client:setup remaining-tries=" remaining-tries)
   (let* ((tdbdat (tasks:open-db)))
     (if (<= remaining-tries 0)
 	(begin
@@ -218,10 +218,10 @@
   (let* ((tdbdat (tasks:open-db)))
     (if (<= remaining-tries 0)
 	(begin
-	  (debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
+	  (debug:print 0 #f "ERROR: failed to start or connect to server for run-id " run-id)
 	  (exit 1))
 	(let* ((server-dat (tasks:get-server (db:delay-if-busy tdbdat) run-id)))
-	  (debug:print-info 4 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
+	  (debug:print-info 4 #f "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
 	  (if server-dat
 	      (let* ((iface     (tasks:hostinfo-get-interface server-dat))
 		     (hostname  (tasks:hostinfo-get-hostname  server-dat))
@@ -239,10 +239,10 @@
 			 ping-res)
 		    (begin
 		      (hash-table-set! *runremote* run-id start-res)
-		      (debug:print-info 2 "connected to " (http-transport:server-dat-make-url start-res))
+		      (debug:print-info 2 #f "connected to " (http-transport:server-dat-make-url start-res))
 		      start-res)
 		    (begin    ;; login failed but have a server record, clean out the record and try again
-		      (debug:print-info 0 "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
+		      (debug:print-info 0 #f "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
 		      (case *transport-type* 
 			((http)(http-transport:close-connections run-id)))
 		      (hash-table-delete! *runremote* run-id)
@@ -261,7 +261,7 @@
 		      )))
 	      (begin    ;; no server registered
 		(let ((num-available (tasks:num-in-available-state (db:dbdat-get-db tdbdat) run-id)))
-		  (debug:print-info 0 "client:setup, no server registered, remaining-tries=" remaining-tries " num-available=" num-available)
+		  (debug:print-info 0 #f "client:setup, no server registered, remaining-tries=" remaining-tries " num-available=" num-available)
 		  (if (< num-available 2)
 		      (server:try-running run-id))
 		  (thread-sleep! (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
@@ -278,14 +278,14 @@
 ;;   (set! *time-to-exit* #t)
 ;;   (handle-exceptions
 ;;    exn
-;;    (debug:print " ... exiting ...")
+;;    (debug:print 0 #f " ... exiting ...")
 ;;    (let ((th1 (make-thread (lambda ()
 ;; 			     "") ;; do nothing for now (was flush out last call if applicable)
 ;; 			   "eat response"))
 ;; 	 (th2 (make-thread (lambda ()
-;; 			     (debug:print 0 "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
+;; 			     (debug:print 0 #f "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
 ;; 			     (thread-sleep! 1) ;; give the flush one second to do it's stuff
-;; 			     (debug:print 0 "       Done.")
+;; 			     (debug:print 0 #f "       Done.")
 ;; 			     (exit 4))
 ;; 			   "exit on ^C timer")))
 ;;      (thread-start! th2)
@@ -300,8 +300,8 @@
 ;;   (set-signal-handler! signal/int  client:signal-handler)
 ;;   (set-signal-handler! signal/term client:signal-handler)
 ;;   (if (client:setup run-id)
-;;       (debug:print-info 2 "connected as client")
+;;       (debug:print-info 2 #f "connected as client")
 ;;       (begin
-;; 	(debug:print 0 "ERROR: Failed to connect as client")
+;; 	(debug:print 0 #f "ERROR: Failed to connect as client")
 ;; 	(exit))))
 ;; 

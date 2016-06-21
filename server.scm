@@ -54,8 +54,8 @@
     ((http)(http-transport:launch run-id))
     ((nmsg)(nmsg-transport:launch run-id))
     ;; ((rpc)  (rpc-transport:launch run-id))
-    (else (debug:print 0 "ERROR: unknown server type " *transport-type*))))
-;;       (else   (debug:print 0 "ERROR: No known transport set, transport=" transport ", using rpc")
+    (else (debug:print 0 #f "ERROR: unknown server type " *transport-type*))))
+;;       (else   (debug:print 0 #f "ERROR: No known transport set, transport=" transport ", using rpc")
 ;; 	      (rpc-transport:launch run-id)))))
 
 ;;======================================================================
@@ -85,7 +85,7 @@
 ;; with spiffy or rpc this simply returns the return data to be returned
 ;; 
 (define (server:reply return-addr query-sig success/fail result)
-  (debug:print-info 11 "server:reply return-addr=" return-addr ", result=" result)
+  (debug:print-info 11 #f "server:reply return-addr=" return-addr ", result=" result)
   ;; (send-message pubsock target send-more: #t)
   ;; (send-message pubsock 
   (case (server:get-transport)
@@ -97,7 +97,7 @@
        (send-message pub-socket (db:obj->string (vector success/fail query-sig result)))))
     ((fs)   result)
     (else 
-     (debug:print 0 "ERROR: unrecognised transport type: " *transport-type*)
+     (debug:print 0 #f "ERROR: unrecognised transport type: " *transport-type*)
      result)))
 
 ;; Given a run id start a server process    ### NOTE ### > file 2>&1 
@@ -114,10 +114,26 @@
 		      " -server " (or target-host "-") " -run-id " run-id (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
 									      (conc " -daemonize -log " logfile)
 									      "")
-		      " -debug 4 -m testsuite:" testsuite))) ;; (conc " >> " logfile " 2>&1 &")))))
-    (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
+		      " -m testsuite:" testsuite))) ;; (conc " >> " logfile " 2>&1 &")))))
+    (debug:print 0 #f "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
     (if (not (directory-exists? "logs"))(create-directory "logs"))
+    ;; Rotate logs, logic: 
+    ;;                 if > 500k and older than 1 week, remove previous compressed log and compress this log
+    (directory-fold 
+     (lambda (file rem)
+       (if (and (string-match "^.*.log" file)
+		(> (file-size (conc "logs/" file)) 200000))
+	   (let ((gzfile (conc "logs/" file ".gz")))
+	     (if (file-exists? gzfile)
+		 (begin
+		   (debug:print-info 0 #f "removing " gzfile)
+		   (delete-file gzfile)))
+	     (debug:print-info 0 #f "compressing " file)
+	     (system (conc "gzip logs/" file)))))
+     '()
+     "logs")
+    
     ;; host.domain.tld match host?
     (if (and target-host 
 	     ;; look at target host, is it host.domain.tld or ip address and does it 
@@ -125,9 +141,10 @@
 	     (not (string-match (conc "("curr-host "|" curr-host"\\..*)") target-host))
 	     (not (equal? curr-ip target-host)))
 	(begin
-	  (debug:print-info 0 "Starting server on " target-host ", logfile is " logfile)
+	  (debug:print-info 0 #f "Starting server on " target-host ", logfile is " logfile)
 	  (setenv "TARGETHOST" target-host)))
     (setenv "TARGETHOST_LOGF" logfile)
+    (common:wait-for-normalized-load 4 " delaying server start due to load") ;; do not try starting servers on an already overloaded machine, just wait forever
     (system (conc "nbfake " cmdln))
     (unsetenv "TARGETHOST_LOGF")
     (if (get-environment-variable "TARGETHOST")(unsetenv "TARGETHOST"))
@@ -178,7 +195,7 @@
 	  (if res
 	      #t
 	      (begin
-		(debug:print-info 0 "server at " server " not responding, removing record")
+		(debug:print-info 0 #f "server at " server " not responding, removing record")
 		(tasks:server-force-clean-running-records-for-run-id (db:delay-if-busy tdbdat) run-id 
 				" server:check-if-running")
 		res)))
@@ -192,11 +209,11 @@
 			(if (eq? (length slst) 2)
 			    (list (car slst)(string->number (cadr slst)))
 			    #f)))
-	   (toppath       (launch:setup-for-run))
+	   (toppath       (launch:setup))
 	   (server-db-dat (if (not host-port)(tasks:get-server (db:delay-if-busy tdbdat) run-id) #f)))
       (if (not run-id)
 	  (begin
-	    (debug:print 0 "ERROR: must specify run-id when doing ping, -run-id n")
+	    (debug:print 0 #f "ERROR: must specify run-id when doing ping, -run-id n")
 	    (print "ERROR: No run-id")
 	    (exit 1))
 	  (if (and (not host-port)
@@ -237,10 +254,10 @@
     (set! *last-db-access* (current-seconds))
     (if (equal? *toppath* toppath)
 	(begin
-	  ;; (debug:print-info 2 "login successful")
+	  ;; (debug:print-info 2 #f "login successful")
 	  #t)
 	(begin
-	  ;; (debug:print-info 2 "login failed")
+	  ;; (debug:print-info 2 #f "login failed")
 	  #f))))
 
 (define (server:get-timeout)

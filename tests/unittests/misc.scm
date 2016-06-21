@@ -4,8 +4,8 @@
 ;; P R O C E S S E S
 ;;======================================================================
 
-(test "cmd-run-with-stderr->list" '("No such file or directory")
-      (let ((reslst (cmd-run-with-stderr->list "ls" "/tmp/ihadbetternotexist")))
+(test "process:cmd-run-with-stderr->list" '("No such file or directory")
+      (let ((reslst (process:cmd-run-with-stderr->list "ls" "/tmp/ihadbetternotexist")))
 	(string-search (regexp "No such file or directory")(car reslst))))
 
 ;;======================================================================

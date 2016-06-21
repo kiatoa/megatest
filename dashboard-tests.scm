@@ -196,12 +196,12 @@
 			  (iup:label val ; #:expand "HORIZONTAL"
 				     ))
 			(list "Hostname: "
-			      "Uname -a: "
 			      "Disk free: "
 			      "CPU Load: "
 			      "Run duration: "
 			      "Logfile: "
-			      "Top process id: "))
+			      "Top process id: "
+			      "Uname -a: "))
 		   (iup:label "" #:expand "VERTICAL")))
     (apply iup:vbox ; #:expand "YES"
 	   (list
@@ -237,7 +237,7 @@
 (define (submegatest-panel dbstruct keydat testdat runname testconfig)
   (let* ((subarea (configf:lookup testconfig "setup" "submegatest"))
 	 (area-exists (and subarea (file-exists? subarea))))
-    (debug:print-info 0 "Megatest subarea=" subarea ", area-exists=" area-exists)
+    ;; (debug:print-info 0 #f "Megatest subarea=" subarea ", area-exists=" area-exists)
     (if subarea
 	(iup:frame 
 	 #:title "Megatest Run Info" ; #:expand "YES"
@@ -420,18 +420,18 @@
   (let* ((db-path       (db:dbfile-path run-id)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/db/" run-id ".db"))
 	 (dbstruct      (make-dbr:dbstruct path:  (db:dbfile-path #f) ;; (configf:lookup *configdat* "setup" "linktree") 
 					   local: #t))
-	 (testdat       (db:get-test-info-by-id dbstruct run-id test-id))
+	 (testdat        (rmt:get-test-info-by-id run-id test-id)) ;; (db:get-test-info-by-id dbstruct run-id test-id))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
 	 (last-update   0) ;; (current-seconds))
 	 (request-update #t))
     (if (not testdat)
 	(begin
-	  (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
+	  (debug:print 2 #f "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
 	(let* (;; (run-id        (if testdat (db:test-get-run_id testdat) #f))
 	       (test-registry (tests:get-all))
-	       (keydat        (if testdat (db:get-key-val-pairs dbstruct run-id) #f))
-	       (rundat        (if testdat (db:get-run-info dbstruct run-id) #f))
+	       (keydat        (if testdat (rmt:get-key-val-pairs run-id) #f))
+	       (rundat        (if testdat (rmt:get-run-info run-id) #f))
 	       (runname       (if testdat (db:get-value-by-header (db:get-rows rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
@@ -443,12 +443,12 @@
 				  (db:test-get-rundir testdat)
 				  logfile))
 	       ;; (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
-	       (teststeps     (if testdat (tests:get-compressed-steps dbstruct run-id test-id) '()))
+	       (teststeps     (if testdat (tests:get-compressed-steps run-id test-id) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       ;; (tests:get-testconfig testdat testname 'return-procs))
 	       (testmeta      (if testdat 
-				  (let ((tm (db:testmeta-get-record dbstruct testname)))
+				  (let ((tm (rmt:testmeta-get-record testname)))
 				    (if tm tm (make-db:testmeta)))
 				  (make-db:testmeta)))
 
@@ -473,7 +473,7 @@
 				(runs:set-megatest-env-vars run-id inkeyvals: keydat inrunname: runname intarget: keystring testname: testname itempath: item-path) ;; these may be needed by the launching process
 				(handle-exceptions
 				 exn
-				 #f
+				 (tests:get-testconfig (db:test-get-testname testdat) test-registry #f)
 				 (tests:get-testconfig (db:test-get-testname testdat) test-registry #t))))
 	       (viewlog    (lambda (x)
 			     (if (file-exists? logfile)
@@ -513,18 +513,18 @@
 						    ;; NOTE: BUG HIDER, try to eliminate this exception handler
 						    (handle-exceptions
 						     exn 
-						     (debug:print-info 0 "test db access issue in examine test for run-id " run-id ", test-id " test-id ": " ((condition-property-accessor 'exn 'message) exn))
-						     (db:get-test-info-by-id dbstruct run-id test-id )))))
-			       ;; (debug:print-info 0 "need-update= " need-update " curr-mod-time = " curr-mod-time)
+						     (debug:print-info 0 #f "test db access issue in examine test for run-id " run-id ", test-id " test-id ": " ((condition-property-accessor 'exn 'message) exn))
+						     (rmt:get-test-info-by-id run-id test-id )))))
+			       ;; (debug:print-info 0 #f "need-update= " need-update " curr-mod-time = " curr-mod-time)
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (tests:get-compressed-steps dbstruct run-id test-id))
+				 (set! teststeps    (tests:get-compressed-steps run-id test-id))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 				 (set! rundir       ;; (filedb:get-path *fdb* 
 				       (db:test-get-rundir testdat)) ;; )
 				 (set! testfullname (db:test-get-fullname testdat))
-				 ;; (debug:print 0 "INFO: teststeps=" (intersperse teststeps "\n    "))
+				 ;; (debug:print 0 #f "INFO: teststeps=" (intersperse teststeps "\n    "))
 				 
 				 ;; I don't see why this was implemented this way. Please comment it ...
 				 ;; (if (eq? curr-mod-time db-mod-time) ;; do only once if same
@@ -581,7 +581,7 @@
 				      (fullcmd (conc (dtests:get-pre-command)
 						     cmd 
 						     (dtests:get-post-command))))
-				 (debug:print-info 02 "Running command: " fullcmd)
+				 (debug:print-info 02 #f "Running command: " fullcmd)
 				 (common:without-vars fullcmd "MT_.*"))))
 	       (command-text-box (iup:textbox
 				  #:expand "HORIZONTAL"
@@ -598,7 +598,7 @@
 	;; 								       (fullcmd (conc (dtests:get-pre-command)
 	;; 										      cmd 
 	;; 										      (dtests:get-post-command))))
-	;; 								  (debug:print-info 02 "Running command: " fullcmd)
+	;; 								  (debug:print-info 02 #f "Running command: " fullcmd)
 	;; 								  (common:without-vars fullcmd "MT_.*")))))
 	       (kill-jobs (lambda (x)
 			    (iup:attribute-set! 
@@ -613,6 +613,7 @@
 				   " -run -testpatt " (conc testname "/" (if (equal? item-path "")
 									"%" 
 									item-path))
+				   " -clean-cache"
 				   ))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
@@ -631,6 +632,7 @@
 						      " -run -preclean -testpatt " (conc testname "/" (if (equal? item-path "")
 											   "%" 
 											   item-path))
+						      " -clean-cache"
 						      )))
 				       (common:without-vars
 					(conc (dtests:get-pre-command)
@@ -693,9 +695,9 @@
 							    #:font   "Courier New, -8"
 							    #:expand "YES"
 							    #:scrollbar "YES"
-							    #:numcol 6
-							    #:numlin 30
-							    #:numcol-visible 6
+							    #:numcol 7
+							    #:numlin 100
+							    #:numcol-visible 7
 							    #:numlin-visible 5
 							    #:click-cb (lambda (obj lin col status)
 									 ;; (if (equal? col 6)
@@ -720,6 +722,7 @@
 					 (iup:attribute-set! steps-matrix "WIDTH4" "50")
 					 (iup:attribute-set! steps-matrix "0:5" "Duration")
 					 (iup:attribute-set! steps-matrix "0:6" "Log File")
+					 (iup:attribute-set! steps-matrix "0:7" "Comment")
 					 (iup:attribute-set! steps-matrix "ALIGNMENT1" "ALEFT")
 					 ;; (iup:attribute-set! steps-matrix "FIXTOTEXT" "C1")
 					 (iup:attribute-set! steps-matrix "RESIZEMATRIX" "YES")
@@ -742,7 +745,7 @@
 					  (hash-table-set! widgets "Test Data"
 							   (lambda (testdat) ;; 
 							     (let* ((currval (iup:attribute test-data "VALUE")) ;; "TITLE"))
-								    (fmtstr  "~10a~10a~10a~10a~7a~7a~6a~6a~a") ;; category,variable,value,expected,tol,units,type,comment
+								    (fmtstr  "~10a~10a~10a~10a~7a~7a~6a~7a~a") ;; category,variable,value,expected,tol,units,type,comment
 								    (newval  (string-intersperse 
 									      (append
 									       (list 
@@ -759,7 +762,7 @@
 											      (db:test-data-get-units    x)
 											      (db:test-data-get-type     x)
 											      (db:test-data-get-comment  x)))
-										    (db:read-test-data dbstruct run-id test-id "%")))
+										    (rmt:read-test-data run-id test-id "%")))
 									      "\n")))
 							       (if (not (equal? currval newval))
 								   (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))

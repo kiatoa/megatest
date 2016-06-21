@@ -36,19 +36,23 @@
   (if (and (string? val)(string? key))
       (handle-exceptions
        exn
-       (debug:print 0 "ERROR: bad value for setenv, key=" key ", value=" val)
+       (debug:print 0 #f "ERROR: bad value for setenv, key=" key ", value=" val)
        (setenv key val))
-      (debug:print 0 "ERROR: bad value for setenv, key=" key ", value=" val)))
+      (debug:print 0 #f "ERROR: bad value for setenv, key=" key ", value=" val)))
 
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
 
 ;; GLOBAL GLETCHES
 (define *db-keys* #f)
-(define *configinfo* #f)
-(define *configdat*  #f)
-(define *toppath*    #f)
+
+(define *configinfo*   #f)   ;; raw results from setup, includes toppath and table from megatest.config
+(define *runconfigdat* #f)   ;; run configs data
+(define *configdat*    #f)   ;; megatest.config data
+(define *configstatus* #f)   ;; status of data; 'fulldata : all processing done, #f : no data yet, 'partialdata : partial read done
+(define *toppath*      #f)
 (define *already-seen-runconfig-info* #f)
+
 (define *waiting-queue*     (make-hash-table))
 (define *test-meta-updated* (make-hash-table))
 (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
@@ -129,6 +133,92 @@
 (define *fdb* #f)
 
 ;;======================================================================
+;; V E R S I O N
+;;======================================================================
+
+(define (common:get-full-version)
+  (conc megatest-version "-" megatest-fossil-hash))
+
+(define (common:version-signature)
+  (conc megatest-version "-" (substring megatest-fossil-hash 0 4)))
+
+;; from metadat lookup MEGATEST_VERSION
+;;
+(define (common:get-last-run-version)
+  (rmt:get-var "MEGATEST_VERSION"))
+
+(define (common:set-last-run-version)
+  (rmt:set-var "MEGATEST_VERSION" (common:version-signature)))
+
+(define (common:version-changed?)
+  (not (equal? (common:get-last-run-version)
+	       (common:version-signature))))
+
+;; Move me elsewhere ...
+;;
+(define (common:cleanup-db)
+  (db:multi-db-sync 
+   #f ;; do all run-ids
+   ;; 'new2old
+   'killservers
+   'dejunk
+   ;; 'adj-testids
+   ;; 'old2new
+   'new2old)
+  (if (common:version-changed?)
+      (common:set-last-run-version)))
+
+(define (common:exit-on-version-changed)
+  (if (common:version-changed?)
+      (let ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config")))
+        (debug:print 0 #f
+		     "ERROR: Version mismatch!\n"
+		     "   expected: " (common:version-signature) "\n"
+		     "   got:      " (common:get-last-run-version))
+	(if (and (file-exists? mtconf)
+		 (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
+	    (begin
+	      (debug:print 0 #f "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
+	      (handle-exceptions
+	       exn
+	       (begin
+		 (debug:print 0 #f "Failed to switch versions.")
+		 (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
+		 (print-call-chain (current-error-port))
+		 (exit 1))
+	       (common:cleanup-db)))
+	    (begin
+	      (debug:print 0 #f " to switch versions you can run: \"megatest -cleanup-db\"")
+	      (exit 1))))))
+
+;;======================================================================
+;; S P A R S E   A R R A Y S
+;;======================================================================
+
+(define (make-sparse-array)
+  (let ((a (make-sparse-vector)))
+    (sparse-vector-set! a 0 (make-sparse-vector))
+    a))
+
+(define (sparse-array? a)
+  (and (sparse-vector? a)
+       (sparse-vector? (sparse-vector-ref a 0))))
+
+(define (sparse-array-ref a x y)
+  (let ((row (sparse-vector-ref a x)))
+    (if row
+	(sparse-vector-ref row y)
+	#f)))
+
+(define (sparse-array-set! a x y val)
+  (let ((row (sparse-vector-ref a x)))
+    (if row
+	(sparse-vector-set! row y val)
+	(let ((new-row (make-sparse-vector)))
+	  (sparse-vector-set! a x new-row)
+	  (sparse-vector-set! new-row y val)))))
+
+;;======================================================================
 ;; L O C K E R S   A N D   B L O C K E R S 
 ;;======================================================================
 
@@ -149,6 +239,23 @@
 ;; U S E F U L   S T U F F
 ;;======================================================================
 
+;; convert things to an alist or assoc list, #f gets converted to ""
+;;
+(define (common:to-alist dat)
+  (cond
+   ((list? dat)   (map common:to-alist dat))
+   ((vector? dat)
+    (map common:to-alist (vector->list dat)))
+   ((pair? dat)
+    (cons (common:to-alist (car dat))
+	  (common:to-alist (cdr dat))))
+   ((hash-table? dat)
+    (map common:to-alist (hash-table->alist dat)))
+   (else
+    (if dat
+	dat
+	""))))
+
 (define (common:low-noise-print waitval . keys)
   (let* ((key      (string-intersperse (map conc keys) "-" ))
 	 (lasttime (hash-table-ref/default *common:denoise* key 0))
@@ -168,7 +275,7 @@
    (handle-exceptions
     exn
     (begin
-      (debug:print 0 "ERROR: received bad encoded string \"" instr "\", message: " ((condition-property-accessor 'exn 'message) exn))
+      (debug:print 0 #f "ERROR: received bad encoded string \"" instr "\", message: " ((condition-property-accessor 'exn 'message) exn))
       (print-call-chain (current-error-port))
       #f)
     (read (open-input-string (base64:base64-decode instr))))
@@ -190,9 +297,11 @@
 	  (lambda ()
 	    (print key-string)))
 	(thread-sleep! 0.25)
-	(with-input-from-file fname
-	  (lambda ()
-	    (equal? key-string (read-line)))))))
+	(if (file-exists? fname)
+	    (with-input-from-file fname
+	      (lambda ()
+		(equal? key-string (read-line))))
+	    #f))))
 	
 (define (common:simple-file-release-lock fname)
   (delete-file* fname))
@@ -254,9 +363,9 @@
 (define (common:legacy-sync-recommended)
   (or (args:get-arg "-runtests")
       (args:get-arg "-server")
-      (args:get-arg "-set-run-status")
+      ;; (args:get-arg "-set-run-status")
       (args:get-arg "-remove-runs")
-      (args:get-arg "-get-run-status")
+      ;; (args:get-arg "-get-run-status")
       ))
 
 (define (common:legacy-sync-required)
@@ -268,13 +377,14 @@
 		       (begin
 			 (set! *time-to-exit* #t)
 			 #t))))
-    (debug:print-info 4 "starting exit process, finalizing databases.")
+    (debug:print-info 4 #f "starting exit process, finalizing databases.")
     (if (and no-hurry (debug:debug-mode 18))
 	(rmt:print-db-stats))
     (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
 			      (let ((run-ids (hash-table-keys *db-local-sync*)))
 				(if (and (not (null? run-ids))
-					 (configf:lookup *configdat* "setup" "megatest-db"))
+					 (or (common:legacy-sync-recommended)
+					     (configf:lookup *configdat* "setup" "megatest-db")))
 				    (if no-hurry (db:multi-db-sync run-ids 'new2old))))
 			      (if *dbstruct-db* (db:close-all *dbstruct-db*))
 			      (if *inmemdb*     (db:close-all *inmemdb*))
@@ -292,11 +402,11 @@
 					  (sqlite3:finalize! db #t)
 					  (vector-set! *task-db* 0 #f)))))) "Cleanup db exit thread"))
 	  (th2 (make-thread (lambda ()
-			      (debug:print 4 "Attempting clean exit. Please be patient and wait a few seconds...")
+			      (debug:print 4 #f "Attempting clean exit. Please be patient and wait a few seconds...")
 			      (if no-hurry
 				  (thread-sleep! 5) ;; give the clean up few seconds to do it's stuff
 				  (thread-sleep! 2))
-			      (debug:print 4 " ... done")
+			      (debug:print 4 #f " ... done")
 			      )
 			    "clean exit")))
       (thread-start! th1)
@@ -306,13 +416,13 @@
 (define (std-signal-handler signum)
   ;; (signal-mask! signum)
   (set! *time-to-exit* #t)
-  (debug:print 0 "ERROR: Received signal " signum " exiting promptly")
+  (debug:print 0 #f "ERROR: Received signal " signum " exiting promptly")
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))
 
 (set-signal-handler! signal/int  std-signal-handler)  ;; ^C
 (set-signal-handler! signal/term std-signal-handler)
-(set-signal-handler! signal/stop std-signal-handler)  ;; ^Z
+;; (set-signal-handler! signal/stop std-signal-handler)  ;; ^Z NO, do NOT handle ^Z!
 
 ;;======================================================================
 ;; M I S C   U T I L S
@@ -340,9 +450,6 @@
 	      parts)
     time-secs))
 		       
-(define (common:version-signature)
-  (conc megatest-version "-" (substring megatest-fossil-hash 0 4)))
-
 ;; one-of args defined
 (define (args-defined? . param)
   (let ((res #f))
@@ -365,13 +472,13 @@
     (if num num val)))
 
 (define (patt-list-match item patts)
-  (debug:print-info 8 "patt-list-match item=" item " patts=" patts)
+  (debug:print-info 8 #f "patt-list-match item=" item " patts=" patts)
   (if (and item patts)  ;; here we are filtering for matches with item patterns
       (let ((res #f))   ;; look through all the item-patts if defined, format is patt1,patt2,patt3 ... wildcard is %
 	(for-each 
 	 (lambda (patt)
 	   (let ((modpatt (string-substitute "%" ".*" patt #t)))
-	     (debug:print-info 10 "patt " patt " modpatt " modpatt)
+	     (debug:print-info 10 #f "patt " patt " modpatt " modpatt)
 	     (if (string-match (regexp modpatt) item)
 		 (set! res #t))))
 	 (string-split patts ","))
@@ -380,11 +487,18 @@
 
 ;; (map print (map car (hash-table->alist (read-config "runconfigs.config" #f #t))))
 (define (common:get-runconfig-targets #!key (configf #f))
-  (sort (map car (hash-table->alist
-		  (or configf
-		      (read-config "runconfigs.config"
-			       #f #t))))
-	string<?))
+  (let ((targs       (sort (map car (hash-table->alist
+				     (or configf
+					 (read-config (conc *toppath* "/runconfigs.config")
+						      #f #t)
+					 (make-hash-table))))
+			   string<?))
+	(target-patt (args:get-arg "-target")))
+    (if target-patt
+	(filter (lambda (x)
+		  (patt-list-match x target-patt))
+		targs)
+	targs)))
 
 ;; '(print (string-intersperse (map cadr (hash-table-ref/default (read-config "megatest.config" \#f \#t) "disks" '"'"'("none" ""))) "\n"))'
 (define (common:get-disks #!key (configf #f))
@@ -396,6 +510,14 @@
 ;; T A R G E T S  ,   S T A T E ,   S T A T U S ,   
 ;;                    R U N N A M E    A N D   T E S T P A T T
 ;;======================================================================
+
+;; Lookup a value in runconfigs based on -reqtarg or -target
+(define (runconfigs-get config var)
+  (let ((targ (common:args-get-target))) ;; (or (args:get-arg "-reqtarg")(args:get-arg "-target")(getenv "MT_TARGET"))))
+    (if targ
+	(or (configf:lookup config targ var)
+	    (configf:lookup config "default" var))
+	(configf:lookup config "default" var))))
 
 (define (common:args-get-state)
   (or (args:get-arg "-state")(args:get-arg ":state")))
@@ -411,26 +533,33 @@
 	 (testpatt    (or (and (equal? args-testpatt "%")
 			       rtestpatt)
 			  args-testpatt)))
-    (if rtestpatt (debug:print-info 0 "TESTPATT from runconfigs: " rtestpatt))
+    (if rtestpatt (debug:print-info 0 #f "TESTPATT from runconfigs: " rtestpatt))
     testpatt))
 
+(define (common:get-linktree)
+  (or (getenv "MT_LINKTREE")
+      (if *configdat*
+	  (configf:lookup *configdat* "setup" "linktree"))))
+
 (define (common:args-get-runname)
-  (or (args:get-arg "-runname")
-      (args:get-arg ":runname")))
+  (let ((res (or (args:get-arg "-runname")
+		 (args:get-arg ":runname")
+		 (getenv "MT_RUNNAME"))))
+    ;; (if res (set-environment-variable "MT_RUNNAME" res)) ;; not sure if this is a good idea. side effect and all ...
+    res))
 
 (define (common:args-get-target #!key (split #f))
-  (let* ((keys    (keys:config-get-fields *configdat*))
+  (let* ((keys    (if (hash-table? *configdat*) (keys:config-get-fields *configdat*) '()))
 	 (numkeys (length keys))
-	 (target  (if (args:get-arg "-reqtarg")
-		      (args:get-arg "-reqtarg")
-		      (if (args:get-arg "-target")
-			  (args:get-arg "-target")
-			  (getenv "MT_TARGET"))))
+	 (target  (or (args:get-arg "-reqtarg")
+		      (args:get-arg "-target")
+		      (getenv "MT_TARGET")))
 	 (tlist   (if target (string-split target "/" #t) '()))
 	 (valid   (if target
-		      (and (not (null? tlist))
-			   (eq? numkeys (length tlist))
-			   (null? (filter string-null? tlist)))
+		      (or (null? keys) ;; probably don't know our keys yet
+			  (and (not (null? tlist))
+			       (eq? numkeys (length tlist))
+			       (null? (filter string-null? tlist))))
 		      #f)))
     (if valid
 	(if split
@@ -438,7 +567,7 @@
 	    target)
 	(if target
 	    (begin
-	      (debug:print 0 "ERROR: Invalid target, spaces or blanks not allowed \"" target "\", target should be: " (string-intersperse keys "/"))
+	      (debug:print 0 #f "ERROR: Invalid target, spaces or blanks not allowed \"" target "\", target should be: " (string-intersperse keys "/") ", have " tlist " for elements")
 	      #f)
 	    #f))))
 
@@ -481,7 +610,7 @@
 
 
 ;;======================================================================
-;; Munge data into nice forms
+;; M U N G E   D A T A   I N T O   N I C E   F O R M S
 ;;======================================================================
 
 ;; Generate an index for a sparse list of key values
@@ -511,7 +640,7 @@
 	       (curr-colnum     (if existing-coldat colnum (+ colnum 1)))
 	       (new-rownames    (if existing-rowdat rownames (cons (list rowkey curr-rownum) rownames)))
 	       (new-colnames    (if existing-coldat colnames (cons (list colkey curr-colnum) colnames))))
-	  ;; (debug:print-info 0 "Processing record: " hed )
+	  ;; (debug:print-info 0 #f "Processing record: " hed )
 	  (if proc (proc curr-rownum curr-colnum rowkey colkey value))
 	  (if (null? tal)
 	      (list new-rownames new-colnames)
@@ -524,18 +653,35 @@
 		    ))))))
 
 ;;======================================================================
-;; System stuff
+;; S Y S T E M   S T U F F
 ;;======================================================================
 
 ;; return a nice clean pathname made absolute
-(define (nice-path dir)
-  (normalize-pathname (if (absolute-pathname? dir)
-			  dir
-			  (conc (current-directory) "/" dir))))
+(define (common:nice-path dir)
+  (let ((match (string-match "^(~[^\\/]*)(\\/.*|)$" dir)))
+    (if match ;; using ~ for home?
+	(common:nice-path (conc (common:read-link-f (cadr match)) "/" (caddr match)))
+	(normalize-pathname (if (absolute-pathname? dir)
+				dir
+				(conc (current-directory) "/" dir))))))
+
+;; make "nice-path" available in config files and the repl
+(define nice-path common:nice-path)
+
+(define (common:read-link-f path)
+  (handle-exceptions
+      exn
+      (begin
+	(debug:print 0 #f "ERROR: command \"/bin/readlink -f " path "\" failed.")
+	path) ;; just give up
+    (with-input-from-pipe
+	(conc "/bin/readlink -f " path)
+      (lambda ()
+	(read-line)))))
 
 (define (get-cpu-load)
   (car (common:get-cpu-load)))
-;;   (let* ((load-res (cmd-run->list "uptime"))
+;;   (let* ((load-res (process:cmd-run->list "uptime"))
 ;; 	 (load-rx  (regexp "load average:\\s+(\\d+)"))
 ;; 	 (cpu-load #f))
 ;;     (for-each (lambda (l)
@@ -553,7 +699,7 @@
   (with-input-from-file "/proc/loadavg" 
     (lambda ()(list (read)(read)(read)))))
 
-(define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000))
+(define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f))
   (let* ((loadavg (common:get-cpu-load))
 	 (first   (car loadavg))
 	 (next    (cadr loadavg))
@@ -562,12 +708,12 @@
     (cond
      ((and (> first adjload)
 	   (> count 0))
-      (debug:print-info 0 "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload)
+      (debug:print-info 0 #f "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
      ((and (> loadjmp numcpus)
 	   (> count 0))
-      (debug:print-info 0 "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus)
+      (debug:print-info 0 #f "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
 
@@ -583,8 +729,14 @@
 		      numcpu)
 		  (read-line)))))))
 
+;; wait for normalized cpu load to drop below maxload
+;;
+(define (common:wait-for-normalized-load maxload #!key (msg #f))
+  (let ((num-cpus (common:get-num-cpus)))
+    (common:wait-for-cpuload maxload num-cpus 15 msg: msg)))
+
 (define (get-uname . params)
-  (let* ((uname-res (cmd-run->list (conc "uname " (if (null? params) "-a" (car params)))))
+  (let* ((uname-res (process:cmd-run->list (conc "uname " (if (null? params) "-a" (car params)))))
 	 (uname #f))
     (if (null? (car uname-res))
 	"unknown"
@@ -594,7 +746,7 @@
 ;; must be protected by mutexes
 ;;
 (define (common:real-path inpath)
-  ;; (cmd-run-with-stderr->list "readlink" "-f" inpath)) ;; cmd . params)
+  ;; (process:cmd-run-with-stderr->list "readlink" "-f" inpath)) ;; cmd . params)
   ;; (let-values 
   ;;  (((inp oup pid) (process "readlink" (list "-f" inpath))))
   ;;  (with-input-from-port inp
@@ -617,8 +769,21 @@
 (define (common:get-disk-space-used fpath)
   (with-input-from-pipe (conc "/usr/bin/du -s " fpath) read))
 
+;; given path get free space, allows override in [setup]
+;; with free-space-script /path/to/some/script.sh
+;;
 (define (get-df path)
-  (let* ((df-results (cmd-run->list (conc "df " path)))
+  (if (configf:lookup *configdat* "setup" "free-space-script")
+      (with-input-from-pipe 
+       (conc (configf:lookup *configdat* "setup" "free-space-script") " " path)
+       (lambda ()
+	 (let ((res (read-line)))
+	   (if (string? res)
+	       (string->number res)))))
+      (get-unix-df path)))
+
+(define (get-unix-df path)
+  (let* ((df-results (process:cmd-run->list (conc "df " path)))
 	 (space-rx   (regexp "([0-9]+)\\s+([0-9]+)%"))
 	 (freespc    #f))
     ;; (write df-results)
@@ -630,6 +795,35 @@
 			    (set! freespc newval))))))
 	      (car df-results))
     freespc))
+
+;; check space in dbdir
+;; returns: ok/not dbspace required-space
+;;
+(define (common:check-db-dir-space)
+  (let* ((dbdir    (db:get-dbdir))
+	 (dbspace  (if (directory? dbdir)
+		       (get-df dbdir)
+		       0))
+	 (required (string->number 
+		    (or (configf:lookup *configdat* "setup" "dbdir-space-required")
+			"100000"))))
+    (list (> dbspace required)
+	  dbspace
+	  required
+	  dbdir)))
+
+;; check available space in dbdir, exit if insufficient
+;;
+(define (common:check-db-dir-and-exit-if-insufficient)
+  (let* ((spacedat (common:check-db-dir-space))
+	 (is-ok    (car spacedat))
+	 (dbspace  (cadr spacedat))
+	 (required (caddr spacedat))
+	 (dbdir    (cadddr spacedat)))
+    (if (not is-ok)
+	(begin
+	  (debug:print 0 #f "ERROR: Insufficient space in " dbdir ", require " required ", have " dbspace  ", exiting now.")
+	  (exit 1)))))
   
 ;; paths is list of lists ((name path) ... )
 ;;
@@ -641,16 +835,16 @@
        (let* ((dirpath    (cadr (assoc disk-num disks)))
 	      (freespc    (cond
 			   ((not (directory? dirpath))
-			    (if (common:low-noise-print 50 "disks not a dir " disk-num)
-				(debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a directory - ignoring it."))
+			    (if (common:low-noise-print 300 "disks not a dir " disk-num)
+				(debug:print 0 #f "WARNING: disk " disk-num " at path \"" dirpath "\" is not a directory - ignoring it."))
 			    -1)
 			   ((not (file-write-access? dirpath))
-			    (if (common:low-noise-print 50 "disks not writeable " disk-num)
-				(debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not writeable - ignoring it."))
+			    (if (common:low-noise-print 300 "disks not writeable " disk-num)
+				(debug:print 0 #f "WARNING: disk " disk-num " at path \"" dirpath "\" is not writeable - ignoring it."))
 			    -1)
 			   ((not (eq? (string-ref dirpath 0) #\/))
-			    (if (common:low-noise-print 50 "disks not a proper path " disk-num)
-				(debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a fully qualified path - ignoring it."))
+			    (if (common:low-noise-print 300 "disks not a proper path " disk-num)
+				(debug:print 0 #f "WARNING: disk " disk-num " at path \"" dirpath "\" is not a fully qualified path - ignoring it."))
 			    -1)
 			   (else
 			    (get-df dirpath)))))
@@ -669,7 +863,12 @@
 	      
 (define (save-environment-as-files fname #!key (ignorevars (list "USER" "HOME" "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR" "MAKEFLAGS" "MAKEF" "MAKEOVERRIDES")))
   (let ((envvars (get-environment-variables))
-        (whitesp (regexp "[^a-zA-Z0-9_\\-:,.\\/%$]")))
+        (whitesp (regexp "[^a-zA-Z0-9_\\-:,.\\/%$]"))
+	(mungeval (lambda (val)
+		    (cond
+		     ((eq? val #t) "") ;; convert #t to empty string
+		     ((eq? val #f) #f) ;; convert #f to itself (still thinking about this one
+		     (else val)))))
      (with-output-to-file (conc fname ".csh")
        (lambda ()
           (for-each (lambda (keyval)
@@ -681,7 +880,7 @@
 			(print (if (member key ignorevars)
 				   "# setenv "
 				   "setenv ")
-			       key " " delim val delim)))
+			       key " " delim (mungeval val) delim)))
 		    envvars)))
      (with-output-to-file (conc fname ".sh")
        (lambda ()
@@ -694,7 +893,7 @@
 			(print (if (member key ignorevars)
 				   "# export "
 				   "export ")
-			       key "=" delim val delim)))
+			       key "=" delim (mungeval val) delim)))
                     envvars)))))
 
 ;; set some env vars from an alist, return an alist with original values
@@ -741,7 +940,7 @@
     vars))
 		  
 ;;======================================================================
-;; time and date nice to have stuff
+;; T I M E   A N D   D A T E
 ;;======================================================================
 
 (define (seconds->hr-min-sec secs)
@@ -784,7 +983,7 @@
     (else #f)))
 
 ;;======================================================================
-;; Colors
+;; C O L O R S
 ;;======================================================================
       
 (define (common:name->iup-color name)
@@ -1033,12 +1232,12 @@
 		      (host-type (cadr hed)))
 		  (if (tests:match patt testname itempath)
 		      (begin
-			(debug:print-info 0 "Have flexi-launcher match for " testname "/" itempath " = " host-type)
+			(debug:print-info 2 #f "Have flexi-launcher match for " testname "/" itempath " = " host-type)
 			(let ((launcher (configf:lookup configdat "host-types" host-type)))
 			  (if launcher
 			      launcher
 			      (begin
-				(debug:print-info 0 "WARNING: no launcher found for host-type " host-type)
+				(debug:print-info 0 #f "WARNING: no launcher found for host-type " host-type)
 				(if (null? tal)
 				    fallback-launcher
 				    (loop (car tal)(cdr tal)))))))

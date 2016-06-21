@@ -39,16 +39,6 @@
 ;;  S U P P O R T   F U N C T I O N S
 ;;======================================================================
 
-;; NOT USED?
-;;
-;; (define (rmt:call-transport run-id connection-info cmd jparams)
-;;   (case (server:get-transport)
-;;     ((rpc)  ( rpc-transport:client-api-send-receive run-id connection-info cmd jparams))
-;;     ((http) (http-transport:client-api-send-receive run-id connection-info cmd jparams))
-;;     ((fs)   ( fs-transport:client-api-send-receive run-id connection-info cmd jparams))
-;;     ((zmq)  (zmq-transport:client-api-send-receive run-id connection-info cmd jparams))
-;;     (else   ( rpc-transport:client-api-send-receive run-id connection-info cmd jparams))))
-
 ;;
 (define (rmt:write-frequency-over-limit? cmd run-id)
   (and (not (member cmd api:read-only-queries))
@@ -65,7 +55,7 @@
 	 (if (and (> count 10)
 		  (> queries-per-second 10))
 	     (begin
-	       (debug:print-info 1 "db write rate too high, starting a server, count=" count " start=" start " run-id=" run-id " queries-per-second=" queries-per-second)
+	       (debug:print-info 1 #f "db write rate too high, starting a server, count=" count " start=" start " run-id=" run-id " queries-per-second=" queries-per-second)
 	       #t)
 	     #f))))
 
@@ -85,7 +75,7 @@
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
 (define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
   ;; clean out old connections
-  (mutex-lock! *db-multi-sync-mutex*)
+  ;; (mutex-lock! *db-multi-sync-mutex*)
   (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
     (for-each 
      (lambda (run-id)
@@ -93,14 +83,14 @@
          (if (and (vector? connection)
         	  (< (http-transport:server-dat-get-last-access connection) expire-time))
              (begin
-               (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
+               (debug:print-info 0 #f "Discarding connection to server for run-id " run-id ", too long between accesses")
                ;; SHOULD CLOSE THE CONNECTION HERE
 	       (case *transport-type*
 		 ((nmsg)(nn-close (http-transport:server-dat-get-socket 
 				   (hash-table-ref *runremote* run-id)))))
                (hash-table-delete! *runremote* run-id)))))
      (hash-table-keys *runremote*)))
-  (mutex-unlock! *db-multi-sync-mutex*)
+  ;; (mutex-unlock! *db-multi-sync-mutex*)
   ;; (mutex-lock! *send-receive-mutex*)
   (let* ((run-id          (if rid rid 0))
 	 (connection-info (rmt:get-connection-info run-id)))
@@ -126,7 +116,7 @@
 		  ((http) res) ;; (db:string->obj res))
 		  ((nmsg) res))) ;; (vector-ref res 1)))
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
-		(debug:print 0 "WARNING: Communication failed, trying call to rmt:send-receive again.")
+		(debug:print 0 #f "WARNING: Communication failed, trying call to rmt:send-receive again.")
 		;; (case *transport-type*
 		;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket connection-info))))
 		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
@@ -165,13 +155,13 @@
 		    (let ((delta (- (current-milliseconds) start-time)))
 		      (if (> delta max-query)
 			  (begin
-			    (debug:print-info 0 "Starting server as query time " delta " is over the limit of " max-query)
+			    (debug:print-info 0 #f "Starting server as query time " delta " is over the limit of " max-query)
 			    (server:kind-run run-id)))
 		      ;; return the result!
 		      newres)
 		    )))
 	    (begin
-	      ;; (debug:print 0 "ERROR: Communication failed!")
+	      ;; (debug:print 0 #f "ERROR: Communication failed!")
 	      ;; (mutex-unlock! *send-receive-mutex*)
 	      ;; (exit)
 	      (rmt:open-qry-close-locally cmd run-id params)
@@ -182,8 +172,8 @@
   (handle-exceptions
    exn
    (begin
-     (debug:print 0 "WARNING: stats collection failed in update-db-stats")
-     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+     (debug:print 0 #f "WARNING: stats collection failed in update-db-stats")
+     (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
      (print "exn=" (condition->list exn))
      #f) ;; if this fails we don't care, it is just stats
    (let* ((cmd      (conc "run-id=" run-id " " (if (eq? rawcmd 'general-call) (car params) rawcmd)))
@@ -199,11 +189,11 @@
 
 (define (rmt:print-db-stats)
   (let ((fmtstr "~40a~7-d~9-d~20,2-f")) ;; "~20,2-f"
-    (debug:print 18 "DB Stats\n========")
-    (debug:print 18 (format #f "~40a~8a~10a~10a" "Cmd" "Count" "TotTime" "Avg"))
+    (debug:print 18 #f "DB Stats\n========")
+    (debug:print 18 #f (format #f "~40a~8a~10a~10a" "Cmd" "Count" "TotTime" "Avg"))
     (for-each (lambda (cmd)
 		(let ((cmd-dat (hash-table-ref *db-stats* cmd)))
-		  (debug:print 18 (format #f fmtstr cmd (vector-ref cmd-dat 0) (vector-ref cmd-dat 1) (/ (vector-ref cmd-dat 1)(vector-ref cmd-dat 0))))))
+		  (debug:print 18 #f (format #f fmtstr cmd (vector-ref cmd-dat 0) (vector-ref cmd-dat 1) (/ (vector-ref cmd-dat 1)(vector-ref cmd-dat 0))))))
 	      (sort (hash-table-keys *db-stats*)
 		    (lambda (a b)
 		      (> (vector-ref (hash-table-ref *db-stats* a) 0)
@@ -251,11 +241,11 @@
     (if (not success)
 	(if (> remretries 0)
 	    (begin
-	      (debug:print 0 "ERROR: local query failed. Trying again.")
+	      (debug:print 0 #f "ERROR: local query failed. Trying again.")
 	      (thread-sleep! (/ (random 5000) 1000)) ;; some random delay 
 	      (rmt:open-qry-close-locally cmd run-id params remretries: (- remretries 1)))
 	    (begin
-	      (debug:print 0 "ERROR: too many retries in rmt:open-qry-close-locally, giving up")
+	      (debug:print 0 #f "ERROR: too many retries in rmt:open-qry-close-locally, giving up")
 	      #f))
 	(begin
 	  ;; (rmt:update-db-stats run-id cmd params duration)
@@ -282,7 +272,7 @@
 	#f)))
 ;; 	(db:string->obj (vector-ref dat 1))
 ;; 	(begin
-;; 	  (debug:print 0 "ERROR: rmt:send-receive-no-auto-client-setup failed, attempting to continue. Got " dat)
+;; 	  (debug:print 0 #f "ERROR: rmt:send-receive-no-auto-client-setup failed, attempting to continue. Got " dat)
 ;; 	  dat))))
 
 ;; Wrap json library for strings (why the ports crap in the first place?)
@@ -377,7 +367,7 @@
   (if (and (number? run-id)(number? test-id))
       (rmt:send-receive 'get-test-info-by-id run-id (list run-id test-id))
       (begin
-	(debug:print 0 "WARNING: Bad data handed to rmt:get-test-info-by-id run-id=" run-id ", test-id=" test-id)
+	(debug:print 0 #f "WARNING: Bad data handed to rmt:get-test-info-by-id run-id=" run-id ", test-id=" test-id)
 	(print-call-chain (current-error-port))
 	#f)))
 
@@ -388,7 +378,7 @@
   (let* ((test-path (if (string? work-area)
 			work-area
 			(rmt:test-get-rundir-from-test-id run-id test-id))))
-    (debug:print 3 "TEST PATH: " test-path)
+    (debug:print 3 #f "TEST PATH: " test-path)
     (open-test-db test-path)))
 
 ;; WARNING: This currently bypasses the transaction wrapped writes system
@@ -398,11 +388,11 @@
 (define (rmt:set-tests-state-status run-id testnames currstate currstatus newstate newstatus)
   (rmt:send-receive 'set-tests-state-status run-id (list run-id testnames currstate currstatus newstate newstatus)))
 
-(define (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)
+(define (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)
   (if (number? run-id)
-      (rmt:send-receive 'get-tests-for-run run-id (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals))
+      (rmt:send-receive 'get-tests-for-run run-id (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode))
       (begin
-	(debug:print "ERROR: rmt:get-tests-for-run called with bad run-id=" run-id)
+	(debug:print 0 #f "ERROR: rmt:get-tests-for-run called with bad run-id=" run-id)
 	(print-call-chain (current-error-port))
 	'())))
 
@@ -433,7 +423,7 @@
 					   (mutex-lock! multi-run-mutex)
 					   (set! result (append result res))
 					   (mutex-unlock! multi-run-mutex))
-					 (debug:print 0 "ERROR: get-tests-for-run-mindata failed for run-id " hed ", testpatt " testpatt ", states " states ", status " status ", not-in " not-in))))
+					 (debug:print 0 #f "ERROR: get-tests-for-run-mindata failed for run-id " hed ", testpatt " testpatt ", states " states ", status " status ", not-in " not-in))))
 				 (conc "multi-run-thread for run-id " hed)))
 		     (newthreads (cons newthread threads)))
 		(thread-start! newthread)
@@ -534,6 +524,9 @@
 (define (rmt:top-test-set-per-pf-counts run-id test-name)
   (rmt:send-receive 'top-test-set-per-pf-counts run-id (list run-id test-name)))
 
+(define (rmt:get-raw-run-stats run-id)
+  (rmt:send-receive 'get-raw-run-stats run-id (list run-id)))
+
 ;;======================================================================
 ;;  R U N S
 ;;======================================================================
@@ -553,6 +546,9 @@
 
 (define (rmt:delete-run run-id)
   (rmt:send-receive 'delete-run run-id (list run-id)))
+
+(define (rmt:update-run-stats run-id stats)
+  (rmt:send-receive 'update-run-stats #f (list run-id stats)))
 
 (define (rmt:delete-old-deleted-test-records)
   (rmt:send-receive 'delete-old-deleted-test-records #f '()))
@@ -586,6 +582,15 @@
   (if (rmt:send-receive 'have-incompletes? run-id (list run-id ovr-deadtime))
       (rmt:send-receive 'mark-incomplete run-id (list run-id ovr-deadtime))))
 
+(define (rmt:get-main-run-stats run-id)
+  (rmt:send-receive 'get-main-run-stats #f (list run-id)))
+
+(define (rmt:get-var varname)
+  (rmt:send-receive 'get-var #f (list varname)))
+
+(define (rmt:set-var varname value)
+  (rmt:send-receive 'set-var #f (list varname value)))
+
 ;;======================================================================
 ;; M U L T I R U N   Q U E R I E S
 ;;======================================================================
@@ -612,12 +617,12 @@
 	(let ((prev-run-ids (rmt:get-prev-run-ids run-id)))
 	  ;; for each run starting with the most recent look to see if there is a matching test
 	  ;; if found then return that matching test record
-	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals ", previous run ids found: " prev-run-ids)
+	  (debug:print 4 #f "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals ", previous run ids found: " prev-run-ids)
 	  (if (null? prev-run-ids) #f
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (rmt:get-tests-for-run hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f)))
-		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
+		(let ((results (rmt:get-tests-for-run hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f #f 'normal)))
+		  (debug:print 4 #f "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
 			   (not (null? tal)))
 		      (loop (car tal)(cdr tal))
@@ -644,7 +649,7 @@
   (let* ((state     (items:check-valid-items "state" state-in))
 	 (status    (items:check-valid-items "status" status-in)))
     (if (or (not state)(not status))
-	(debug:print 3 "WARNING: Invalid " (if status "status" "state")
+	(debug:print 3 #f "WARNING: Invalid " (if status "status" "state")
 		     " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
     (rmt:send-receive 'teststep-set-status! run-id (list run-id test-id teststep-name state-in status-in comment logfile))))
 
@@ -656,10 +661,11 @@
 ;;======================================================================
 
 (define (rmt:read-test-data run-id test-id categorypatt #!key (work-area #f)) 
-  (let ((tdb  (rmt:open-test-db-by-test-id run-id test-id work-area: work-area)))
-    (if tdb
-	(tdb:read-test-data tdb test-id categorypatt)
-	'())))
+  (rmt:send-receive 'read-test-data run-id (list run-id test-id categorypatt)))
+;;   (let ((tdb  (rmt:open-test-db-by-test-id run-id test-id work-area: work-area)))
+;;     (if tdb
+;; 	(tdb:read-test-data tdb test-id categorypatt)
+;; 	'())))
 
 (define (rmt:testmeta-add-record testname)
   (rmt:send-receive 'testmeta-add-record #f (list testname)))

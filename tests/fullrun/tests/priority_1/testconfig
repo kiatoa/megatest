@@ -14,4 +14,4 @@ tags first,single
 reviewed 09/10/2011, by Matt
 
 [triggers]
-COMPLETED/ echo $MT_TEST_NAME > $MT_RUN_AREA_HOME/foo
+COMPLETED/   echo "trigger: priority_1, COMPLETED/" >> $MT_RUN_AREA_HOME/triggers_$MT_RUN_NAME.dat

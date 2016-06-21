@@ -49,6 +49,7 @@
     get-runs-by-patt
     get-steps-data
     get-steps-for-test
+    read-test-data
     login
     testmeta-get-record
     have-incompletes?
@@ -112,7 +113,7 @@
    exn
    (let ((call-chain (get-call-chain)))
      (print-call-chain (current-error-port))
-     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))       
+     (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))       
      (vector #f (vector exn call-chain dat))) ;; return some stuff for debug if an exception happens
    (if (not (vector? dat))                    ;; it is an error to not receive a vector
        (vector #f #f "remote must be called with a vector")       
@@ -149,6 +150,8 @@
 	    ((delete-run)                   (apply db:delete-run dbstruct params))
 	    ((lock/unlock-run)              (apply db:lock/unlock-run dbstruct params))
 	    ((update-run-event_time)        (apply db:update-run-event_time dbstruct params))
+	    ((update-run-stats)             (apply db:update-run-stats dbstruct params))
+	    ((set-var)                      (apply db:set-var dbstruct params))
 
 	    ;; STEPS
 	    ((teststep-set-status!)         (apply db:teststep-set-status! dbstruct params))
@@ -207,6 +210,7 @@
 	    ((get-prereqs-not-met)             (apply db:get-prereqs-not-met dbstruct params))
 	    ((get-count-tests-running-for-run-id) (apply db:get-count-tests-running-for-run-id dbstruct params))
 	    ((synchash-get)                    (apply synchash:server-get dbstruct params))
+	    ((get-raw-run-stats)               (apply db:get-raw-run-stats dbstruct params))
 
 	    ;; RUNS
 	    ((get-run-info)                 (apply db:get-run-info dbstruct params))
@@ -222,10 +226,15 @@
 	    ((get-run-ids-matching-target)  (apply db:get-run-ids-matching-target dbstruct params))
 	    ((get-runs-by-patt)             (apply db:get-runs-by-patt dbstruct params))
 	    ((get-run-name-from-id)         (apply db:get-run-name-from-id dbstruct params))
+	    ((get-main-run-stats)           (apply db:get-main-run-stats dbstruct params))
+	    ((get-var)                      (apply db:get-var dbstruct params))
 
 	    ;; STEPS
 	    ((get-steps-data)               (apply db:get-steps-data dbstruct params))
 	    ((get-steps-for-test)           (apply db:get-steps-for-test dbstruct params))
+
+	    ;; TEST DATA
+	    ((read-test-data)               (apply db:read-test-data dbstruct params))
 
 	    ;; MISC
 	    ((have-incompletes?)            (apply db:have-incompletes? dbstruct params))

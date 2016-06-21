@@ -13,7 +13,7 @@
 (require-library iup)
 (import (prefix iup iup:))
 (use canvas-draw)
-(use regex)
+(use regex defstruct)
 
 (declare (unit dcommon))
 
@@ -66,6 +66,11 @@
 (define (dboard:data-get-run-name      vec)    (vector-ref vec 19))
 (define (dboard:data-get-runs-listbox  vec)    (vector-ref vec 20))
 
+(defstruct d:data runs tests runs-matrix tests-tree run-keys
+  curr-test-ids updaters path-run-ids curr-run-id runs-tree test-patts
+  states statuses logs-textbox command command-tb target run-name
+  runs-listbox)
+
 (define (dboard:data-set-runs!          vec val)(vector-set! vec 0 val))
 (define (dboard:data-set-tests!         vec val)(vector-set! vec 1 val))
 (define (dboard:data-set-runs-matrix!   vec val)(vector-set! vec 2 val))
@@ -100,6 +105,12 @@
 
 ;; Look up run-ids by ??
 (dboard:data-set-path-run-ids! *data* (make-hash-table))
+
+(define (d:data-init dat)
+  (d:data-run-keys-set!      dat (make-hash-table))
+  (d:data-curr-test-ids-set! dat (make-hash-table))
+  (d:data-path-run-ids-set!  dat (make-hash-table))
+  dat)
 
 ;;======================================================================
 ;; D O T F I L E
@@ -177,7 +188,7 @@
 	 (testname-to-row (hash-table-ref *cachedata* "testname-to-row")) 
 	 (colnum       1)
 	 (rownum       0)) ;; rownum = 0 is the header
-;; (debug:print 0 "test-ids " test-ids ", tests-detail-changes " tests-detail-changes)
+;; (debug:print 0 #f "test-ids " test-ids ", tests-detail-changes " tests-detail-changes)
     
 	 ;; tests related stuff
 	 ;; (all-testnames (delete-duplicates (map db:test-get-testname test-changes))))
@@ -253,7 +264,7 @@
 					       userdata: (conc "test-id: " test-id))
 				(let ((node-num (tree:find-node tb (cons "Runs" test-path)))
 				      (color    (car (gutils:get-color-for-state-status state status))))
-				  (debug:print 0 "node-num: " node-num ", color: " color)
+				  (debug:print 0 #f "node-num: " node-num ", color: " color)
 				  (iup:attribute-set! tb (conc "COLOR" node-num) color))
 				(hash-table-set! (dboard:data-get-path-test-ids *data*) test-path test-id)
 				(if (not rownum)
@@ -267,7 +278,7 @@
 							  (conc rownum ":" 0) dispname)
 				      ))
 				;; set the cell text and color
-				;; (debug:print 2 "rownum:colnum=" rownum ":" colnum ", state=" status)
+				;; (debug:print 2 #f "rownum:colnum=" rownum ":" colnum ", state=" status)
 				(iup:attribute-set! (dboard:data-get-runs-matrix *data*)
 						    (conc rownum ":" colnum)
 						    (if (member state '("ARCHIVED" "COMPLETED"))
@@ -284,8 +295,8 @@
       (if updater (updater (hash-table-ref/default data get-details-sig #f))))
 
     (iup:attribute-set! (dboard:data-get-runs-matrix *data*) "REDRAW" "ALL")
-    ;; (debug:print 2 "run-changes: " run-changes)
-    ;; (debug:print 2 "test-changes: " test-changes)
+    ;; (debug:print 2 #f "run-changes: " run-changes)
+    ;; (debug:print 2 #f "test-changes: " test-changes)
     (list run-changes all-test-changes)))
 
 ;;======================================================================
@@ -354,7 +365,7 @@
 			   #:numcol 1
 			   #:numlin (length key-vals)
 			   #:numcol-visible 1
-			   #:numlin-visible (length key-vals)
+			   #:numlin-visible (min 10 (length key-vals))
 			   #:scrollbar "YES")))
     (iup:attribute-set! section-matrix "0:0" varcolname)
     (iup:attribute-set! section-matrix "0:1" valcolname)
@@ -409,7 +420,7 @@
 				(max-row      (if (null? row-indices) 1 (apply max (map cadr row-indices))))
 				(max-col      (if (null? col-indices) 1 
 						  (apply max (map cadr col-indices))))
-				(max-visible  (max (- *num-tests* 15) 3))
+				(max-visible  (max (- (d:alldat-num-tests *alldat*) 15) 3))
 				(max-col-vis  (if (> max-col 10) 10 max-col))
 				(numrows      1)
 				(numcols      1))
@@ -581,82 +592,286 @@
 ;; CANVAS STUFF FOR TESTS
 ;;======================================================================
 
-(define (dcommon:draw-test cnv x y w h name selected)
-  (let* ((llx x)
-	 (lly y)
-	 (urx (+ x w))
-	 (ury (+ y h)))
-    (canvas-text! cnv (+ llx 5)(+ lly 5) name) ;; (conc testname " (" xtorig "," ytorig ")"))
+(define (dcommon:draw-test cnv xoffset yoffset scalef x y w h name selected)
+  (let* ((llx (dcommon:x->canvas x scalef xoffset))
+	 (lly (dcommon:y->canvas y scalef yoffset))
+	 (urx (dcommon:x->canvas (+ x w) scalef xoffset))
+	 (ury (dcommon:y->canvas (+ y h) scalef yoffset)))
+    (canvas-text! cnv (+ llx 5)(+ lly 5) name)
     (canvas-rectangle! cnv llx urx lly ury)
     (if selected (canvas-box! cnv llx (+ llx 5) lly (+ lly 5)))))
 
-(define (dcommon:initial-draw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames)
-      (let* ((scalef (hash-table-ref/default tests-draw-state 'scalef 8))
-	     (test-browse-xoffset (hash-table-ref tests-draw-state 'test-browse-xoffset))
-	     (test-browse-yoffset (hash-table-ref tests-draw-state 'test-browse-yoffset))
-	     (xtorig (+ test-browse-xoffset (* (/ sizex 2) scalef (- 0.5 xadj)))) ;;  (- xadj 1))))
-	     (ytorig (+ test-browse-yoffset (* (/ sizey 2) scalef (- yadj 0.5))))
-	     (boxw   90) ;; default, overriden by length estimate below
-	     (boxh   25)
-	     (gapx   20)
-	     (gapy   30)
-	     (tests-hash     (hash-table-ref tests-draw-state 'tests-info))
-	     (selected-tests (hash-table-ref tests-draw-state 'selected-tests )))
-	(hash-table-set! tests-draw-state 'xtorig xtorig)
-	(hash-table-set! tests-draw-state 'ytorig ytorig)
-	(let ((longest-str   (if (null? sorted-testnames) "         " (car (sort sorted-testnames (lambda (a b)(>= (string-length a)(string-length b))))))))
-	  (let-values (((x-max y-max) (canvas-text-size cnv longest-str)))
-             (if (> x-max boxw)(set! boxw (+ 10 x-max)))))
-	;; (print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv) " originx: " originx " originy: " originy " xtorig: " xtorig " ytorig: " ytorig " xadj: " xadj " yadj: " yadj)
-	(if (not (null? sorted-testnames))
-	    (let loop ((hed (car (reverse sorted-testnames)))
-		       (tal (cdr (reverse sorted-testnames)))
-		       (llx xtorig)
-		       (lly ytorig)
-		       (urx (+ xtorig boxw))
-		       (ury (+ ytorig boxh)))
-					; (print "hed " hed " llx " llx " lly " lly " urx " urx " ury " ury)
-	      (dcommon:draw-test cnv llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
-	      ;; data used by mouse click calc. keep the wacky order for now.
-	      (hash-table-set! tests-hash hed  (list llx urx (- sizey ury)(- sizey lly) lly boxw boxh)) 
-	      ;; (list llx lly boxw boxh)) ;; NB// Swap ury and lly
-	      (if (not (null? tal))
-		  ;; leave a column of space to the right to list items
-		  (let ((have-room 
-			 (if #t ;; put "auto" here where some form of auto rearanging can be done
-			     (> (* 3 (+ boxw gapx)) (- urx xtorig))
-			     (< urx (- sizex boxw gapx boxw)))))  ;; is there room for another column?
-		    (loop (car tal)
-			  (cdr tal)
-			  (if have-room (+ llx boxw gapx) xtorig) ;; have room, 
-			  (if have-room lly (+ lly boxh gapy))
-			  (if have-room (+ urx boxw gapx) (+ xtorig boxw))
-			  (if have-room ury (+ ury boxh gapy)))))))))
+(define (dcommon:draw-arrow cnv test-box-center waiton-center)
+  (let* ((test-box-center-x (vector-ref test-box-center 0))
+	 (test-box-center-y (vector-ref test-box-center 1))
+	 (waiton-center-x   (vector-ref waiton-center   0))
+	 (waiton-center-y   (vector-ref waiton-center   1))
+	 (delta-y           (- waiton-center-y test-box-center-y))
+	 (delta-x           (- waiton-center-x test-box-center-x))
+	 (abs-delta-x       (abs delta-x))
+	 (abs-delta-y       (abs delta-y))
+	 (use-delta-x       (> abs-delta-x abs-delta-y)) ;; use the larger one
+	 (delta-ratio       (if use-delta-x
+				(if (> abs-delta-x 0)
+				    (/ abs-delta-y abs-delta-x)
+				    1)
+				(if (> abs-delta-y 0)
+				    (/ abs-delta-x abs-delta-y)
+				    1)))
+	 (x-adj             (if use-delta-x
+				8
+				(* delta-ratio 8)))
+	 (y-adj             (if use-delta-x
+				(* x-adj delta-ratio)
+				8))
+	 (new-waiton-x      (inexact->exact
+			     (round (if (> delta-x 0) ;; have positive x
+					(- waiton-center-x x-adj)
+					(+ waiton-center-x x-adj)))))
+	 (new-waiton-y      (inexact->exact
+			     (round (if (> delta-y 0)
+					(- waiton-center-y y-adj)
+					(+ waiton-center-y y-adj))))))
+  ;; (canvas-line-width-set! cnv 5)
+  (canvas-line! cnv
+		test-box-center-x
+		test-box-center-y
+		new-waiton-x
+		new-waiton-y
+		)
+  (canvas-mark! cnv new-waiton-x new-waiton-y)))
 
-(define (dcommon:redraw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames)
-  (let* ((scalef (hash-table-ref/default tests-draw-state 'scalef 8))
-	 (test-browse-xoffset (hash-table-ref tests-draw-state 'test-browse-xoffset))
-	 (test-browse-yoffset (hash-table-ref tests-draw-state 'test-browse-yoffset))
-	 (xtorig (+ test-browse-xoffset (* (/ sizex 2) scalef (- 0.5 xadj)))) ;;  (- xadj 1))))
-	 (ytorig (+ test-browse-yoffset (* (/ sizey 2) scalef (- yadj 0.5))))
-	 (xdelta (- (hash-table-ref tests-draw-state 'xtorig) xtorig))
-	 (ydelta (- (hash-table-ref tests-draw-state 'ytorig) ytorig))
-	 (tests-hash     (hash-table-ref tests-draw-state 'tests-info))
-	 (selected-tests (hash-table-ref tests-draw-state 'selected-tests )))
-    (hash-table-set! tests-draw-state 'xtorig xtorig)
-    (hash-table-set! tests-draw-state 'ytorig ytorig)
+(define (dcommon:get-box-center box)
+  (let* ((llx  (list-ref box 0))
+	 (lly  (list-ref box 1))
+	 (boxw (list-ref box 4))
+	 (boxh (list-ref box 5)))
+    (vector (+ llx (/ boxw 2))
+	    (+ lly (/ boxh 2)))))
+
+(define-inline (num->int num)
+  (inexact->exact (round num)))
+
+(define (dcommon:draw-edges cnv xoffset yoffset scalef edges)
+  (for-each
+   (lambda (e)
+     (let loop ((x1 (car e))
+		(y1 (cadr e))
+		(x2 #f)
+		(y2 #f)
+		(tal (cddr e)))
+       (if (and x1 y1 x2 y2)
+	   (canvas-line! 
+	    cnv 
+	    (num->int (dcommon:x->canvas x1 scalef xoffset))
+	    (num->int (dcommon:y->canvas y1 scalef yoffset))
+	    (num->int (dcommon:x->canvas x2 scalef xoffset))
+	    (num->int (dcommon:y->canvas y2 scalef yoffset)))) ;; (num->int x1)(num->int y1)(num->int x2)(num->int y2)))
+       (if (< (length tal) 2)
+	   (canvas-mark! cnv
+			 (num->int (dcommon:x->canvas x1 scalef xoffset))
+			 (num->int (dcommon:y->canvas y1 scalef yoffset))) ;; (num->int x1)(num->int y1))
+	   (loop (car tal)(cadr tal) x1 y1 (cddr tal)))))
+   ;; (map (lambda (e)(map (lambda (x)(num->int (* x scalef))) e)) edges)))
+   edges))
+
+
+(define (dcommon:draw-arrows cnv testname tests-hash test-records)
+  (let* ((test-box-info   (hash-table-ref tests-hash testname))
+	 (test-box-center (dcommon:get-box-center test-box-info))
+	 (test-record     (hash-table-ref test-records testname))
+	 (waitons         (vector-ref test-record 2)))
+    (for-each
+     (lambda (waiton)
+       (let* ((waiton-box-info (hash-table-ref/default tests-hash waiton #f))
+	      (waiton-center   (dcommon:get-box-center (or waiton-box-info test-box-info))))
+	 (dcommon:draw-arrow cnv test-box-center waiton-center)))
+     waitons)
+    ;; (debug:print 0 #f "test-box-info=" test-box-info)
+    ;; (debug:print 0 #f "test-record=" test-record)
+    ))
+
+(define (dcommon:estimate-scale sizex sizey originx originy nodes)
+  ;; (print "sizex: " sizex " sizey: " sizey " originx: " originx " originy: " originy " nodes: " nodes)
+  (let* ((maxx 1)
+	 (maxy 1))
+    (for-each
+     (lambda (node)
+       (if (equal? (car node) "node")
+	   (let ((x (string->number (list-ref node 2)))
+		 (y (string->number (list-ref node 3))))
+	     (if (and x (> x maxx))(set! maxx x))
+	     (if (and y (> y maxy))(set! maxy y)))))
+     nodes)
+    (let ((scalex (/ sizex maxx))
+	  (scaley (/ sizey maxy)))
+      ;; (print "maxx: " maxx " maxy: " maxy " scalex: " scalex " scaley: " scaley)
+      (min scalex scaley))))
+
+(define (dcommon:get-xoffset tests-draw-state sizex-in xadj-in)
+  (let ((xadj  (or xadj-in  (hash-table-ref/default tests-draw-state 'xadj 0)))
+	(sizex (or sizex-in (hash-table-ref/default tests-draw-state 'sizex 500))))
+    (hash-table-set! tests-draw-state 'xadj xadj) ;; for use in de-scaling when handling mouse clicks
+    (hash-table-set! tests-draw-state 'sizex sizex)
+    (* (/ sizex 2) (- 0.5 xadj))))
+
+(define (dcommon:get-yoffset tests-draw-state sizey-in yadj-in)
+  (let ((yadj  (or yadj-in  (hash-table-ref/default tests-draw-state 'yadj 0)))
+	(sizey (or sizey-in (hash-table-ref/default tests-draw-state 'sizey 500))))
+    (hash-table-set! tests-draw-state 'yadj yadj) ;; for use in de-scaling when handling mouse clicks
+    (hash-table-set! tests-draw-state 'sizey sizey)
+    (* (/ sizey 2) (- yadj 0.5))))
+
+(define (dcommon:x->canvas x scalef xoffset)
+  (+ xoffset (* x scalef)))
+
+(define (dcommon:y->canvas y scalef yoffset)
+  (+ yoffset (* y scalef)))
+
+;; sizex, sizey     - canvas size
+;; originx, originy - canvas origin
+;;
+(define (dcommon:initial-draw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames test-records)
+  (let* ((dot-data ;; (map cdr (filter
+		   ;; 	  (lambda (x)(equal? "node" (car x)))
+	  (map string-split (tests:lazy-dot test-records "plain" sizex sizey))) ;; (tests:easy-dot test-records "plain")))
+	 (xoffset	 (dcommon:get-xoffset tests-draw-state sizex xadj))
+	 (yoffset        (dcommon:get-yoffset tests-draw-state sizey yadj))
+	 (no-dot         (configf:lookup *configdat* "setup" "nodot"))
+	 (boxh           15)
+	 (boxw           10)
+	 (margin         5)
+	 (tests-info     (hash-table-ref tests-draw-state 'tests-info))
+	 (selected-tests (hash-table-ref tests-draw-state 'selected-tests ))
+	 (scalef         (if no-dot
+			     1
+			     (dcommon:estimate-scale sizex sizey originx originy dot-data)))
+	 (sorted-testnames (if no-dot
+			       (sort sorted-testnames string>=?)
+			       sorted-testnames))
+	 (curr-x         0)  ;; NB// NOT screen units
+	 (curr-y         (/ (- sizey boxh margin) scalef)) ;; used when no-dot
+	 (scaled-sizex   (/ sizex scalef)))
+
+    (hash-table-set! tests-draw-state 'scalef scalef)
+    
+    (let ((longest-str   (if (null? sorted-testnames) "         " (car (sort sorted-testnames (lambda (a b)(>= (string-length a)(string-length b))))))))
+      (let-values (((x-max y-max) (canvas-text-size cnv longest-str)))
+	(if (> x-max boxw)(set! boxw (+ 10 x-max)))))
+    ;; (print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv) " originx: " originx " originy: " originy " xtorig: " xtorig " ytorig: " ytorig " xadj: " xadj " yadj: " yadj)
     (if (not (null? sorted-testnames))
 	(let loop ((hed (car (reverse sorted-testnames)))
 		   (tal (cdr (reverse sorted-testnames))))
-	  (let* ((tvals (hash-table-ref tests-hash hed))
-		 (llx   (+ xdelta (list-ref tvals 0)))
-		 (lly   (+ ydelta (list-ref tvals 4)))
-		 (boxw  (list-ref tvals 5))
-		 (boxh  (list-ref tvals 6))
+	  (let* ((nodedat (if no-dot
+			      #f
+			      (let ((tmpres (filter (lambda (x)
+						      (if (and (not (null? x))
+							       (equal? (car x) "node"))
+							  (equal? hed (cadr x))
+							  #f))
+						    dot-data)))
+				(if (null? tmpres)
+				    ;;           llx  lly boxw boxh
+				    (list "0" "1" "1" (conc (length tal)) "2" "0.5") ;; return some placeholder junk if no dat found
+				    (car tmpres)))))
+		 (edgedat (if no-dot
+			      '()
+			      (let ((edges (filter (lambda (x)  ;; filter for edge
+						     (if (and (not (null? x))
+							      (equal? (car x) "edge"))
+							 (equal? hed (cadr x))
+							 #f))
+						   dot-data)))
+				(map (lambda (inlst)
+				       (dcommon:process-polyline 
+					(map (lambda (instr)
+					       (string->number instr)) ;; convert to number and scale
+					     (let ((il (cddddr inlst)))
+					       (take il (- (length il) 2))))
+					(lambda (x y)
+					  (list (+ x 0)   ;; xtorig)
+						(+ y 0))) ;; ytorig)))
+					#f #f)) ;; process polyline
+				     edges))))
+		 (llx  (if no-dot
+			   curr-x
+			   (string->number (list-ref nodedat 2))))
+		 (lly  (if no-dot
+			   curr-y
+			   (string->number (list-ref nodedat 3))))
+		 (boxw (if no-dot
+			   boxw
+			   (string->number (list-ref nodedat 4))))
+		 (boxh (if no-dot
+			   boxh
+			   (string->number (list-ref nodedat 5))))
+		 (urx  (+ llx boxw))
+		 (ury  (+ lly boxh)))
+
+	    ;; if we are in no-dot mode then increment curr-x and curr-y as needed
+	    (if no-dot
+		(begin
+		  (cond 
+		   ((< curr-x (- scaled-sizex boxw boxw margin))
+		    (set! curr-x (+ curr-x boxw margin)))
+		   ((> curr-x (- scaled-sizex boxw boxw margin))
+		    (set! curr-x 0)
+		    (set! curr-y (- curr-y (+ boxh margin)))))))
+					; (print "hed " hed " llx " llx " lly " lly " urx " urx " ury " ury)
+	    (dcommon:draw-test cnv xoffset yoffset scalef llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
+	    ;; (dcommon:draw-arrows cnv testname tests-info test-records))
+	    (dcommon:draw-edges cnv xoffset yoffset scalef edgedat)
+	    
+	    ;; data used by mouse click calc. keep the wacky order for now.
+	    (hash-table-set! tests-info hed  (list llx lly urx ury boxw boxh edgedat)) 
+	    (if (not (null? tal))
+		(loop (car tal)
+		      (cdr tal))))))
+    ))
+
+;; per-point-proc required, remainder optional
+;;
+(define (dcommon:process-polyline line per-point-proc per-segment-proc last-segment-proc)
+  (if (< (length line) 2)
+      '()
+      (let loop ((x1   (car  line))
+		 (y1   (cadr line))
+		 (x2   #f)
+		 (y2   #f)
+		 (tal  (cddr line))
+		 (res  '()))
+	(if (and x1 y1 x2 y2 per-segment-proc)
+	    (per-segment-proc x1 y1 x2 y2))
+	(if (< (length tal) 2)
+	    (begin
+	      (if last-segment-proc (last-segment-proc x1 y1 x2 y2))
+	      (append res (per-point-proc x1 y1)))
+	    (loop (car tal)(cadr tal) x1 y1 (cddr tal) (append res (per-point-proc x1 y1)))))))
+
+(define (dcommon:redraw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames test-records)
+  (let* ((scalef              (hash-table-ref tests-draw-state 'scalef))
+	 (xoffset             (dcommon:get-xoffset tests-draw-state sizex xadj))
+	 (yoffset             (dcommon:get-yoffset tests-draw-state sizey yadj))
+	 (tests-info          (hash-table-ref tests-draw-state 'tests-info))
+	 (selected-tests      (hash-table-ref tests-draw-state 'selected-tests )))
+    (if (not (null? sorted-testnames))
+	(let loop ((hed (car (reverse sorted-testnames)))
+		   (tal (cdr (reverse sorted-testnames))))
+	  (let* ((tvals (hash-table-ref tests-info hed))
+		 (llx   (list-ref tvals 0))
+		 (lly   (list-ref tvals 1))
+		 (boxw  (list-ref tvals 4))
+		 (boxh  (list-ref tvals 5))
+		 (edges (map (lambda (pline)
+			       (dcommon:process-polyline pline
+							 (lambda (x1 y1)
+							   (list x1 y1))
+							 #f #f))
+			     (list-ref tvals 6)))
 		 (urx   (+ llx boxw))
 		 (ury   (+ lly boxh)))
-	    (dcommon:draw-test cnv llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
-	    (hash-table-set! tests-hash hed (list llx urx (- sizey ury)(- sizey lly) lly boxw boxh))
+	    (dcommon:draw-test cnv xoffset yoffset scalef llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
+	    (dcommon:draw-edges cnv xoffset yoffset scalef edges)
 	    (if (not (null? tal))
 		;; leave a column of space to the right to list items
 		(loop (car tal)
@@ -667,7 +882,8 @@
 ;;======================================================================
 
 (define (dcommon:populate-steps teststeps steps-matrix)
-  (let ((max-row 0))
+  (let ((max-row 0)
+	(max-col 7))
     (if (null? teststeps)
 	(iup:attribute-set! steps-matrix "CLEARVALUE" "CONTENTS")
 	(let loop ((hed    (car teststeps))
@@ -678,7 +894,7 @@
 	  (let ((val     (vector-ref hed (- colnum 1)))
 		(mtrx-rc (conc rownum ":" colnum)))
 	    (iup:attribute-set! steps-matrix  mtrx-rc (if val (conc val) ""))
-	    (if (< colnum 6)
+	    (if (< colnum max-col)
 		(loop hed tal rownum (+ colnum 1))
 		(if (not (null? tal))
 		    (loop (car tal)(cdr tal)(+ rownum 1) 1))))))
@@ -688,18 +904,18 @@
 	  (let loop ((rownum  (+ max-row 1))
 		     (colnum  0)
 		     (deleted #f))
-	    ;; (debug:print-info 0 "cleaning " rownum ":" colnum)
-	    (let* ((next-row (if (eq? colnum 6) (+ rownum 1) rownum))
-		   (next-col (if (eq? colnum 6) 1 (+ colnum 1)))
+	    ;; (debug:print-info 0 #f "cleaning " rownum ":" colnum)
+	    (let* ((next-row (if (eq? colnum max-col) (+ rownum 1) rownum))
+		   (next-col (if (eq? colnum max-col) 1 (+ colnum 1)))
 		   (mtrx-rc  (conc rownum ":" colnum))
 		   (curr-val (iup:attribute steps-matrix mtrx-rc)))
-	      ;; (debug:print-info 0 "cleaning " rownum ":" colnum " currval= " curr-val)
+	      ;; (debug:print-info 0 #f "cleaning " rownum ":" colnum " currval= " curr-val)
 	      (if (and (string? curr-val)
 		       (not (equal? curr-val "")))
 		  (begin
 		    (iup:attribute-set! steps-matrix mtrx-rc "")
 		    (loop next-row next-col #t))
-		  (if (eq? colnum 6) ;; not done, didn't get a full blank row
+		  (if (eq? colnum max-col) ;; not done, didn't get a full blank row
 		      (if deleted (loop next-row next-col #f)) ;; exit on this not met
 		      (loop next-row next-col deleted)))))
 	  (iup:attribute-set! steps-matrix "REDRAW" "ALL")))))
