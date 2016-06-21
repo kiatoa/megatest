@@ -154,24 +154,42 @@
   (not (equal? (common:get-last-run-version)
 	       (common:version-signature))))
 
+;; Move me elsewhere ...
+;;
+(define (common:cleanup-db)
+  (db:multi-db-sync 
+   #f ;; do all run-ids
+   ;; 'new2old
+   'killservers
+   'dejunk
+   ;; 'adj-testids
+   ;; 'old2new
+   'new2old)
+  (if (common:version-changed?)
+      (common:set-last-run-version)))
+
 (define (common:exit-on-version-changed)
   (if (common:version-changed?)
-      (begin
+      (let ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config")))
         (debug:print 0 #f
 		     "ERROR: Version mismatch!\n"
 		     "   expected: " (common:version-signature) "\n"
-		     "   got:      " (common:get-last-run-version) "\n"
-		     " to switch versions you can run: \"megatest -cleanup-db\"")
-        ;; megatest -cleanup-db IS NOT correcting the dbver.  Let's force it for now.
-        ;; Matt: please review this!
-        (db:multi-db-sync
-         #f 
-         'killservers
-         'dejunk
-         'new2old)
-        (rmt:set-var "MEGATEST_VERSION" (common:version-signature))
-
-	(exit 1))))
+		     "   got:      " (common:get-last-run-version))
+	(if (and (file-exists? mtconf)
+		 (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
+	    (begin
+	      (debug:print 0 #f "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
+	      (handle-exceptions
+	       exn
+	       (begin
+		 (debug:print 0 #f "Failed to switch versions.")
+		 (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
+		 (print-call-chain (current-error-port))
+		 (exit 1))
+	       (common:cleanup-db)))
+	    (begin
+	      (debug:print 0 #f " to switch versions you can run: \"megatest -cleanup-db\"")
+	      (exit 1))))))
 
 ;;======================================================================
 ;; S P A R S E   A R R A Y S

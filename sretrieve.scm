@@ -58,6 +58,7 @@
     -m \"message\"       : why retrieved?
   cp <relative path>     : copy file to current directory 
   log                    : get listing of recent downloads
+  shell                  : start a shell-like interface
 
 Part of the Megatest tool suite.
 Learn more at http://www.kiatoa.com/fossils/megatest
@@ -415,6 +416,51 @@ Version: " megatest-fossil-hash)) ;; "
       (apply print args))))
 
 ;;======================================================================
+;; SHELL
+;;======================================================================
+
+(define (toplevel-command . args) #f)
+(define (sretrieve:shell)
+  (use readline)
+  (let* ((path      '())
+	 (prompt    "> ")
+	 (top-areas '("mrwellan" "pjhatwal" "bjbarcla" "ritikaag" "jmoon18"))
+	 (iport     (make-readline-port prompt)))
+    (install-history-file) ;;  [homedir] [filename] [nlines])
+    (with-input-from-port iport
+      (lambda ()
+	(let loop ((inl (read-line)))
+	  (if (not (or (eof-object? inl)
+		       (equal? inl "exit")))
+	      (let* ((parts (string-split inl))
+		     (cmd   (if (null? parts) #f (car parts))))
+		(if (not cmd)
+		    (loop (read-line))
+		    (case (string->symbol cmd)
+		      ((cd)
+		       (if (> (length parts) 1) ;; have a parameter
+			   (set! path (append path (string-split (cadr parts)))) ;; not correct for relative paths
+			   (set! path '())))
+		      ((ls)
+		       (let* ((thepath (if (> (length parts) 1) ;; have a parameter
+					   (cdr parts)
+					   path))
+			      (plen    (length thepath)))
+			 (cond
+			  ((null? thepath)
+			   (print (string-intersperse top-areas " ")))
+			  ((and (< plen 2)
+				(member (car thepath) top-areas))
+			   (system (conc "ls /p/fdk/gwa/" (car thepath))))
+			  (else ;; have a long path
+			   ;; check for access rights here
+			   (system (conc "ls /p/fdk/gwa/" (string-intersperse thepath "/")))))))
+		      (else 
+		       (print "Got command: " inl))))
+		(loop (read-line)))))))))
+    
+
+;;======================================================================
 ;; MAIN
 ;;======================================================================
 
@@ -560,6 +606,8 @@ Version: " megatest-fossil-hash)) ;; "
 					     (lambda (row)
 					       (apply print (intersperse row " | "))))
 					    (sql db "SELECT * FROM actions")))))
+	((shell)
+	 (sretrieve:shell))
 	(else
 	 (print "ERROR: Unrecognised command. Try \"sretrieve help\""))))
      ;; multi-word commands
