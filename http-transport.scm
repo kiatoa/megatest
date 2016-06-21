@@ -50,7 +50,7 @@
 (define *db:process-queue-mutex* (make-mutex))
 
 (define (http-transport:run hostn run-id server-id)
-  (debug:print 2 #f "Attempting to start the server ...")
+  (debug:print 2 *default-log-port* "Attempting to start the server ...")
   (let* ((db              #f) ;;        (open-db)) ;; we don't want the server to be opening and closing the db unnecesarily
 	 (hostname        (get-host-name))
 	 (ipaddrstr       (let ((ipstr (if (string=? "-" hostn)
@@ -61,7 +61,7 @@
 	 (start-port      (portlogger:open-run-close portlogger:find-port))
 	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree")))
     ;; (set! db *inmemdb*)
-    (debug:print-info 0 #f "portlogger recommended port: " start-port)
+    (debug:print-info 0 *default-log-port* "portlogger recommended port: " start-port)
     (root-path     (if link-tree-path 
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
@@ -114,18 +114,18 @@
 (define (http-transport:try-start-server run-id ipaddrstr portnum server-id)
   (let ((config-hostname (configf:lookup *configdat* "server" "hostname"))
 	(tdbdat          (tasks:open-db)))
-    (debug:print-info 0 #f "http-transport:try-start-server run-id=" run-id " ipaddrsstr=" ipaddrstr " portnum=" portnum " server-id=" server-id " config-hostname=" config-hostname)
+    (debug:print-info 0 *default-log-port* "http-transport:try-start-server run-id=" run-id " ipaddrsstr=" ipaddrstr " portnum=" portnum " server-id=" server-id " config-hostname=" config-hostname)
     (handle-exceptions
      exn
      (begin
        (print-error-message exn)
        (if (< portnum 64000)
 	   (begin 
-	     (debug:print 0 #f "WARNING: attempt to start server failed. Trying again ...")
-	     (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 #f "exn=" (condition->list exn))
+	     (debug:print 0 *default-log-port* "WARNING: attempt to start server failed. Trying again ...")
+	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+	     (debug:print 0 *default-log-port* "exn=" (condition->list exn))
 	     (portlogger:open-run-close portlogger:set-failed portnum)
-	     (debug:print 0 #f "WARNING: failed to start on portnum: " portnum ", trying next port")
+	     (debug:print 0 *default-log-port* "WARNING: failed to start on portnum: " portnum ", trying next port")
 	     (thread-sleep! 0.1)
 
 	     ;; get_next_port goes here
@@ -142,7 +142,7 @@
 		     (db:delay-if-busy tdbdat)
 		     server-id 
 		     ipaddrstr portnum)
-     (debug:print 0 #f "INFO: Trying to start server on " ipaddrstr ":" portnum)
+     (debug:print 0 *default-log-port* "INFO: Trying to start server on " ipaddrstr ":" portnum)
      ;; This starts the spiffy server
      ;; NEED WAY TO SET IP TO #f TO BIND ALL
      ;; (start-server bind-address: ipaddrstr port: portnum)
@@ -153,7 +153,7 @@
 	 (start-server port: portnum))
      ;;  (portlogger:open-run-close portlogger:set-port portnum "released")
      (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat) run-id ipaddrstr portnum " http-transport:try-start-server")
-     (debug:print 1 #f "INFO: server has been stopped"))))
+     (debug:print 1 *default-log-port* "INFO: server has been stopped"))))
 
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
@@ -185,7 +185,7 @@
   ;; Use this opportunity to slow things down iff there are too many requests in flight
   (if (> *http-requests-in-progress* 5)
       (begin
-	(debug:print-info 0 #f "Whoa there buddy, ease up...")
+	(debug:print-info 0 *default-log-port* "Whoa there buddy, ease up...")
 	(thread-sleep! 1)))
   (mutex-unlock! *http-mutex*))
 
@@ -203,7 +203,7 @@
 	    (begin
 	      (thread-sleep! 0.05)
 	      (loop etime))
-	    (debug:print 0 #f "ERROR: requests still in progress after 5 seconds of waiting. I'm going to pass on cleaning up http connections"))
+	    (debug:print 0 *default-log-port* "ERROR: requests still in progress after 5 seconds of waiting. I'm going to pass on cleaning up http connections"))
 	(close-all-connections!)))
   (set! *http-connections-next-cleanup* (+ (current-seconds) 10))
   (mutex-unlock! *http-mutex*))
@@ -218,7 +218,7 @@
   (let* ((fullurl    (if (vector? serverdat)
 			 (http-transport:server-dat-get-api-req serverdat)
 			 (begin
-			   (debug:print 0 #f "FATAL ERROR: http-transport:client-api-send-receive called with no server info")
+			   (debug:print 0 *default-log-port* "FATAL ERROR: http-transport:client-api-send-receive called with no server info")
 			   (exit 1))))
 	 (res        #f)
 	 (success    #t)
@@ -232,16 +232,16 @@
 ;;	   (thread-sleep! 1)
 ;;	   (handle-exceptions
 ;;	    exn
-;;	    (debug:print 0 #f "WARNING: closing connections failed. Server at " fullurl " almost certainly dead")
+;;	    (debug:print 0 *default-log-port* "WARNING: closing connections failed. Server at " fullurl " almost certainly dead")
 ;;	    (close-all-connections!))
-;;	   (debug:print 0 #f "WARNING: Failed to communicate with server, trying again, numretries left: " numretries)
+;;	   (debug:print 0 *default-log-port* "WARNING: Failed to communicate with server, trying again, numretries left: " numretries)
 ;;	   (http-transport:client-api-send-receive run-id serverdat cmd sparams numretries: (- numretries 1)))
 ;;	 (begin
 ;;	   (mutex-unlock! *http-mutex*)
 ;;	   (tasks:kill-server-run-id run-id)
 ;;	   #f))
 ;;     (begin
-       (debug:print-info 11 #f "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
+       (debug:print-info 11 *default-log-port* "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
        ;; set up the http-client here
        (max-retry-attempts 1)
        ;; consider all requests indempotent
@@ -261,8 +261,8 @@
 					   exn
 					   (begin
 					     (set! success #f)
-					     (debug:print 0 #f "WARNING: failure in with-input-from-request to " fullurl ".")
-					     (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
+					     (debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
+					     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 					     (hash-table-delete! *runremote* run-id)
 					     ;; Killing associated server to allow clean retry.")
 					     ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
@@ -291,15 +291,15 @@
 	 (thread-start! th2)
 	 (thread-join! th1)
 	 (thread-terminate! th2)
-	 (debug:print-info 11 #f "got res=" res)
+	 (debug:print-info 11 *default-log-port* "got res=" res)
 	 (if (vector? res)
 	     (if (vector-ref res 0)
 		 res
 		 (begin ;; note: this code also called in nmsg-transport - consider consolidating it
-		   (debug:print 0 #f "ERROR: error occured at server, info=" (vector-ref res 2))
-		   (debug:print 0 #f " client call chain:")
+		   (debug:print 0 *default-log-port* "ERROR: error occured at server, info=" (vector-ref res 2))
+		   (debug:print 0 *default-log-port* " client call chain:")
 		   (print-call-chain (current-error-port))
-		   (debug:print 0 #f " server call chain:")
+		   (debug:print 0 *default-log-port* " server call chain:")
 		   (pp (vector-ref res 1) (current-error-port))
 		   (signal (vector-ref result 0))))
 	     (signal (make-composite-condition
@@ -341,7 +341,7 @@
       (vector-set! vec 5 (current-seconds))
       (begin
 	(print-call-chain (current-error-port))
-	(debug:print 0 #f "ERROR: call to http-transport:server-dat-update-last-access with non-vector!!"))))
+	(debug:print 0 *default-log-port* "ERROR: call to http-transport:server-dat-update-last-access with non-vector!!"))))
 
 ;;
 ;; connect
@@ -360,7 +360,7 @@
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
-  (debug:print-info 0 #f "Starting the sync-back, keep alive thread in server for run-id=" run-id)
+  (debug:print-info 0 *default-log-port* "Starting the sync-back, keep alive thread in server for run-id=" run-id)
   (let* ((tdbdat      (tasks:open-db))
 	 (server-start-time (current-seconds))
 	 (server-info (let loop ((start-time (current-seconds))
@@ -368,7 +368,7 @@
 				 (last-sdat  "not this"))
                         (let ((sdat #f))
 			  (thread-sleep! 0.01)
-			  (debug:print-info 0 #f "Waiting for server alive signature")
+			  (debug:print-info 0 *default-log-port* "Waiting for server alive signature")
                           (mutex-lock! *heartbeat-mutex*)
                           (set! sdat *server-info*)
                           (mutex-unlock! *heartbeat-mutex*)
@@ -377,11 +377,11 @@
 				   (> (- (current-seconds) start-time) 2))
 			      sdat
                               (begin
-				(debug:print-info 0 #f "Still waiting, last-sdat=" last-sdat)
+				(debug:print-info 0 *default-log-port* "Still waiting, last-sdat=" last-sdat)
                                 (sleep 4)
 				(if (> (- (current-seconds) start-time) 120) ;; been waiting for two minutes
 				    (begin
-				      (debug:print 0 #f "ERROR: transport appears to have died, exiting server " server-id " for run " run-id)
+				      (debug:print 0 *default-log-port* "ERROR: transport appears to have died, exiting server " server-id " for run " run-id)
 				      (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id "failed to start, never received server alive signature")
 				      (exit))
 				    (loop start-time
@@ -410,12 +410,12 @@
 			     (thread-sleep! 5)
 			     (loop count server-state (+ bad-sync-count 1)))))
 	     ((exn)
-	      (debug:print 0 #f "ERROR: error from sync code other than 'sync-failed. Attempting to gracefully shutdown the server")
+	      (debug:print 0 *default-log-port* "ERROR: error from sync code other than 'sync-failed. Attempting to gracefully shutdown the server")
 	      (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running crashed")
 	      (exit)))
 	    (set! sync-time  (- (current-milliseconds) start-time))
 	    (set! rem-time (quotient (- 4000 sync-time) 1000))
-	    (debug:print 4 #f "SYNC: time= " sync-time ", rem-time=" rem-time)
+	    (debug:print 4 *default-log-port* "SYNC: time= " sync-time ", rem-time=" rem-time)
 	    
 	    (if (and (<= rem-time 4)
 		     (> rem-time 0))
@@ -451,7 +451,7 @@
       (if (or (not (equal? sdat (list iface port)))
 	      (not server-id))
 	  (begin 
-	    (debug:print-info 0 #f "interface changed, refreshing iface and port info")
+	    (debug:print-info 0 *default-log-port* "interface changed, refreshing iface and port info")
 	    (set! iface (car sdat))
 	    (set! port  (cadr sdat))))
       
@@ -460,7 +460,7 @@
       (set! last-access *last-db-access*)
       (mutex-unlock! *heartbeat-mutex*)
 
-      ;; (debug:print 11 #f "last-access=" last-access ", server-timeout=" server-timeout)
+      ;; (debug:print 11 *default-log-port* "last-access=" last-access ", server-timeout=" server-timeout)
       ;;
       ;; no_traffic, no running tests, if server 0, no running servers
       ;;
@@ -471,13 +471,13 @@
 				   (- server-timeout (inexact->exact (round (* hrs-since-start 60))))  ;; subtract 60 seconds per hour
 				   server-timeout)))
 	(if (common:low-noise-print 120 "server timeout")
-	    (debug:print-info 0 #f "Adjusted server timeout: " adjusted-timeout))
+	    (debug:print-info 0 *default-log-port* "Adjusted server timeout: " adjusted-timeout))
 	(if (and *server-run*
 		 (> (+ last-access server-timeout)
 		    (current-seconds)))
 	    (begin
 	      (if (common:low-noise-print 120 "server continuing")
-		  (debug:print-info 0 #f "Server continuing, seconds since last db access: " (- (current-seconds) last-access)))
+		  (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access)))
 	      ;;
 	      ;; Consider implementing some smarts here to re-insert the record or kill self is
 	      ;; the db indicates so
@@ -490,7 +490,7 @@
   
 (define (http-transport:server-shutdown server-id port)
   (let ((tdbdat (tasks:open-db)))
-    (debug:print-info 0 #f "Starting to shutdown the server.")
+    (debug:print-info 0 *default-log-port* "Starting to shutdown the server.")
     ;; need to delete only *my* server entry (future use)
     (set! *time-to-exit* #t)
     (if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
@@ -500,22 +500,22 @@
     (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "shutting-down")
     (portlogger:open-run-close portlogger:set-port port "released")
     (thread-sleep! 5)
-    (debug:print-info 0 #f "Max cached queries was    " *max-cache-size*)
-    (debug:print-info 0 #f "Number of cached writes   " *number-of-writes*)
-    (debug:print-info 0 #f "Average cached write time "
+    (debug:print-info 0 *default-log-port* "Max cached queries was    " *max-cache-size*)
+    (debug:print-info 0 *default-log-port* "Number of cached writes   " *number-of-writes*)
+    (debug:print-info 0 *default-log-port* "Average cached write time "
 		      (if (eq? *number-of-writes* 0)
 			  "n/a (no writes)"
 			  (/ *writes-total-delay*
 			     *number-of-writes*))
 		      " ms")
-    (debug:print-info 0 #f "Number non-cached queries "  *number-non-write-queries*)
-    (debug:print-info 0 #f "Average non-cached time   "
+    (debug:print-info 0 *default-log-port* "Number non-cached queries "  *number-non-write-queries*)
+    (debug:print-info 0 *default-log-port* "Average non-cached time   "
 		      (if (eq? *number-non-write-queries* 0)
 			  "n/a (no queries)"
 			  (/ *total-non-write-delay* 
 			     *number-non-write-queries*))
 		      " ms")
-    (debug:print-info 0 #f "Server shutdown complete. Exiting")
+    (debug:print-info 0 *default-log-port* "Server shutdown complete. Exiting")
     (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running complete")
     (exit)))
 
@@ -535,7 +535,7 @@
 		(current-output-port *alt-log-file*)))))
     (if (server:check-if-running run-id)
 	(begin
-	  (debug:print 0 #f "INFO: Server for run-id " run-id " already running")
+	  (debug:print 0 *default-log-port* "INFO: Server for run-id " run-id " already running")
 	  (exit 0)))
     (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id))
 	       (remtries  4))
@@ -547,11 +547,11 @@
 		      (- remtries 1)))
 	      (begin
 		;; since we didn't get the server lock we are going to clean up and bail out
-		(debug:print-info 2 #f "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
+		(debug:print-info 2 *default-log-port* "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
 		(tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat) " http-transport:launch")
 		))
 	  (let* ((th2 (make-thread (lambda ()
-				     (debug:print-info 0 #f "Server run thread started")
+				     (debug:print-info 0 *default-log-port* "Server run thread started")
 				     (http-transport:run 
 				      (if (args:get-arg "-server")
 					  (args:get-arg "-server")
@@ -559,7 +559,7 @@
 				      run-id
 				      server-id)) "Server run"))
 		 (th3 (make-thread (lambda ()
-				     (debug:print-info 0 #f "Server monitor thread started")
+				     (debug:print-info 0 *default-log-port* "Server monitor thread started")
 				     (http-transport:keep-running server-id run-id))
 				   "Keep running")))
 	    (thread-start! th2)
@@ -585,14 +585,14 @@
   (signal-mask! signum)
   (handle-exceptions
    exn
-   (debug:print 0 #f " ... exiting ...")
+   (debug:print 0 *default-log-port* " ... exiting ...")
    (let ((th1 (make-thread (lambda ()
 			     (thread-sleep! 1))
 			   "eat response"))
 	 (th2 (make-thread (lambda ()
-			     (debug:print 0 #f "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
+			     (debug:print 0 *default-log-port* "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
 			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
-			     (debug:print 0 #f "       Done.")
+			     (debug:print 0 *default-log-port* "       Done.")
 			     (exit 4))
 			   "exit on ^C timer")))
      (thread-start! th2)

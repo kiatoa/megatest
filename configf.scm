@@ -47,7 +47,7 @@
   (handle-exceptions
    exn
    (begin
-     (debug:print 0 #f "ERROR: problem evaluating \"" str "\" in the shell environment")
+     (debug:print 0 *default-log-port* "ERROR: problem evaluating \"" str "\" in the shell environment")
      #f)
    (let ((cmdres (process:cmd-run->list (conc "echo " str))))
      (if (null? cmdres) ""
@@ -100,8 +100,8 @@
 		(handle-exceptions
 		 exn
 		 (begin
-		   (debug:print 0 #f "WARNING: failed to process config input \"" l "\"")
-		   (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
+		   (debug:print 0 *default-log-port* "WARNING: failed to process config input \"" l "\"")
+		   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 		   ;; (print "exn=" (condition->list exn))
 		   (set! result (conc "#{( " cmdtype ") " cmd"}")))
 		 (if (or allow-system
@@ -114,8 +114,8 @@
 		  ((system shell scheme)
 		   (let ((delta (- (current-seconds) start-time)))
 		     (if (> delta 2)
-			 (debug:print-info 0 #f "for line \"" l "\"\n command:  " cmd " took " delta " seconds to run with output:\n   " result)
-			 (debug:print-info 9 #f "for line \"" l "\"\n command:  " cmd " took " delta " seconds to run with output:\n   " result)))))
+			 (debug:print-info 0 *default-log-port* "for line \"" l "\"\n command:  " cmd " took " delta " seconds to run with output:\n   " result)
+			 (debug:print-info 9 *default-log-port* "for line \"" l "\"\n command:  " cmd " took " delta " seconds to run with output:\n   " result)))))
 		(loop (conc prestr result poststr)))
 	      res))
 	res)))
@@ -129,7 +129,7 @@
 	(let ((outres (string-intersperse 
 		       res
 		       "\n")))
-	  (debug:print-info 4 #f "shell result:\n" outres)
+	  (debug:print-info 4 *default-log-port* "shell result:\n" outres)
 	  outres)
 	(begin
 	  (with-output-to-port (current-error-port)
@@ -181,11 +181,11 @@
 ;; post-section-procs alist of section-pattern => proc, where: (proc section-name next-section-name ht curr-path)
 ;;
 (define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f)(settings (make-hash-table))(keep-filenames #f)(post-section-procs '()))
-  (debug:print-info 5 #f "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections " pwd: " (current-directory))
-  (debug:print 9 #f "START: " path)
+  (debug:print-info 5 *default-log-port* "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections " pwd: " (current-directory))
+  (debug:print 9 *default-log-port* "START: " path)
   (if (not (file-exists? path))
       (begin 
-	(debug:print-info 1 #f "read-config - file not found " path " current path: " (current-directory))
+	(debug:print-info 1 *default-log-port* "read-config - file not found " path " current path: " (current-directory))
 	;; WARNING: This is a risky change but really, we should not return an empty hash table if no file read?
 	#f) ;; (if (not ht)(make-hash-table) ht))
       (let ((inp        (open-input-file path))
@@ -197,12 +197,12 @@
 		   (curr-section-name (if curr-section curr-section "default"))
 		   (var-flag #f);; turn on for key-var-pr and cont-ln-rx, turn off elsewhere
 		   (lead     #f))
-	  (debug:print-info 8 #f "curr-section-name: " curr-section-name " var-flag: " var-flag "\n   inl: \"" inl "\"")
+	  (debug:print-info 8 *default-log-port* "curr-section-name: " curr-section-name " var-flag: " var-flag "\n   inl: \"" inl "\"")
 	  (if (eof-object? inl) 
 	      (begin
 		(close-input-port inp)
 		(hash-table-delete! res "") ;; we are using "" as a dumping ground and must remove it before returning the ht
-		(debug:print 9 #f "END: " path)
+		(debug:print 9 *default-log-port* "END: " path)
 		res)
 	      (regex-case 
 	       inl 
@@ -222,13 +222,13 @@
 							(if (file-exists? full-conf)
 							    (begin
 							      ;; (push-directory conf-dir)
-							      (debug:print 9 #f "Including: " full-conf)
+							      (debug:print 9 *default-log-port* "Including: " full-conf)
 							      (read-config full-conf res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections settings: settings keep-filenames: keep-filenames)
 							      ;; (pop-directory)
 							      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
 							    (begin
 							      (debug:print '(2 9) #f "INFO: include file " include-file " not found (called from " path ")")
-							      (debug:print 2 #f "        " full-conf)
+							      (debug:print 2 *default-log-port* "        " full-conf)
 							      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f)))))
 	       (configf:section-rx ( x section-name ) (begin
 							;; call post-section-procs
@@ -253,14 +253,14 @@
 										   (delta      (- (current-seconds) start-time))
 										   (status     (cadr cmdres))
 										   (res        (car  cmdres)))
-									      (debug:print-info 4 #f "" inl "\n => " (string-intersperse res "\n"))
+									      (debug:print-info 4 *default-log-port* "" inl "\n => " (string-intersperse res "\n"))
 									      (if (not (eq? status 0))
 										  (begin
-										    (debug:print 0 #f "ERROR: problem with " inl ", return code " status
+										    (debug:print 0 *default-log-port* "ERROR: problem with " inl ", return code " status
 												 " output: " cmdres)))
 									      (if (> delta 2)
-										  (debug:print-info 0 #f "for line \"" inl "\"\n  command: " cmd " took " delta " seconds to run with output:\n   " res)
-										  (debug:print-info 9 #f "for line \"" inl "\"\n  command: " cmd " took " delta " seconds to run with output:\n   " res))
+										  (debug:print-info 0 *default-log-port* "for line \"" inl "\"\n  command: " cmd " took " delta " seconds to run with output:\n   " res)
+										  (debug:print-info 9 *default-log-port* "for line \"" inl "\"\n  command: " cmd " took " delta " seconds to run with output:\n   " res))
 									      (if (null? res)
 										  ""
 										  (string-intersperse res " "))))))
@@ -276,7 +276,7 @@
 							  (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f)))
 	       (configf:key-no-val ( x key val)            (let* ((alist   (hash-table-ref/default res curr-section-name '()))
 								  (fval    (or (if (string? val) val #f) ""))) ;; fval should be either "" or " " (one or more spaces)
-							     (debug:print 10 #f "   setting: [" curr-section-name "] " key " = #t")
+							     (debug:print 10 *default-log-port* "   setting: [" curr-section-name "] " key " = #t")
 							     (safe-setenv key fval)
 							     (hash-table-set! res curr-section-name 
 									      (config:assoc-safe-add alist key fval metadata: metapath))
@@ -286,9 +286,9 @@
 								  (realval (if envar
 									       (config:eval-string-in-environment val)
 									       val)))
-							     (debug:print-info 6 #f "read-config env setting, envar: " envar " realval: " realval " val: " val " key: " key " curr-section-name: " curr-section-name)
+							     (debug:print-info 6 *default-log-port* "read-config env setting, envar: " envar " realval: " realval " val: " val " key: " key " curr-section-name: " curr-section-name)
 							     (if envar (safe-setenv key realval))
-							     (debug:print 10 #f "   setting: [" curr-section-name "] " key " = " val)
+							     (debug:print 10 *default-log-port* "   setting: [" curr-section-name "] " key " = " val)
 							     (hash-table-set! res curr-section-name 
 									      (config:assoc-safe-add alist key realval metadata: metapath))
 							     (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name key #f)))
@@ -307,7 +307,7 @@
 								       (config:assoc-safe-add alist var-flag newval metadata: metapath))
 						      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name var-flag (if lead lead whsp)))
 						    (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))))
-	       (else (debug:print 0 #f "ERROR: problem parsing " path ",\n   \"" inl "\"")
+	       (else (debug:print 0 *default-log-port* "ERROR: problem parsing " path ",\n   \"" inl "\"")
 		     (set! var-flag #f)
 		     (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))))))))
   
@@ -320,7 +320,7 @@
 	 (set-fields (lambda (curr-section next-section ht path)
 		       (let ((field-names (if ht (keys:config-get-fields ht) '()))
 			     (target      (or (getenv "MT_TARGET")(args:get-arg "-reqtarg")(args:get-arg "-target"))))
-			 (debug:print-info 9 #f "set-fields with field-names=" field-names " target=" target " curr-section=" curr-section " next-section=" next-section " path=" path " ht=" ht)
+			 (debug:print-info 9 *default-log-port* "set-fields with field-names=" field-names " target=" target " curr-section=" curr-section " next-section=" next-section " path=" path " ht=" ht)
 			 (if (not (null? field-names))(keys:target-set-args field-names target #f))))))
     (if toppath (change-directory toppath)) 
     (if (and toppath pathenvvar)(setenv pathenvvar toppath))
@@ -469,9 +469,9 @@
 			     (hash-table-set! sechash key newval)
 			     (set! new (conc key " " newval)))
 			  (else
-			   (debug:print 0 #f "ERROR: problem parsing line number " lnum "\"" hed "\"")))))
+			   (debug:print 0 *default-log-port* "ERROR: problem parsing line number " lnum "\"" hed "\"")))))
 	   (else
-	    (debug:print 0 #f "ERROR: Problem parsing line num " lnum " :\n   " hed )))
+	    (debug:print 0 *default-log-port* "ERROR: Problem parsing line num " lnum " :\n   " hed )))
 	  (if (not (null? tal))
 	      (loop (car tal)(cdr tal)(if new (append res (list new)) res)(+ lnum 1)))
 	  ;; drop to here when done processing, res contains modified list of lines

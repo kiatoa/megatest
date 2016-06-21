@@ -64,7 +64,7 @@
 ;;======================================================================
 
 (define (nmsg-transport:run dbstruct hostn run-id server-id #!key (retrynum 1000))
-  (debug:print 2 #f "Attempting to start the server ...")
+  (debug:print 2 *default-log-port* "Attempting to start the server ...")
   (let* ((start-port      (portlogger:open-run-close portlogger:find-port))
 	 (server-thread   (make-thread (lambda ()
 					 (nmsg-transport:try-start-server dbstruct run-id start-port server-id))
@@ -86,12 +86,12 @@
 	  (thread-join! server-thread))
 	(if (> retrynum 0)
 	    (begin
-	      (debug:print 0 #f "WARNING: Failed to connect to server (self) on host " hostn ":" start-port ", trying again.")
+	      (debug:print 0 *default-log-port* "WARNING: Failed to connect to server (self) on host " hostn ":" start-port ", trying again.")
 	      (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id "failed to start, never received server alive signature")
 	      (portlogger:open-run-close portlogger:set-failed start-port)
 	      (nmsg-transport:run dbstruct hostn run-id server-id))
 	    (begin
-	      (debug:print 0 #f "ERROR: could not find an open port to start server on. Giving up")
+	      (debug:print 0 *default-log-port* "ERROR: could not find an open port to start server on. Giving up")
 	      (exit 1))))))
 
 (define (nmsg-transport:try-start-server dbstruct run-id portnum server-id)
@@ -99,9 +99,9 @@
     (nn-bind repsoc (conc "tcp://*:" portnum))
     (let loop ((msg-in (nn-recv repsoc)))
       (let* ((dat    (db:string->obj msg-in transport: 'nmsg)))
-	(debug:print 0 #f "server, received: " dat)
+	(debug:print 0 *default-log-port* "server, received: " dat)
 	(let ((result (api:execute-requests dbstruct dat)))
-	  (debug:print 0 #f "server, sending: " result)
+	  (debug:print 0 *default-log-port* "server, sending: " result)
 	  (nn-send repsoc (db:obj->string result  transport: 'nmsg)))
 	(loop (nn-recv repsoc))))))
 
@@ -124,7 +124,7 @@
     ;;     	(current-output-port *alt-log-file*)))))
     (if (server:check-if-running run-id)
 	(begin
-	  (debug:print-info 0 #f "Server for run-id " run-id " already running")
+	  (debug:print-info 0 *default-log-port* "Server for run-id " run-id " already running")
 	  (exit 0)))
     (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id))
 	       (remtries  4))
@@ -136,11 +136,11 @@
 		    (loop (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id)
 			  (- remtries 1))
 		    (begin
-		      (debug:print-info 0 #f "Another server took the slot, exiting")
+		      (debug:print-info 0 *default-log-port* "Another server took the slot, exiting")
 		      (exit 0))))
 	      (begin
 		;; since we didn't get the server lock we are going to clean up and bail out
-		(debug:print-info 2 #f "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
+		(debug:print-info 2 *default-log-port* "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
 		(tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat) " http-transport:launch")
 		))
 	  ;; locked in a server id, try to start up
@@ -186,7 +186,7 @@
 	 (key     (if success 
 		      (vector-ref result 1)
 		      #f)))
-    (debug:print 0 #f "success=" success ", key=" key ", expected-key=" expected-key ", equal? " (equal? key expected-key))
+    (debug:print 0 *default-log-port* "success=" success ", key=" key ", expected-key=" expected-key ", equal? " (equal? key expected-key))
     (if (and success
 	     (or (not expected-key) ;; just getting a reply is good enough then
 		 (equal? key expected-key)))
@@ -220,7 +220,7 @@
 		       (lambda ()
 			 (let loop ((count 0))
 			   (thread-sleep! 1)
-			   (debug:print-info 1 #f "send-receive-raw, still waiting after " count " seconds...")
+			   (debug:print-info 1 *default-log-port* "send-receive-raw, still waiting after " count " seconds...")
 			   (if (and keepwaiting (< count timeout)) ;; yes, this is very aproximate
 			       (loop (+ count 1))))
 			 (if keepwaiting
@@ -242,10 +242,10 @@
 		 (vector-ref result 0)) ;; did it fail at the server?
 	    result                ;; nope, all good
 	    (begin
-	      (debug:print 0 #f "ERROR: error occured at server, info=" (vector-ref result 2))
-	      (debug:print 0 #f " client call chain:")
+	      (debug:print 0 *default-log-port* "ERROR: error occured at server, info=" (vector-ref result 2))
+	      (debug:print 0 *default-log-port* " client call chain:")
 	      (print-call-chain (current-error-port))
-	      (debug:print 0 #f " server call chain:")
+	      (debug:print 0 *default-log-port* " server call chain:")
 	      (pp (vector-ref result 1) (current-error-port))
 	      (signal (vector-ref result 0))))
 	(signal (make-composite-condition
@@ -265,7 +265,7 @@
                           (mutex-unlock! *heartbeat-mutex*)
                           (if sdat 
 			      (begin
-				(debug:print-info 0 #f "keep-running got sdat=" sdat)
+				(debug:print-info 0 *default-log-port* "keep-running got sdat=" sdat)
 				sdat)
                               (begin
                                 (thread-sleep! 0.5)
@@ -299,14 +299,14 @@
 	       (> (+ last-access server-timeout)
 		  (current-seconds)))
             (begin
-              (debug:print-info 0 #f "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
+              (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
               (loop 0))
             (begin
-              (debug:print-info 0 #f "Starting to shutdown the server.")
+              (debug:print-info 0 *default-log-port* "Starting to shutdown the server.")
               (set! *time-to-exit* #t)
 	      (db:sync-touched *inmemdb* run-id force-sync: #t)
               (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running")
-              (debug:print-info 0 #f "Server shutdown complete. Exiting")
+              (debug:print-info 0 *default-log-port* "Server shutdown complete. Exiting")
               (exit)
 	      ))))))
 
@@ -341,15 +341,15 @@
 (define (nmsg-transport:client-signal-handler signum)
   (handle-exceptions
    exn
-   (debug:print 0 #f " ... exiting ...")
+   (debug:print 0 *default-log-port* " ... exiting ...")
    (let ((th1 (make-thread (lambda ()
 			     (if (not *received-response*)
 				 (receive-message* *runremote*))) ;; flush out last call if applicable
 			   "eat response"))
 	 (th2 (make-thread (lambda ()
-			     (debug:print 0 #f "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
+			     (debug:print 0 *default-log-port* "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
 			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
-			     (debug:print 0 #f "       Done.")
+			     (debug:print 0 *default-log-port* "       Done.")
 			     (exit 4))
 			   "exit on ^C timer")))
      (thread-start! th2)

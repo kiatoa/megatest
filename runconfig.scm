@@ -19,7 +19,7 @@
 		      (or (common:args-get-target)
 			  (get-environment-variable "MT_TARGET")
 			  (begin
-			    (debug:print 0 #f "ERROR: setup-env-defaults called with no run-id or -target or -reqtarg")
+			    (debug:print 0 *default-log-port* "ERROR: setup-env-defaults called with no run-id or -target or -reqtarg")
 			    "nothing matches this I hope"))))
 	 ;; Why was system disallowed in the reading of the runconfigs file?
 	 ;; NOTE: Should be setting env vars based on (target|default)
@@ -28,7 +28,7 @@
 	 (finaldat  (make-hash-table))
 	 (sections (list "default" thekey)))
     (if (not *target*)(set! *target* thekey)) ;; may save a db access or two but repeats db:get-target code
-    (debug:print 4 #f "Using key=\"" thekey "\"")
+    (debug:print 4 *default-log-port* "Using key=\"" thekey "\"")
 
     (if change-env
 	(for-each ;; NB// This can be simplified with new content of keyvals having all that is needed.
@@ -53,11 +53,11 @@
      sections)
     (if already-seen
 	(begin
-	  (debug:print 2 #f "Key settings found in runconfig.config:")
+	  (debug:print 2 *default-log-port* "Key settings found in runconfig.config:")
 	  (for-each (lambda (fullkey)
-		      (debug:print 2 #f (format #f "~20a ~a\n" fullkey (hash-table-ref/default whatfound fullkey 0))))
+		      (debug:print 2 *default-log-port* (format #f "~20a ~a\n" fullkey (hash-table-ref/default whatfound fullkey 0))))
 		    sections)
-	  (debug:print 2 #f "---")
+	  (debug:print 2 *default-log-port* "---")
 	  (set! *already-seen-runconfig-info* #t)))
     ;; finaldat ;; was returning this "finaldat" which would be good but conflicts with other uses
     confdat
@@ -76,5 +76,5 @@
 						(if targ
 						    (conc "|" targ ")")
 						    ")")))
-	(debug:print 0 #f "WARNING: You do not have a run config file: " runconfigf))))
+	(debug:print 0 *default-log-port* "WARNING: You do not have a run config file: " runconfigf))))
  
