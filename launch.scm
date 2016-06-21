@@ -134,7 +134,7 @@
 			     (thread-sleep! 2)
 			     (processloop (+ i 1))))
 		       )))))
-    (debug:print-info 0 #f "step " stepname " completed with exit code " (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
+    (debug:print-info 0 *default-log-port* "step " stepname " completed with exit code " (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
     ;; now run logpro if needed
     (if logpro-used
 	(let ((pid (process-run (conc "logpro " logpro-file " " (conc stepname ".html") " < " stepname ".log"))))
@@ -150,7 +150,7 @@
 			    (begin
 			      (thread-sleep! 2)
 			      (processloop (+ i 1)))))
-	    (debug:print-info 0 #f "logpro for step " stepname " exited with code " (launch:einf-exit-code exit-info))))) ;; (vector-ref exit-info 2)))))
+	    (debug:print-info 0 *default-log-port* "logpro for step " stepname " exited with code " (launch:einf-exit-code exit-info))))) ;; (vector-ref exit-info 2)))))
     
     (let ((exinfo (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
 	  (logfna (if logpro-used (conc stepname ".html") ""))
@@ -332,7 +332,7 @@
 						(time-exceeded (> run-seconds runtlim)))
 					   (if time-exceeded
 					       (begin
-						 (debug:print-info 0 #f "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
+						 (debug:print-info 0 *default-log-port* "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
 						 #t)
 					       #f)))))
 	(tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f)
@@ -352,10 +352,10 @@
 			 (handle-exceptions
 			  exn
 			  (begin
-			    (debug:print-info 0 #f "Unable to kill process with pid " pid ", possibly already killed.")
+			    (debug:print-info 0 *default-log-port* "Unable to kill process with pid " pid ", possibly already killed.")
 			    (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn)))
 			  (debug:print 0 *default-log-port* "WARNING: Request received to kill job " pid) ;;  " (attempt # " kill-tries ")")
-			  (debug:print-info 0 #f "Signal mask=" (signal-mask))
+			  (debug:print-info 0 *default-log-port* "Signal mask=" (signal-mask))
 			  ;; (if (process:alive? pid)
 			  ;;     (begin
 			  (map (lambda (pid-num)
@@ -369,7 +369,7 @@
 				  #f
 				  (process-signal pid-num signal/kill)))
 			       (process:get-sub-pids pid))))
-		       ;;    (debug:print-info 0 #f "not killing process " pid " as it is not alive"))))
+		       ;;    (debug:print-info 0 *default-log-port* "not killing process " pid " as it is not alive"))))
 		       pids)
 		      (tests:test-set-status! run-id test-id "KILLED"  "KILLED" (args:get-arg "-m") #f))
 		    (begin
@@ -602,7 +602,7 @@
 	    (thread-start! th1)
 	    (thread-start! th2)
 	    (thread-join! th2)
-	    (debug:print-info 0 #f "Megatest exectute of test " test-name ", item path " item-path " complete. Notifying the db ...")
+	    (debug:print-info 0 *default-log-port* "Megatest exectute of test " test-name ", item path " item-path " complete. Notifying the db ...")
 	    (hash-table-set! misc-flags 'keep-going #f)
 	    (thread-join! th1)
 	    (thread-sleep! 1)       ;; givbe thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.
@@ -630,7 +630,7 @@
 				     ((eq? (launch:einf-rollup-status exit-info) 5) "ABORT")
 				     ((eq? (launch:einf-rollup-status exit-info) 6) "SKIP")
 				     (else "FAIL")))) ;; (db:test-get-status testinfo)))
-		    (debug:print-info 1 #f "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (launch:einf-exit-status exit-info) " and rollup-status of " (launch:einf-rollup-status exit-info))
+		    (debug:print-info 1 *default-log-port* "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (launch:einf-exit-status exit-info) " and rollup-status of " (launch:einf-rollup-status exit-info))
 		    (tests:test-set-status! run-id 
 					    test-id 
 					    new-state
@@ -667,7 +667,7 @@
 			     runname)))
 	(if (and linktree (file-exists? linktree)) ;; can't proceed without linktree
 	    (begin
-	      (debug:print-info 0 #f "Have -run with target=" target ", runname=" runname ", fulldir=" fulldir ", testpatt=" (or (args:get-arg "-testpatt") "%"))
+	      (debug:print-info 0 *default-log-port* "Have -run with target=" target ", runname=" runname ", fulldir=" fulldir ", testpatt=" (or (args:get-arg "-testpatt") "%"))
 	      (if (not (file-exists? fulldir))
 		  (create-directory fulldir #t)) ;; need to protect with exception handler 
 	      (if (and target
@@ -678,11 +678,11 @@
 			(rconfig  (conc fulldir "/.runconfig." megatest-version "-" megatest-fossil-hash)))
 		    (if (file-exists? rconfig) ;; only cache megatest.config AFTER runconfigs has been cached
 			(begin
-			  (debug:print-info 0 #f "Caching megatest.config in " tmpfile)
+			  (debug:print-info 0 *default-log-port* "Caching megatest.config in " tmpfile)
 			  (configf:write-alist *configdat* tmpfile)
 			  (system (conc "ln -sf " tmpfile " " targfile))))
 		    )))
-	    (debug:print-info 1 #f "No linktree yet, no caching configs.")))))
+	    (debug:print-info 1 *default-log-port* "No linktree yet, no caching configs.")))))
 
 
 ;; gather available information, if legit read configs in this order:
@@ -910,7 +910,7 @@
     ;; level
     (if (not not-iterated) ;; i.e. iterated
 	(let ((iterated-parent  (pathname-directory (conc lnkpath "/" item-path))))
-	  (debug:print-info 2 #f "Creating iterated parent " iterated-parent)
+	  (debug:print-info 2 *default-log-port* "Creating iterated parent " iterated-parent)
 	  (handle-exceptions
 	   exn
 	   (begin
@@ -960,7 +960,7 @@
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
 	      (begin
-		(debug:print-info 2 #f "Creating " toptest-path " and link " lnkpath)
+		(debug:print-info 2 *default-log-port* "Creating " toptest-path " and link " lnkpath)
 		(handle-exceptions
 		 exn
 		 #f ;; don't care to catch and deal with errors here for now.
@@ -1091,7 +1091,7 @@
     (if (and (args:get-arg "-preclean") ;; user has requested to preclean for this run
 	     (not (member (db:test-get-rundir testinfo)(list "n/a" "/tmp/badname")))) ;; n/a is a placeholder and thus not a read dir
 	(begin
-	  (debug:print-info 0 #f "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
+	  (debug:print-info 0 *default-log-port* "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
 	  (runs:remove-test-directory testinfo 'remove-data-only))) ;; remove data only, do not perturb the record
 
     ;; prevent overlapping actions - set to LAUNCHED as early as possible
@@ -1103,7 +1103,7 @@
 	(let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
 	  (set! toptest-work-area (cadr dat))
-	  (debug:print-info 2 #f "Using work area " work-area))
+	  (debug:print-info 2 *default-log-port* "Using work area " work-area))
 	(begin
 	  (set! work-area (conc test-path "/tmp_run"))
 	  (create-directory work-area #t)

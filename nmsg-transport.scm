@@ -124,7 +124,7 @@
     ;;     	(current-output-port *alt-log-file*)))))
     (if (server:check-if-running run-id)
 	(begin
-	  (debug:print-info 0 #f "Server for run-id " run-id " already running")
+	  (debug:print-info 0 *default-log-port* "Server for run-id " run-id " already running")
 	  (exit 0)))
     (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id))
 	       (remtries  4))
@@ -136,11 +136,11 @@
 		    (loop (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id)
 			  (- remtries 1))
 		    (begin
-		      (debug:print-info 0 #f "Another server took the slot, exiting")
+		      (debug:print-info 0 *default-log-port* "Another server took the slot, exiting")
 		      (exit 0))))
 	      (begin
 		;; since we didn't get the server lock we are going to clean up and bail out
-		(debug:print-info 2 #f "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
+		(debug:print-info 2 *default-log-port* "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
 		(tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat) " http-transport:launch")
 		))
 	  ;; locked in a server id, try to start up
@@ -220,7 +220,7 @@
 		       (lambda ()
 			 (let loop ((count 0))
 			   (thread-sleep! 1)
-			   (debug:print-info 1 #f "send-receive-raw, still waiting after " count " seconds...")
+			   (debug:print-info 1 *default-log-port* "send-receive-raw, still waiting after " count " seconds...")
 			   (if (and keepwaiting (< count timeout)) ;; yes, this is very aproximate
 			       (loop (+ count 1))))
 			 (if keepwaiting
@@ -265,7 +265,7 @@
                           (mutex-unlock! *heartbeat-mutex*)
                           (if sdat 
 			      (begin
-				(debug:print-info 0 #f "keep-running got sdat=" sdat)
+				(debug:print-info 0 *default-log-port* "keep-running got sdat=" sdat)
 				sdat)
                               (begin
                                 (thread-sleep! 0.5)
@@ -299,14 +299,14 @@
 	       (> (+ last-access server-timeout)
 		  (current-seconds)))
             (begin
-              (debug:print-info 0 #f "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
+              (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
               (loop 0))
             (begin
-              (debug:print-info 0 #f "Starting to shutdown the server.")
+              (debug:print-info 0 *default-log-port* "Starting to shutdown the server.")
               (set! *time-to-exit* #t)
 	      (db:sync-touched *inmemdb* run-id force-sync: #t)
               (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running")
-              (debug:print-info 0 #f "Server shutdown complete. Exiting")
+              (debug:print-info 0 *default-log-port* "Server shutdown complete. Exiting")
               (exit)
 	      ))))))
 

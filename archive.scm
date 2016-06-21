@@ -121,7 +121,7 @@
 	  (debug:print 0 *default-log-port* "       use [archive] minspace to specify minimum available space")
 	  (debug:print 0 *default-log-port* "   disks: " (string-intersperse (map cadr (archive:get-archive-disks)) "\n         "))
 	  (exit 1))
-	(debug:print-info 0 #f "Using path " archive-dir " for archiving"))
+	(debug:print-info 0 *default-log-port* "Using path " archive-dir " for archiving"))
 
     ;; from the test info bin the path to the test by stem
     ;;
@@ -187,15 +187,15 @@
 	 (if (not (file-exists? (conc archive-dir "/HEAD")))
 	     (begin
 	       ;; replace this with jobrunner stuff enventually
-	       (debug:print-info 0 #f "Init bup in " archive-dir)
+	       (debug:print-info 0 *default-log-port* "Init bup in " archive-dir)
 	       ;; (mutex-lock! bup-mutex)
 	       (run-n-wait bup-exe params: bup-init-params print-cmd: print-prefix)
 	       ;; (mutex-unlock! bup-mutex)
 	       ))
-	 (debug:print-info 0 #f "Indexing data to be archived")
+	 (debug:print-info 0 *default-log-port* "Indexing data to be archived")
 	 ;; (mutex-lock! bup-mutex)
 	 (run-n-wait bup-exe params: bup-index-params print-cmd: print-prefix)
-	 (debug:print-info 0 #f "Archiving data with bup")
+	 (debug:print-info 0 *default-log-port* "Archiving data with bup")
 	 (run-n-wait bup-exe params: bup-save-params print-cmd: print-prefix)
 	 ;; (mutex-unlock! bup-mutex)
 	 (for-each
@@ -282,7 +282,7 @@
 						 (exit 1))))
 		      ;; new-test-path won't work - must use best-disk instead? Nope, new-test-path but tack on /..
 		      (bup-restore-params  (list "-d" archive-path "restore" "-C" (conc new-test-path "/..") archive-internal-path)))
-		 (debug:print-info 0 #f "Restoring archived data to " new-test-physical-path " from archive in " archive-path " ... " archive-internal-path)
+		 (debug:print-info 0 *default-log-port* "Restoring archived data to " new-test-physical-path " from archive in " archive-path " ... " archive-internal-path)
 		 ;; (mutex-lock! bup-mutex)
 		 (run-n-wait bup-exe params: bup-restore-params print-cmd: #f)
 		 ;; (mutex-unlock! bup-mutex)

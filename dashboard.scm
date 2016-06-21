@@ -419,7 +419,7 @@ Misc
 
     (d:alldat-header-set! data header)
     (d:alldat-allruns-set! data result)
-    (debug:print-info 6 #f "(d:alldat-allruns data) has " (length (d:alldat-allruns data)) " runs")
+    (debug:print-info 6 *default-log-port* "(d:alldat-allruns data) has " (length (d:alldat-allruns data)) " runs")
     maxtests))
 
 (define *collapsed* (make-hash-table))

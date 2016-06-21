@@ -122,10 +122,10 @@
     ;; otherwise return #f - this is not an iterated test
     (cond
      ((procedure? items)      
-      (debug:print-info 4 #f "items is a procedure, will calc later")
+      (debug:print-info 4 *default-log-port* "items is a procedure, will calc later")
       items)            ;; calc later
      ((procedure? itemstable)
-      (debug:print-info 4 #f "itemstable is a procedure, will calc later")
+      (debug:print-info 4 *default-log-port* "itemstable is a procedure, will calc later")
       itemstable)       ;; calc later
      ((filter (lambda (x)
 		(let ((val (car x)))
@@ -134,7 +134,7 @@
 		      (if (list? itemstable) itemstable '())))
       'have-procedure)
      ((or (list? items)(list? itemstable)) ;; calc now
-      (debug:print-info 4 #f "items and itemstable are lists, calc now\n"
+      (debug:print-info 4 *default-log-port* "items and itemstable are lists, calc now\n"
 			"    items: " items " itemstable: " itemstable)
       (items:get-items-from-config tconfig))
      (else #f))))                           ;; not iterated
@@ -152,12 +152,12 @@
 	   (instr2 (if config
 		       (config-lookup config "requirements" "waitor")
 		       "")))
-       (debug:print-info 8 #f "waitons string is " instr ", waitors string is " instr2)
+       (debug:print-info 8 *default-log-port* "waitons string is " instr ", waitors string is " instr2)
        (let ((newwaitons
 	      (string-split (cond
 			     ((procedure? instr) ;; here 
 			      (let ((res (instr)))
-				(debug:print-info 8 #f "waiton procedure results in string " res " for test " test-name)
+				(debug:print-info 8 *default-log-port* "waiton procedure results in string " res " for test " test-name)
 				res))
 			     ((string? instr)     instr)
 			     (else 
@@ -167,7 +167,7 @@
 	      (string-split (cond
 			     ((procedure? instr2)
 			      (let ((res (instr2)))
-				(debug:print-info 8 #f "waitor procedure results in string " res " for test " test-name)
+				(debug:print-info 8 *default-log-port* "waitor procedure results in string " res " for test " test-name)
 				res))
 			     ((string? instr2)     instr2)
 			     (else 
@@ -496,7 +496,7 @@
 		(if (> my-start-time (file-modification-time lockf))
 		    ;; we started since current re-gen in flight, delay a little and try again
 		    (begin
-		      (debug:print-info 1 #f "Waiting to update " outputfilename ", another test currently updating it")
+		      (debug:print-info 1 *default-log-port* "Waiting to update " outputfilename ", another test currently updating it")
 		      (thread-sleep! (+ 5 (random 5))) ;; delay between 5 and 10 seconds
 		      (loop (common:simple-file-lock lockf))))))))))
 
@@ -814,7 +814,7 @@
 			 cache-file
 			 (file-write-access? cache-path))
 		    (let ((tpath (conc cache-path "/.testconfig")))
-		      (debug:print-info 1 #f "Caching testconfig for " test-name " in " tpath)
+		      (debug:print-info 1 *default-log-port* "Caching testconfig for " test-name " in " tpath)
 		      (configf:write-alist tcfg tpath)))
 		tcfg))))))
   
@@ -1034,18 +1034,18 @@
   (if (not (null? test-names))
       (let loop ((hed (car test-names))
 		 (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
-	(debug:print-info 4 #f "hed=" hed " at top of loop")
+	(debug:print-info 4 *default-log-port* "hed=" hed " at top of loop")
 	(let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs))
 	       (waitons (let ((instr (if config 
 					 (config-lookup config "requirements" "waiton")
 					 (begin ;; No config means this is a non-existant test
 					   (debug:print 0 *default-log-port* "ERROR: non-existent required test \"" hed "\", grep through your testconfigs to find and remove or create the test. Discarding and continuing.")
 					     ""))))
-			  (debug:print-info 8 #f "waitons string is " instr)
+			  (debug:print-info 8 *default-log-port* "waitons string is " instr)
 			  (string-split (cond
 					 ((procedure? instr)
 					  (let ((res (instr)))
-					    (debug:print-info 8 #f "waiton procedure results in string " res " for test " hed)
+					    (debug:print-info 8 *default-log-port* "waiton procedure results in string " res " for test " hed)
 					    res))
 					 ((string? instr)     instr)
 					 (else 
@@ -1056,7 +1056,7 @@
 		  test-records
 		  (loop (car tal)(cdr tal)))
 	      (begin
-		(debug:print-info 8 #f "waitons: " waitons)
+		(debug:print-info 8 *default-log-port* "waitons: " waitons)
 		;; check for hed in waitons => this would be circular, remove it and issue an
 		;; error
 		(if (member hed waitons)
@@ -1079,10 +1079,10 @@
 						   ;; otherwise return #f - this is not an iterated test
 						   (cond
 						    ((procedure? items)      
-						     (debug:print-info 4 #f "items is a procedure, will calc later")
+						     (debug:print-info 4 *default-log-port* "items is a procedure, will calc later")
 						     items)            ;; calc later
 						    ((procedure? itemstable)
-						     (debug:print-info 4 #f "itemstable is a procedure, will calc later")
+						     (debug:print-info 4 *default-log-port* "itemstable is a procedure, will calc later")
 						     itemstable)       ;; calc later
 						    ((filter (lambda (x)
 							       (let ((val (car x)))
@@ -1091,7 +1091,7 @@
 								     (if (list? itemstable) itemstable '())))
 						     'have-procedure)
 						    ((or (list? items)(list? itemstable)) ;; calc now
-						     (debug:print-info 4 #f "items and itemstable are lists, calc now\n"
+						     (debug:print-info 4 *default-log-port* "items and itemstable are lists, calc now\n"
 								       "    items: " items " itemstable: " itemstable)
 						     (items:get-items-from-config config))
 						    (else #f)))                           ;; not iterated
@@ -1160,7 +1160,7 @@
      (if (> remtries 0)
 	 (begin
 	   (print-call-chain (current-error-port))
-	   (debug:print-info 0 #f "WARNING: failed to set meta info. Will try " remtries " more times")
+	   (debug:print-info 0 *default-log-port* "WARNING: failed to set meta info. Will try " remtries " more times")
 	   (set! remtries (- remtries 1))
 	   (thread-sleep! 10)
 	   (tests:set-full-meta-info db test-id run-id minutes work-area (- remtries 1)))

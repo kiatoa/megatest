@@ -56,8 +56,8 @@
       (if have-more 
 	  (let ((new-offset (+ offset limit))
 		(next-batch (rmt:get-runs-by-patt keys runnamepatt targpatt offset limit #f)))
-	    (debug:print-info 4 #f "More than " limit " runs, have " (length full-list) " runs so far.")
-	    (debug:print-info 0 #f "next-batch: " next-batch)
+	    (debug:print-info 4 *default-log-port* "More than " limit " runs, have " (length full-list) " runs so far.")
+	    (debug:print-info 0 *default-log-port* "next-batch: " next-batch)
 	    (loop next-batch
 		  full-list
 		  new-offset
@@ -77,7 +77,7 @@
 	   (have-more (eq? (length testsdat) limit)))
       (if have-more 
 	  (let ((new-offset (+ offset limit)))
-	    (debug:print-info 4 #f "More than " limit " tests, have " (length full-list) " tests so far.")
+	    (debug:print-info 4 *default-log-port* "More than " limit " tests, have " (length full-list) " tests so far.")
 	    (loop (rmt:get-tests-for-run run-id testpatt states status new-offset limit not-in sort-by sort-order qryvals last-update 'normal)
 		  full-list
 		  new-offset
@@ -107,7 +107,7 @@
   (if (null? tests)
       tests
       (begin
-	(debug:print-info 1 #f "Discarding tests from " tests " that are waiting on " failed-test)
+	(debug:print-info 1 *default-log-port* "Discarding tests from " tests " that are waiting on " failed-test)
 	(let loop ((testn (car tests))
 		   (remt  (cdr tests))
 		   (res   '()))
@@ -158,7 +158,7 @@
 				   ;; stdout and stderr will be caught in the NBFAKE or mt_launch.log files
 				   ;; or equivalent. No need to do this. Just run it?
 				   (let ((fullcmd (conc cmd " " test-id " " test-rundir " " trigger "&")))
-				     (debug:print-info 0 #f "TRIGGERED on " trigger ", running command " fullcmd)
+				     (debug:print-info 0 *default-log-port* "TRIGGERED on " trigger ", running command " fullcmd)
 				     (process-run fullcmd)))))
 			   (list
 			    (conc state "/" status)

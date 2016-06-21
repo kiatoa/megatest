@@ -61,7 +61,7 @@
 	 (start-port      (portlogger:open-run-close portlogger:find-port))
 	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree")))
     ;; (set! db *inmemdb*)
-    (debug:print-info 0 #f "portlogger recommended port: " start-port)
+    (debug:print-info 0 *default-log-port* "portlogger recommended port: " start-port)
     (root-path     (if link-tree-path 
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
@@ -114,7 +114,7 @@
 (define (http-transport:try-start-server run-id ipaddrstr portnum server-id)
   (let ((config-hostname (configf:lookup *configdat* "server" "hostname"))
 	(tdbdat          (tasks:open-db)))
-    (debug:print-info 0 #f "http-transport:try-start-server run-id=" run-id " ipaddrsstr=" ipaddrstr " portnum=" portnum " server-id=" server-id " config-hostname=" config-hostname)
+    (debug:print-info 0 *default-log-port* "http-transport:try-start-server run-id=" run-id " ipaddrsstr=" ipaddrstr " portnum=" portnum " server-id=" server-id " config-hostname=" config-hostname)
     (handle-exceptions
      exn
      (begin
@@ -185,7 +185,7 @@
   ;; Use this opportunity to slow things down iff there are too many requests in flight
   (if (> *http-requests-in-progress* 5)
       (begin
-	(debug:print-info 0 #f "Whoa there buddy, ease up...")
+	(debug:print-info 0 *default-log-port* "Whoa there buddy, ease up...")
 	(thread-sleep! 1)))
   (mutex-unlock! *http-mutex*))
 
@@ -241,7 +241,7 @@
 ;;	   (tasks:kill-server-run-id run-id)
 ;;	   #f))
 ;;     (begin
-       (debug:print-info 11 #f "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
+       (debug:print-info 11 *default-log-port* "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
        ;; set up the http-client here
        (max-retry-attempts 1)
        ;; consider all requests indempotent
@@ -291,7 +291,7 @@
 	 (thread-start! th2)
 	 (thread-join! th1)
 	 (thread-terminate! th2)
-	 (debug:print-info 11 #f "got res=" res)
+	 (debug:print-info 11 *default-log-port* "got res=" res)
 	 (if (vector? res)
 	     (if (vector-ref res 0)
 		 res
@@ -360,7 +360,7 @@
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
-  (debug:print-info 0 #f "Starting the sync-back, keep alive thread in server for run-id=" run-id)
+  (debug:print-info 0 *default-log-port* "Starting the sync-back, keep alive thread in server for run-id=" run-id)
   (let* ((tdbdat      (tasks:open-db))
 	 (server-start-time (current-seconds))
 	 (server-info (let loop ((start-time (current-seconds))
@@ -368,7 +368,7 @@
 				 (last-sdat  "not this"))
                         (let ((sdat #f))
 			  (thread-sleep! 0.01)
-			  (debug:print-info 0 #f "Waiting for server alive signature")
+			  (debug:print-info 0 *default-log-port* "Waiting for server alive signature")
                           (mutex-lock! *heartbeat-mutex*)
                           (set! sdat *server-info*)
                           (mutex-unlock! *heartbeat-mutex*)
@@ -377,7 +377,7 @@
 				   (> (- (current-seconds) start-time) 2))
 			      sdat
                               (begin
-				(debug:print-info 0 #f "Still waiting, last-sdat=" last-sdat)
+				(debug:print-info 0 *default-log-port* "Still waiting, last-sdat=" last-sdat)
                                 (sleep 4)
 				(if (> (- (current-seconds) start-time) 120) ;; been waiting for two minutes
 				    (begin
@@ -451,7 +451,7 @@
       (if (or (not (equal? sdat (list iface port)))
 	      (not server-id))
 	  (begin 
-	    (debug:print-info 0 #f "interface changed, refreshing iface and port info")
+	    (debug:print-info 0 *default-log-port* "interface changed, refreshing iface and port info")
 	    (set! iface (car sdat))
 	    (set! port  (cadr sdat))))
       
@@ -471,13 +471,13 @@
 				   (- server-timeout (inexact->exact (round (* hrs-since-start 60))))  ;; subtract 60 seconds per hour
 				   server-timeout)))
 	(if (common:low-noise-print 120 "server timeout")
-	    (debug:print-info 0 #f "Adjusted server timeout: " adjusted-timeout))
+	    (debug:print-info 0 *default-log-port* "Adjusted server timeout: " adjusted-timeout))
 	(if (and *server-run*
 		 (> (+ last-access server-timeout)
 		    (current-seconds)))
 	    (begin
 	      (if (common:low-noise-print 120 "server continuing")
-		  (debug:print-info 0 #f "Server continuing, seconds since last db access: " (- (current-seconds) last-access)))
+		  (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access)))
 	      ;;
 	      ;; Consider implementing some smarts here to re-insert the record or kill self is
 	      ;; the db indicates so
@@ -490,7 +490,7 @@
   
 (define (http-transport:server-shutdown server-id port)
   (let ((tdbdat (tasks:open-db)))
-    (debug:print-info 0 #f "Starting to shutdown the server.")
+    (debug:print-info 0 *default-log-port* "Starting to shutdown the server.")
     ;; need to delete only *my* server entry (future use)
     (set! *time-to-exit* #t)
     (if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
@@ -500,22 +500,22 @@
     (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "shutting-down")
     (portlogger:open-run-close portlogger:set-port port "released")
     (thread-sleep! 5)
-    (debug:print-info 0 #f "Max cached queries was    " *max-cache-size*)
-    (debug:print-info 0 #f "Number of cached writes   " *number-of-writes*)
-    (debug:print-info 0 #f "Average cached write time "
+    (debug:print-info 0 *default-log-port* "Max cached queries was    " *max-cache-size*)
+    (debug:print-info 0 *default-log-port* "Number of cached writes   " *number-of-writes*)
+    (debug:print-info 0 *default-log-port* "Average cached write time "
 		      (if (eq? *number-of-writes* 0)
 			  "n/a (no writes)"
 			  (/ *writes-total-delay*
 			     *number-of-writes*))
 		      " ms")
-    (debug:print-info 0 #f "Number non-cached queries "  *number-non-write-queries*)
-    (debug:print-info 0 #f "Average non-cached time   "
+    (debug:print-info 0 *default-log-port* "Number non-cached queries "  *number-non-write-queries*)
+    (debug:print-info 0 *default-log-port* "Average non-cached time   "
 		      (if (eq? *number-non-write-queries* 0)
 			  "n/a (no queries)"
 			  (/ *total-non-write-delay* 
 			     *number-non-write-queries*))
 		      " ms")
-    (debug:print-info 0 #f "Server shutdown complete. Exiting")
+    (debug:print-info 0 *default-log-port* "Server shutdown complete. Exiting")
     (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running complete")
     (exit)))
 
@@ -547,11 +547,11 @@
 		      (- remtries 1)))
 	      (begin
 		;; since we didn't get the server lock we are going to clean up and bail out
-		(debug:print-info 2 #f "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
+		(debug:print-info 2 *default-log-port* "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
 		(tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat) " http-transport:launch")
 		))
 	  (let* ((th2 (make-thread (lambda ()
-				     (debug:print-info 0 #f "Server run thread started")
+				     (debug:print-info 0 *default-log-port* "Server run thread started")
 				     (http-transport:run 
 				      (if (args:get-arg "-server")
 					  (args:get-arg "-server")
@@ -559,7 +559,7 @@
 				      run-id
 				      server-id)) "Server run"))
 		 (th3 (make-thread (lambda ()
-				     (debug:print-info 0 #f "Server monitor thread started")
+				     (debug:print-info 0 *default-log-port* "Server monitor thread started")
 				     (http-transport:keep-running server-id run-id))
 				   "Keep running")))
 	    (thread-start! th2)
