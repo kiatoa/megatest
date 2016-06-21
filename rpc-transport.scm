@@ -29,7 +29,7 @@
   (handle-exceptions
    exn
    (begin
-     (debug:print 1 "Remote failed for " proc " " params)
+     (debug:print 1 #f "Remote failed for " proc " " params)
      (apply (eval (string->symbol procstr)) params))
    ;; (if *runremote*
    ;;    (apply (eval (string->symbol (conc "remote:" procstr))) params)
@@ -45,7 +45,7 @@
       (daemon:ize))
   (if (server:check-if-running run-id)
       (begin
-	(debug:print 0 "INFO: Server for run-id " run-id " already running")
+	(debug:print 0 #f "INFO: Server for run-id " run-id " already running")
 	(exit 0)))
   (let loop ((server-id (open-run-close tasks:server-lock-slot tasks:open-db run-id))
 	     (remtries  4))
@@ -57,14 +57,14 @@
 		    (- remtries 1)))
 	    (begin
 	      ;; since we didn't get the server lock we are going to clean up and bail out
-	      (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
+	      (debug:print-info 2 #f "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
 	      (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db " rpc-transport:launch")))
 	(begin
 	  (rpc-transport:run (if (args:get-arg "-server")(args:get-arg "-server") "-") run-id server-id)
 	  (exit)))))
 
 (define (rpc-transport:run hostn run-id server-id)
-  (debug:print 2 "Attempting to start the rpc server ...")
+  (debug:print 2 #f "Attempting to start the rpc server ...")
    ;; (trace rpc:publish-procedure!)
 
   (rpc:publish-procedure! 'server:login server:login)
@@ -101,7 +101,7 @@
 		    tasks:open-db 
 		    server-id 
 		    ipaddrstr portnum)
-    (debug:print 0 "Server started on " host:port)
+    (debug:print 0 #f "Server started on " host:port)
     
     ;; (trace rpc:publish-procedure!)
     ;; (rpc:publish-procedure! 'server:login server:login)
@@ -125,14 +125,14 @@
 	(if (or (> numrunning 0)
 		(> (+ *last-db-access* 60)(current-seconds)))
 	    (begin
-	      (debug:print-info 0 "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
+	      (debug:print-info 0 #f "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
 	      (loop (+ 1 count)))
 	    (begin
-	      (debug:print-info 0 "Starting to shutdown the server side")
+	      (debug:print-info 0 #f "Starting to shutdown the server side")
 	      (open-run-close tasks:server-delete-record tasks:open-db server-id " rpc-transport:try-start-server stop")
 	      (thread-sleep! 10)
-	      (debug:print-info 0 "Max cached queries was " *max-cache-size*)
-	      (debug:print-info 0 "Server shutdown complete. Exiting")
+	      (debug:print-info 0 #f "Max cached queries was " *max-cache-size*)
+	      (debug:print-info 0 #f "Server shutdown complete. Exiting")
 	      ))))))
 
 (define (rpc-transport:find-free-port-and-open port)
@@ -164,7 +164,7 @@
 (define (rpc-transport:client-setup run-id #!key (remtries 10))
   (if *runremote*
       (begin
-	(debug:print 0 "ERROR: Attempt to connect to server but already connected")
+	(debug:print 0 #f "ERROR: Attempt to connect to server but already connected")
 	#f)
       (let* ((host-info (hash-table-ref/default *runremote* run-id #f))) ;; (open-run-close db:get-var #f "SERVER"))
 	(if host-info
@@ -180,7 +180,7 @@
 		    (thread-sleep! 2)
 		    (rpc-transport:client-setup run-id (- remtries 1)))))
  	    (let* ((server-db-info (open-run-close tasks:get-server tasks:open-db run-id)))
- 	      (debug:print-info 0 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
+ 	      (debug:print-info 0 #f "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
 	      (if server-db-info
  		  (let* ((iface     (tasks:hostinfo-get-interface server-db-info))
  			 (port      (tasks:hostinfo-get-port      server-db-info))
@@ -203,12 +203,12 @@
 ;; 	(if (and port
 ;; 		 (string->number port))
 ;; 	    (let ((portn (string->number port)))
-;; 	      (debug:print-info 2 "Setting up to connect to host " host ":" port)
+;; 	      (debug:print-info 2 #f "Setting up to connect to host " host ":" port)
 ;; 	      (handle-exceptions
 ;; 	       exn
 ;; 	       (begin
-;; 		 (debug:print 0 "ERROR: Failed to open a connection to the server at host: " host " port: " port)
-;; 		 (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
+;; 		 (debug:print 0 #f "ERROR: Failed to open a connection to the server at host: " host " port: " port)
+;; 		 (debug:print 0 #f "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
 ;; 		 ;; (open-run-close 
 ;; 		 ;;  (lambda (db . param) 
 ;; 		 ;;    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER'"))
@@ -217,10 +217,10 @@
 ;; 	       (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
 ;; 			((rpc:procedure 'server:login host portn) *toppath*))
 ;; 		   (begin
-;; 		     (debug:print-info 2 "Logged in and connected to " host ":" port)
+;; 		     (debug:print-info 2 #f "Logged in and connected to " host ":" port)
 ;; 		     (set! *runremote* (vector host portn)))
 ;; 		   (begin
-;; 		     (debug:print-info 2 "Failed to login or connect to " host ":" port)
+;; 		     (debug:print-info 2 #f "Failed to login or connect to " host ":" port)
 ;; 		     (set! *runremote* #f)))))
-;; 	    (debug:print-info 2 "no server available")))))
+;; 	    (debug:print-info 2 #f "no server available")))))
 

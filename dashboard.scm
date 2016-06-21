@@ -217,6 +217,7 @@ Misc
 				    (let ((ans (config:lookup *configdat* "dashboard" "use-server")))
 				      (if (equal? ans "yes") #t #f)))
 				   (else #t)))
+(define *dashboard-mode* (string->symbol (or (configf:lookup *configdat* "dashboard" "mode") "dashboard")))
 
 (d:alldat-dbdir-set! *alldat* (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 (d:alldat-dblocal-set! *alldat* (make-dbr:dbstruct path:  (d:alldat-dbdir *alldat*)
@@ -351,7 +352,8 @@ Misc
 						 'shortlist
 						 (if (d:alldat-filters-changed data)
 						     0
-						     last-update))
+						     last-update)
+						 *dashboard-mode*) ;; use dashboard mode
 			  (db:get-tests-for-run (d:alldat-dblocal data) run-id testnamepatt states statuses
 						#f #f
 						(d:alldat-hide-not-hide data)
@@ -360,7 +362,8 @@ Misc
 						'shortlist
 						(if (d:alldat-filters-changed data)
 						    0
-						    last-update))))
+						    last-update)
+						*dashboard-mode*)))
 	 (tests       (let ((newdat (filter
 				     (lambda (x)
 				       (not (equal? (db:test-get-state x) "DELETED"))) ;; remove deleted tests but do it after merging
@@ -373,7 +376,7 @@ Misc
 			    (sort newdat dboard:compare-tests)
 			    newdat))))
     (vector-set! prev-dat 3 (- (current-seconds) 2)) ;; go back two seconds in time to ensure all changes are captured.
-    ;; (debug:print 0 "(dboard:get-tests-for-run-duplicate: filters-changed=" (d:alldat-filters-changed data) " last-update=" last-update " got " (length tmptests) " test records for run " run-id)
+    ;; (debug:print 0 #f "(dboard:get-tests-for-run-duplicate: filters-changed=" (d:alldat-filters-changed data) " last-update=" last-update " got " (length tmptests) " test records for run " run-id)
     tests))
 
 ;; create a virtual table of all the tests
@@ -387,8 +390,7 @@ Misc
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
 	 (result      '())
-	 (maxtests    0)
-)
+	 (maxtests    0))
     ;; 
     ;; trim runs to only those that are changing often here
     ;; 
@@ -401,21 +403,23 @@ Misc
 		  ;; NOTE: bubble-up also sets the global (d:alldat-item-test-names data)
 		  ;; (tests       (bubble-up tmptests priority: bubble-type))
 		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
-		  ;; (debug:print 0 "Getting data for run " run-id " with key-vals=" key-vals)
+		  ;; (debug:print 0 #f "Getting data for run " run-id " with key-vals=" key-vals)
 		  ;; Not sure this is needed?
-		  (set! referenced-run-ids (cons run-id referenced-run-ids))
-		  (if (> (length tests) maxtests)
-		      (set! maxtests (length tests)))
-		  (if (or (not (d:alldat-hide-empty-runs data)) ;; this reduces the data burden when set
-			  (not (null? tests)))
-		      (let ((dstruct (vector run tests key-vals (- (current-seconds) 10))))
-			(hash-table-set! (d:alldat-allruns-by-id data) run-id dstruct)
-			(set! result (cons dstruct result))))))
+		  (if (not (null? tests))
+		      (begin
+			(set! referenced-run-ids (cons run-id referenced-run-ids))
+			(if (> (length tests) maxtests)
+			    (set! maxtests (length tests)))
+			(if (or (not (d:alldat-hide-empty-runs data)) ;; this reduces the data burden when set
+				(not (null? tests)))
+			    (let ((dstruct (vector run tests key-vals (- (current-seconds) 10))))
+			      (hash-table-set! (d:alldat-allruns-by-id data) run-id dstruct)
+			      (set! result (cons dstruct result))))))))
 	      runs)
 
     (d:alldat-header-set! data header)
     (d:alldat-allruns-set! data result)
-    (debug:print-info 6 "(d:alldat-allruns data) has " (length (d:alldat-allruns data)) " runs")
+    (debug:print-info 6 #f "(d:alldat-allruns data) has " (length (d:alldat-allruns data)) " runs")
     maxtests))
 
 (define *collapsed* (make-hash-table))
@@ -682,6 +686,7 @@ Misc
   (set-bg-on-filter))
 
 (define (mark-for-update)
+  (d:alldat-filters-changed-set! *alldat* #t)
   (d:alldat-last-db-update-set! *alldat* 0))
 
 ;;======================================================================
@@ -1209,7 +1214,8 @@ Misc
 					     "id,testname,item_path,state,status"
 					     (if (d:alldat-filters-changed data)
 						 0
-						 last-update)) ;; get 'em all
+						 last-update)
+					     *dashboard-mode*) ;; get 'em all
 		      (db:get-tests-for-run db run-id 
 					    (hash-table-ref/default (d:alldat-searchpatts data) "test-name" "%/%")
 					    (hash-table-keys (d:alldat-state-ignore-hash data)) ;; '()
@@ -1220,9 +1226,10 @@ Misc
 					    "id,testname,item_path,state,status"
 					    (if (d:alldat-filters-changed data)
 						0
-						last-update)))
+						last-update)
+					    *dashboard-mode*))
 		  '()))) ;; get 'em all
-    (debug:print 0 "dboard:get-tests-dat: got " (length tdat) " test records for run " run-id)
+    (debug:print 0 #f "dboard:get-tests-dat: got " (length tdat) " test records for run " run-id)
     (sort tdat (lambda (a b)
 		 (let* ((aval (vector-ref a 2))
 			(bval (vector-ref b 2))
@@ -1249,7 +1256,7 @@ Misc
 			   (begin
 			     (d:data-curr-run-id-set! ddata run-id)
 			     (dashboard:update-run-summary-tab))
-			   (debug:print 0 "ERROR: tree-path->run-id returned non-number " run-id)))
+			   (debug:print 0 #f "ERROR: tree-path->run-id returned non-number " run-id)))
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		     )))
 	 (cell-lookup (make-hash-table))
@@ -1396,7 +1403,7 @@ Misc
 			   (begin
 			     (d:data-curr-run-id-set! ddata run-id)
 			     (dashboard:update-new-view-tab))
-			   (debug:print 0 "ERROR: tree-path->run-id returned non-number " run-id)))
+			   (debug:print 0 #f "ERROR: tree-path->run-id returned non-number " run-id)))
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		     )))
 	 (cell-lookup (make-hash-table))
@@ -1535,84 +1542,104 @@ Misc
 	    (iup:frame 
 	     #:title "filter test and items"
 	     (iup:hbox
-	      (iup:textbox #:size "120x15" #:fontsize "10" #:value "%"
-			   #:action (lambda (obj unk val)
-				      (mark-for-update)
-				      (update-search "test-name" val)))
-	      ;;(iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
-	      ;;  	   #:action (lambda (obj unk val)
-	      ;;  		      (mark-for-update)
-	      ;;  		      (update-search "item-name" val))
-	      ))
-	    (iup:vbox
-	     (iup:hbox
-	      (let* ((cmds-list '("+testname" "-testname" "+event_time" "-event_time" "+statestatus" "-statestatus"))
-		     (lb         (iup:listbox #:expand "HORIZONTAL"
-					      #:dropdown "YES"
-					      #:action (lambda (obj val index lbstate)
-							 (set! *tests-sort-reverse* index)
+	      (iup:vbox
+	       (iup:textbox #:size "120x15" #:fontsize "10" #:value "%"
+			    #:action (lambda (obj unk val)
+				       (mark-for-update)
+				       (update-search "test-name" val)))
+	       (iup:hbox
+		(iup:button "Quit"      #:action (lambda (obj)
+						   ;; (if (d:alldat-dblocal data) (db:close-all (d:alldat-dblocal data)))
+						   (exit)))
+		(iup:button "Refresh"   #:action (lambda (obj)
+						   (mark-for-update)))
+		(iup:button "Collapse"  #:action (lambda (obj)
+						   (let ((myname (iup:attribute obj "TITLE")))
+						     (if (equal? myname "Collapse")
+							 (begin
+							   (for-each (lambda (tname)
+								       (hash-table-set! *collapsed* tname #t))
+								     (d:alldat-item-test-names data))
+							   (iup:attribute-set! obj "TITLE" "Expand"))
+							 (begin
+							   (for-each (lambda (tname)
+								       (hash-table-delete! *collapsed* tname))
+								     (hash-table-keys *collapsed*))
+							   (iup:attribute-set! obj "TITLE" "Collapse"))))
+						   (mark-for-update))))
+	       )
+	      (iup:vbox
+	       ;; (iup:button "Sort -t"   #:action (lambda (obj)
+	       ;;   				 (next-sort-option)
+	       ;;   				 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
+	       ;;   				 (mark-for-update)))
+	       
+	       (let* ((hide #f)
+		      (show #f)
+		      (hide-empty #f)
+		      (sel-color    "180 100 100")
+		      (nonsel-color "170 170 170")
+		      (cmds-list '("+testname" "-testname" "+event_time" "-event_time" "+statestatus" "-statestatus"))
+		      (sort-lb    (iup:listbox #:expand "HORIZONTAL"
+					       #:dropdown "YES"
+					       #:action (lambda (obj val index lbstate)
+							  (set! *tests-sort-reverse* index)
+							  (mark-for-update))))
+		      (default-cmd (car (list-ref *tests-sort-type-index* *tests-sort-reverse*))))
+		 (iuplistbox-fill-list sort-lb cmds-list selected-item: default-cmd)
+		 
+		 (set! hide-empty (iup:button "HideEmpty"
+					      #:expand "YES"
+					      #:action (lambda (obj)
+							 (d:alldat-hide-empty-runs-set! data (not (d:alldat-hide-empty-runs data)))
+							 (iup:attribute-set! obj "TITLE" (if (d:alldat-hide-empty-runs data) "+HideE" "-HideE"))
 							 (mark-for-update))))
-		     (default-cmd (car (list-ref *tests-sort-type-index* *tests-sort-reverse*))))
-		(iuplistbox-fill-list lb cmds-list selected-item: default-cmd)
-		(mark-for-update)
-		;; (set! *tests-sort-reverse* *tests-sort-reverse*0)
-		lb)
-	      ;; (iup:button "Sort -t"   #:action (lambda (obj)
-	      ;;   				 (next-sort-option)
-	      ;;   				 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
-	      ;;   				 (mark-for-update)))
-	      (iup:button "HideEmpty" #:action (lambda (obj)
-						 (d:alldat-hide-empty-runs-set! data (not (d:alldat-hide-empty-runs data)))
-						 (iup:attribute-set! obj "TITLE" (if (d:alldat-hide-empty-runs data) "+HideE" "-HideE"))
-						 (mark-for-update)))
-	      (let ((hideit (iup:button "HideTests" #:action (lambda (obj)
-							       (d:alldat-hide-not-hide-set! data (not (d:alldat-hide-not-hide data)))
-							       (iup:attribute-set! obj "TITLE" (if (d:alldat-hide-not-hide data) "HideTests" "NotHide"))
-							       (mark-for-update)))))
-		(d:alldat-hide-not-hide-button-set! data hideit) ;; never used, can eliminate ...
-		hideit))
-	     (iup:hbox
-	      (iup:button "Quit"      #:action (lambda (obj)
-						 ;; (if (d:alldat-dblocal data) (db:close-all (d:alldat-dblocal data)))
-						 (exit)))
-	      (iup:button "Refresh"   #:action (lambda (obj)
-						 (mark-for-update)))
-	      (iup:button "Collapse"  #:action (lambda (obj)
-						 (let ((myname (iup:attribute obj "TITLE")))
-						   (if (equal? myname "Collapse")
-						       (begin
-							 (for-each (lambda (tname)
-								     (hash-table-set! *collapsed* tname #t))
-								   (d:alldat-item-test-names data))
-							 (iup:attribute-set! obj "TITLE" "Expand"))
-						       (begin
-							 (for-each (lambda (tname)
-								     (hash-table-delete! *collapsed* tname))
-								   (hash-table-keys *collapsed*))
-							 (iup:attribute-set! obj "TITLE" "Collapse"))))
-						 (mark-for-update))))))
+		 (set! hide (iup:button "Hide"
+					#:expand "YES"
+					#:action (lambda (obj)
+						   (d:alldat-hide-not-hide-set! data #t) ;; (not (d:alldat-hide-not-hide data)))
+						   ;; (iup:attribute-set! obj "TITLE" (if (d:alldat-hide-not-hide data) "HideTests" "NotHide"))
+						   (iup:attribute-set! hide "BGCOLOR" sel-color)
+						   (iup:attribute-set! show "BGCOLOR" nonsel-color)
+						   (mark-for-update))))
+		 (set! show (iup:button "Show"
+					#:expand "YES"
+					#:action (lambda (obj)
+						   (d:alldat-hide-not-hide-set! data #f) ;; (not (d:alldat-hide-not-hide data)))
+						   (iup:attribute-set! show "BGCOLOR" sel-color)
+						   (iup:attribute-set! hide "BGCOLOR" nonsel-color)
+						   (mark-for-update))))
+		 (iup:attribute-set! hide "BGCOLOR" sel-color)
+		 (iup:attribute-set! show "BGCOLOR" nonsel-color)
+		 ;; (d:alldat-hide-not-hide-button-set! data hideit) ;; never used, can eliminate ...
+		 (iup:vbox
+		  (iup:hbox hide show)
+		  hide-empty sort-lb)))
+	      )))
 	   (iup:frame 
 	    #:title "state/status filter"
 	    (iup:vbox
 	     (apply 
 	      iup:hbox
 	      (map (lambda (status)
-		     (iup:toggle status  #:action   (lambda (obj val)
-						      (mark-for-update)
-						      (if (eq? val 1)
-							  (hash-table-set! (d:alldat-status-ignore-hash data) status #t)
-							  (hash-table-delete! (d:alldat-status-ignore-hash data) status))
-						      (set-bg-on-filter))))
+		     (iup:toggle (conc status "  ")
+				 #:action   (lambda (obj val)
+					      (mark-for-update)
+					      (if (eq? val 1)
+						  (hash-table-set! (d:alldat-status-ignore-hash data) status #t)
+						  (hash-table-delete! (d:alldat-status-ignore-hash data) status))
+					      (set-bg-on-filter))))
 		   (map cadr *common:std-statuses*))) ;; '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
 	     (apply 
 	      iup:hbox
 	      (map (lambda (state)
-		     (iup:toggle state   #:action   (lambda (obj val)
-						      (mark-for-update)
-						      (if (eq? val 1)
-							  (hash-table-set! (d:alldat-state-ignore-hash data) state #t)
-							  (hash-table-delete! (d:alldat-state-ignore-hash data) state))
-						      (set-bg-on-filter))))
+		     (iup:toggle (conc state "  ")
+				 #:action   (lambda (obj val)
+					      (mark-for-update)
+					      (if (eq? val 1)
+						  (hash-table-set! (d:alldat-state-ignore-hash data) state #t)
+						  (hash-table-delete! (d:alldat-state-ignore-hash data) state))
+					      (set-bg-on-filter))))
 		   (map cadr *common:std-states*))) ;; '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
 	     (iup:valuator #:valuechanged_cb (lambda (obj)
 					       (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))
@@ -1620,7 +1647,7 @@ Misc
 						     (maxruns  (d:alldat-tot-runs data)))
 						 (d:alldat-start-run-offset-set! data val)
 						 (mark-for-update)
-						 (debug:print 6 "(d:alldat-start-run-offset data) " (d:alldat-start-run-offset data) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
+						 (debug:print 6 #f "(d:alldat-start-run-offset data) " (d:alldat-start-run-offset data) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
 						 (iup:attribute-set! obj "MAX" (* maxruns 10))))
 			   #:expand "HORIZONTAL"
 			   #:max (* 10 (length (d:alldat-allruns data)))
@@ -1672,7 +1699,7 @@ Misc
 											     (newmax  (* 10 (length *alltestnamelst*))))
 											 (d:alldat-please-update-set! data #t)
 											 (d:alldat-start-test-offset-set! *alldat* (inexact->exact (round (/ val 10))))
-											 (debug:print 6 "(d:alldat-start-test-offset *alldat*) " (d:alldat-start-test-offset *alldat*) " val: " val " newmax: " newmax " oldmax: " oldmax)
+											 (debug:print 6 #f "(d:alldat-start-test-offset *alldat*) " (d:alldat-start-test-offset *alldat*) " val: " val " newmax: " newmax " oldmax: " oldmax)
 											 (if (< val 10)
 											     (iup:attribute-set! obj "MAX" newmax))
 											 ))
@@ -1761,15 +1788,16 @@ Misc
 		    (dashboard:summary *alldat*)
 		    runs-view
 		    (dashboard:one-run db  data runs-sum-dat)
-		    (dashboard:new-view db data new-view-dat)
+		    ;; (dashboard:new-view db data new-view-dat)
 		    (dashboard:run-controls)
 		    )))
 	;; (set! (iup:callback tabs tabchange-cb:) (lambda (a b c)(print "SWITCHED TO TAB: " a " " b " " c)))
 	(iup:attribute-set! tabs "TABTITLE0" "Summary")
 	(iup:attribute-set! tabs "TABTITLE1" "Runs")
 	(iup:attribute-set! tabs "TABTITLE2" "Run Summary")
-	(iup:attribute-set! tabs "TABTITLE3" "New View")
-	(iup:attribute-set! tabs "TABTITLE4" "Run Control")
+	(iup:attribute-set! tabs "TABTITLE3" "Run Control")
+	;; (iup:attribute-set! tabs "TABTITLE3" "New View")
+	;; (iup:attribute-set! tabs "TABTITLE4" "Run Control")
 	(iup:attribute-set! tabs "BGCOLOR" "190 190 190")
 	(d:alldat-hide-not-hide-tabs-set! *alldat* tabs)
 	(iup:vbox
@@ -1818,7 +1846,7 @@ Misc
   (handle-exceptions
    exn
    (begin
-     (debug:print 0 "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn))
+     (debug:print 0 #f "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn))
      (current-seconds)) ;; something went wrong - just print an error and return current-seconds
    (apply max (map (lambda (filen)
 		     (file-modification-time filen))
@@ -1903,7 +1931,7 @@ Misc
 		 (>= test-id 0))
 	    (examine-test run-id test-id)
 	    (begin
-	      (debug:print 3 "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
+	      (debug:print 3 #f "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
 	      (exit 1)))))
      ((args:get-arg "-guimonitor")
       (gui-monitor (d:alldat-dblocal data)))

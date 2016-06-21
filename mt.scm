@@ -52,12 +52,12 @@
 	   (runslst   (vector-ref runsdat 1))
 	   (full-list (append res runslst))
 	   (have-more (eq? (length runslst) limit)))
-      ;; (debug:print 0 "header: " header " runslst: " runslst " have-more: " have-more)
+      ;; (debug:print 0 #f "header: " header " runslst: " runslst " have-more: " have-more)
       (if have-more 
 	  (let ((new-offset (+ offset limit))
 		(next-batch (rmt:get-runs-by-patt keys runnamepatt targpatt offset limit #f)))
-	    (debug:print-info 4 "More than " limit " runs, have " (length full-list) " runs so far.")
-	    (debug:print-info 0 "next-batch: " next-batch)
+	    (debug:print-info 4 #f "More than " limit " runs, have " (length full-list) " runs so far.")
+	    (debug:print-info 0 #f "next-batch: " next-batch)
 	    (loop next-batch
 		  full-list
 		  new-offset
@@ -69,7 +69,7 @@
 ;;======================================================================
 
 (define (mt:get-tests-for-run run-id testpatt states status #!key (not-in #t) (sort-by 'event_time) (sort-order "ASC") (qryvals #f)(last-update #f))
-  (let loop ((testsdat (rmt:get-tests-for-run run-id testpatt states status 0 500 not-in sort-by sort-order qryvals last-update))
+  (let loop ((testsdat (rmt:get-tests-for-run run-id testpatt states status 0 500 not-in sort-by sort-order qryvals last-update 'normal))
 	     (res      '())
 	     (offset   0)
 	     (limit    500))
@@ -77,8 +77,8 @@
 	   (have-more (eq? (length testsdat) limit)))
       (if have-more 
 	  (let ((new-offset (+ offset limit)))
-	    (debug:print-info 4 "More than " limit " tests, have " (length full-list) " tests so far.")
-	    (loop (rmt:get-tests-for-run run-id testpatt states status new-offset limit not-in sort-by sort-order qryvals last-update)
+	    (debug:print-info 4 #f "More than " limit " tests, have " (length full-list) " tests so far.")
+	    (loop (rmt:get-tests-for-run run-id testpatt states status new-offset limit not-in sort-by sort-order qryvals last-update 'normal)
 		  full-list
 		  new-offset
 		  limit))
@@ -93,7 +93,7 @@
 		       #f))))
     (if useres
 	(let ((result (vector-ref res 1)))
-	  (debug:print 4 "Using lazy value res: " result)
+	  (debug:print 4 #f "Using lazy value res: " result)
 	  result)
 	(let ((newres (rmt:get-prereqs-not-met run-id waitons ref-item-path mode: mode itemmaps: itemmaps)))
 	  (hash-table-set! *pre-reqs-met-cache* key (vector (current-seconds) newres))
@@ -107,7 +107,7 @@
   (if (null? tests)
       tests
       (begin
-	(debug:print-info 1 "Discarding tests from " tests " that are waiting on " failed-test)
+	(debug:print-info 1 #f "Discarding tests from " tests " that are waiting on " failed-test)
 	(let loop ((testn (car tests))
 		   (remt  (cdr tests))
 		   (res   '()))
@@ -122,7 +122,7 @@
 		      (cdr remt)
 		      (if (member failed-test waitons)
 			  (begin
-			    (debug:print 0 "Discarding test " testn "(" test-dat ") due to " failed-test)
+			    (debug:print 0 #f "Discarding test " testn "(" test-dat ") due to " failed-test)
 			    res)
 			  (cons testn res)))))))))
 
@@ -139,7 +139,8 @@
 	       (tconfig       #f)
 	       (state         (if newstate  newstate  (db:test-get-state  test-dat)))
 	       (status        (if newstatus newstatus (db:test-get-status test-dat))))
-	  (if (and test-rundir   ;; #f means no dir set yet
+	  (if (and test-name
+		   test-rundir   ;; #f means no dir set yet
 		   (file-exists? test-rundir)
 		   (directory? test-rundir))
 	      (call-with-environment-variables
@@ -157,7 +158,7 @@
 				   ;; stdout and stderr will be caught in the NBFAKE or mt_launch.log files
 				   ;; or equivalent. No need to do this. Just run it?
 				   (let ((fullcmd (conc cmd " " test-id " " test-rundir " " trigger "&")))
-				     (debug:print-info 0 "TRIGGERED on " trigger ", running command " fullcmd)
+				     (debug:print-info 0 #f "TRIGGERED on " trigger ", running command " fullcmd)
 				     (process-run fullcmd)))))
 			   (list
 			    (conc state "/" status)
@@ -174,7 +175,7 @@
 (define (mt:test-set-state-status-by-id run-id test-id newstate newstatus newcomment)
   (if (not (and run-id test-id))
       (begin
-	(debug:print 0 "ERROR: bad data handed to mt:test-set-state-status-by-id, run-id=" run-id ", test-id=" test-id ", newstate=" newstate)
+	(debug:print 0 #f "ERROR: bad data handed to mt:test-set-state-status-by-id, run-id=" run-id ", test-id=" test-id ", newstate=" newstate)
 	(print-call-chain (current-error-port))
 	#f)
       (begin
@@ -216,7 +217,7 @@
 		      newtcfg))
 		  (if (null? tal)
 		      (begin
-			(debug:print 0 "ERROR: No readable testconfig found for " test-name)
+			(debug:print 0 #f "ERROR: No readable testconfig found for " test-name)
 			#f)
 		      (loop (car tal)(cdr tal))))))))))
 

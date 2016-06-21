@@ -208,4 +208,4 @@
 	     (map (lambda (dat)(print (car dat) " " (cdr dat)))
 		  (hash-table->alist changed)))))
       (else
-       (debug:print 0 "ERROR: No dumpmode specified, use -dumpmode [bash|csh|config]")))))
+       (debug:print 0 #f "ERROR: No dumpmode specified, use -dumpmode [bash|csh|config]")))))
