@@ -958,7 +958,7 @@
   (time->string 
    (seconds->local-time sec) "%H:%M:%S"))
 
-(define (seconds->work-week/day-time sec)
+(define (sbeconds->work-week/day-time sec)
   (time->string
    (seconds->local-time sec) "ww%V.%u %H:%M"))
 
@@ -972,7 +972,7 @@
 
 (define (seconds->year-work-week/day-time sec)
   (time->string
-   (seconds->local-time sec) "%yww%V.%w %H:%M"))
+   (seconds->local-time sec) "%Yww%V.%w %H:%M"))
 
 (define (seconds->quarter sec)
   (case (string->number
