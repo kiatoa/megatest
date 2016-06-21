@@ -375,11 +375,11 @@
 ;;     (cond
 ;;      (forced 
 ;;       (if (common:low-noise-print 60 run-id "server required is set")
-;; 	  (debug:print-info 0 #f "Server required is set, starting server for run-id " run-id "."))
+;; 	  (debug:print-info 0 *default-log-port* "Server required is set, starting server for run-id " run-id "."))
 ;;       #t)
 ;;      ((> maxqry threshold)
 ;;       (if (common:low-noise-print 60 run-id "Max query time execeeded")
-;; 	  (debug:print-info 0 #f "Max avg query time of " maxqry "ms exceeds limit of " threshold "ms, server needed for run-id " run-id "."))
+;; 	  (debug:print-info 0 *default-log-port* "Max avg query time of " maxqry "ms exceeds limit of " threshold "ms, server needed for run-id " run-id "."))
 ;;       #t)
 ;;      (else
 ;;       #f))))
@@ -426,7 +426,7 @@
 ;; no elegance here ...
 ;;
 (define (tasks:kill-server hostname pid)
-  (debug:print-info 0 #f "Attempting to kill server process " pid " on host " hostname)
+  (debug:print-info 0 *default-log-port* "Attempting to kill server process " pid " on host " hostname)
   (setenv "TARGETHOST" hostname)
   (setenv "TARGETHOST_LOGF" "server-kills.log")
   (system (conc "nbfake kill " pid))
@@ -443,10 +443,10 @@
 	      (pid      (vector-ref sdat 5))
 	      (server-id (vector-ref sdat 0)))
 	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "killed")
-	  (debug:print-info 0 #f "Killing server " server-id " for run-id " run-id " on host " hostname " with pid " pid)
+	  (debug:print-info 0 *default-log-port* "Killing server " server-id " for run-id " run-id " on host " hostname " with pid " pid)
 	  (tasks:kill-server hostname pid)
 	  (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id tag) )
-	(debug:print-info 0 #f "No server found for run-id " run-id ", nothing to kill"))
+	(debug:print-info 0 *default-log-port* "No server found for run-id " run-id ", nothing to kill"))
     ;; (sqlite3:finalize! tdb)
     ))
     
@@ -521,7 +521,7 @@
 ;; 
 (define (tasks:start-monitor db mdb)
   (if (> (tasks:get-num-alive-monitors mdb) 2) ;; have two running, no need for more
-      (debug:print-info 1 #f "Not starting monitor, already have more than two running")
+      (debug:print-info 1 *default-log-port* "Not starting monitor, already have more than two running")
       (let* ((megatestdb     (conc *toppath* "/megatest.db"))
 	     (monitordbf     (conc (db:dbfile-path #f) "/monitor.db"))
 	     (last-db-update 0)) ;; (file-modification-time megatestdb)))

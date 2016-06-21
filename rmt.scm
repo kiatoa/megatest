@@ -55,7 +55,7 @@
 	 (if (and (> count 10)
 		  (> queries-per-second 10))
 	     (begin
-	       (debug:print-info 1 #f "db write rate too high, starting a server, count=" count " start=" start " run-id=" run-id " queries-per-second=" queries-per-second)
+	       (debug:print-info 1 *default-log-port* "db write rate too high, starting a server, count=" count " start=" start " run-id=" run-id " queries-per-second=" queries-per-second)
 	       #t)
 	     #f))))
 
@@ -83,7 +83,7 @@
          (if (and (vector? connection)
         	  (< (http-transport:server-dat-get-last-access connection) expire-time))
              (begin
-               (debug:print-info 0 #f "Discarding connection to server for run-id " run-id ", too long between accesses")
+               (debug:print-info 0 *default-log-port* "Discarding connection to server for run-id " run-id ", too long between accesses")
                ;; SHOULD CLOSE THE CONNECTION HERE
 	       (case *transport-type*
 		 ((nmsg)(nn-close (http-transport:server-dat-get-socket 
@@ -155,7 +155,7 @@
 		    (let ((delta (- (current-milliseconds) start-time)))
 		      (if (> delta max-query)
 			  (begin
-			    (debug:print-info 0 #f "Starting server as query time " delta " is over the limit of " max-query)
+			    (debug:print-info 0 *default-log-port* "Starting server as query time " delta " is over the limit of " max-query)
 			    (server:kind-run run-id)))
 		      ;; return the result!
 		      newres)

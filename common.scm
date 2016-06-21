@@ -378,7 +378,7 @@
 		       (begin
 			 (set! *time-to-exit* #t)
 			 #t))))
-    (debug:print-info 4 #f "starting exit process, finalizing databases.")
+    (debug:print-info 4 *default-log-port* "starting exit process, finalizing databases.")
     (if (and no-hurry (debug:debug-mode 18))
 	(rmt:print-db-stats))
     (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
@@ -401,7 +401,9 @@
 					(begin
 					  (sqlite3:interrupt! db)
 					  (sqlite3:finalize! db #t)
-					  (vector-set! *task-db* 0 #f)))))) "Cleanup db exit thread"))
+					  (vector-set! *task-db* 0 #f)))))
+			      (close-output-port *default-log-port*)
+			      (set! *default-log-port* (current-error-port))) "Cleanup db exit thread"))
 	  (th2 (make-thread (lambda ()
 			      (debug:print 4 *default-log-port* "Attempting clean exit. Please be patient and wait a few seconds...")
 			      (if no-hurry
@@ -473,13 +475,13 @@
     (if num num val)))
 
 (define (patt-list-match item patts)
-  (debug:print-info 8 #f "patt-list-match item=" item " patts=" patts)
+  (debug:print-info 8 *default-log-port* "patt-list-match item=" item " patts=" patts)
   (if (and item patts)  ;; here we are filtering for matches with item patterns
       (let ((res #f))   ;; look through all the item-patts if defined, format is patt1,patt2,patt3 ... wildcard is %
 	(for-each 
 	 (lambda (patt)
 	   (let ((modpatt (string-substitute "%" ".*" patt #t)))
-	     (debug:print-info 10 #f "patt " patt " modpatt " modpatt)
+	     (debug:print-info 10 *default-log-port* "patt " patt " modpatt " modpatt)
 	     (if (string-match (regexp modpatt) item)
 		 (set! res #t))))
 	 (string-split patts ","))
@@ -534,7 +536,7 @@
 	 (testpatt    (or (and (equal? args-testpatt "%")
 			       rtestpatt)
 			  args-testpatt)))
-    (if rtestpatt (debug:print-info 0 #f "TESTPATT from runconfigs: " rtestpatt))
+    (if rtestpatt (debug:print-info 0 *default-log-port* "TESTPATT from runconfigs: " rtestpatt))
     testpatt))
 
 (define (common:get-linktree)
@@ -641,7 +643,7 @@
 	       (curr-colnum     (if existing-coldat colnum (+ colnum 1)))
 	       (new-rownames    (if existing-rowdat rownames (cons (list rowkey curr-rownum) rownames)))
 	       (new-colnames    (if existing-coldat colnames (cons (list colkey curr-colnum) colnames))))
-	  ;; (debug:print-info 0 #f "Processing record: " hed )
+	  ;; (debug:print-info 0 *default-log-port* "Processing record: " hed )
 	  (if proc (proc curr-rownum curr-colnum rowkey colkey value))
 	  (if (null? tal)
 	      (list new-rownames new-colnames)
@@ -709,12 +711,12 @@
     (cond
      ((and (> first adjload)
 	   (> count 0))
-      (debug:print-info 0 #f "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload (if msg msg ""))
+      (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
      ((and (> loadjmp numcpus)
 	   (> count 0))
-      (debug:print-info 0 #f "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus (if msg msg ""))
+      (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
 
@@ -1233,12 +1235,12 @@
 		      (host-type (cadr hed)))
 		  (if (tests:match patt testname itempath)
 		      (begin
-			(debug:print-info 2 #f "Have flexi-launcher match for " testname "/" itempath " = " host-type)
+			(debug:print-info 2 *default-log-port* "Have flexi-launcher match for " testname "/" itempath " = " host-type)
 			(let ((launcher (configf:lookup configdat "host-types" host-type)))
 			  (if launcher
 			      launcher
 			      (begin
-				(debug:print-info 0 #f "WARNING: no launcher found for host-type " host-type)
+				(debug:print-info 0 *default-log-port* "WARNING: no launcher found for host-type " host-type)
 				(if (null? tal)
 				    fallback-launcher
 				    (loop (car tal)(cdr tal)))))))

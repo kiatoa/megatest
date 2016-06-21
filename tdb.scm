@@ -47,7 +47,7 @@
 ;; THIS CODE TO BE REMOVED
 ;;
 (define (open-test-db work-area) 
-  (debug:print-info 11 #f "open-test-db " work-area)
+  (debug:print-info 11 *default-log-port* "open-test-db " work-area)
   (if (and work-area 
 	   (directory? work-area)
 	   (file-read-access? work-area))
@@ -78,10 +78,10 @@
 	(if (not dbexists)
 	    (begin
 	      (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
-	      (debug:print-info 11 #f "Initialized test database " dbpath)
+	      (debug:print-info 11 *default-log-port* "Initialized test database " dbpath)
 	      (tdb:testdb-initialize db)))
 	;; (sqlite3:execute db "PRAGMA synchronous = 0;")
-	(debug:print-info 11 #f "open-test-db END (sucessful)" work-area)
+	(debug:print-info 11 *default-log-port* "open-test-db END (sucessful)" work-area)
 	;; now let's test that everything is correct
 	(handle-exceptions
 	 exn
@@ -97,7 +97,7 @@
 	db)
       ;; no work-area or not readable - create a placeholder to fake rest of world out
       (let ((baddb (sqlite3:open-database ":memory:")))
- 	(debug:print-info 11 #f "open-test-db END (unsucessful)" work-area)
+ 	(debug:print-info 11 *default-log-port* "open-test-db END (unsucessful)" work-area)
  	;; provide an in-mem db (this is dangerous!)
  	(tdb:testdb-initialize baddb)
  	baddb)))

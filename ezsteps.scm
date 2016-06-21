@@ -46,7 +46,7 @@
 		(debug:print 0 *default-log-port* "WARNING: ezsteps attempting to run but test run directory " test-run-dir " is not there. Waiting and trying again " count " more times")
 		(sleep 3)
 		(loop (- count 1))))))
-    (debug:print-info 0 #f "Running in directory " test-run-dir)
+    (debug:print-info 0 *default-log-port* "Running in directory " test-run-dir)
     (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
     ;; if ezsteps was defined then we are sure to have at least one step but check anyway
     (if (not (> (length ezstepslst) 0))
@@ -159,7 +159,7 @@
 				    ;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
 				    (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
 				   (else "FAIL")))) ;; (db:test-get-status testinfo)))
-		  (debug:print-info 2 #f "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
+		  (debug:print-info 2 *default-log-port* "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
 		  (tests:test-set-status! test-id 
 					  new-state
 					  new-status

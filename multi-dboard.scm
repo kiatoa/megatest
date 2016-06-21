@@ -325,11 +325,11 @@ Misc
 	    (path-changed   (if current-tab
 				(equal? current-path (tab-view-path current-tab))
 				#t)))
-       ;; (debug:print-info 0 #f "Current path: " current-path)
+       ;; (debug:print-info 0 *default-log-port* "Current path: " current-path)
        ;; now for each area in the window gather the data
        (if path-changed
 	   (begin
-	     (debug:print-info 0 #f "clearing matrix - path changed")
+	     (debug:print-info 0 *default-log-port* "clearing matrix - path changed")
 	     (dboard:clear-matrix current-tab)))
        (for-each
 	(lambda (area-name)
@@ -505,7 +505,7 @@ Misc
 		 (iup:attribute-set! current-matrix (conc rownum ":" count) "0")
 		 (if (not (null? tal))
 		     (loop (car tal)(cdr tal)(+ count 1))))
-	       (debug:print-info 0 #f "view-type=" view-type ", rownum=" rownum ", curr-rownum=" curr-rownum ", next-rownum=" next-rownum ", coord=" coord ", area-name=" area-name)
+	       (debug:print-info 0 *default-log-port* "view-type=" view-type ", rownum=" rownum ", curr-rownum=" curr-rownum ", next-rownum=" next-rownum ", coord=" coord ", area-name=" area-name)
 	       (iup:attribute-set! current-matrix coord area-name)
 	       (set! changed #t))))))
     (if changed (iup:attribute-set! current-matrix "REDRAW" "ALL"))))
@@ -732,7 +732,7 @@ Misc
 	  (curr-mtpath   (if curr-mtcfg (car curr-mtcfgdat) #f)))
      (if curr-mtpath
 	 (begin
-	   (debug:print-info 0 #f "Creating config file " fname)
+	   (debug:print-info 0 *default-log-port* "Creating config file " fname)
 	   (if (not (file-exists? dirname))
 	       (create-directory dirname #t))
 	   (with-output-to-file fname
@@ -742,7 +742,7 @@ Misc
 		 (print  "path " curr-mtpath))))
 	   #t)
 	 (begin
-	   (debug:print-info 0 #f "Need to create a config but no megatest.config found: " curr-mtcfgdat)
+	   (debug:print-info 0 *default-log-port* "Need to create a config but no megatest.config found: " curr-mtcfgdat)
 	   #f))))
 ;; )
 

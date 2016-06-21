@@ -173,7 +173,7 @@
      (sqlite3:finalize! (lock-queue:db-dat-get-db dbdat)))))
 
 (define (lock-queue:steal-lock dbdat test-id #!key (count 10))
-  (debug:print-info 0 #f "Attempting to steal lock at " (lock-queue:db-dat-get-path dbdat))
+  (debug:print-info 0 *default-log-port* "Attempting to steal lock at " (lock-queue:db-dat-get-path dbdat))
   (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 "lock-queue:steal-lock; waiting on journal")
   (handle-exceptions
    exn

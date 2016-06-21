@@ -85,7 +85,7 @@
 ;; with spiffy or rpc this simply returns the return data to be returned
 ;; 
 (define (server:reply return-addr query-sig success/fail result)
-  (debug:print-info 11 #f "server:reply return-addr=" return-addr ", result=" result)
+  (debug:print-info 11 *default-log-port* "server:reply return-addr=" return-addr ", result=" result)
   ;; (send-message pubsock target send-more: #t)
   ;; (send-message pubsock 
   (case (server:get-transport)
@@ -127,9 +127,9 @@
 	   (let ((gzfile (conc "logs/" file ".gz")))
 	     (if (file-exists? gzfile)
 		 (begin
-		   (debug:print-info 0 #f "removing " gzfile)
+		   (debug:print-info 0 *default-log-port* "removing " gzfile)
 		   (delete-file gzfile)))
-	     (debug:print-info 0 #f "compressing " file)
+	     (debug:print-info 0 *default-log-port* "compressing " file)
 	     (system (conc "gzip logs/" file)))))
      '()
      "logs")
@@ -141,7 +141,7 @@
 	     (not (string-match (conc "("curr-host "|" curr-host"\\..*)") target-host))
 	     (not (equal? curr-ip target-host)))
 	(begin
-	  (debug:print-info 0 #f "Starting server on " target-host ", logfile is " logfile)
+	  (debug:print-info 0 *default-log-port* "Starting server on " target-host ", logfile is " logfile)
 	  (setenv "TARGETHOST" target-host)))
     (setenv "TARGETHOST_LOGF" logfile)
     (common:wait-for-normalized-load 4 " delaying server start due to load") ;; do not try starting servers on an already overloaded machine, just wait forever
@@ -195,7 +195,7 @@
 	  (if res
 	      #t
 	      (begin
-		(debug:print-info 0 #f "server at " server " not responding, removing record")
+		(debug:print-info 0 *default-log-port* "server at " server " not responding, removing record")
 		(tasks:server-force-clean-running-records-for-run-id (db:delay-if-busy tdbdat) run-id 
 				" server:check-if-running")
 		res)))
@@ -254,10 +254,10 @@
     (set! *last-db-access* (current-seconds))
     (if (equal? *toppath* toppath)
 	(begin
-	  ;; (debug:print-info 2 #f "login successful")
+	  ;; (debug:print-info 2 *default-log-port* "login successful")
 	  #t)
 	(begin
-	  ;; (debug:print-info 2 #f "login failed")
+	  ;; (debug:print-info 2 *default-log-port* "login failed")
 	  #f))))
 
 (define (server:get-timeout)

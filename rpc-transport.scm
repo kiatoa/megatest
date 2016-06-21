@@ -57,7 +57,7 @@
 		    (- remtries 1)))
 	    (begin
 	      ;; since we didn't get the server lock we are going to clean up and bail out
-	      (debug:print-info 2 #f "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
+	      (debug:print-info 2 *default-log-port* "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
 	      (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db " rpc-transport:launch")))
 	(begin
 	  (rpc-transport:run (if (args:get-arg "-server")(args:get-arg "-server") "-") run-id server-id)
@@ -125,14 +125,14 @@
 	(if (or (> numrunning 0)
 		(> (+ *last-db-access* 60)(current-seconds)))
 	    (begin
-	      (debug:print-info 0 #f "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
+	      (debug:print-info 0 *default-log-port* "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
 	      (loop (+ 1 count)))
 	    (begin
-	      (debug:print-info 0 #f "Starting to shutdown the server side")
+	      (debug:print-info 0 *default-log-port* "Starting to shutdown the server side")
 	      (open-run-close tasks:server-delete-record tasks:open-db server-id " rpc-transport:try-start-server stop")
 	      (thread-sleep! 10)
-	      (debug:print-info 0 #f "Max cached queries was " *max-cache-size*)
-	      (debug:print-info 0 #f "Server shutdown complete. Exiting")
+	      (debug:print-info 0 *default-log-port* "Max cached queries was " *max-cache-size*)
+	      (debug:print-info 0 *default-log-port* "Server shutdown complete. Exiting")
 	      ))))))
 
 (define (rpc-transport:find-free-port-and-open port)
@@ -180,7 +180,7 @@
 		    (thread-sleep! 2)
 		    (rpc-transport:client-setup run-id (- remtries 1)))))
  	    (let* ((server-db-info (open-run-close tasks:get-server tasks:open-db run-id)))
- 	      (debug:print-info 0 #f "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
+ 	      (debug:print-info 0 *default-log-port* "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
 	      (if server-db-info
  		  (let* ((iface     (tasks:hostinfo-get-interface server-db-info))
  			 (port      (tasks:hostinfo-get-port      server-db-info))
@@ -203,7 +203,7 @@
 ;; 	(if (and port
 ;; 		 (string->number port))
 ;; 	    (let ((portn (string->number port)))
-;; 	      (debug:print-info 2 #f "Setting up to connect to host " host ":" port)
+;; 	      (debug:print-info 2 *default-log-port* "Setting up to connect to host " host ":" port)
 ;; 	      (handle-exceptions
 ;; 	       exn
 ;; 	       (begin
@@ -217,10 +217,10 @@
 ;; 	       (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
 ;; 			((rpc:procedure 'server:login host portn) *toppath*))
 ;; 		   (begin
-;; 		     (debug:print-info 2 #f "Logged in and connected to " host ":" port)
+;; 		     (debug:print-info 2 *default-log-port* "Logged in and connected to " host ":" port)
 ;; 		     (set! *runremote* (vector host portn)))
 ;; 		   (begin
-;; 		     (debug:print-info 2 #f "Failed to login or connect to " host ":" port)
+;; 		     (debug:print-info 2 *default-log-port* "Failed to login or connect to " host ":" port)
 ;; 		     (set! *runremote* #f)))))
-;; 	    (debug:print-info 2 #f "no server available")))))
+;; 	    (debug:print-info 2 *default-log-port* "no server available")))))
 

@@ -358,12 +358,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (begin ;; let ((sync-time (- (current-seconds) start-time)))
 			(db:multi-db-sync (list run-id) 'new2old)
 			(let ((sync-time (- (current-seconds) start-time)))
-			  (debug:print-info 3 #f "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
+			  (debug:print-info 3 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
 			  (if (common:low-noise-print 30 "sync new to old")
-			      (debug:print-info 0 #f "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
+			      (debug:print-info 0 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
 			;; (if (> sync-time 10) ;; took more than ten seconds, start a server for this run
 			;;     (begin
-			;;       (debug:print-info 0 #f "Sync is taking a long time, start up a server to assist for run " run-id)
+			;;       (debug:print-info 0 *default-log-port* "Sync is taking a long time, start up a server to assist for run " run-id)
 			;;       (server:kind-run run-id)))))
 			(hash-table-delete! *db-local-sync* run-id)))
 		  (mutex-unlock! *db-multi-sync-mutex*))
@@ -372,7 +372,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			(> (- start-time last-time) 60))
 		   (begin
 		     (set! last-time start-time)
-		     (debug:print-info 4 #f "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
+		     (debug:print-info 4 *default-log-port* "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
 	     
 	     ;; keep going unless time to exit
 	     ;;
@@ -385,7 +385,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (delay-loop (+ count 1))))
 		   (loop)))
 	     (if (common:low-noise-print 30)
-		 (debug:print-info 0 #f "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*)))))
+		 (debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*)))))
      "Watchdog thread")))
 
 (thread-start! *watchdog*)
@@ -393,9 +393,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))
-      (debug:print-info 0 #f "Sending log output to " (args:get-arg "-log"))
-      (current-error-port oup)
-      (current-output-port oup)))
+      (debug:print-info 0 *default-log-port* "Sending log output to " (args:get-arg "-log"))
+      (set! *default-log-port* oup)))
 
 (if (or (args:get-arg "-h")
 	(args:get-arg "-help")
@@ -483,9 +482,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					   (glob (conc runtop "/.runconfig*")))
 				   '())))
 		(if (null? files)
-		    (debug:print-info 0 #f "No cached megatest or runconfigs files found. None removed.")
+		    (debug:print-info 0 *default-log-port* "No cached megatest or runconfigs files found. None removed.")
 		    (begin
-		      (debug:print-info 0 #f "Removing cached files:\n    " (string-intersperse files "\n    "))
+		      (debug:print-info 0 *default-log-port* "Removing cached files:\n    " (string-intersperse files "\n    "))
 		      (for-each 
 		       (lambda (f)
 			 (handle-exceptions
@@ -749,7 +748,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      ;; if not list or kill then start a client (if appropriate)
 	      (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
-		  (debug:print-info 1 #f "Server connection not needed")
+		  (debug:print-info 1 *default-log-port* "Server connection not needed")
 		  (begin
 		    ;; (if run-id 
 		    ;;     (client:launch run-id) 
@@ -802,10 +801,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 (if (or (equal? id sid)
 			 (equal? sid 0)) ;; kill all/any
 		     (begin
-		       (debug:print-info 0 #f "Attempting to stop server with pid " pid)
+		       (debug:print-info 0 *default-log-port* "Attempting to stop server with pid " pid)
 		       (tasks:kill-server status hostname pullport pid transport)))))
 	     servers)
-	    (debug:print-info 1 #f "Done with listservers")
+	    (debug:print-info 1 *default-log-port* "Done with listservers")
 	    (set! *didsomething* #t)
 	    (exit)) ;; must do, would have to add checks to many/all calls below
 	  (exit))))
@@ -921,7 +920,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (json-write data)
 	      (pp data))
 	  (set! *didsomething* #t))
-	(debug:print-info 0 #f "environment variable MT_CMDINFO is not set")))
+	(debug:print-info 0 *default-log-port* "environment variable MT_CMDINFO is not set")))
 
 ;;======================================================================
 ;; Remove old run(s)
@@ -988,7 +987,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (rows     (vector-ref runsdat 1)))
 	 (if (null? rows)
 	     (begin
-	       (debug:print-info 0 #f "No matching run found.")
+	       (debug:print-info 0 *default-log-port* "No matching run found.")
 	       (exit 1))
 	     (let* ((row      (car (vector-ref runsdat 1)))
 		    (run-id   (db:get-value-by-header row header "id")))
@@ -1683,7 +1682,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(debug:print 0 *default-log-port* "Failed to setup, exiting")
 		(exit 1)))
 
-	  (if (args:get-arg "-runstep")(debug:print-info 1 #f "Running -runstep, first change to directory " work-area))
+	  (if (args:get-arg "-runstep")(debug:print-info 1 *default-log-port* "Running -runstep, first change to directory " work-area))
 	  (change-directory work-area)
 	  ;; can setup as client for server mode now
 	  ;; (client:setup)
@@ -1727,7 +1726,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    ;; mark the start of the test
 		    (rmt:teststep-set-status! run-id test-id stepname "start" "n/a" (args:get-arg "-m") logfile)
 		    ;; run the test step
-		    (debug:print-info 2 #f "Running \"" fullcmd "\" in directory \"" startingdir)
+		    (debug:print-info 2 *default-log-port* "Running \"" fullcmd "\" in directory \"" startingdir)
 		    (change-directory startingdir)
 		    (set! exitstat (system fullcmd))
 		    (set! *globalexitstatus* exitstat)
@@ -1737,7 +1736,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			(let* ((htmllogfile (conc stepname ".html"))
 			       (oldexitstat exitstat)
 			       (cmd         (string-intersperse (list "logpro" logprofile htmllogfile "<" logfile ">" (conc stepname "_logpro.log")) " ")))
-			  (debug:print-info 2 #f "running \"" cmd "\"")
+			  (debug:print-info 2 *default-log-port* "running \"" cmd "\"")
 			  (change-directory startingdir)
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
@@ -1929,20 +1928,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; ;; ;; redo me       (for-each 
 ;; ;; ;; redo me        (lambda (field)
 ;; ;; ;; redo me 	 (let ((dat '()))
-;; ;; ;; redo me 	   (debug:print-info 0 #f "Getting data for field " field)
+;; ;; ;; redo me 	   (debug:print-info 0 *default-log-port* "Getting data for field " field)
 ;; ;; ;; redo me 	   (sqlite3:for-each-row
 ;; ;; ;; redo me 	    (lambda (id val)
 ;; ;; ;; redo me 	      (set! dat (cons (list id val) dat)))
 ;; ;; ;; redo me 	    (db:get-db db run-id)
 ;; ;; ;; redo me 	    (conc "SELECT id," field " FROM tests;"))
-;; ;; ;; redo me 	   (debug:print-info 0 #f "found " (length dat) " items for field " field)
+;; ;; ;; redo me 	   (debug:print-info 0 *default-log-port* "found " (length dat) " items for field " field)
 ;; ;; ;; redo me 	   (let ((qry (sqlite3:prepare db (conc "UPDATE tests SET " field "=? WHERE id=?;"))))
 ;; ;; ;; redo me 	     (for-each
 ;; ;; ;; redo me 	      (lambda (item)
 ;; ;; ;; redo me 		(let ((newval ;; (sdb:qry 'getid 
 ;; ;; ;; redo me 		       (cadr item))) ;; )
 ;; ;; ;; redo me 		  (if (not (equal? newval (cadr item)))
-;; ;; ;; redo me 		      (debug:print-info 0 #f "Converting " (cadr item) " to " newval " for test #" (car item)))
+;; ;; ;; redo me 		      (debug:print-info 0 *default-log-port* "Converting " (cadr item) " to " newval " for test #" (car item)))
 ;; ;; ;; redo me 		  (sqlite3:execute qry newval (car item))))
 ;; ;; ;; redo me 	      dat)
 ;; ;; ;; redo me 	     (sqlite3:finalize! qry))))
