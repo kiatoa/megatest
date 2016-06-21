@@ -54,7 +54,7 @@
    exn
    (begin
      (print "ERROR:  Failed to run command: " cmd " " (string-intersperse params " "))
-     (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
+     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
      (print "exn=" (condition->list exn))
      #f)
    (let-values (((fh fho pid) (if (null? params)
@@ -106,7 +106,7 @@
 ;; "find / -print 2&>1 > findall.log"
 (define (run-n-wait cmdline #!key (params #f)(print-cmd #f))
   (if print-cmd 
-      (debug:print 0 #f 
+      (debug:print 0 *default-log-port* 
 		   (if (string? print-cmd)
 		       print-cmd
 		       "")
