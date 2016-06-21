@@ -1328,7 +1328,7 @@
       (if (file-exists? test-path)
 	  (change-directory test-path)
 	  (begin
-	    (debug:print "ERROR: test run path not created before attempting to run the test. Perhaps you are running -remove-runs at the same time?")
+	    (debug:print 0 #f "ERROR: test run path not created before attempting to run the test. Perhaps you are running -remove-runs at the same time?")
 	    (change-directory *toppath*)))
       (case (if force ;; (args:get-arg "-force")
 		'NOT_STARTED

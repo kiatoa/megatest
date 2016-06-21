@@ -1828,19 +1828,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (debug:print 0 #f "Failed to setup, exiting") 
 	    (exit 1)))
-      ;; keep this one local
-      ;; (open-run-close db:clean-up #f)
-      (db:multi-db-sync 
-       #f ;; do all run-ids
-       ;; 'new2old
-       'killservers
-       'dejunk
-       ;; 'adj-testids
-       ;; 'old2new
-       'new2old
-       )
-      (if (common:version-changed?)
-	  (common:set-last-run-version))
+      (common:cleanup-db)
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-mark-incompletes")
@@ -1902,10 +1890,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (import apropos)
 	      ;; (import (prefix sqlite3 sqlite3:)) ;; doesn't work ...
 	      (include "readline-fix.scm")
-	      (gnu-history-install-file-manager
-	       (string-append
-		(or (get-environment-variable "HOME") ".") "/.megatest_history"))
-	      (current-input-port (make-gnu-readline-port "megatest> "))
+	      (if *use-new-readline*
+		  (begin
+		    (install-history-file (get-environment-variable "HOME") ".megatest_history") ;;  [homedir] [filename] [nlines])
+		    (current-input-port (make-readline-port "megatest> ")))
+		  (begin
+		    (gnu-history-install-file-manager
+		     (string-append
+		      (or (get-environment-variable "HOME") ".") "/.megatest_history"))
+		    (current-input-port (make-gnu-readline-port "megatest> "))))
 	      (if (args:get-arg "-repl")
 		  (repl)
 		  (load (args:get-arg "-load")))
