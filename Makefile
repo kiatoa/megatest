@@ -230,11 +230,13 @@ sretrieve/sretrieve : datashare-testing/sretrieve
 #             csv-xml z3
 
 #  "(define (toplevel-command . a) #f)"
+# if egrep 'version.*3.0' $(shell dirname $(shell dirname $(shell which csi)))/lib/chicken/7/readline.setup-info;then \
+
 readline-fix.scm :
-	if egrep 'version.*3.0' $(shell dirname $(shell dirname $(shell which csi)))/lib/chicken/7/readline.setup-info;then \
-           echo "(use-legacy-bindings)" > readline-fix.scm; \
+	if [[ $(shell chicken-status | grep readline | awk '{print $4}' | cut -d. -f1) -gt 3 ]];then \
+	   echo "(define *use-new-readline* #f)" > readline-fix.scm; \
 	else \
-	   echo "" > readline-fix.scm;\
+	   echo "(define *use-new-readline* #t)" > readline-fix.scm;\
 	fi
 
 altdb.scm :

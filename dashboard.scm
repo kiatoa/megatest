@@ -376,7 +376,7 @@ Misc
 			    (sort newdat dboard:compare-tests)
 			    newdat))))
     (vector-set! prev-dat 3 (- (current-seconds) 2)) ;; go back two seconds in time to ensure all changes are captured.
-    ;; (debug:print 0 "(dboard:get-tests-for-run-duplicate: filters-changed=" (d:alldat-filters-changed data) " last-update=" last-update " got " (length tmptests) " test records for run " run-id)
+    ;; (debug:print 0 #f "(dboard:get-tests-for-run-duplicate: filters-changed=" (d:alldat-filters-changed data) " last-update=" last-update " got " (length tmptests) " test records for run " run-id)
     tests))
 
 ;; create a virtual table of all the tests
@@ -390,8 +390,7 @@ Misc
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
 	 (result      '())
-	 (maxtests    0)
-)
+	 (maxtests    0))
     ;; 
     ;; trim runs to only those that are changing often here
     ;; 
@@ -404,7 +403,7 @@ Misc
 		  ;; NOTE: bubble-up also sets the global (d:alldat-item-test-names data)
 		  ;; (tests       (bubble-up tmptests priority: bubble-type))
 		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
-		  ;; (debug:print 0 "Getting data for run " run-id " with key-vals=" key-vals)
+		  ;; (debug:print 0 #f "Getting data for run " run-id " with key-vals=" key-vals)
 		  ;; Not sure this is needed?
 		  (if (not (null? tests))
 		      (begin
@@ -420,7 +419,7 @@ Misc
 
     (d:alldat-header-set! data header)
     (d:alldat-allruns-set! data result)
-    (debug:print-info 6 "(d:alldat-allruns data) has " (length (d:alldat-allruns data)) " runs")
+    (debug:print-info 6 #f "(d:alldat-allruns data) has " (length (d:alldat-allruns data)) " runs")
     maxtests))
 
 (define *collapsed* (make-hash-table))
@@ -1230,7 +1229,7 @@ Misc
 						last-update)
 					    *dashboard-mode*))
 		  '()))) ;; get 'em all
-    (debug:print 0 "dboard:get-tests-dat: got " (length tdat) " test records for run " run-id)
+    (debug:print 0 #f "dboard:get-tests-dat: got " (length tdat) " test records for run " run-id)
     (sort tdat (lambda (a b)
 		 (let* ((aval (vector-ref a 2))
 			(bval (vector-ref b 2))
@@ -1257,7 +1256,7 @@ Misc
 			   (begin
 			     (d:data-curr-run-id-set! ddata run-id)
 			     (dashboard:update-run-summary-tab))
-			   (debug:print 0 "ERROR: tree-path->run-id returned non-number " run-id)))
+			   (debug:print 0 #f "ERROR: tree-path->run-id returned non-number " run-id)))
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		     )))
 	 (cell-lookup (make-hash-table))
@@ -1404,7 +1403,7 @@ Misc
 			   (begin
 			     (d:data-curr-run-id-set! ddata run-id)
 			     (dashboard:update-new-view-tab))
-			   (debug:print 0 "ERROR: tree-path->run-id returned non-number " run-id)))
+			   (debug:print 0 #f "ERROR: tree-path->run-id returned non-number " run-id)))
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		     )))
 	 (cell-lookup (make-hash-table))
@@ -1606,7 +1605,7 @@ Misc
 		 (set! show (iup:button "Show"
 					#:expand "YES"
 					#:action (lambda (obj)
-						   (d:alldat-hide-not-hide-set! data (not (d:alldat-hide-not-hide data)))
+						   (d:alldat-hide-not-hide-set! data #f) ;; (not (d:alldat-hide-not-hide data)))
 						   (iup:attribute-set! show "BGCOLOR" sel-color)
 						   (iup:attribute-set! hide "BGCOLOR" nonsel-color)
 						   (mark-for-update))))
@@ -1648,7 +1647,7 @@ Misc
 						     (maxruns  (d:alldat-tot-runs data)))
 						 (d:alldat-start-run-offset-set! data val)
 						 (mark-for-update)
-						 (debug:print 6 "(d:alldat-start-run-offset data) " (d:alldat-start-run-offset data) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
+						 (debug:print 6 #f "(d:alldat-start-run-offset data) " (d:alldat-start-run-offset data) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
 						 (iup:attribute-set! obj "MAX" (* maxruns 10))))
 			   #:expand "HORIZONTAL"
 			   #:max (* 10 (length (d:alldat-allruns data)))
@@ -1700,7 +1699,7 @@ Misc
 											     (newmax  (* 10 (length *alltestnamelst*))))
 											 (d:alldat-please-update-set! data #t)
 											 (d:alldat-start-test-offset-set! *alldat* (inexact->exact (round (/ val 10))))
-											 (debug:print 6 "(d:alldat-start-test-offset *alldat*) " (d:alldat-start-test-offset *alldat*) " val: " val " newmax: " newmax " oldmax: " oldmax)
+											 (debug:print 6 #f "(d:alldat-start-test-offset *alldat*) " (d:alldat-start-test-offset *alldat*) " val: " val " newmax: " newmax " oldmax: " oldmax)
 											 (if (< val 10)
 											     (iup:attribute-set! obj "MAX" newmax))
 											 ))
@@ -1847,7 +1846,7 @@ Misc
   (handle-exceptions
    exn
    (begin
-     (debug:print 0 "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn))
+     (debug:print 0 #f "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn))
      (current-seconds)) ;; something went wrong - just print an error and return current-seconds
    (apply max (map (lambda (filen)
 		     (file-modification-time filen))
@@ -1932,7 +1931,7 @@ Misc
 		 (>= test-id 0))
 	    (examine-test run-id test-id)
 	    (begin
-	      (debug:print 3 "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
+	      (debug:print 3 #f "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
 	      (exit 1)))))
      ((args:get-arg "-guimonitor")
       (gui-monitor (d:alldat-dblocal data)))

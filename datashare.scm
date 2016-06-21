@@ -233,7 +233,7 @@ Version: " megatest-fossil-hash)) ;; "
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 2 "ERROR: problem accessing db " dbpath
+	     (debug:print 2 #f "ERROR: problem accessing db " dbpath
 			  ((condition-property-accessor 'exn 'message) exn))
 	     (exit))
 	   (set! db (sqlite3:open-database dbpath)))
