@@ -64,7 +64,7 @@
 ;;======================================================================
 
 (define (nmsg-transport:run dbstruct hostn run-id server-id #!key (retrynum 1000))
-  (debug:print 2 #f "Attempting to start the server ...")
+  (debug:print 2 *default-log-port* "Attempting to start the server ...")
   (let* ((start-port      (portlogger:open-run-close portlogger:find-port))
 	 (server-thread   (make-thread (lambda ()
 					 (nmsg-transport:try-start-server dbstruct run-id start-port server-id))
@@ -86,12 +86,12 @@
 	  (thread-join! server-thread))
 	(if (> retrynum 0)
 	    (begin
-	      (debug:print 0 #f "WARNING: Failed to connect to server (self) on host " hostn ":" start-port ", trying again.")
+	      (debug:print 0 *default-log-port* "WARNING: Failed to connect to server (self) on host " hostn ":" start-port ", trying again.")
 	      (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id "failed to start, never received server alive signature")
 	      (portlogger:open-run-close portlogger:set-failed start-port)
 	      (nmsg-transport:run dbstruct hostn run-id server-id))
 	    (begin
-	      (debug:print 0 #f "ERROR: could not find an open port to start server on. Giving up")
+	      (debug:print 0 *default-log-port* "ERROR: could not find an open port to start server on. Giving up")
 	      (exit 1))))))
 
 (define (nmsg-transport:try-start-server dbstruct run-id portnum server-id)
@@ -99,9 +99,9 @@
     (nn-bind repsoc (conc "tcp://*:" portnum))
     (let loop ((msg-in (nn-recv repsoc)))
       (let* ((dat    (db:string->obj msg-in transport: 'nmsg)))
-	(debug:print 0 #f "server, received: " dat)
+	(debug:print 0 *default-log-port* "server, received: " dat)
 	(let ((result (api:execute-requests dbstruct dat)))
-	  (debug:print 0 #f "server, sending: " result)
+	  (debug:print 0 *default-log-port* "server, sending: " result)
 	  (nn-send repsoc (db:obj->string result  transport: 'nmsg)))
 	(loop (nn-recv repsoc))))))
 
@@ -186,7 +186,7 @@
 	 (key     (if success 
 		      (vector-ref result 1)
 		      #f)))
-    (debug:print 0 #f "success=" success ", key=" key ", expected-key=" expected-key ", equal? " (equal? key expected-key))
+    (debug:print 0 *default-log-port* "success=" success ", key=" key ", expected-key=" expected-key ", equal? " (equal? key expected-key))
     (if (and success
 	     (or (not expected-key) ;; just getting a reply is good enough then
 		 (equal? key expected-key)))
@@ -242,10 +242,10 @@
 		 (vector-ref result 0)) ;; did it fail at the server?
 	    result                ;; nope, all good
 	    (begin
-	      (debug:print 0 #f "ERROR: error occured at server, info=" (vector-ref result 2))
-	      (debug:print 0 #f " client call chain:")
+	      (debug:print 0 *default-log-port* "ERROR: error occured at server, info=" (vector-ref result 2))
+	      (debug:print 0 *default-log-port* " client call chain:")
 	      (print-call-chain (current-error-port))
-	      (debug:print 0 #f " server call chain:")
+	      (debug:print 0 *default-log-port* " server call chain:")
 	      (pp (vector-ref result 1) (current-error-port))
 	      (signal (vector-ref result 0))))
 	(signal (make-composite-condition
@@ -341,15 +341,15 @@
 (define (nmsg-transport:client-signal-handler signum)
   (handle-exceptions
    exn
-   (debug:print 0 #f " ... exiting ...")
+   (debug:print 0 *default-log-port* " ... exiting ...")
    (let ((th1 (make-thread (lambda ()
 			     (if (not *received-response*)
 				 (receive-message* *runremote*))) ;; flush out last call if applicable
 			   "eat response"))
 	 (th2 (make-thread (lambda ()
-			     (debug:print 0 #f "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
+			     (debug:print 0 *default-log-port* "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
 			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
-			     (debug:print 0 #f "       Done.")
+			     (debug:print 0 *default-log-port* "       Done.")
 			     (exit 4))
 			   "exit on ^C timer")))
      (thread-start! th2)

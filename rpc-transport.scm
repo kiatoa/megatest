@@ -29,7 +29,7 @@
   (handle-exceptions
    exn
    (begin
-     (debug:print 1 #f "Remote failed for " proc " " params)
+     (debug:print 1 *default-log-port* "Remote failed for " proc " " params)
      (apply (eval (string->symbol procstr)) params))
    ;; (if *runremote*
    ;;    (apply (eval (string->symbol (conc "remote:" procstr))) params)
@@ -45,7 +45,7 @@
       (daemon:ize))
   (if (server:check-if-running run-id)
       (begin
-	(debug:print 0 #f "INFO: Server for run-id " run-id " already running")
+	(debug:print 0 *default-log-port* "INFO: Server for run-id " run-id " already running")
 	(exit 0)))
   (let loop ((server-id (open-run-close tasks:server-lock-slot tasks:open-db run-id))
 	     (remtries  4))
@@ -64,7 +64,7 @@
 	  (exit)))))
 
 (define (rpc-transport:run hostn run-id server-id)
-  (debug:print 2 #f "Attempting to start the rpc server ...")
+  (debug:print 2 *default-log-port* "Attempting to start the rpc server ...")
    ;; (trace rpc:publish-procedure!)
 
   (rpc:publish-procedure! 'server:login server:login)
@@ -101,7 +101,7 @@
 		    tasks:open-db 
 		    server-id 
 		    ipaddrstr portnum)
-    (debug:print 0 #f "Server started on " host:port)
+    (debug:print 0 *default-log-port* "Server started on " host:port)
     
     ;; (trace rpc:publish-procedure!)
     ;; (rpc:publish-procedure! 'server:login server:login)
@@ -164,7 +164,7 @@
 (define (rpc-transport:client-setup run-id #!key (remtries 10))
   (if *runremote*
       (begin
-	(debug:print 0 #f "ERROR: Attempt to connect to server but already connected")
+	(debug:print 0 *default-log-port* "ERROR: Attempt to connect to server but already connected")
 	#f)
       (let* ((host-info (hash-table-ref/default *runremote* run-id #f))) ;; (open-run-close db:get-var #f "SERVER"))
 	(if host-info
@@ -207,8 +207,8 @@
 ;; 	      (handle-exceptions
 ;; 	       exn
 ;; 	       (begin
-;; 		 (debug:print 0 #f "ERROR: Failed to open a connection to the server at host: " host " port: " port)
-;; 		 (debug:print 0 #f "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
+;; 		 (debug:print 0 *default-log-port* "ERROR: Failed to open a connection to the server at host: " host " port: " port)
+;; 		 (debug:print 0 *default-log-port* "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
 ;; 		 ;; (open-run-close 
 ;; 		 ;;  (lambda (db . param) 
 ;; 		 ;;    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER'"))

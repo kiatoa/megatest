@@ -45,9 +45,9 @@
 			(if ht (hash-table-set! ht (conc ":" key) val)))
 		      keys
 		      vals)
-	    (debug:print 0 #f "ERROR: wrong number of values in " target ", should match " keys))
+	    (debug:print 0 *default-log-port* "ERROR: wrong number of values in " target ", should match " keys))
 	vals)
-      (debug:print 4 #f "ERROR: keys:target-set-args called with no target.")))
+      (debug:print 4 *default-log-port* "ERROR: keys:target-set-args called with no target.")))
 
 ;; given the keys (a list of vectors <key field> or a list of keys) and a target return a keyval list
 ;; keyval list ( (key1 val1) (key2 val2) ...)

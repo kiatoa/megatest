@@ -214,7 +214,7 @@ Misc
     (handle-exceptions
      exn
      (begin
-       (debug:print 0 #f "ERROR: Couldn't create path to " dbdir)
+       (debug:print 0 *default-log-port* "ERROR: Couldn't create path to " dbdir)
        (exit 1))
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     (if fname
@@ -242,7 +242,7 @@ Misc
 	       (db     (if (file-exists? dbfile)
 			   (open-database dbfile)
 			   (begin
-			     (debug:print 0 #f "ERROR: I was asked to open " dbfile ", but file does not exist or is not readable.")
+			     (debug:print 0 *default-log-port* "ERROR: I was asked to open " dbfile ", but file does not exist or is not readable.")
 			     #f))))
 	  (case run-id
 	    ((-1)(areadat-monitordb-set! areadat db))
@@ -265,7 +265,7 @@ Misc
 	       (sql maindb (conc "SELECT id,"
 				 (string-intersperse keys "||'/'||")
 				 ",runname,state,status,event_time FROM runs WHERE state != 'deleted';")))
-	(debug:print 0 #f "ERROR: no main.db found at "  (areadb:dbfile-path areadat 0)))
+	(debug:print 0 *default-log-port* "ERROR: no main.db found at "  (areadb:dbfile-path areadat 0)))
     areadat))
 
 ;; given an areadat and target/runname patt fill up runs data
@@ -487,7 +487,7 @@ Misc
 	 (view-type (dboard:get-view-type keys current-path))
 	 (changed   #f)
 	 (state-statuses  (list "PASS" "FAIL" "WARN" "CHECK" "SKIP" "RUNNING" "LAUNCHED")))
-    ;; (debug:print 0 #f "current-matrix=" current-matrix)
+    ;; (debug:print 0 *default-log-port* "current-matrix=" current-matrix)
     (case view-type
       ((areas) ;; find row for this area, if not found, create new entry
        (let* ((curr-rownum (hash-table-ref/default rows area-name #f))
@@ -575,7 +575,7 @@ Misc
 		     (hed   (car area-names))
 		     (tal   (cdr area-names)))
 	    ;; (hash-table-set! tabs index hed)
-	    (debug:print 0 #f "Adding area " hed " with index " index " to dashboard")
+	    (debug:print 0 *default-log-port* "Adding area " hed " with index " index " to dashboard")
 	    (iup:attribute-set! tabtop (conc "TABTITLE" index) hed)
 	    (if (not (null? tal))
 		(loop (+ index 1)(car tal)(cdr tal)))))
