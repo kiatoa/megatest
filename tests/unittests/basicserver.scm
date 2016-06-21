@@ -181,7 +181,7 @@
 ;; ;; 						    (server:launch 'http)))))
 ;; ;; 			   (set! server-pid pid)
 ;; ;; 			   (number? pid)))
-;; (system "../../bin/megatest -server - -debug 22 > server.log 2> server.log &")
+;; (system "../../bin/megatest -server - -debugbcom 22 > server.log 2> server.log &")
 ;; 
 ;; (let loop ((n 10))
 ;;   (thread-sleep! 1) ;; need to wait for server to start.

@@ -25,23 +25,56 @@
 
 ;; Create a run
 (test #f 1 (rmt:register-run keyvals runname "new" "n/a" user))
-(test #f #t (rmt:general-call 'register-test run-id run-id "test-one" ""))
-(test #f #t (rmt:general-call 'register-test run-id run-id "test-two" ""))
+(test #f #t (rmt:general-call 'register-test run-id run-id "test-one"   ""))
+(test #f #t (rmt:general-call 'register-test run-id run-id "test-two"   ""))
+(test #f #t (rmt:general-call 'register-test run-id run-id "test-three" ""))
+(test #f #t (rmt:general-call 'register-test run-id run-id "test-four"  ""))
 
-(rmt:test-set-state-status-by-id 
- run-id
- (rmt:get-test-id run-id "test-one" "") "COMPLETED" "FAIL" "")
-(rmt:test-set-state-status-by-id 
- run-id
- (rmt:get-test-id run-id "test-two" "") "COMPLETED" "PASS" "")
+(rmt:test-set-state-status-by-id run-id (rmt:get-test-id run-id "test-one"   "") "COMPLETED" "FAIL" "")
+(rmt:test-set-state-status-by-id run-id (rmt:get-test-id run-id "test-two"   "") "COMPLETED" "PASS" "")
+(rmt:test-set-state-status-by-id run-id (rmt:get-test-id run-id "test-three" "") "RUNNING"   "n/a"  "")
+(rmt:test-set-state-status-by-id run-id (rmt:get-test-id run-id "test-four"  "") "COMPLETED" "WARN" "")
 
+(print "MODE=not in")
+(test #f '()
+      (filter
+       (lambda (y)
+	 (equal? y "FAIL")) ;; any FAIL in the output list?
+       (map 
+	(lambda (x)(vector-ref x 4))
+	(rmt:get-tests-for-run run-id "%/%" '() '("FAIL") #f #f #t 'event_time "DESC" 'shortlist 0 'dashboard))))
+
+(print "MODE=in")
 (test #f '("FAIL")
       (map 
        (lambda (x)(vector-ref x 4))
-       (rmt:get-tests-for-run run-id "%/%" '() '("FAIL") #f #f #t 'event_time "DESC" 'shortlist 0 'dashboard)))
-(test #f '()
-      (map 
-       (lambda (x)(vector-ref x 4))
        (rmt:get-tests-for-run run-id "%/%" '() '("FAIL") #f #f #f 'event_time "DESC" 'shortlist 0 'dashboard)))
+(set! *verbosity* 1)
+
+(print "MODE=in, state in RUNNING")
+;; (set! *verbosity* 8)
+(test #f '("RUNNING")
+      (map 
+       (lambda (x)(vector-ref x 3))
+       (rmt:get-tests-for-run run-id "%/%" '("RUNNING") '() #f #f #f 'event_time "DESC" 'shortlist 0 'dashboard)))
+(set! *verbosity* 1)
+
+(print "MODE=in, state in RUNNING and status IN WARN")
+;; (set! *verbosity* 8)
+(test #f '(("RUNNING" . "n/a") ("COMPLETED" . "WARN"))
+      (map 
+       (lambda (x)
+	 (cons (vector-ref x 3)(vector-ref x 4)))
+       (rmt:get-tests-for-run run-id "%/%" '("RUNNING") '("WARN") #f #f #f 'event_time "DESC" 'shortlist 0 'dashboard)))
+(set! *verbosity* 1)
+
+(print "MODE=not in, state in RUNNING and status IN WARN")
+(set! *verbosity* 8)
+(test #f '(("RUNNING" . "n/a") ("COMPLETED" . "WARN"))
+      (map 
+       (lambda (x)
+	 (cons (vector-ref x 3)(vector-ref x 4)))
+       (rmt:get-tests-for-run run-id "%/%" '("RUNNING") '("WARN") #f #f #t 'event_time "DESC" 'shortlist 0 'dashboard)))
+(set! *verbosity* 1)
 
 (exit)
