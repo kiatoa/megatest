@@ -2199,20 +2199,29 @@
 						" IN ('") )
 					(string-intersperse statuses "','")
 					"')")))
-	     (interim-qry       (conc " AND " (if not-in "NOT " "") "( ( state='COMPLETED' AND " statuses-qry " ) "
+	     (interim-qry       (conc " AND " (if not-in "NOT " "") "( state='COMPLETED' " (if statuses-qry (conc " AND " statuses-qry " ) ") " ) ")
 				      (if states-qry
-					  (conc (if not-in " AND " " OR ") states-qry " ) ")
+					  (conc (if not-in " AND " " OR ") states-qry ) ;; " ) ")
 					  "")))
 	     (states-statuses-qry 
 	      (cond 
 	       ((and states-qry statuses-qry)
 		(case mode
-		  ((dashboard) interim-qry)
+		  ((dashboard) 
+		   (if not-in
+		       (conc " AND (state='COMPLETED' AND status NOT IN ('" (string-intersperse statuses "','") "')) "
+			     " OR (state != 'COMPLETED' AND state NOT IN ('" (string-intersperse states "','") "')) ")
+		       (conc " AND (state='COMPLETED' AND status IN ('" (string-intersperse statuses "','") "')) "
+			     " OR (state NOT IN ('COMPLETED','DELETED') AND state IN ('" (string-intersperse states "','") "')) ")))
 		  (else       (conc " AND ( " states-qry " AND " statuses-qry " ) "))))
 	       (states-qry  
-		(conc " AND " states-qry))
+		(case mode
+		  ((dashboard) (conc " AND " (if not-in "NOT " "") " state IN ('" (string-intersperse states    "','") "') ")) ;; interim-qry)
+		  (else        (conc " AND " states-qry))))
 	       (statuses-qry 
-		(conc " AND " statuses-qry))
+		(case mode
+		  ((dashboard) (conc " AND " (if not-in "NOT " "") " status IN ('" (string-intersperse statuses "','") "') ")) ;; interim-qry)
+		  (else        (conc " AND " statuses-qry))))
 	       (else "")))
 	     (tests-match-qry (tests:match->sqlqry testpatt))
 	     (qry             (conc "SELECT " qryvalstr
