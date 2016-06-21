@@ -54,8 +54,8 @@
     ((http)(http-transport:launch run-id))
     ((nmsg)(nmsg-transport:launch run-id))
     ((rpc)  (rpc-transport:launch run-id))
-    (else (debug:print 0 "ERROR: unknown server type " *transport-type*))))
-;;       (else   (debug:print 0 "ERROR: No known transport set, transport=" transport ", using rpc")
+    (else (debug:print 0 #f "ERROR: unknown server type " *transport-type*))))
+;;       (else   (debug:print 0 #f "ERROR: No known transport set, transport=" transport ", using rpc")
 ;; 	      (rpc-transport:launch run-id)))))
 
 ;;======================================================================
@@ -85,7 +85,7 @@
 ;; with spiffy or rpc this simply returns the return data to be returned
 ;; 
 (define (server:reply return-addr query-sig success/fail result)
-  (debug:print-info 11 "server:reply return-addr=" return-addr ", result=" result)
+  (debug:print-info 11 #f "server:reply return-addr=" return-addr ", result=" result)
   ;; (send-message pubsock target send-more: #t)
   ;; (send-message pubsock 
   (case (server:get-transport)
@@ -97,7 +97,7 @@
        (send-message pub-socket (db:obj->string (vector success/fail query-sig result)))))
     ((fs)   result)
     (else 
-     (debug:print 0 "ERROR: unrecognised transport type: " *transport-type*)
+     (debug:print 0 #f "ERROR: unrecognised transport type: " *transport-type*)
      result)))
 
 ;; Given a run id start a server process    ### NOTE ### > file 2>&1 
@@ -115,7 +115,7 @@
 									      (conc " -daemonize -log " logfile)
 									      "")
 		      " -m testsuite:" testsuite))) ;; (conc " >> " logfile " 2>&1 &")))))
-    (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
+    (debug:print 0 #f "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
     (if (not (directory-exists? "logs"))(create-directory "logs"))
     ;; Rotate logs, logic: 
@@ -127,9 +127,9 @@
 	   (let ((gzfile (conc "logs/" file ".gz")))
 	     (if (file-exists? gzfile)
 		 (begin
-		   (debug:print-info 0 "removing " gzfile)
+		   (debug:print-info 0 #f "removing " gzfile)
 		   (delete-file gzfile)))
-	     (debug:print-info 0 "compressing " file)
+	     (debug:print-info 0 #f "compressing " file)
 	     (system (conc "gzip logs/" file)))))
      '()
      "logs")
@@ -141,7 +141,7 @@
 	     (not (string-match (conc "("curr-host "|" curr-host"\\..*)") target-host))
 	     (not (equal? curr-ip target-host)))
 	(begin
-	  (debug:print-info 0 "Starting server on " target-host ", logfile is " logfile)
+	  (debug:print-info 0 #f "Starting server on " target-host ", logfile is " logfile)
 	  (setenv "TARGETHOST" target-host)))
     (setenv "TARGETHOST_LOGF" logfile)
     (common:wait-for-normalized-load 4 " delaying server start due to load") ;; do not try starting servers on an already overloaded machine, just wait forever
@@ -195,7 +195,7 @@
 	  (if res
 	      #t
 	      (begin
-		(debug:print-info 0 "server at " server " not responding, removing record")
+		(debug:print-info 0 #f "server at " server " not responding, removing record")
 		(tasks:server-force-clean-running-records-for-run-id (db:delay-if-busy tdbdat) run-id 
 				" server:check-if-running")
 		res)))
@@ -213,7 +213,7 @@
 	   (server-db-dat (if (not host-port)(tasks:get-server (db:delay-if-busy tdbdat) run-id) #f)))
       (if (not run-id)
 	  (begin
-	    (debug:print 0 "ERROR: must specify run-id when doing ping, -run-id n")
+	    (debug:print 0 #f "ERROR: must specify run-id when doing ping, -run-id n")
 	    (print "ERROR: No run-id")
 	    (exit 1))
 	  (if (and (not host-port)
@@ -254,10 +254,10 @@
     (set! *last-db-access* (current-seconds))
     (if (equal? *toppath* toppath)
 	(begin
-	  ;; (debug:print-info 2 "login successful")
+	  ;; (debug:print-info 2 #f "login successful")
 	  #t)
 	(begin
-	  ;; (debug:print-info 2 "login failed")
+	  ;; (debug:print-info 2 #f "login failed")
 	  #f))))
 
 (define (server:get-timeout)
