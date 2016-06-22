@@ -78,6 +78,7 @@ Launching and managing runs
   -rerun FAIL,WARN...     : force re-run for tests with specificed status(s)
   -rerun-clean            : set all tests not COMPLETED+PASS,WARN,WAIVED to NOT_STARTED,n/a
                             and then run the specified testpatt with -preclean
+  -rerun-all              : set all tests to NOT_STARTED,n/a and run with -preclean
   -lock                   : lock run specified by target and runname
   -unlock                 : unlock run specified by target and runname
   -set-run-status status  : sets status for run to status, requires -target and -runname
@@ -273,6 +274,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-daemonize"
 			"-preclean"
 			"-rerun-clean"
+			"-rerun-all"
 			"-clean-cache"
 
 			;; misc
@@ -1392,6 +1394,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (or (args:get-arg "-runall")
 	(args:get-arg "-run")
 	(args:get-arg "-rerun-clean")
+	(args:get-arg "-rerun-all")
 	(args:get-arg "-runtests"))
     (general-run-call 
      "-runall"
@@ -1416,6 +1419,24 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
 			      ;; state:  states
 			      status: statuses
+			      new-state-status: "NOT_STARTED,n/a")))
+       ;; RERUN ALL
+       (if (args:get-arg "-rerun-all") ;; first set states/statuses correct
+	   (begin
+	     (hash-table-set! args:arg-hash "-preclean" #t)
+	     (runs:operate-on 'set-state-status
+			      target
+			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+			      state:  #f
+			      ;; status: statuses
+			      new-state-status: "NOT_STARTED,n/a")
+	     (runs:operate-on 'set-state-status
+			      target
+			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+			      ;; state:  states
+			      status: #f
 			      new-state-status: "NOT_STARTED,n/a")))
        (runs:run-tests target
 		       runname

@@ -431,28 +431,6 @@
 ;; M I S C   U T I L S
 ;;======================================================================
 
-;; Convert strings like "5s 2h 3m" => 60x60x2 + 3x60 + 5
-(define (common:hms-string->seconds tstr)
-  (let ((parts     (string-split tstr))
-	(time-secs 0)
-	;; s=seconds, m=minutes, h=hours, d=days
-	(trx       (regexp "(\\d+)([smhd])")))
-    (for-each (lambda (part)
-		(let ((match  (string-match trx part)))
-		  (if match
-		      (let ((val (string->number (cadr match)))
-			    (unt (caddr match)))
-			(if val 
-			    (set! time-secs (+ time-secs (* val
-							    (case (string->symbol unt)
-							      ((s) 1)
-							      ((m) 60)
-							      ((h) (* 60 60))
-							      ((d) (* 24 60 60))
-							      (else 0))))))))))
-	      parts)
-    time-secs))
-		       
 ;; one-of args defined
 (define (args-defined? . param)
   (let ((res #f))
@@ -946,6 +924,28 @@
 ;; T I M E   A N D   D A T E
 ;;======================================================================
 
+;; Convert strings like "5s 2h 3m" => 60x60x2 + 3x60 + 5
+(define (common:hms-string->seconds tstr)
+  (let ((parts     (string-split tstr))
+	(time-secs 0)
+	;; s=seconds, m=minutes, h=hours, d=days
+	(trx       (regexp "(\\d+)([smhd])")))
+    (for-each (lambda (part)
+		(let ((match  (string-match trx part)))
+		  (if match
+		      (let ((val (string->number (cadr match)))
+			    (unt (caddr match)))
+			(if val 
+			    (set! time-secs (+ time-secs (* val
+							    (case (string->symbol unt)
+							      ((s) 1)
+							      ((m) 60)
+							      ((h) (* 60 60))
+							      ((d) (* 24 60 60))
+							      (else 0))))))))))
+	      parts)
+    time-secs))
+		       
 (define (seconds->hr-min-sec secs)
   (let* ((hrs (quotient secs 3600))
 	 (min (quotient (- secs (* hrs 3600)) 60))
@@ -958,7 +958,7 @@
   (time->string 
    (seconds->local-time sec) "%H:%M:%S"))
 
-(define (sbeconds->work-week/day-time sec)
+(define (seconds->work-week/day-time sec)
   (time->string
    (seconds->local-time sec) "ww%V.%u %H:%M"))
 
