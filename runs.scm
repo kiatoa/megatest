@@ -953,7 +953,7 @@
 			 (dtime (seconds->year-work-week/day-time event-time))) 
 		     (if (runs:lownoise "inc-print" 600)
 			 (format #t fmt "State" "Status" "Start Time" "Duration" "Test name" "Item path"))
-		     (debug:print 0 *default-log-port* "fmt: " fmt " state: " state " status: " status " test-name: " test-name " item-path: " item-path " dtime: " dtime)
+		     ;; (debug:print 0 *default-log-port* "fmt: " fmt " state: " state " status: " status " test-name: " test-name " item-path: " item-path " dtime: " dtime)
 		     ;; (debug:print 0 #f "event-time: " event-time " duration: " duration)
 		     (format #t fmt
 			     state
