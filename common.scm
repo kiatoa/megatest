@@ -36,9 +36,9 @@
   (if (and (string? val)(string? key))
       (handle-exceptions
        exn
-       (debug:print 0 *default-log-port* "ERROR: bad value for setenv, key=" key ", value=" val)
+       (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val)
        (setenv key val))
-      (debug:print 0 *default-log-port* "ERROR: bad value for setenv, key=" key ", value=" val)))
+      (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val)))
 
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
@@ -276,7 +276,7 @@
    (handle-exceptions
     exn
     (begin
-      (debug:print 0 *default-log-port* "ERROR: received bad encoded string \"" instr "\", message: " ((condition-property-accessor 'exn 'message) exn))
+      (debug:print-error 0 *default-log-port* "received bad encoded string \"" instr "\", message: " ((condition-property-accessor 'exn 'message) exn))
       (print-call-chain (current-error-port))
       #f)
     (read (open-input-string (base64:base64-decode instr))))
@@ -419,7 +419,7 @@
 (define (std-signal-handler signum)
   ;; (signal-mask! signum)
   (set! *time-to-exit* #t)
-  (debug:print 0 *default-log-port* "ERROR: Received signal " signum " exiting promptly")
+  (debug:print-error 0 *default-log-port* "Received signal " signum " exiting promptly")
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))
 
@@ -548,7 +548,7 @@
 	    target)
 	(if target
 	    (begin
-	      (debug:print 0 *default-log-port* "ERROR: Invalid target, spaces or blanks not allowed \"" target "\", target should be: " (string-intersperse keys "/") ", have " tlist " for elements")
+	      (debug:print-error 0 *default-log-port* "Invalid target, spaces or blanks not allowed \"" target "\", target should be: " (string-intersperse keys "/") ", have " tlist " for elements")
 	      #f)
 	    #f))))
 
@@ -653,7 +653,7 @@
   (handle-exceptions
       exn
       (begin
-	(debug:print 0 *default-log-port* "ERROR: command \"/bin/readlink -f " path "\" failed.")
+	(debug:print-error 0 *default-log-port* "command \"/bin/readlink -f " path "\" failed.")
 	path) ;; just give up
     (with-input-from-pipe
 	(conc "/bin/readlink -f " path)
@@ -803,7 +803,7 @@
 	 (dbdir    (cadddr spacedat)))
     (if (not is-ok)
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: Insufficient space in " dbdir ", require " required ", have " dbspace  ", exiting now.")
+	  (debug:print-error 0 *default-log-port* "Insufficient space in " dbdir ", require " required ", have " dbspace  ", exiting now.")
 	  (exit 1)))))
   
 ;; paths is list of lists ((name path) ... )

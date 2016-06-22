@@ -137,7 +137,7 @@ Version: " megatest-fossil-hash)) ;; "
 	      (set-busy-handler! db (busy-timeout 10000)) ;; 10 sec timeout
 	      (if (not dbexists)(sretrieve:initialize-db db))
 	      (proc db)))))
-	(debug:print 0 *default-log-port* "ERROR: invalid path for storing database: " path))))
+	(debug:print-error 0 *default-log-port* "invalid path for storing database: " path))))
 
 ;; copy in directory to dest, validation is done BEFORE calling this
 ;;
@@ -147,12 +147,12 @@ Version: " megatest-fossil-hash)) ;; "
     (if (or (not base-dir)
 	    (not (file-exists? base-dir)))
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: Bad configuration! base-dir " base-dir " not found")
+	  (debug:print-error 0 *default-log-port* "Bad configuration! base-dir " base-dir " not found")
 	  (exit 1)))
     (print datadir)
     (if (not (file-exists? datadir))
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: Bad version (" version "), no data found at " datadir "." )
+	  (debug:print-error 0 *default-log-port* "Bad version (" version "), no data found at " datadir "." )
 	  (exit 1)))
     
     (sretrieve:db-do
@@ -189,20 +189,20 @@ Version: " megatest-fossil-hash)) ;; "
     (if (or (not base-dir)
 	    (not (file-exists? base-dir)))
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: Bad configuration! base-dir " base-dir " not found")
+	  (debug:print-error 0 *default-log-port* "Bad configuration! base-dir " base-dir " not found")
 	  (exit 1)))
     (print datadir)
     (if (not (file-exists? datadir))
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: File  (" file "), not found at " base-dir "." )
+	  (debug:print-error 0 *default-log-port* "File  (" file "), not found at " base-dir "." )
 	  (exit 1)))
     (if (directory? datadir)
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: (" file ") is a dirctory!! cp cmd works only on files ." )
+	  (debug:print-error 0 *default-log-port* "(" file ") is a dirctory!! cp cmd works only on files ." )
 	  (exit 1)))
     (if(not (string-match (regexp  allowed-sub-paths) file))
         (begin
-	  (debug:print 0 *default-log-port* "ERROR: Access denied to file (" file ")!! " )
+	  (debug:print-error 0 *default-log-port* "Access denied to file (" file ")!! " )
 	  (exit 1)))
      
      (sretrieve:db-do
@@ -226,16 +226,16 @@ Version: " megatest-fossil-hash)) ;; "
     (if (or (not base-dir)
 	    (not (file-exists? base-dir)))
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: Bad configuration! base-dir " base-dir " not found")
+	  (debug:print-error 0 *default-log-port* "Bad configuration! base-dir " base-dir " not found")
 	  (exit 1)))
     (print datadir)
     (if (not (file-exists? datadir))
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: File  (" file "), not found at " base-dir "." )
+	  (debug:print-error 0 *default-log-port* "File  (" file "), not found at " base-dir "." )
 	  (exit 1)))
       (if(not (string-match (regexp  allowed-sub-paths) file))
         (begin
-	  (debug:print 0 *default-log-port* "ERROR: Access denied to file (" file ")!! " )
+	  (debug:print-error 0 *default-log-port* "Access denied to file (" file ")!! " )
 	  (exit 1)))
    
         (sretrieve:do-as-calling-user
@@ -258,12 +258,12 @@ Version: " megatest-fossil-hash)) ;; "
         (targ-path (conc target-dir "/" normal-path)))
     (if (string-contains   normal-path "..")
     (begin
-      (debug:print 0 *default-log-port* "ERROR: Path  " targ-mk " resolved outside target area "  target-dir )
+      (debug:print-error 0 *default-log-port* "Path  " targ-mk " resolved outside target area "  target-dir )
       (exit 1)))
 
     (if (not (string-contains targ-path target-dir))
     (begin
-      (debug:print 0 *default-log-port* "ERROR: You cannot update data outside " target-dir ".")
+      (debug:print-error 0 *default-log-port* "You cannot update data outside " target-dir ".")
       (exit 1)))
     (debug:print 0 *default-log-port* "Path " targ-mk " is valid.")   
  ))
@@ -275,7 +275,7 @@ Version: " megatest-fossil-hash)) ;; "
     
     (if (file-exists? targ-path)
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: target Directory " targ-path " already exist!!")
+	  (debug:print-error 0 *default-log-port* "target Directory " targ-path " already exist!!")
 	  (exit 1)))
     (sretrieve:db-do
      configdat
@@ -305,11 +305,11 @@ Version: " megatest-fossil-hash)) ;; "
   (let ((targ-path (conc target-dir "/" link-name)))
     (if (file-exists? targ-path)
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: target file " targ-path " already exist!!")
+	  (debug:print-error 0 *default-log-port* "target file " targ-path " already exist!!")
 	  (exit 1)))
      (if (not (file-exists? targ-link ))
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: target file " targ-link " does not exist!!")
+	  (debug:print-error 0 *default-log-port* "target file " targ-link " does not exist!!")
 	  (exit 1)))
  
     (sretrieve:db-do
@@ -341,7 +341,7 @@ Version: " megatest-fossil-hash)) ;; "
   (let ((targ-path (conc target-dir "/" targ-file)))
     (if (not (file-exists? targ-path))
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: target file " targ-path " not found, nothing to remove.")
+	  (debug:print-error 0 *default-log-port* "target file " targ-path " not found, nothing to remove.")
 	  (exit 1)))
     (sretrieve:db-do
      configdat
@@ -489,7 +489,7 @@ Version: " megatest-fossil-hash)) ;; "
 		(> (file-modification-time upstream-file)(file-modification-time package-config)))
 	    (handle-exceptions
 	     exn
-	     (debug:print 0 *default-log-port* "ERROR: failed to run script " conversion-script " with params " upstream-file " " package-config)
+	     (debug:print-error 0 *default-log-port* "failed to run script " conversion-script " with params " upstream-file " " package-config)
 	     (let ((pid (process-run conversion-script (list upstream-file package-config))))
 	       (process-wait pid)))
 	    (debug:print 0 *default-log-port* "Skipping update of " package-config " from " upstream-file))
@@ -529,7 +529,7 @@ Version: " megatest-fossil-hash)) ;; "
       ((get)
        (if (< (length args) 1)
 	   (begin 
-	     (debug:print 0 *default-log-port* "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (debug:print-error 0 *default-log-port* "Missing arguments; " (string-intersperse args ", "))
 	     (exit 1)))
        (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
               (version     (car args))
@@ -544,7 +544,7 @@ Version: " megatest-fossil-hash)) ;; "
          ((cp)
             (if (< (length args) 1)
              (begin 
-	     (debug:print 0 *default-log-port* "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (debug:print-error 0 *default-log-port* "Missing arguments; " (string-intersperse args ", "))
 	     (exit 1)))
           (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
               (file     (car args))
@@ -555,7 +555,7 @@ Version: " megatest-fossil-hash)) ;; "
       ((ls)
             (if (< (length args) 1)
              (begin 
-	     (debug:print 0 *default-log-port* "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (debug:print-error 0 *default-log-port* "Missing arguments; " (string-intersperse args ", "))
 	     (exit 1)))
           (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
               (dir     (car args))
@@ -614,6 +614,6 @@ Version: " megatest-fossil-hash)) ;; "
      ((null? rema)(print sretrieve:help))
      ((>= (length rema) 2)
       (apply sretrieve:process-action configdat (car rema)(cdr rema)))
-     (else (debug:print 0 *default-log-port* "ERROR: Unrecognised command. Try \"sretrieve help\"")))))
+     (else (debug:print-error 0 *default-log-port* "Unrecognised command. Try \"sretrieve help\"")))))
 
 (main)

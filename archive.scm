@@ -256,7 +256,7 @@
 	     (let* ((base (pathname-directory prev-test-physical-path))
 		    (dirn (pathname-file      prev-test-physical-path))
 		    (newn (conc base "/." dirn)))
-	       (debug:print 0 *default-log-port* "ERROR: the old directory " prev-test-physical-path ", still exists! Moving it to " newn)
+	       (debug:print-error 0 *default-log-port* "the old directory " prev-test-physical-path ", still exists! Moving it to " newn)
 	       (rename-file prev-test-physical-path newn)))
 
 	 (if (and archive-path ;; no point in proceeding if there is no actual archive
@@ -278,7 +278,7 @@
 		      (new-test-path       (if (vector? new-test-dat )
 					       (db:test-get-rundir new-test-dat)
 					       (begin
-						 (debug:print 0 *default-log-port* "ERROR: unable to get data for run-id=" run-id ", test-id=" test-id)
+						 (debug:print-error 0 *default-log-port* "unable to get data for run-id=" run-id ", test-id=" test-id)
 						 (exit 1))))
 		      ;; new-test-path won't work - must use best-disk instead? Nope, new-test-path but tack on /..
 		      (bup-restore-params  (list "-d" archive-path "restore" "-C" (conc new-test-path "/..") archive-internal-path)))
@@ -287,6 +287,6 @@
 		 (run-n-wait bup-exe params: bup-restore-params print-cmd: #f)
 		 ;; (mutex-unlock! bup-mutex)
 		 (mt:test-set-state-status-by-id run-id test-id "COMPLETED" #f #f)))
-	     (debug:print 0 *default-log-port* "ERROR: No archive path in the record for run-id=" run-id " test-id=" test-id))))
+	     (debug:print-error 0 *default-log-port* "No archive path in the record for run-id=" run-id " test-id=" test-id))))
      (filter vector? tests))))
 	 

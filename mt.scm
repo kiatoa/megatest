@@ -175,7 +175,7 @@
 (define (mt:test-set-state-status-by-id run-id test-id newstate newstatus newcomment)
   (if (not (and run-id test-id))
       (begin
-	(debug:print 0 *default-log-port* "ERROR: bad data handed to mt:test-set-state-status-by-id, run-id=" run-id ", test-id=" test-id ", newstate=" newstate)
+	(debug:print-error 0 *default-log-port* "bad data handed to mt:test-set-state-status-by-id, run-id=" run-id ", test-id=" test-id ", newstate=" newstate)
 	(print-call-chain (current-error-port))
 	#f)
       (begin
@@ -217,7 +217,7 @@
 		      newtcfg))
 		  (if (null? tal)
 		      (begin
-			(debug:print 0 *default-log-port* "ERROR: No readable testconfig found for " test-name)
+			(debug:print-error 0 *default-log-port* "No readable testconfig found for " test-name)
 			#f)
 		      (loop (car tal)(cdr tal))))))))))
 

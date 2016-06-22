@@ -66,7 +66,7 @@
 ;;   (debug:print 0 *default-log-port* "INFO: client:setup remaining-tries=" remaining-tries)
 ;;   (if (<= remaining-tries 0)
 ;;       (begin
-;; 	(debug:print 0 *default-log-port* "ERROR: failed to start or connect to server for run-id " run-id)
+;; 	(debug:print-error 0 *default-log-port* "failed to start or connect to server for run-id " run-id)
 ;; 	(exit 1))
 ;;       (let ((host-info (hash-table-ref/default *runremote* run-id #f)))
 ;; 	(debug:print-info 0 *default-log-port* "client:setup host-info=" host-info ", remaining-tries=" remaining-tries)
@@ -159,7 +159,7 @@
   (let* ((tdbdat (tasks:open-db)))
     (if (<= remaining-tries 0)
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: failed to start or connect to server for run-id " run-id)
+	  (debug:print-error 0 *default-log-port* "failed to start or connect to server for run-id " run-id)
 	  (exit 1))
 	(let* ((server-dat (tasks:get-server (db:delay-if-busy tdbdat) run-id)))
 	  (debug:print-info 4 *default-log-port* "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
@@ -224,7 +224,7 @@
 ;; 			     "") ;; do nothing for now (was flush out last call if applicable)
 ;; 			   "eat response"))
 ;; 	 (th2 (make-thread (lambda ()
-;; 			     (debug:print 0 *default-log-port* "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
+;; 			     (debug:print-error 0 *default-log-port* "Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
 ;; 			     (thread-sleep! 1) ;; give the flush one second to do it's stuff
 ;; 			     (debug:print 0 *default-log-port* "       Done.")
 ;; 			     (exit 4))
@@ -243,6 +243,6 @@
 ;;   (if (client:setup run-id)
 ;;       (debug:print-info 2 *default-log-port* "connected as client")
 ;;       (begin
-;; 	(debug:print 0 *default-log-port* "ERROR: Failed to connect as client")
+;; 	(debug:print-error 0 *default-log-port* "Failed to connect as client")
 ;; 	(exit))))
 ;; 

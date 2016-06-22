@@ -147,7 +147,7 @@
      (let ((instr (if config 
 		      (config-lookup config "requirements" "waiton")
 		      (begin ;; No config means this is a non-existant test
-			(debug:print 0 *default-log-port* "ERROR: non-existent required test \"" test-name "\"")
+			(debug:print-error 0 *default-log-port* "non-existent required test \"" test-name "\"")
 			(exit 1))))
 	   (instr2 (if config
 		       (config-lookup config "requirements" "waitor")
@@ -161,7 +161,7 @@
 				res))
 			     ((string? instr)     instr)
 			     (else 
-			      ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 *default-log-port* "ERROR: something went wrong in processing waitons for test " test-name)
+			      ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print-error 0 *default-log-port* "something went wrong in processing waitons for test " test-name)
 			      ""))))
 	     (newwaitors
 	      (string-split (cond
@@ -171,7 +171,7 @@
 				res))
 			     ((string? instr2)     instr2)
 			     (else 
-			      ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 *default-log-port* "ERROR: something went wrong in processing waitons for test " test-name)
+			      ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print-error 0 *default-log-port* "something went wrong in processing waitons for test " test-name)
 			      "")))))
 	 (values
 	  ;; the waitons
@@ -179,14 +179,14 @@
 		    (if (hash-table-ref/default all-tests-registry x #f)
 			#t
 			(begin
-			  (debug:print 0 *default-log-port* "ERROR: test " test-name " has unrecognised waiton testname " x)
+			  (debug:print-error 0 *default-log-port* "test " test-name " has unrecognised waiton testname " x)
 			  #f)))
 		  newwaitons)
 	  (filter (lambda (x)
 		    (if (hash-table-ref/default all-tests-registry x #f)
 			#t
 			(begin
-			  (debug:print 0 *default-log-port* "ERROR: test " test-name " has unrecognised waiton testname " x)
+			  (debug:print-error 0 *default-log-port* "test " test-name " has unrecognised waiton testname " x)
 			  #f)))
 		  newwaitors)
 	  config)))))
@@ -304,7 +304,7 @@
 	 (logpro-rule "diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html"))
     (if (not (file-exists? test-rundir))
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: test run directory is gone, cannot propagate waiver")
+	  (debug:print-error 0 *default-log-port* "test run directory is gone, cannot propagate waiver")
 	  #f)
 	(begin
 	  (push-directory test-rundir)
@@ -470,7 +470,7 @@
 	  (debug:print 4 *default-log-port* "Found path: " path)
 	  (change-directory path))
 	;; (set! outputfilename (conc path "/" outputfilename)))
-	(debug:print 0 *default-log-port* "ERROR: summarize-items for run-id=" run-id ", test-name=" test-name ", no such path: " path))
+	(debug:print-error 0 *default-log-port* "summarize-items for run-id=" run-id ", test-name=" test-name ", no such path: " path))
     (debug:print 4 *default-log-port* "summarize-items with logf " logf ", outputfilename " outputfilename " and force " force)
     (if (or (equal? logf "logs/final.log")
 	    (equal? logf outputfilename)
@@ -824,7 +824,7 @@
   (let* ((mungepriority (lambda (priority)
 			  (if priority
 			      (let ((tmp (any->number priority)))
-				(if tmp tmp (begin (debug:print 0 *default-log-port* "ERROR: bad priority value " priority ", using 0") 0)))
+				(if tmp tmp (begin (debug:print-error 0 *default-log-port* "bad priority value " priority ", using 0") 0)))
 			      0)))
 	 (all-tests      (hash-table-keys test-records))
 	 (all-waited-on  (let loop ((hed (car all-tests))
@@ -1039,7 +1039,7 @@
 	       (waitons (let ((instr (if config 
 					 (config-lookup config "requirements" "waiton")
 					 (begin ;; No config means this is a non-existant test
-					   (debug:print 0 *default-log-port* "ERROR: non-existent required test \"" hed "\", grep through your testconfigs to find and remove or create the test. Discarding and continuing.")
+					   (debug:print-error 0 *default-log-port* "non-existent required test \"" hed "\", grep through your testconfigs to find and remove or create the test. Discarding and continuing.")
 					     ""))))
 			  (debug:print-info 8 *default-log-port* "waitons string is " instr)
 			  (string-split (cond
@@ -1049,7 +1049,7 @@
 					    res))
 					 ((string? instr)     instr)
 					 (else 
-					  ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 *default-log-port* "ERROR: something went wrong in processing waitons for test " hed)
+					  ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print-error 0 *default-log-port* "something went wrong in processing waitons for test " hed)
 					  ""))))))
 	  (if (not config) ;; this is a non-existant test called in a waiton. 
 	      (if (null? tal)
@@ -1061,7 +1061,7 @@
 		;; error
 		(if (member hed waitons)
 		    (begin
-		      (debug:print 0 *default-log-port* "ERROR: test " hed " has listed itself as a waiton, please correct this!")
+		      (debug:print-error 0 *default-log-port* "test " hed " has listed itself as a waiton, please correct this!")
 		      (set! waitons (filter (lambda (x)(not (equal? x hed))) waitons))))
 		
 		;; (items   (items:get-items-from-config config)))
@@ -1165,7 +1165,7 @@
 	   (thread-sleep! 10)
 	   (tests:set-full-meta-info db test-id run-id minutes work-area (- remtries 1)))
 	 (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
-	   (debug:print 0 *default-log-port* "ERROR: tried for over a minute to update meta info and failed. Giving up")
+	   (debug:print-error 0 *default-log-port* "tried for over a minute to update meta info and failed. Giving up")
 	   (debug:print 0 *default-log-port* "EXCEPTION: database probably overloaded or unreadable.")
 	   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 	   (print "exn=" (condition->list exn))

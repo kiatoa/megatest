@@ -19,7 +19,7 @@
 		      (or (common:args-get-target)
 			  (get-environment-variable "MT_TARGET")
 			  (begin
-			    (debug:print 0 *default-log-port* "ERROR: setup-env-defaults called with no run-id or -target or -reqtarg")
+			    (debug:print-error 0 *default-log-port* "setup-env-defaults called with no run-id or -target or -reqtarg")
 			    "nothing matches this I hope"))))
 	 ;; Why was system disallowed in the reading of the runconfigs file?
 	 ;; NOTE: Should be setting env vars based on (target|default)

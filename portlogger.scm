@@ -56,7 +56,7 @@
      exn
      (begin
        ;; (release-dot-lock fname)
-       (debug:print 0 *default-log-port* "ERROR: portlogger:open-run-close failed. " proc " " params)
+       (debug:print-error 0 *default-log-port* "portlogger:open-run-close failed. " proc " " params)
        (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
        (debug:print 0 *default-log-port* "exn=" (condition->list exn))
        (if (file-exists? fname)(delete-file fname)) ;; brutally get rid of it

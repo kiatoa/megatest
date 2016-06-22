@@ -53,7 +53,7 @@
     ;; get the info from the db and put it in the cache
     (if link-tree
 	(setenv "MT_LINKTREE" link-tree)
-	(debug:print 0 *default-log-port* "ERROR: linktree not set, should be set in megatest.config in [setup] section."))
+	(debug:print-error 0 *default-log-port* "linktree not set, should be set in megatest.config in [setup] section."))
     (if (not vals)
 	(let ((ht (make-hash-table)))
 	  (hash-table-set! *env-vars-by-run-id* run-id ht)
@@ -74,7 +74,7 @@
     (let ((runname  (if inrunname inrunname (rmt:get-run-name-from-id run-id))))
       (if runname
 	  (setenv "MT_RUNNAME" runname)
-	  (debug:print 0 *default-log-port* "ERROR: no value for runname for id " run-id)))
+	  (debug:print-error 0 *default-log-port* "no value for runname for id " run-id)))
     (setenv "MT_RUN_AREA_HOME" *toppath*)
     ;; if a testname and itempath are available set the remaining appropriate variables
     (if testname (setenv "MT_TEST_NAME" testname))
@@ -302,7 +302,7 @@
 	    (if (or (member hed waitons)
 		    (member hed waitors))
 		(begin
-		  (debug:print 0 *default-log-port* "ERROR: test " hed " has listed itself as a waiton or waitor, please correct this!")
+		  (debug:print-error 0 *default-log-port* "test " hed " has listed itself as a waiton or waitor, please correct this!")
 		  (set! waitons (filter (lambda (x)(not (equal? x hed))) waitons))
 		  (set! waitors (filter (lambda (x)(not (equal? x hed))) waitors))))
 	    
@@ -383,7 +383,7 @@
 					    ;;  exn
 					    ;;  (begin
 					    ;;    (print-call-chain (current-error-port))
-					    ;;    (debug:print 0 *default-log-port* "ERROR: failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
+					    ;;    (debug:print-error 0 *default-log-port* "failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
 					    ;;    (if (> run-queue-retries 0)
 					    ;; 	   (begin
 					    ;; 	     (set! run-queue-retries (- run-queue-retries 1))
@@ -444,7 +444,7 @@
 ;;    ((and (not regfull)(null? tal)(not (null? reg))) (car reg))
 ;;    ((and (not regfull)(not (null? tal)))            (car tal))
 ;;    (else
-;;     (debug:print 0 *default-log-port* "ERROR: runs:queue-next-hed, tal=" tal ", reg=" reg ", n=" n ", regfull=" regfull)
+;;     (debug:print-error 0 *default-log-port* "runs:queue-next-hed, tal=" tal ", reg=" reg ", n=" n ", regfull=" regfull)
 ;;     #f)))
 
 (define (runs:queue-next-tal tal reg n regfull)
@@ -539,7 +539,7 @@
 		(tests:testqueue-set-items! test-record items-list)
 		(list hed tal reg reruns))
 	      (begin
-		(debug:print 0 *default-log-port* "ERROR: The proc from reading the items table did not yield a list - please report this")
+		(debug:print-error 0 *default-log-port* "The proc from reading the items table did not yield a list - please report this")
 		(exit 1))))))
 
      ((and (null? fails)
@@ -668,7 +668,7 @@
 	 (fails                   (if (list? prereqs-not-met)
 				      (runs:calc-fails prereqs-not-met)
 				      (begin
-					(debug:print 0 *default-log-port* "ERROR: prereqs-not-met is not a list! " prereqs-not-met)
+					(debug:print-error 0 *default-log-port* "prereqs-not-met is not a list! " prereqs-not-met)
 					'())))
 	 (non-completed           (filter (lambda (x)             ;; remove hed from not completed list, duh, of course it is not completed!
 					    (not (equal? x hed)))
@@ -726,7 +726,7 @@
 		(begin
 		  (thread-sleep! 0.5)
 		  (register-loop (- numtries 1)))
-		(debug:print 0 *default-log-port* "ERROR: failed to register test " (db:test-make-full-name test-name item-path)))))
+		(debug:print-error 0 *default-log-port* "failed to register test " (db:test-make-full-name test-name item-path)))))
       (if (not (eq? (hash-table-ref/default test-registry (db:test-make-full-name test-name "") #f) 'done))
 	  (begin
 	    (rmt:register-test run-id test-name "")
@@ -1110,7 +1110,7 @@
 	;; error
 	(if (member test-name waitons)
 	    (begin
-	      (debug:print 0 *default-log-port* "ERROR: test " test-name " has listed itself as a waiton, please correct this!")
+	      (debug:print-error 0 *default-log-port* "test " test-name " has listed itself as a waiton, please correct this!")
 	      (set! waiton (filter (lambda (x)(not (equal? x hed))) waitons))))
 
 	(cond 
@@ -1201,7 +1201,7 @@
 	    
 	 ;; this case should not happen, added to help catch any bugs
 	 ((and (list? items) itemdat)
-	  (debug:print 0 *default-log-port* "ERROR: Should not have a list of items in a test and the itemspath set - please report this")
+	  (debug:print-error 0 *default-log-port* "Should not have a list of items in a test and the itemspath set - please report this")
 	  (exit 1))
 	 ((not (null? reruns))
 	  (let* ((newlst (tests:filter-non-runnable run-id tal test-records)) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
@@ -1366,12 +1366,12 @@
 		  (thread-sleep! 1)
 		  (loop)))))
       (if (not testdat) ;; should NOT happen
-	  (debug:print 0 *default-log-port* "ERROR: failed to get test record for test-id " test-id))
+	  (debug:print-error 0 *default-log-port* "failed to get test record for test-id " test-id))
       (set! test-id (db:test-get-id testdat))
       (if (file-exists? test-path)
 	  (change-directory test-path)
 	  (begin
-	    (debug:print 0 *default-log-port* "ERROR: test run path not created before attempting to run the test. Perhaps you are running -remove-runs at the same time?")
+	    (debug:print-error 0 *default-log-port* "test run path not created before attempting to run the test. Perhaps you are running -remove-runs at the same time?")
 	    (change-directory *toppath*)))
       (case (if force ;; (args:get-arg "-force")
 		'NOT_STARTED
@@ -1379,7 +1379,7 @@
 		    (string->symbol (test:get-state testdat))
 		    'failed-to-insert))
 	((failed-to-insert)
-	 (debug:print 0 *default-log-port* "ERROR: Failed to insert the record into the db"))
+	 (debug:print-error 0 *default-log-port* "Failed to insert the record into the db"))
 	((NOT_STARTED COMPLETED DELETED INCOMPLETE)
 	 (let ((runflag #f))
 	   (cond
@@ -1475,7 +1475,7 @@
 	;;        ;; (tests:test-set-status! test-id "INCOMPLETE" "STUCK/DEAD" "" #f))
 	;;      (debug:print 2 *default-log-port* "NOTE: " test-name " is already running")))
 	(else      
-	 (debug:print 0 *default-log-port* "ERROR: Failed to launch test " full-test-name ". Unrecognised state " (test:get-state testdat))
+	 (debug:print-error 0 *default-log-port* "Failed to launch test " full-test-name ". Unrecognised state " (test:get-state testdat))
 	 (case (string->symbol (test:get-state testdat)) 
 	   ((COMPLETED INCOMPLETE)
 	    (hash-table-set! test-registry (db:test-make-full-name test-name test-path) 'DONOTRUN))
@@ -1499,7 +1499,7 @@
 	;; FAILED, possibly due to permissions, do chmod a+rwx then try one more time
 	(system (conc "chmod -R a+rwx " real-dir))
 	(if (> (system (conc "rm -rf " real-dir)) 0)
-	    (debug:print 0 *default-log-port* "ERROR: There was a problem removing " real-dir " with rm -f")))))
+	    (debug:print-error 0 *default-log-port* "There was a problem removing " real-dir " with rm -f")))))
 
 (define (runs:safe-delete-test-dir real-dir)
   ;; first delete all sub-directories
@@ -1544,7 +1544,7 @@
     (debug:print-info 4 *default-log-port* "runs:operate-on => Header: " header " action: " action " new-state-status: " new-state-status)
     (if (> 2 (length state-status))
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: the parameter to -set-state-status is a comma delimited string. E.g. COMPLETED,FAIL")
+	  (debug:print-error 0 *default-log-port* "the parameter to -set-state-status is a comma delimited string. E.g. COMPLETED,FAIL")
 	  (exit)))
     (for-each
      (lambda (run)
@@ -1592,7 +1592,7 @@
 							 ((save save-remove keep-html)(archive:run-bup (args:get-arg "-archive") run-id run-name tests rp-mutex bup-mutex))
 							 ((restore)(archive:bup-restore (args:get-arg "-archive") run-id run-name tests rp-mutex bup-mutex))
 							 (else 
-							  (debug:print 0 *default-log-port* "ERROR: unrecognised sub command to -archive. Run \"megatest\" to see help")
+							  (debug:print-error 0 *default-log-port* "unrecognised sub command to -archive. Run \"megatest\" to see help")
 							  (exit))))
 						     "archive-bup-thread"))
 		    (thread-start! worker-thread))
@@ -1619,7 +1619,7 @@
 			    (new-test-dat  (rmt:get-test-info-by-id run-id test-id)))
 		       (if (not new-test-dat)
 			   (begin
-			     (debug:print 0 *default-log-port* "ERROR: We have a test-id of " test-id " but no record was found. NOTE: No locking of records is done between processes, do not simultaneously remove the same run from two processes!")
+			     (debug:print-error 0 *default-log-port* "We have a test-id of " test-id " but no record was found. NOTE: No locking of records is done between processes, do not simultaneously remove the same run from two processes!")
 			     (if (not (null? tal))
 				 (loop (car tal)(cdr tal))))
 			   (let* ((item-path     (db:test-get-item-path new-test-dat))
@@ -1747,14 +1747,14 @@
 	  (debug:print-info 1 *default-log-port* "Removing symlink " run-dir)
 	  (handle-exceptions
 	   exn
-	   (debug:print 0 *default-log-port* "ERROR:  Failed to remove symlink " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
+	   (debug:print-error 0 *default-log-port* " Failed to remove symlink " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
 	   (delete-file run-dir)))
 	(if (directory? run-dir)
 	    (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
 		(debug:print 0 *default-log-port* "WARNING: refusing to remove " run-dir " as it is not empty")
 		(handle-exceptions
 		 exn
-		 (debug:print 0 *default-log-port* "ERROR:  Failed to remove directory " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
+		 (debug:print-error 0 *default-log-port* " Failed to remove directory " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
 		 (delete-directory run-dir)))
 	    (if (and run-dir
 		     (not (member run-dir (list "n/a" "/tmp/badname"))))
@@ -1778,10 +1778,10 @@
 	(target  (common:args-get-target)))
     (cond
      ((not target)
-      (debug:print 0 *default-log-port* "ERROR: Missing required parameter for " switchname ", you must specify the target with -target")
+      (debug:print-error 0 *default-log-port* "Missing required parameter for " switchname ", you must specify the target with -target")
       (exit 3))
      ((not runname)
-      (debug:print 0 *default-log-port* "ERROR: Missing required parameter for " switchname ", you must specify the run name with -runname runname")
+      (debug:print-error 0 *default-log-port* "Missing required parameter for " switchname ", you must specify the run name with -runname runname")
       (exit 3))
      (else
       (let (;; (db   #f)
@@ -1802,7 +1802,7 @@
 		  (keys:target-set-args keys (args:get-arg "-reqtarg") args:arg-hash)
 		    
 		  (begin
-		    (debug:print 0 *default-log-port* "ERROR: [" (args:get-arg "-reqtarg") "] not found in " runconfigf)
+		    (debug:print-error 0 *default-log-port* "[" (args:get-arg "-reqtarg") "] not found in " runconfigf)
 		    ;; (if db (sqlite3:finalize! db))
 		    (exit 1)
 		    )))
@@ -1810,7 +1810,7 @@
 		(keys:target-set-args keys (args:get-arg "-target" args:arg-hash) args:arg-hash)))
 	(if (not (car *configinfo*))
 	    (begin
-	      (debug:print 0 *default-log-port* "ERROR: Attempted to " action-desc " but run area config file not found")
+	      (debug:print-error 0 *default-log-port* "Attempted to " action-desc " but run area config file not found")
 	      (exit 1))
 	    ;; Extract out stuff needed in most or many calls
 	    ;; here then call proc
