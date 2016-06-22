@@ -214,7 +214,7 @@ Misc
     (handle-exceptions
      exn
      (begin
-       (debug:print 0 *default-log-port* "ERROR: Couldn't create path to " dbdir)
+       (debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
        (exit 1))
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     (if fname
@@ -242,7 +242,7 @@ Misc
 	       (db     (if (file-exists? dbfile)
 			   (open-database dbfile)
 			   (begin
-			     (debug:print 0 *default-log-port* "ERROR: I was asked to open " dbfile ", but file does not exist or is not readable.")
+			     (debug:print-error 0 *default-log-port* "I was asked to open " dbfile ", but file does not exist or is not readable.")
 			     #f))))
 	  (case run-id
 	    ((-1)(areadat-monitordb-set! areadat db))
@@ -265,7 +265,7 @@ Misc
 	       (sql maindb (conc "SELECT id,"
 				 (string-intersperse keys "||'/'||")
 				 ",runname,state,status,event_time FROM runs WHERE state != 'deleted';")))
-	(debug:print 0 *default-log-port* "ERROR: no main.db found at "  (areadb:dbfile-path areadat 0)))
+	(debug:print-error 0 *default-log-port* "no main.db found at "  (areadb:dbfile-path areadat 0)))
     areadat))
 
 ;; given an areadat and target/runname patt fill up runs data

@@ -161,7 +161,7 @@
 		      newres)
 		    )))
 	    (begin
-	      ;; (debug:print 0 *default-log-port* "ERROR: Communication failed!")
+	      ;; (debug:print-error 0 *default-log-port* "Communication failed!")
 	      ;; (mutex-unlock! *send-receive-mutex*)
 	      ;; (exit)
 	      (rmt:open-qry-close-locally cmd run-id params)
@@ -241,11 +241,11 @@
     (if (not success)
 	(if (> remretries 0)
 	    (begin
-	      (debug:print 0 *default-log-port* "ERROR: local query failed. Trying again.")
+	      (debug:print-error 0 *default-log-port* "local query failed. Trying again.")
 	      (thread-sleep! (/ (random 5000) 1000)) ;; some random delay 
 	      (rmt:open-qry-close-locally cmd run-id params remretries: (- remretries 1)))
 	    (begin
-	      (debug:print 0 *default-log-port* "ERROR: too many retries in rmt:open-qry-close-locally, giving up")
+	      (debug:print-error 0 *default-log-port* "too many retries in rmt:open-qry-close-locally, giving up")
 	      #f))
 	(begin
 	  ;; (rmt:update-db-stats run-id cmd params duration)
@@ -272,7 +272,7 @@
 	#f)))
 ;; 	(db:string->obj (vector-ref dat 1))
 ;; 	(begin
-;; 	  (debug:print 0 *default-log-port* "ERROR: rmt:send-receive-no-auto-client-setup failed, attempting to continue. Got " dat)
+;; 	  (debug:print-error 0 *default-log-port* "rmt:send-receive-no-auto-client-setup failed, attempting to continue. Got " dat)
 ;; 	  dat))))
 
 ;; Wrap json library for strings (why the ports crap in the first place?)
@@ -392,7 +392,7 @@
   (if (number? run-id)
       (rmt:send-receive 'get-tests-for-run run-id (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode))
       (begin
-	(debug:print 0 *default-log-port* "ERROR: rmt:get-tests-for-run called with bad run-id=" run-id)
+	(debug:print-error 0 *default-log-port* "rmt:get-tests-for-run called with bad run-id=" run-id)
 	(print-call-chain (current-error-port))
 	'())))
 
@@ -423,7 +423,7 @@
 					   (mutex-lock! multi-run-mutex)
 					   (set! result (append result res))
 					   (mutex-unlock! multi-run-mutex))
-					 (debug:print 0 *default-log-port* "ERROR: get-tests-for-run-mindata failed for run-id " hed ", testpatt " testpatt ", states " states ", status " status ", not-in " not-in))))
+					 (debug:print-error 0 *default-log-port* "get-tests-for-run-mindata failed for run-id " hed ", testpatt " testpatt ", states " states ", status " status ", not-in " not-in))))
 				 (conc "multi-run-thread for run-id " hed)))
 		     (newthreads (cons newthread threads)))
 		(thread-start! newthread)

@@ -45,7 +45,7 @@
 			(if ht (hash-table-set! ht (conc ":" key) val)))
 		      keys
 		      vals)
-	    (debug:print 0 *default-log-port* "ERROR: wrong number of values in " target ", should match " keys))
+	    (debug:print-error 0 *default-log-port* "wrong number of values in " target ", should match " keys))
 	vals)
       (debug:print 4 *default-log-port* "ERROR: keys:target-set-args called with no target.")))
 

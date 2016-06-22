@@ -47,7 +47,7 @@
   (handle-exceptions
    exn
    (begin
-     (debug:print 0 *default-log-port* "ERROR: problem evaluating \"" str "\" in the shell environment")
+     (debug:print-error 0 *default-log-port* "problem evaluating \"" str "\" in the shell environment")
      #f)
    (let ((cmdres (process:cmd-run->list (conc "echo " str))))
      (if (null? cmdres) ""
@@ -256,7 +256,7 @@
 									      (debug:print-info 4 *default-log-port* "" inl "\n => " (string-intersperse res "\n"))
 									      (if (not (eq? status 0))
 										  (begin
-										    (debug:print 0 *default-log-port* "ERROR: problem with " inl ", return code " status
+										    (debug:print-error 0 *default-log-port* "problem with " inl ", return code " status
 												 " output: " cmdres)))
 									      (if (> delta 2)
 										  (debug:print-info 0 *default-log-port* "for line \"" inl "\"\n  command: " cmd " took " delta " seconds to run with output:\n   " res)
@@ -307,7 +307,7 @@
 								       (config:assoc-safe-add alist var-flag newval metadata: metapath))
 						      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name var-flag (if lead lead whsp)))
 						    (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))))
-	       (else (debug:print 0 *default-log-port* "ERROR: problem parsing " path ",\n   \"" inl "\"")
+	       (else (debug:print-error 0 *default-log-port* "problem parsing " path ",\n   \"" inl "\"")
 		     (set! var-flag #f)
 		     (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))))))))
   
@@ -469,9 +469,9 @@
 			     (hash-table-set! sechash key newval)
 			     (set! new (conc key " " newval)))
 			  (else
-			   (debug:print 0 *default-log-port* "ERROR: problem parsing line number " lnum "\"" hed "\"")))))
+			   (debug:print-error 0 *default-log-port* "problem parsing line number " lnum "\"" hed "\"")))))
 	   (else
-	    (debug:print 0 *default-log-port* "ERROR: Problem parsing line num " lnum " :\n   " hed )))
+	    (debug:print-error 0 *default-log-port* "Problem parsing line num " lnum " :\n   " hed )))
 	  (if (not (null? tal))
 	      (loop (car tal)(cdr tal)(if new (append res (list new)) res)(+ lnum 1)))
 	  ;; drop to here when done processing, res contains modified list of lines

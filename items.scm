@@ -50,7 +50,7 @@
 				    (debug:print 6 *default-log-port* "item-assoc->item-list x: " x)
 				    (if (< (length x) 2)
 					(begin
-					  (debug:print 0 *default-log-port* "ERROR: malformed items spec " (string-intersperse x " "))
+					  (debug:print-error 0 *default-log-port* "malformed items spec " (string-intersperse x " "))
 					  (list (car x)'()))
 					(let* ((name (car x))
 					       (items (cadr x))
@@ -58,7 +58,7 @@
 								     (string-split items)
 								     '()))))
 					  (if (null? ilist)
-					      (debug:print 0 *default-log-port* "ERROR: No items specified for " name))
+					      (debug:print-error 0 *default-log-port* "No items specified for " name))
 					  ilist)))
 				  itemsdat))))
 	(let ((debuglevel 5))
@@ -134,8 +134,8 @@
 				(list (car item)((cadr item)))  ;; evaluate the proc
 				item))
 			  itemstable))
-    (if (and have-items  (null? items))     (debug:print 0 *default-log-port* "ERROR: [items] section in testconfig but no entries defined"))
-    (if (and have-itable (null? itemstable))(debug:print 0 *default-log-port* "ERROR: [itemstable] section in testconfig but no entries defined"))
+    (if (and have-items  (null? items))     (debug:print-error 0 *default-log-port* "[items] section in testconfig but no entries defined"))
+    (if (and have-itable (null? itemstable))(debug:print-error 0 *default-log-port* "[itemstable] section in testconfig but no entries defined"))
     (if (or (not (null? items))(not (null? itemstable)))
 	(append (item-assoc->item-list items)
 		(item-table->item-list itemstable))

@@ -80,7 +80,7 @@
 	 (thread-sleep! 30)
 	 (lock-queue:set-state dbdat test-id newstate remtries: (- remtries 1)))
        (begin
-	 (debug:print 0 *default-log-port* "ERROR:  Failed to set lock state for test with id " test-id ", error: " ((condition-property-accessor 'exn 'message) exn) ", giving up.")
+	 (debug:print-error 0 *default-log-port* " Failed to set lock state for test with id " test-id ", error: " ((condition-property-accessor 'exn 'message) exn) ", giving up.")
 	 #f))
    (sqlite3:execute (lock-queue:db-dat-get-db dbdat) "UPDATE queue SET state=? WHERE test_id=?;"
 		    newstate
@@ -99,7 +99,7 @@
          (lock-queue:delete-lock-db dbdat)
 	 (lock-queue:any-younger? dbdat mystart test-id remtries: (- remtries 1)))
        (begin
-	 (debug:print 0 *default-log-port* "ERROR:  Failed to find younger locks for test with id " test-id ", error: " ((condition-property-accessor 'exn 'message) exn) ", giving up.")
+	 (debug:print-error 0 *default-log-port* " Failed to find younger locks for test with id " test-id ", error: " ((condition-property-accessor 'exn 'message) exn) ", giving up.")
 	 #f))
    (let ((res #f))
      (sqlite3:for-each-row

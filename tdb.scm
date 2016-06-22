@@ -87,7 +87,7 @@
 	 exn
 	 (begin
 	   (print-call-chain (current-error-port))
-	   (debug:print 0 *default-log-port* "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test or remove the file " 
+	   (debug:print-error 0 *default-log-port* "problem accessing test db " work-area ", you probably should clean and re-run this test or remove the file " 
 			dbpath ".\n  "
 			((condition-property-accessor 'exn 'message) exn))
 	   #f)

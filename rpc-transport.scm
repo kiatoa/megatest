@@ -164,7 +164,7 @@
 (define (rpc-transport:client-setup run-id #!key (remtries 10))
   (if *runremote*
       (begin
-	(debug:print 0 *default-log-port* "ERROR: Attempt to connect to server but already connected")
+	(debug:print-error 0 *default-log-port* "Attempt to connect to server but already connected")
 	#f)
       (let* ((host-info (hash-table-ref/default *runremote* run-id #f))) ;; (open-run-close db:get-var #f "SERVER"))
 	(if host-info
@@ -207,7 +207,7 @@
 ;; 	      (handle-exceptions
 ;; 	       exn
 ;; 	       (begin
-;; 		 (debug:print 0 *default-log-port* "ERROR: Failed to open a connection to the server at host: " host " port: " port)
+;; 		 (debug:print-error 0 *default-log-port* "Failed to open a connection to the server at host: " host " port: " port)
 ;; 		 (debug:print 0 *default-log-port* "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
 ;; 		 ;; (open-run-close 
 ;; 		 ;;  (lambda (db . param) 

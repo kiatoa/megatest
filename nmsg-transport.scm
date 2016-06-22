@@ -91,7 +91,7 @@
 	      (portlogger:open-run-close portlogger:set-failed start-port)
 	      (nmsg-transport:run dbstruct hostn run-id server-id))
 	    (begin
-	      (debug:print 0 *default-log-port* "ERROR: could not find an open port to start server on. Giving up")
+	      (debug:print-error 0 *default-log-port* "could not find an open port to start server on. Giving up")
 	      (exit 1))))))
 
 (define (nmsg-transport:try-start-server dbstruct run-id portnum server-id)
@@ -242,7 +242,7 @@
 		 (vector-ref result 0)) ;; did it fail at the server?
 	    result                ;; nope, all good
 	    (begin
-	      (debug:print 0 *default-log-port* "ERROR: error occured at server, info=" (vector-ref result 2))
+	      (debug:print-error 0 *default-log-port* "error occured at server, info=" (vector-ref result 2))
 	      (debug:print 0 *default-log-port* " client call chain:")
 	      (print-call-chain (current-error-port))
 	      (debug:print 0 *default-log-port* " server call chain:")
@@ -347,7 +347,7 @@
 				 (receive-message* *runremote*))) ;; flush out last call if applicable
 			   "eat response"))
 	 (th2 (make-thread (lambda ()
-			     (debug:print 0 *default-log-port* "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
+			     (debug:print-error 0 *default-log-port* "Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
 			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
 			     (debug:print 0 *default-log-port* "       Done.")
 			     (exit 4))

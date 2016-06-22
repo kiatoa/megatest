@@ -203,7 +203,7 @@
 	    (begin
 	      (thread-sleep! 0.05)
 	      (loop etime))
-	    (debug:print 0 *default-log-port* "ERROR: requests still in progress after 5 seconds of waiting. I'm going to pass on cleaning up http connections"))
+	    (debug:print-error 0 *default-log-port* "requests still in progress after 5 seconds of waiting. I'm going to pass on cleaning up http connections"))
 	(close-all-connections!)))
   (set! *http-connections-next-cleanup* (+ (current-seconds) 10))
   (mutex-unlock! *http-mutex*))
@@ -296,7 +296,7 @@
 	     (if (vector-ref res 0)
 		 res
 		 (begin ;; note: this code also called in nmsg-transport - consider consolidating it
-		   (debug:print 0 *default-log-port* "ERROR: error occured at server, info=" (vector-ref res 2))
+		   (debug:print-error 0 *default-log-port* "error occured at server, info=" (vector-ref res 2))
 		   (debug:print 0 *default-log-port* " client call chain:")
 		   (print-call-chain (current-error-port))
 		   (debug:print 0 *default-log-port* " server call chain:")
@@ -341,7 +341,7 @@
       (vector-set! vec 5 (current-seconds))
       (begin
 	(print-call-chain (current-error-port))
-	(debug:print 0 *default-log-port* "ERROR: call to http-transport:server-dat-update-last-access with non-vector!!"))))
+	(debug:print-error 0 *default-log-port* "call to http-transport:server-dat-update-last-access with non-vector!!"))))
 
 ;;
 ;; connect
@@ -381,7 +381,7 @@
                                 (sleep 4)
 				(if (> (- (current-seconds) start-time) 120) ;; been waiting for two minutes
 				    (begin
-				      (debug:print 0 *default-log-port* "ERROR: transport appears to have died, exiting server " server-id " for run " run-id)
+				      (debug:print-error 0 *default-log-port* "transport appears to have died, exiting server " server-id " for run " run-id)
 				      (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id "failed to start, never received server alive signature")
 				      (exit))
 				    (loop start-time
@@ -410,7 +410,7 @@
 			     (thread-sleep! 5)
 			     (loop count server-state (+ bad-sync-count 1)))))
 	     ((exn)
-	      (debug:print 0 *default-log-port* "ERROR: error from sync code other than 'sync-failed. Attempting to gracefully shutdown the server")
+	      (debug:print-error 0 *default-log-port* "error from sync code other than 'sync-failed. Attempting to gracefully shutdown the server")
 	      (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running crashed")
 	      (exit)))
 	    (set! sync-time  (- (current-milliseconds) start-time))
@@ -590,7 +590,7 @@
 			     (thread-sleep! 1))
 			   "eat response"))
 	 (th2 (make-thread (lambda ()
-			     (debug:print 0 *default-log-port* "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
+			     (debug:print-error 0 *default-log-port* "Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
 			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
 			     (debug:print 0 *default-log-port* "       Done.")
 			     (exit 4))

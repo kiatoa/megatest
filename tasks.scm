@@ -27,7 +27,7 @@
 ;;
 (define (tasks:wait-on-journal path n #!key (remove #f)(waiting-msg #f))
   (if (not (string? path))
-      (debug:print 0 *default-log-port* "ERROR: Called tasks:wait-on-journal with path=" path " (not a string)")
+      (debug:print-error 0 *default-log-port* "Called tasks:wait-on-journal with path=" path " (not a string)")
       (let ((fullpath (conc path "-journal")))
 	(handle-exceptions
 	 exn
@@ -61,7 +61,7 @@
     (handle-exceptions
      exn
      (begin
-       (debug:print 0 *default-log-port* "ERROR: Couldn't create path to " dbdir)
+       (debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
        (exit 1))
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     dbdir))
@@ -288,7 +288,7 @@
 (define (tasks:server-am-i-the-server? mdb run-id)
   (let* ((all    (tasks:server-get-servers-vying-for-run-id mdb run-id))
 	 (first  (if (null? all)
-		     #f;; (begin (debug:print 0 *default-log-port* "ERROR: no servers listed, should be at least one by now.") 
+		     #f;; (begin (debug:print-error 0 *default-log-port* "no servers listed, should be at least one by now.") 
 		       ;;      (sqlite3:finalize! mdb)
 		       ;;      (exit 1))
 		     (car (db:get-rows all)))))
@@ -780,7 +780,7 @@
 		     (if old-targethost (setenv "TARGETHOST" old-targethost))
 		     (unsetenv "TARGETHOST")
 		     (unsetenv "TARGETHOST_LOGF"))))
-	     (debug:print 0 *default-log-port* "ERROR: no record or improper record for " target "/" run-name " in tasks_queue in main.db"))))
+	     (debug:print-error 0 *default-log-port* "no record or improper record for " target "/" run-name " in tasks_queue in main.db"))))
      records)))
 
 ;; (define (tasks:start-run dbstruct mdb task)

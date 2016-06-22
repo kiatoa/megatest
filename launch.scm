@@ -280,12 +280,12 @@
 	;; after all that, still no testconfig? Time to abort
 	(if (not testconfig)
 	    (begin
-	      (debug:print 0 *default-log-port* "ERROR: Failed to resolve megatest.config, runconfigs.config and testconfig issues. Giving up now")
+	      (debug:print-error 0 *default-log-port* "Failed to resolve megatest.config, runconfigs.config and testconfig issues. Giving up now")
 	      (exit 1)))
 	(if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
 	;; if ezsteps was defined then we are sure to have at least one step but check anyway
 	(if (not (> (length ezstepslst) 0))
-	    (debug:print 0 *default-log-port* "ERROR: ezsteps defined but ezstepslst is zero length")
+	    (debug:print-error 0 *default-log-port* "ezsteps defined but ezstepslst is zero length")
 	    (let loop ((ezstep (car ezstepslst))
 		       (tal    (cdr ezstepslst))
 		       (prevstep #f))
@@ -373,7 +373,7 @@
 		       pids)
 		      (tests:test-set-status! run-id test-id "KILLED"  "KILLED" (args:get-arg "-m") #f))
 		    (begin
-		      (debug:print 0 *default-log-port* "ERROR: Nothing to kill, pid1=" pid1 ", pid2=" pid2)
+		      (debug:print-error 0 *default-log-port* "Nothing to kill, pid1=" pid1 ", pid2=" pid2)
 		      (tests:test-set-status! run-id test-id "KILLED"  "FAILED TO KILL" (args:get-arg "-m") #f)
 		      )))
 	      (mutex-unlock! m)
@@ -439,7 +439,7 @@
 	  (let ((sighand (lambda (signum)
 			   ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
 			   (if (eq? signum signal/stop)
-			       (debug:print 0 *default-log-port* "ERROR: attempt to STOP process. Exiting."))
+			       (debug:print-error 0 *default-log-port* "attempt to STOP process. Exiting."))
 			   (set! *time-to-exit* #t)
 			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
 			   (let ((th1 (make-thread (lambda ()
@@ -470,12 +470,12 @@
 	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")) ;; prime it for running
 	     ((member (db:test-get-state test-info) '("RUNNING" "REMOTEHOSTSTART"))
 	      (if (process:alive-on-host? test-host test-pid)
-		  (debug:print 0 *default-log-port* "ERROR: test state is "  (db:test-get-state test-info) " and process " test-pid " is still running on host " test-host ", cannot proceed")
+		  (debug:print-error 0 *default-log-port* "test state is "  (db:test-get-state test-info) " and process " test-pid " is still running on host " test-host ", cannot proceed")
 		  (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")))
 	     ((not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
 	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a"))
 	     (else ;; (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ"))
-	      (debug:print 0 *default-log-port* "ERROR: test state is " (db:test-get-state test-info) ", cannot proceed")
+	      (debug:print-error 0 *default-log-port* "test state is " (db:test-get-state test-info) ", cannot proceed")
 	      (exit))))
 	  
 	  (debug:print 2 *default-log-port* "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
@@ -505,7 +505,7 @@
 				      (if (and (string? var)(string? val))
 					  (begin
 					    (setenv var (config:eval-string-in-environment val))) ;; val)
-					  (debug:print 0 *default-log-port* "ERROR: bad variable spec, " var "=" val))))
+					  (debug:print-error 0 *default-log-port* "bad variable spec, " var "=" val))))
 				  (configf:get-section rconfig section)))
 		      (list "default" target)))
 
@@ -541,7 +541,7 @@
 	       (if val
 		   (setenv var val)
 		   (begin
-		     (debug:print 0 *default-log-port* "ERROR: required variable " var " does not have a valid value. Exiting")
+		     (debug:print-error 0 *default-log-port* "required variable " var " does not have a valid value. Exiting")
 		     (exit)))))
 	     (list 
 	      (list  "MT_TEST_RUN_DIR" work-area)
@@ -751,7 +751,7 @@
 	      (set! toppath      *toppath*)
 	      (if (not *toppath*)
 		  (begin
-		    (debug:print 0 *default-log-port* "ERROR: you are not in a megatest area!")
+		    (debug:print-error 0 *default-log-port* "you are not in a megatest area!")
 		    (exit 1)))
 	      (setenv "MT_RUN_AREA_HOME" *toppath*)
 	      ;; the seed read is done, now read runconfigs, cache it then read megatest.config one more time and cache it
@@ -794,7 +794,7 @@
 	      (set! *toppath*      toppath)
 	      (set! *configstatus* 'partial))
 	    (begin
-	      (debug:print 0 *default-log-port* "ERROR: No " mtconfig " file found. Giving up.")
+	      (debug:print-error 0 *default-log-port* "No " mtconfig " file found. Giving up.")
 	      (exit 2))))))
     ;; additional house keeping
     (let* ((linktree (or (getenv "MT_LINKTREE")
@@ -805,19 +805,19 @@
 		(handle-exceptions
 		 exn
 		 (begin
-		   (debug:print 0 *default-log-port* "ERROR: Something went wrong when trying to create linktree dir at " linktree)
+		   (debug:print-error 0 *default-log-port* "Something went wrong when trying to create linktree dir at " linktree)
 		   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 		   (exit 1))
 		 (create-directory linktree #t))))
 	  (begin
-	    (debug:print 0 *default-log-port* "ERROR: linktree not defined in [setup] section of megatest.config")
+	    (debug:print-error 0 *default-log-port* "linktree not defined in [setup] section of megatest.config")
 	    ;; (exit 1)
 	    )))
     (if (and *toppath*
 	     (directory-exists? *toppath*))
 	(setenv "MT_RUN_AREA_HOME" *toppath*)
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: failed to find the top path to your Megatest area.")))
+	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")))
     *toppath*))
 
 (define launch:setup launch:setup-new)
@@ -833,7 +833,7 @@
 	      (cdr res)
 	      (begin
 		(if (common:low-noise-print 20 "No valid disks or no disk with enough space")
-		    (debug:print 0 *default-log-port* "ERROR: No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists and has enough space!\n    You can change minspace in the [setup] section of megatest.config. Current setting is: " minspace))
+		    (debug:print-error 0 *default-log-port* "No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists and has enough space!\n    You can change minspace in the [setup] section of megatest.config. Current setting is: " minspace))
 		(exit 1)))))))
 
 ;; Desired directory structure:
@@ -895,7 +895,7 @@
 	(handle-exceptions
 	 exn
 	 (begin
-	   (debug:print 0 *default-log-port* "ERROR: Problem creating linktree base at " lnkbase)
+	   (debug:print-error 0 *default-log-port* "Problem creating linktree base at " lnkbase)
 	   (print-error-message exn (current-error-port)))
 	 (create-directory lnkbase #t)))
     
@@ -914,7 +914,7 @@
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 0 *default-log-port* "ERROR:  Failed to create directory " iterated-parent ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	     (debug:print-error 0 *default-log-port* " Failed to create directory " iterated-parent ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	     (exit 1))
 	   (create-directory iterated-parent #t))))
 
@@ -922,7 +922,7 @@
 	(handle-exceptions
 	 exn
 	 (begin
-	   (debug:print 0 *default-log-port* "ERROR:  Failed to remove symlink " lnkpath ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	   (debug:print-error 0 *default-log-port* " Failed to remove symlink " lnkpath ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	   (exit 1))
 	 (delete-file lnkpath)))
 
@@ -931,7 +931,7 @@
 	(handle-exceptions
 	 exn
 	 (begin
-	   (debug:print 0 *default-log-port* "ERROR:  Failed to create symlink " lnkpath ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	   (debug:print-error 0 *default-log-port* " Failed to create symlink " lnkpath ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	   (exit 1))
 	 (create-symbolic-link toptest-path lnkpath)))
     
@@ -976,7 +976,7 @@
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 0 *default-log-port* "ERROR:  Failed to create directory " test-path ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	     (debug:print-error 0 *default-log-port* " Failed to create directory " test-path ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	     (exit 1))
 	   (create-directory test-path #t))
 	  (debug:print 2 *default-log-port* 
@@ -987,7 +987,7 @@
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 0 *default-log-port* "ERROR:  Failed to re-create link " lnktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	     (debug:print-error 0 *default-log-port* " Failed to re-create link " lnktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	     (exit))
 	   (if (symbolic-link? lnktarget)     (delete-file lnktarget))
 	   (if (not (file-exists? lnktarget)) (create-symbolic-link test-path lnktarget)))))
@@ -1013,7 +1013,7 @@
 	  (list lnkpathf lnkpath ))
 	(if (and test-src-path (> remtries 0))
 	    (begin
-	      (debug:print 0 *default-log-port* "ERROR: Failed to create work area at " test-path " with link at " lnktarget ", remaining attempts " remtries)
+	      (debug:print-error 0 *default-log-port* "Failed to create work area at " test-path " with link at " lnktarget ", remaining attempts " remtries)
 	      ;; 
 	      (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat remtries: (- remtries 1)))
 	    (list #f #f)))))

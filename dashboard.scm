@@ -1256,7 +1256,7 @@ Misc
 			   (begin
 			     (d:data-curr-run-id-set! ddata run-id)
 			     (dashboard:update-run-summary-tab))
-			   (debug:print 0 *default-log-port* "ERROR: tree-path->run-id returned non-number " run-id)))
+			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		     )))
 	 (cell-lookup (make-hash-table))
@@ -1403,7 +1403,7 @@ Misc
 			   (begin
 			     (d:data-curr-run-id-set! ddata run-id)
 			     (dashboard:update-new-view-tab))
-			   (debug:print 0 *default-log-port* "ERROR: tree-path->run-id returned non-number " run-id)))
+			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		     )))
 	 (cell-lookup (make-hash-table))

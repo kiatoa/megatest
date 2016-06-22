@@ -42,7 +42,7 @@
   (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
     ;; check for (exn sqlite3) ((condition-property-accessor 'exn 'message) exn)
     (print "err-status: " err-status)
-    (debug:print 0 *default-log-port* "ERROR:  query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
+    (debug:print-error 0 *default-log-port* " query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
     (print-call-chain (current-error-port))))
 
 ;; convert to -inline
@@ -54,7 +54,7 @@
      (if (eq? err-status 'done)
 	 default
 	 (begin
-	   (debug:print 0 *default-log-port* "ERROR:  query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print-error 0 *default-log-port* " query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
 	   (print-call-chain (current-error-port))
 	   default)))
    (apply sqlite3:first-result db stmt params)))
@@ -113,7 +113,7 @@
     (handle-exceptions
      exn
      (begin
-       (debug:print 0 *default-log-port* "ERROR: sqlite3 issue in db:with-db, dbstruct=" dbstruct ", run-id=" run-id ", proc=" proc ", params=" params " error: " ((condition-property-accessor 'exn 'message) exn))
+       (debug:print-error 0 *default-log-port* "sqlite3 issue in db:with-db, dbstruct=" dbstruct ", run-id=" run-id ", proc=" proc ", params=" params " error: " ((condition-property-accessor 'exn 'message) exn))
        (print-call-chain (current-error-port)))
      (let ((res (apply proc db params)))
        (if (vector? dbstruct)(db:done-with dbstruct run-id r/w))
@@ -154,7 +154,7 @@
     (handle-exceptions
      exn
      (begin
-       (debug:print 0 *default-log-port* "ERROR: Couldn't create path to " dbdir)
+       (debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
        (exit 1))
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     (if fname
@@ -220,7 +220,7 @@
 						       (begin
 							 ;; (release-dot-lock dbpath)
 							 (if (> attemptnum 2)
-							     (debug:print 0 *default-log-port* "ERROR: tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
+							     (debug:print-error 0 *default-log-port* "tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
 							     (db:open-rundb dbstruct run-id attemptnum (+ attemptnum 1))))
 						       (db:initialize-run-id-db db)
 						       (sqlite3:execute 
@@ -483,12 +483,12 @@
 	 (fnamejnl (conc fname "-journal"))
 	 (tmpname  (conc fname "." (current-process-id)))
 	 (tmpjnl   (conc fnamejnl "." (current-process-id))))
-    (debug:print 0 *default-log-port* "ERROR: " fname " appears corrupted. Making backup \"old/" fname "\"")
+    (debug:print-error 0 *default-log-port* "" fname " appears corrupted. Making backup \"old/" fname "\"")
     (system (conc "cd " dbdir ";mkdir -p old;cat " fname " > old/" tmpname))
     (system (conc "rm -f " dbpath))
     (if (file-exists? fnamejnl)
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: " fnamejnl " found, moving it to old dir as " tmpjnl)
+	  (debug:print-error 0 *default-log-port* "" fnamejnl " found, moving it to old dir as " tmpjnl)
 	  (system (conc "cd " dbdir ";mkdir -p old;cat " fnamejnl " > old/" tmpjnl))
 	  (system (conc "rm -f " dbdir "/" fnamejnl))))
     ;; attempt to recreate database
@@ -568,7 +568,7 @@
 		   (debug:print 0 *default-log-port* " dbpath:  " dbpath)
 		   (if (not (db:repair-db dbdat))
 		       (begin
-			 (debug:print 0 *default-log-port* "ERROR: Failed to rebuild " dbpath ", exiting now.")
+			 (debug:print-error 0 *default-log-port* "Failed to rebuild " dbpath ", exiting now.")
 			 (exit)))))
 	       (cons todb slave-dbs))
      
@@ -586,9 +586,9 @@
     ((not fromdb) (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with fromdb missing") -1)
     ((not todb)   (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with todb missing") -2)
     ((not (sqlite3:database? (db:dbdat-get-db fromdb)))
-     (debug:print 0 *default-log-port* "ERROR: db:sync-tables called with fromdb not a database " fromdb) -3)
+     (debug:print-error 0 *default-log-port* "db:sync-tables called with fromdb not a database " fromdb) -3)
     ((not (sqlite3:database? (db:dbdat-get-db todb)))
-     (debug:print 0 *default-log-port* "ERROR: db:sync-tables called with todb not a database " todb) -4)
+     (debug:print-error 0 *default-log-port* "db:sync-tables called with todb not a database " todb) -4)
     (else
      (let ((stmts       (make-hash-table)) ;; table-field => stmt
 	   (all-stmts   '())              ;; ( ( stmt1 value1 ) ( stml2 value2 ))
@@ -868,9 +868,9 @@
       (let* ((db (cond
 		  ((pair? idb)                 (db:dbdat-get-db idb))
 		  ((sqlite3:database? idb)     idb)
-		  ((not idb)                   (debug:print 0 *default-log-port* "ERROR: cannot open-run-close with #f anymore"))
+		  ((not idb)                   (debug:print-error 0 *default-log-port* "cannot open-run-close with #f anymore"))
 		  ((procedure? idb)            (idb))
-		  (else   	               (debug:print 0 *default-log-port* "ERROR: cannot open-run-close with #f anymore"))))
+		  (else   	               (debug:print-error 0 *default-log-port* "cannot open-run-close with #f anymore"))))
 	     (res #f))
 	(set! res (apply proc db params))
 	(if (not idb)(sqlite3:finalize! dbstruct))
@@ -1731,7 +1731,7 @@
 	  (sqlite3:execute db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=? AND state='deleted';" state status res)
 	  res) 
 	(begin
-	  (debug:print 0 *default-log-port* "ERROR: Called without all necessary keys")
+	  (debug:print-error 0 *default-log-port* "Called without all necessary keys")
 	  #f))))
 
 ;; replace header and keystr with a call to runs:get-std-run-fields
@@ -1980,7 +1980,7 @@
 		  (if patt
 		      (set! key-patt (conc key-patt " AND " key " " wildtype " '" patt "'"))
 		      (begin
-			(debug:print 0 *default-log-port* "ERROR: searching for runs with no pattern set for " fulkey)
+			(debug:print-error 0 *default-log-port* "searching for runs with no pattern set for " fulkey)
 			(exit 6)))))
 	      keyvals)
     (set! qry-str (conc "SELECT " keystr " FROM runs WHERE state != 'deleted' AND runname " runwildtype " ? " key-patt " ORDER BY event_time "
@@ -3011,7 +3011,7 @@
 		(regexp "_") "=" msg #t)))
 	   (lambda ()(deserialize)))
 	 (begin
-	   (debug:print 0 *default-log-port* "ERROR: reception failed. Received " msg " but cannot translate it.")
+	   (debug:print-error 0 *default-log-port* "reception failed. Received " msg " but cannot translate it.")
 	   msg))) ;; crude reply for when things go awry
     ((zmq nmsg)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg)))
