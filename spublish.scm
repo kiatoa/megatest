@@ -117,7 +117,7 @@ Version: " megatest-fossil-hash)) ;; "
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 2 "ERROR: problem accessing db " dbpath
+	     (debug:print 2 *default-log-port* "ERROR: problem accessing db " dbpath
 			  ((condition-property-accessor 'exn 'message) exn))
 	     (exit 1))
 	   (call-with-database

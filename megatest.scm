@@ -79,6 +79,7 @@ Launching and managing runs
   -rerun FAIL,WARN...     : force re-run for tests with specificed status(s)
   -rerun-clean            : set all tests not COMPLETED+PASS,WARN,WAIVED to NOT_STARTED,n/a
                             and then run the specified testpatt with -preclean
+  -rerun-all              : set all tests to NOT_STARTED,n/a and run with -preclean
   -lock                   : lock run specified by target and runname
   -unlock                 : unlock run specified by target and runname
   -set-run-status status  : sets status for run to status, requires -target and -runname
@@ -274,6 +275,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-daemonize"
 			"-preclean"
 			"-rerun-clean"
+			"-rerun-all"
 			"-clean-cache"
 
 			;; misc
@@ -327,7 +329,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (args:get-arg "-envdelta")
 	       )
 	      ))
-    (debug:print 0 "ERROR: Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
+    (debug:print-error 0 *default-log-port* "Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
 ;; immediately set MT_TARGET if -reqtarg or -target are available
 ;;
@@ -359,12 +361,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (begin ;; let ((sync-time (- (current-seconds) start-time)))
 			(db:multi-db-sync (list run-id) 'new2old)
 			(let ((sync-time (- (current-seconds) start-time)))
-			  (debug:print-info 3 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
+			  (debug:print-info 3 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
 			  (if (common:low-noise-print 30 "sync new to old")
-			      (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
+			      (debug:print-info 0 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
 			;; (if (> sync-time 10) ;; took more than ten seconds, start a server for this run
 			;;     (begin
-			;;       (debug:print-info 0 "Sync is taking a long time, start up a server to assist for run " run-id)
+			;;       (debug:print-info 0 *default-log-port* "Sync is taking a long time, start up a server to assist for run " run-id)
 			;;       (server:kind-run run-id)))))
 			(hash-table-delete! *db-local-sync* run-id)))
 		  (mutex-unlock! *db-multi-sync-mutex*))
@@ -373,7 +375,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			(> (- start-time last-time) 60))
 		   (begin
 		     (set! last-time start-time)
-		     (debug:print-info 4 "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
+		     (debug:print-info 4 *default-log-port* "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
 	     
 	     ;; keep going unless time to exit
 	     ;;
@@ -386,7 +388,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (delay-loop (+ count 1))))
 		   (loop)))
 	     (if (common:low-noise-print 30)
-		 (debug:print-info 0 "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*)))))
+		 (debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*)))))
      "Watchdog thread")))
 
 (thread-start! *watchdog*)
@@ -394,9 +396,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))
-      (debug:print-info 0 "Sending log output to " (args:get-arg "-log"))
-      (current-error-port oup)
-      (current-output-port oup)))
+      (debug:print-info 0 *default-log-port* "Sending log output to " (args:get-arg "-log"))
+      (set! *default-log-port* oup)))
 
 (if (or (args:get-arg "-h")
 	(args:get-arg "-help")
@@ -409,7 +410,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (if (file-exists? (args:get-arg "-start-dir"))
 	(change-directory (args:get-arg "-start-dir"))
 	(begin
-	  (debug:print 0 "ERROR: non-existant start dir " (args:get-arg "-start-dir") " specified, exiting.")
+	  (debug:print-error 0 *default-log-port* "non-existant start dir " (args:get-arg "-start-dir") " specified, exiting.")
 	  (exit 1))))
 
 (if (args:get-arg "-version")
@@ -456,12 +457,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-itempatt")
     (let ((newval (conc (args:get-arg "-testpatt") "/" (args:get-arg "-itempatt"))))
-      (debug:print 0 "WARNING: -itempatt has been deprecated, please use -testpatt testpatt/itempatt method, new testpatt is "newval)
+      (debug:print 0 *default-log-port* "WARNING: -itempatt has been deprecated, please use -testpatt testpatt/itempatt method, new testpatt is "newval)
       (hash-table-set! args:arg-hash "-testpatt" newval)
       (hash-table-delete! args:arg-hash "-itempatt")))
 
 (if (args:get-arg "-runtests")
-    (debug:print 0 "WARNING: \"-runtests\" is deprecated. Use \"-run\" with \"-testpatt\" instead"))
+    (debug:print 0 *default-log-port* "WARNING: \"-runtests\" is deprecated. Use \"-run\" with \"-testpatt\" instead"))
 
 (on-exit std-exit-procedure)
 
@@ -484,18 +485,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					   (glob (conc runtop "/.runconfig*")))
 				   '())))
 		(if (null? files)
-		    (debug:print-info 0 "No cached megatest or runconfigs files found. None removed.")
+		    (debug:print-info 0 *default-log-port* "No cached megatest or runconfigs files found. None removed.")
 		    (begin
-		      (debug:print-info 0 "Removing cached files:\n    " (string-intersperse files "\n    "))
+		      (debug:print-info 0 *default-log-port* "Removing cached files:\n    " (string-intersperse files "\n    "))
 		      (for-each 
 		       (lambda (f)
 			 (handle-exceptions
 			     exn
-			     (debug:print 0 "WARNING: Failed to remove file " f)
+			     (debug:print 0 *default-log-port* "WARNING: Failed to remove file " f)
 			   (delete-file f)))
 		       files))))
-	      (debug:print 0 "ERROR: -clean-cache requires -runname."))
-	  (debug:print 0 "ERROR: -clean-cache requires -target or -reqtarg"))))
+	      (debug:print-error 0 *default-log-port* "-clean-cache requires -runname."))
+	  (debug:print-error 0 *default-log-port* "-clean-cache requires -target or -reqtarg"))))
 	    
 	  
 (if (args:get-arg "-env2file")
@@ -552,7 +553,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (data     (car res-data))
 	   (msg      (cadr res-data)))
       (if (not data)
-	  (debug:print 0 "Bad input? data=" data) ;; some error occurred
+	  (debug:print 0 *default-log-port* "Bad input? data=" data) ;; some error occurred
 	  (with-output-to-port out-port
 	    (lambda ()
 	      (case (string->symbol out-fmt)
@@ -712,7 +713,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  (env:print added removed changed))
 	      (env:close-database db)
 	      (set! *didsomething* #t))
-	    (debug:print 0 "ERROR: Parameter to -envdelta should be new=star-end")))))
+	    (debug:print-error 0 *default-log-port* "Parameter to -envdelta should be new=star-end")))))
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
@@ -730,7 +731,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (server:launch run-id)
 	    (set! *didsomething* #t))
-	  (debug:print 0 "ERROR: server requires run-id be specified with -run-id")))
+	  (debug:print-error 0 *default-log-port* "server requires run-id be specified with -run-id")))
 
     ;; Not a server? This section will decide how to communicate
     ;;
@@ -750,7 +751,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      ;; if not list or kill then start a client (if appropriate)
 	      (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
-		  (debug:print-info 1 "Server connection not needed")
+		  (debug:print-info 1 *default-log-port* "Server connection not needed")
 		  (begin
 		    ;; (if run-id 
 		    ;;     (client:launch run-id) 
@@ -803,10 +804,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 (if (or (equal? id sid)
 			 (equal? sid 0)) ;; kill all/any
 		     (begin
-		       (debug:print-info 0 "Attempting to stop server with pid " pid)
+		       (debug:print-info 0 *default-log-port* "Attempting to stop server with pid " pid)
 		       (tasks:kill-server status hostname pullport pid transport)))))
 	     servers)
-	    (debug:print-info 1 "Done with listservers")
+	    (debug:print-info 1 *default-log-port* "Done with listservers")
 	    (set! *didsomething* #t)
 	    (exit)) ;; must do, would have to add checks to many/all calls below
 	  (exit))))
@@ -817,7 +818,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-list-targets")
     (let ((targets (common:get-runconfig-targets)))
-      (debug:print 1 "Found "(length targets) " targets")
+      (debug:print 1 *default-log-port* "Found "(length targets) " targets")
       (case (string->symbol (or (args:get-arg "-dumpmode") "alist"))
 	((alist)
 	 (for-each (lambda (x)
@@ -827,7 +828,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	((json)
 	 (json-write targets))
 	(else
-	 (debug:print 0 "ERROR: dump output format " (args:get-arg "-dumpmode") " not supported for -list-targets")))
+	 (debug:print-error 0 *default-log-port* "dump output format " (args:get-arg "-dumpmode") " not supported for -list-targets")))
       (set! *didsomething* #t)))
 
 ;; cache the runconfigs in $MT_LINKTREE/$MT_TARGET/$MT_RUNNAME/.runconfig
@@ -887,7 +888,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 ((string=? (args:get-arg "-dumpmode") "ini")
 	  (configf:config->ini data))
 	 (else
-	  (debug:print 0 "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
+	  (debug:print-error 0 *default-log-port* "-dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
 	(set! *didsomething* #t))
       (pop-directory)))
 
@@ -911,7 +912,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        ((string=? (args:get-arg "-dumpmode") "ini")
 	(configf:config->ini data))
        (else
-	(debug:print 0 "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
+	(debug:print-error 0 *default-log-port* "-dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
       (set! *didsomething* #t)
       (pop-directory)))
 
@@ -922,7 +923,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (json-write data)
 	      (pp data))
 	  (set! *didsomething* #t))
-	(debug:print-info 0 "environment variable MT_CMDINFO is not set")))
+	(debug:print-info 0 *default-log-port* "environment variable MT_CMDINFO is not set")))
 
 ;;======================================================================
 ;; Remove old run(s)
@@ -935,19 +936,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (target (common:args-get-target)))
     (cond
      ((not target)
-      (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify -target or -reqtarg")
+      (debug:print-error 0 *default-log-port* "Missing required parameter for " action ", you must specify -target or -reqtarg")
       (exit 1))
      ((not (or (args:get-arg ":runname")
 	       (args:get-arg "-runname")))
-      (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the run name pattern with -runname patt")
+      (debug:print-error 0 *default-log-port* "Missing required parameter for " action ", you must specify the run name pattern with -runname patt")
       (exit 2))
      ((not (args:get-arg "-testpatt"))
-      (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the test pattern with -testpatt")
+      (debug:print-error 0 *default-log-port* "Missing required parameter for " action ", you must specify the test pattern with -testpatt")
       (exit 3))
      (else
       (if (not (car *configinfo*))
 	  (begin
-	    (debug:print 0 "ERROR: Attempted " action "on test(s) but run area config file not found")
+	    (debug:print-error 0 *default-log-port* "Attempted " action "on test(s) but run area config file not found")
 	    (exit 1))
 	  ;; put test parameters into convenient variables
 	  (begin
@@ -989,7 +990,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (rows     (vector-ref runsdat 1)))
 	 (if (null? rows)
 	     (begin
-	       (debug:print-info 0 "No matching run found.")
+	       (debug:print-info 0 *default-log-port* "No matching run found.")
 	       (exit 1))
 	     (let* ((row      (car (vector-ref runsdat 1)))
 		    (run-id   (db:get-value-by-header row header "id")))
@@ -1089,7 +1090,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (hash-table-set! test-field-index hed idx)
 		      (if (not (null? tal))(loop (car tal)(cdr tal)(+ idx 1))))
 		    (begin
-		      (debug:print 0 "ERROR: Invalid test fields specified: " (string-intersperse invalid-tests-spec ", "))
+		      (debug:print-error 0 *default-log-port* "Invalid test fields specified: " (string-intersperse invalid-tests-spec ", "))
 		      (exit)))))
 
 	  ;; Each run
@@ -1158,9 +1159,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      	(handle-exceptions
 			 exn
 			 (begin
-			   (debug:print 0 "ERROR: Bad data in test record? " test)
+			   (debug:print-error 0 *default-log-port* "Bad data in test record? " test)
 			   (print "exn=" (condition->list exn))
-			   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+			   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 			   (print-call-chain (current-error-port)))
 			 (let* ((test-id      (if (member "id"           tests-spec)(get-value-by-fieldname test test-field-index "id"          ) #f)) ;; (db:test-get-id         test))
 				(testname     (if (member "testname"     tests-spec)(get-value-by-fieldname test test-field-index "testname"    ) #f)) ;; (db:test-get-testname   test))
@@ -1304,7 +1305,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 							 (if tmp (cdr tmp) "")))
 						     metadat-fields)
 						(begin
-						  (debug:print 0 "WARNING: meta data for run " runname " not found")
+						  (debug:print 0 *default-log-port* "WARNING: meta data for run " runname " not found")
 						  '()))))
 					allrundat)))
 		 ;; '( ( "target" ( "runname" ( "data" ( "runid" ( "id . "37" ) ( ... ))))
@@ -1333,7 +1334,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 									 (cons '()
 									       (cons run-fields tests)))))
 							   (begin
-							     (debug:print 0 "WARNING: run " target "/" runname " appears to have no data")
+							     (debug:print 0 *default-log-port* "WARNING: run " target "/" runname " appears to have no data")
 							     ;; (pp rundat)
 							     '()))))
 						   runsdat)
@@ -1354,7 +1355,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       (ouf        (if (string-match (regexp "^[/~]+.*") outputfile) ;; full path?
 				       outputfile
 				       (begin
-					 (debug:print 0 "WARNING: path given, " outputfile " is relative, prefixing with current directory")
+					 (debug:print 0 *default-log-port* "WARNING: path given, " outputfile " is relative, prefixing with current directory")
 					 (conc (current-directory) "/" outputfile)))))
 		  (create-directory tempdir #t)
 		  (ods:list->ods tempdir ouf sheets))))
@@ -1394,6 +1395,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (or (args:get-arg "-runall")
 	(args:get-arg "-run")
 	(args:get-arg "-rerun-clean")
+	(args:get-arg "-rerun-all")
 	(args:get-arg "-runtests"))
     (general-run-call 
      "-runall"
@@ -1418,6 +1420,24 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
 			      ;; state:  states
 			      status: statuses
+			      new-state-status: "NOT_STARTED,n/a")))
+       ;; RERUN ALL
+       (if (args:get-arg "-rerun-all") ;; first set states/statuses correct
+	   (begin
+	     (hash-table-set! args:arg-hash "-preclean" #t)
+	     (runs:operate-on 'set-state-status
+			      target
+			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+			      state:  #f
+			      ;; status: statuses
+			      new-state-status: "NOT_STARTED,n/a")
+	     (runs:operate-on 'set-state-status
+			      target
+			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+			      ;; state:  states
+			      status: #f
 			      new-state-status: "NOT_STARTED,n/a")))
        (runs:run-tests target
 		       runname
@@ -1520,11 +1540,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (change-directory toppath)
 	  (if (not target)
 	      (begin
-		(debug:print 0 "ERROR: -target is required.")
+		(debug:print-error 0 *default-log-port* "-target is required.")
 		(exit 1)))
 	  (if (not (launch:setup))
 	      (begin
-		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
+		(debug:print 0 *default-log-port* "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
 	  (let* ((keys     (rmt:get-keys))
 		 ;; db:test-get-paths must not be run remote
@@ -1571,7 +1591,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (runspatt   (or (args:get-arg "-runname")(args:get-arg ":runname")))
 	     (pathmod    (args:get-arg "-pathmod")))
 	     ;; (keyvalalist (keys->alist keys "%")))
-	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvals: " keyvals)
+	 (debug:print 2 *default-log-port* "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvals: " keyvals)
 	 (db:extract-ods-file dbstruct outputfile keyvals (if runspatt runspatt "%") pathmod)
 	 (db:close-all dbstruct)
 	 (set! *didsomething* #t)))))
@@ -1604,7 +1624,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  (launch:recover-test run-id test-id)
 		  (set! *didsomething* #t))
 		(begin
-		  (debug:print 0 "ERROR: bad run-id or test-id, must be integers")
+		  (debug:print-error 0 *default-log-port* "bad run-id or test-id, must be integers")
 		  (exit 1)))))))
 
 ;;======================================================================
@@ -1614,7 +1634,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (define (megatest:step step state status logfile msg)
   (if (not (getenv "MT_CMDINFO"))
       (begin
-	(debug:print 0 "ERROR: MT_CMDINFO env var not set, -step must be called *inside* a megatest invoked environment!")
+	(debug:print-error 0 *default-log-port* "MT_CMDINFO env var not set, -step must be called *inside* a megatest invoked environment!")
 	(exit 5))
       (let* ((cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
 	     (transport (assoc/default 'transport cmdinfo))
@@ -1630,14 +1650,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(change-directory testpath)
 	(if (not (launch:setup))
 	    (begin
-	      (debug:print 0 "Failed to setup, exiting")
+	      (debug:print 0 *default-log-port* "Failed to setup, exiting")
 	      (exit 1)))
 	(if (and state status)
 	    (let ((comment (launch:load-logpro-dat run-id test-id step)))
 	      ;; (rmt:test-set-log! run-id test-id (conc stepname ".html"))))
 	      (rmt:teststep-set-status! run-id test-id step state status (or comment msg) logfile))
 	    (begin
-	      (debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
+	      (debug:print-error 0 *default-log-port* "You must specify :state and :status with every call to -step")
 	      (exit 6))))))
 
 (if (args:get-arg "-step")
@@ -1662,7 +1682,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(args:get-arg "-summarize-items"))
     (if (not (getenv "MT_CMDINFO"))
 	(begin
-	  (debug:print 0 "ERROR: MT_CMDINFO env var not set, commands -test-status, -runstep and -setlog must be called *inside* a megatest environment!")
+	  (debug:print-error 0 *default-log-port* "MT_CMDINFO env var not set, commands -test-status, -runstep and -setlog must be called *inside* a megatest environment!")
 	  (exit 5))
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
@@ -1681,10 +1701,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (stepname  (args:get-arg "-step")))
 	  (if (not (launch:setup))
 	      (begin
-		(debug:print 0 "Failed to setup, exiting")
+		(debug:print 0 *default-log-port* "Failed to setup, exiting")
 		(exit 1)))
 
-	  (if (args:get-arg "-runstep")(debug:print-info 1 "Running -runstep, first change to directory " work-area))
+	  (if (args:get-arg "-runstep")(debug:print-info 1 *default-log-port* "Running -runstep, first change to directory " work-area))
 	  (change-directory work-area)
 	  ;; can setup as client for server mode now
 	  ;; (client:setup)
@@ -1705,7 +1725,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin
-		    (debug:print 0 "ERROR: nothing specified to run!")
+		    (debug:print-error 0 *default-log-port* "nothing specified to run!")
 		    (if db (sqlite3:finalize! db))
 		    (exit 6))
 		  (let* ((stepname   (args:get-arg "-runstep"))
@@ -1728,7 +1748,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    ;; mark the start of the test
 		    (rmt:teststep-set-status! run-id test-id stepname "start" "n/a" (args:get-arg "-m") logfile)
 		    ;; run the test step
-		    (debug:print-info 2 "Running \"" fullcmd "\" in directory \"" startingdir)
+		    (debug:print-info 2 *default-log-port* "Running \"" fullcmd "\" in directory \"" startingdir)
 		    (change-directory startingdir)
 		    (set! exitstat (system fullcmd))
 		    (set! *globalexitstatus* exitstat)
@@ -1738,7 +1758,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			(let* ((htmllogfile (conc stepname ".html"))
 			       (oldexitstat exitstat)
 			       (cmd         (string-intersperse (list "logpro" logprofile htmllogfile "<" logfile ">" (conc stepname "_logpro.log")) " ")))
-			  (debug:print-info 2 "running \"" cmd "\"")
+			  (debug:print-info 2 *default-log-port* "running \"" cmd "\"")
 			  (change-directory startingdir)
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
@@ -1766,7 +1786,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (or (not state)
 			     (not status)))
 		    (begin
-		      (debug:print 0 "ERROR: You must specify :state and :status with every call to -test-status\n" help)
+		      (debug:print-error 0 *default-log-port* "You must specify :state and :status with every call to -test-status\n" help)
 		      (if (sqlite3:database? db)(sqlite3:finalize! db))
 		      (exit 6)))
 		(let* ((msg    (args:get-arg "-m"))
@@ -1786,16 +1806,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (keys #f))
       (if (not (launch:setup))
 	  (begin
-	    (debug:print 0 "Failed to setup, exiting")
+	    (debug:print 0 *default-log-port* "Failed to setup, exiting")
 	    (exit 1)))
       (set! keys (rmt:get-keys)) ;;  db))
-      (debug:print 1 "Keys: " (string-intersperse keys ", "))
+      (debug:print 1 *default-log-port* "Keys: " (string-intersperse keys ", "))
       (if (sqlite3:database? db)(sqlite3:finalize! db))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-gui")
     (begin
-      (debug:print 0 "Look at the dashboard for now")
+      (debug:print 0 *default-log-port* "Look at the dashboard for now")
       ;; (megatest-gui)
       (set! *didsomething* #t)))
 
@@ -1817,7 +1837,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (if (not (launch:setup))
 	  (begin
-	    (debug:print 0 "Failed to setup, exiting") 
+	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
       ;; keep this one local
       (open-run-close patch-db #f)
@@ -1827,28 +1847,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (if (not (launch:setup))
 	  (begin
-	    (debug:print 0 "Failed to setup, exiting") 
+	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
-      ;; keep this one local
-      ;; (open-run-close db:clean-up #f)
-      (db:multi-db-sync 
-       #f ;; do all run-ids
-       ;; 'new2old
-       'killservers
-       'dejunk
-       ;; 'adj-testids
-       ;; 'old2new
-       'new2old
-       )
-      (if (common:version-changed?)
-	  (common:set-last-run-version))
+      (common:cleanup-db)
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-mark-incompletes")
     (begin
       (if (not (launch:setup))
 	  (begin
-	    (debug:print 0 "Failed to setup, exiting")
+	    (debug:print 0 *default-log-port* "Failed to setup, exiting")
 	    (exit 1)))
       (open-run-close db:find-and-mark-incomplete #f)
       (set! *didsomething* #t)))
@@ -1861,7 +1869,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (if (not (launch:setup))
 	  (begin
-	    (debug:print 0 "Failed to setup, exiting") 
+	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
       ;; now can find our db
       ;; keep this one local
@@ -1929,7 +1937,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (if (not (launch:setup))
 	  (begin
-	    (debug:print 0 "Failed to setup, exiting") 
+	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
       (operate-on 'run-wait)
       (set! *didsomething* #t)))
@@ -1942,20 +1950,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; ;; ;; redo me       (for-each 
 ;; ;; ;; redo me        (lambda (field)
 ;; ;; ;; redo me 	 (let ((dat '()))
-;; ;; ;; redo me 	   (debug:print-info 0 "Getting data for field " field)
+;; ;; ;; redo me 	   (debug:print-info 0 *default-log-port* "Getting data for field " field)
 ;; ;; ;; redo me 	   (sqlite3:for-each-row
 ;; ;; ;; redo me 	    (lambda (id val)
 ;; ;; ;; redo me 	      (set! dat (cons (list id val) dat)))
 ;; ;; ;; redo me 	    (db:get-db db run-id)
 ;; ;; ;; redo me 	    (conc "SELECT id," field " FROM tests;"))
-;; ;; ;; redo me 	   (debug:print-info 0 "found " (length dat) " items for field " field)
+;; ;; ;; redo me 	   (debug:print-info 0 *default-log-port* "found " (length dat) " items for field " field)
 ;; ;; ;; redo me 	   (let ((qry (sqlite3:prepare db (conc "UPDATE tests SET " field "=? WHERE id=?;"))))
 ;; ;; ;; redo me 	     (for-each
 ;; ;; ;; redo me 	      (lambda (item)
 ;; ;; ;; redo me 		(let ((newval ;; (sdb:qry 'getid 
 ;; ;; ;; redo me 		       (cadr item))) ;; )
 ;; ;; ;; redo me 		  (if (not (equal? newval (cadr item)))
-;; ;; ;; redo me 		      (debug:print-info 0 "Converting " (cadr item) " to " newval " for test #" (car item)))
+;; ;; ;; redo me 		      (debug:print-info 0 *default-log-port* "Converting " (cadr item) " to " newval " for test #" (car item)))
 ;; ;; ;; redo me 		  (sqlite3:execute qry newval (car item))))
 ;; ;; ;; redo me 	      dat)
 ;; ;; ;; redo me 	     (sqlite3:finalize! qry))))
@@ -1990,7 +1998,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if *runremote* (close-all-connections!))
 
 (if (not *didsomething*)
-    (debug:print 0 help))
+    (debug:print 0 *default-log-port* help))
 
 (set! *time-to-exit* #t)
 (thread-join! *watchdog*)
@@ -1998,7 +2006,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (not (eq? *globalexitstatus* 0))
     (if (or (args:get-arg "-run")(args:get-arg "-runtests")(args:get-arg "-runall"))
         (begin
-           (debug:print 0 "NOTE: Subprocesses with non-zero exit code detected: " *globalexitstatus*)
+           (debug:print 0 *default-log-port* "NOTE: Subprocesses with non-zero exit code detected: " *globalexitstatus*)
            (exit 0))
         (case *globalexitstatus*
          ((0)(exit 0))

@@ -215,7 +215,7 @@ Misc
     (handle-exceptions
      exn
      (begin
-       (debug:print 0 "ERROR: Couldn't create path to " dbdir)
+       (debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
        (exit 1))
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     (if fname
@@ -243,7 +243,7 @@ Misc
 	       (db     (if (file-exists? dbfile)
 			   (open-database dbfile)
 			   (begin
-			     (debug:print 0 "ERROR: I was asked to open " dbfile ", but file does not exist or is not readable.")
+			     (debug:print-error 0 *default-log-port* "I was asked to open " dbfile ", but file does not exist or is not readable.")
 			     #f))))
 	  (case run-id
 	    ((-1)(areadat-monitordb-set! areadat db))
@@ -266,7 +266,7 @@ Misc
 	       (sql maindb (conc "SELECT id,"
 				 (string-intersperse keys "||'/'||")
 				 ",runname,state,status,event_time FROM runs WHERE state != 'deleted';")))
-	(debug:print 0 "ERROR: no main.db found at "  (areadb:dbfile-path areadat 0)))
+	(debug:print-error 0 *default-log-port* "no main.db found at "  (areadb:dbfile-path areadat 0)))
     areadat))
 
 ;; given an areadat and target/runname patt fill up runs data
@@ -326,11 +326,11 @@ Misc
 	    (path-changed   (if current-tab
 				(equal? current-path (tab-view-path current-tab))
 				#t)))
-       ;; (debug:print-info 0 "Current path: " current-path)
+       ;; (debug:print-info 0 *default-log-port* "Current path: " current-path)
        ;; now for each area in the window gather the data
        (if path-changed
 	   (begin
-	     (debug:print-info 0 "clearing matrix - path changed")
+	     (debug:print-info 0 *default-log-port* "clearing matrix - path changed")
 	     (dboard:clear-matrix current-tab)))
        (for-each
 	(lambda (area-name)
@@ -498,7 +498,7 @@ Misc
 	 (view-type (dboard:get-view-type keys current-path))
 	 (changed   #f)
 	 (state-statuses  (list "PASS" "FAIL" "WARN" "CHECK" "SKIP" "RUNNING" "LAUNCHED")))
-    ;; (debug:print 0 "current-matrix=" current-matrix)
+    ;; (debug:print 0 *default-log-port* "current-matrix=" current-matrix)
     (case view-type
       ((areas) ;; find row for this area, if not found, create new entry
        (let* ((curr-rownum (hash-table-ref/default rows area-name #f))
@@ -516,7 +516,7 @@ Misc
 		 (iup:attribute-set! current-matrix (conc rownum ":" count) "0")
 		 (if (not (null? tal))
 		     (loop (car tal)(cdr tal)(+ count 1))))
-	       (debug:print-info 0 "view-type=" view-type ", rownum=" rownum ", curr-rownum=" curr-rownum ", next-rownum=" next-rownum ", coord=" coord ", area-name=" area-name)
+	       (debug:print-info 0 *default-log-port* "view-type=" view-type ", rownum=" rownum ", curr-rownum=" curr-rownum ", next-rownum=" next-rownum ", coord=" coord ", area-name=" area-name)
 	       (iup:attribute-set! current-matrix coord area-name)
 	       (set! changed #t))))))
     (if changed (iup:attribute-set! current-matrix "REDRAW" "ALL"))))
@@ -624,7 +624,7 @@ Misc
 		     (hed   (car area-names))
 		     (tal   (cdr area-names)))
 	    ;; (hash-table-set! tabs index hed)
-	    (debug:print 0 "Adding area " hed " with index " index " to dashboard")
+	    (debug:print 0 *default-log-port* "Adding area " hed " with index " index " to dashboard")
 	    (iup:attribute-set! tabtop (conc "TABTITLE" index) hed)
 	    (if (not (null? tal))
 		(loop (+ index 1)(car tal)(cdr tal)))))
@@ -781,7 +781,7 @@ Misc
 	  (curr-mtpath   (if curr-mtcfg (car curr-mtcfgdat) #f)))
      (if curr-mtpath
 	 (begin
-	   (debug:print-info 0 "Creating config file " fname)
+	   (debug:print-info 0 *default-log-port* "Creating config file " fname)
 	   (if (not (file-exists? dirname))
 	       (create-directory dirname #t))
 	   (with-output-to-file fname
@@ -791,7 +791,7 @@ Misc
 		 (print  "path " curr-mtpath))))
 	   #t)
 	 (begin
-	   (debug:print-info 0 "Need to create a config but no megatest.config found: " curr-mtcfgdat)
+	   (debug:print-info 0 *default-log-port* "Need to create a config but no megatest.config found: " curr-mtcfgdat)
 	   #f))))
 ;; )
 

@@ -42,7 +42,7 @@
   (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
     ;; check for (exn sqlite3) ((condition-property-accessor 'exn 'message) exn)
     (print "err-status: " err-status)
-    (debug:print 0 "ERROR:  query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
+    (debug:print-error 0 *default-log-port* " query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
     (print-call-chain (current-error-port))))
 
 ;; convert to -inline
@@ -54,7 +54,7 @@
      (if (eq? err-status 'done)
 	 default
 	 (begin
-	   (debug:print 0 "ERROR:  query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print-error 0 *default-log-port* " query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
 	   (print-call-chain (current-error-port))
 	   default)))
    (apply sqlite3:first-result db stmt params)))
@@ -113,7 +113,7 @@
     (handle-exceptions
      exn
      (begin
-       (debug:print 0 "ERROR: sqlite3 issue in db:with-db, dbstruct=" dbstruct ", run-id=" run-id ", proc=" proc ", params=" params " error: " ((condition-property-accessor 'exn 'message) exn))
+       (debug:print-error 0 *default-log-port* "sqlite3 issue in db:with-db, dbstruct=" dbstruct ", run-id=" run-id ", proc=" proc ", params=" params " error: " ((condition-property-accessor 'exn 'message) exn))
        (print-call-chain (current-error-port)))
      (let ((res (apply proc db params)))
        (if (vector? dbstruct)(db:done-with dbstruct run-id r/w))
@@ -154,7 +154,7 @@
     (handle-exceptions
      exn
      (begin
-       (debug:print 0 "ERROR: Couldn't create path to " dbdir)
+       (debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
        (exit 1))
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     (if fname
@@ -194,7 +194,7 @@
 	  ;; (release-dot-lock fname)
 	  db)
 	(begin
-	  (debug:print 2 "WARNING: opening db in non-writable dir " fname)
+	  (debug:print 2 *default-log-port* "WARNING: opening db in non-writable dir " fname)
 	  (sqlite3:open-database fname))))) ;; )
 
 ;; This routine creates the db. It is only called if the db is not already opened
@@ -220,7 +220,7 @@
 						       (begin
 							 ;; (release-dot-lock dbpath)
 							 (if (> attemptnum 2)
-							     (debug:print 0 "ERROR: tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
+							     (debug:print-error 0 *default-log-port* "tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
 							     (db:open-rundb dbstruct run-id attemptnum (+ attemptnum 1))))
 						       (db:initialize-run-id-db db)
 						       (sqlite3:execute 
@@ -321,7 +321,7 @@
 	(olddb  (dbr:dbstruct-get-olddb dbstruct))
 	;; (runid  (dbr:dbstruct-get-run-id dbstruct))
 	)
-    (debug:print-info 4 "Syncing for run-id: " run-id)
+    (debug:print-info 4 *default-log-port* "Syncing for run-id: " run-id)
     ;; (mutex-lock! *http-mutex*)
     (if (eq? run-id 0)
 	;; runid equal to 0 is main.db
@@ -341,7 +341,7 @@
 	      ;; this can occur when using local access (i.e. not in a server)
 	      ;; need a flag to turn it off.
 	      ;;
-	      (debug:print 3 "WARNING: call to sync main.db to megatest.db but main not initialized")
+	      (debug:print 3 *default-log-port* "WARNING: call to sync main.db to megatest.db but main not initialized")
 	      0))
 	;; any other runid is a run
 	(if (or (not (number? mtime))
@@ -483,12 +483,12 @@
 	 (fnamejnl (conc fname "-journal"))
 	 (tmpname  (conc fname "." (current-process-id)))
 	 (tmpjnl   (conc fnamejnl "." (current-process-id))))
-    (debug:print 0 "ERROR: " fname " appears corrupted. Making backup \"old/" fname "\"")
+    (debug:print-error 0 *default-log-port* "" fname " appears corrupted. Making backup \"old/" fname "\"")
     (system (conc "cd " dbdir ";mkdir -p old;cat " fname " > old/" tmpname))
     (system (conc "rm -f " dbpath))
     (if (file-exists? fnamejnl)
 	(begin
-	  (debug:print 0 "ERROR: " fnamejnl " found, moving it to old dir as " tmpjnl)
+	  (debug:print-error 0 *default-log-port* "" fnamejnl " found, moving it to old dir as " tmpjnl)
 	  (system (conc "cd " dbdir ";mkdir -p old;cat " fnamejnl " > old/" tmpjnl))
 	  (system (conc "rm -f " dbdir "/" fnamejnl))))
     ;; attempt to recreate database
@@ -501,10 +501,10 @@
   (let* ((dbpath   (db:dbdat-get-path        dbdat))
 	 (dbdir    (pathname-directory       dbpath))
 	 (fname    (pathname-strip-directory dbpath)))
-    (debug:print-info 0 "Checking db " dbpath " for errors.")
+    (debug:print-info 0 *default-log-port* "Checking db " dbpath " for errors.")
     (cond
      ((not (file-write-access? dbdir))
-      (debug:print 0 "WARNING: can't write to " dbdir ", can't fix " fname)
+      (debug:print 0 *default-log-port* "WARNING: can't write to " dbdir ", can't fix " fname)
       #f)
 
      ;; handle special cases, megatest.db and monitor.db
@@ -519,8 +519,8 @@
 	 (if (> numtries 0)
 	     (db:repair-db dbdat numtries: (- numtries 1))
 	     #f)
-	 (debug:print 0 "FATAL: file " dbpath " was found corrupted, an attempt to fix has been made but you must start over.")
-	 (debug:print 0
+	 (debug:print 0 *default-log-port* "FATAL: file " dbpath " was found corrupted, an attempt to fix has been made but you must start over.")
+	 (debug:print 0 *default-log-port*
 		      "   check the following:\n"
 		      "      1. full directories, look in ~/ /tmp and " dbdir "\n"
 		      "      2. write access to " dbdir "\n\n"
@@ -557,18 +557,18 @@
    exn
    (begin
      (mutex-unlock! *db-sync-mutex*)
-     (debug:print 0 "EXCEPTION: database probably overloaded or unreadable in db:sync-tables.")
+     (debug:print 0 *default-log-port* "EXCEPTION: database probably overloaded or unreadable in db:sync-tables.")
      (print-call-chain (current-error-port))
-     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
      (print "exn=" (condition->list exn))
-     (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
-     (debug:print 0 " src db:  " (db:dbdat-get-path fromdb))
+     (debug:print 0 *default-log-port* " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
+     (debug:print 0 *default-log-port* " src db:  " (db:dbdat-get-path fromdb))
      (for-each (lambda (dbdat)
 		 (let ((dbpath (db:dbdat-get-path dbdat)))
-		   (debug:print 0 " dbpath:  " dbpath)
+		   (debug:print 0 *default-log-port* " dbpath:  " dbpath)
 		   (if (not (db:repair-db dbdat))
 		       (begin
-			 (debug:print 0 "ERROR: Failed to rebuild " dbpath ", exiting now.")
+			 (debug:print-error 0 *default-log-port* "Failed to rebuild " dbpath ", exiting now.")
 			 (exit)))))
 	       (cons todb slave-dbs))
      
@@ -583,12 +583,12 @@
 	 ;; (portlogger:open-run-close portlogger:set-port port "released")
 	 ;; (exit 1)))
    (cond
-    ((not fromdb) (debug:print 3 "WARNING: db:sync-tables called with fromdb missing") -1)
-    ((not todb)   (debug:print 3 "WARNING: db:sync-tables called with todb missing") -2)
+    ((not fromdb) (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with fromdb missing") -1)
+    ((not todb)   (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with todb missing") -2)
     ((not (sqlite3:database? (db:dbdat-get-db fromdb)))
-     (debug:print 0 "ERROR: db:sync-tables called with fromdb not a database " fromdb) -3)
+     (debug:print-error 0 *default-log-port* "db:sync-tables called with fromdb not a database " fromdb) -3)
     ((not (sqlite3:database? (db:dbdat-get-db todb)))
-     (debug:print 0 "ERROR: db:sync-tables called with todb not a database " todb) -4)
+     (debug:print-error 0 *default-log-port* "db:sync-tables called with todb not a database " todb) -4)
     (else
      (let ((stmts       (make-hash-table)) ;; table-field => stmt
 	   (all-stmts   '())              ;; ( ( stmt1 value1 ) ( stml2 value2 ))
@@ -637,7 +637,7 @@
 		(set! fromdats (cons fromdat fromdats)))
 
 	    (if (common:low-noise-print 120 "sync-records")
-		(debug:print-info 4 "found " totrecords " records to sync"))
+		(debug:print-info 4 *default-log-port* "found " totrecords " records to sync"))
 
 	    ;; read the target table
 	    (sqlite3:for-each-row
@@ -681,14 +681,14 @@
 	tbls)
        (let* ((runtime      (- (current-milliseconds) start-time))
 	      (should-print (common:low-noise-print 120 "db sync" (> runtime 500)))) ;; low and high sync times treated as separate.
-	 (if should-print (debug:print 3 "INFO: db sync, total run time " runtime " ms"))
+	 (if should-print (debug:print 3 *default-log-port* "INFO: db sync, total run time " runtime " ms"))
 	 (for-each 
 	  (lambda (dat)
 	    (let ((tblname (car dat))
 		  (count   (cdr dat)))
 	      (set! tot-count (+ tot-count count))
 	      (if (> count 0)
-		  (if should-print (debug:print 0 (format #f "    ~10a ~5a" tblname count))))))
+		  (if should-print (debug:print 0 *default-log-port* (format #f "    ~10a ~5a" tblname count))))))
 	  (sort (hash-table->alist numrecs)(lambda (a b)(> (cdr a)(cdr b))))))
        tot-count)))
    (mutex-unlock! *db-sync-mutex*)))
@@ -749,7 +749,7 @@
 	     (db:delay-if-busy mtdb)
 	     (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id))
 		   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
-	       (debug:print 0 "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
+	       (debug:print 0 *default-log-port* "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
 	       (db:replace-test-records dbstruct run-id testrecs)
 	       (sqlite3:finalize! (db:dbdat-get-db (dbr:dbstruct-get-rundb dbstruct)))))
 	   run-ids)))
@@ -766,7 +766,7 @@
 	       (dead-runs  '()))
 	  (for-each
 	   (lambda (run-id)
-	     (debug:print 0 "Processing run " (if (eq? run-id 0) " main.db " run-id) ", " count " of " total)
+	     (debug:print 0 *default-log-port* "Processing run " (if (eq? run-id 0) " main.db " run-id) ", " count " of " total)
 	     (set! count (+ count 1))
 	     (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
 		    (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
@@ -785,7 +785,7 @@
 		     (handle-exceptions
 		      exn
 		      (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
-			  (debug:print 0 "Column last_update already added to runs table")
+			  (debug:print 0 *default-log-port* "Column last_update already added to runs table")
 			  (db:general-sqlite-error-dump exn "alter table runs ..." run-id "none"))
 		      (sqlite3:execute
 		       maindb
@@ -827,7 +827,7 @@
 			(handle-exceptions
 			 exn
 			 (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
-			     (debug:print 0 "Column last_update already added to " table-name " table")
+			     (debug:print 0 *default-log-port* "Column last_update already added to " table-name " table")
 			     (db:general-sqlite-error-dump exn "alter table " table-name " ..." #f "none"))
 			 (sqlite3:execute
 			  frundb
@@ -852,7 +852,7 @@
 			(let ((fullname (conc dbdir "/" run-id ".db")))
 			  (if (file-exists? fullname)
 			      (begin
-				(debug:print 0 "Removing database file for deleted run " fullname)
+				(debug:print 0 *default-log-port* "Removing database file for deleted run " fullname)
 				(delete-file fullname)))))
 		      dead-runs))))
 
@@ -862,19 +862,19 @@
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
-  (debug:print-info 11 "open-run-close-no-exception-handling START given a db=" (if idb "yes " "no ") ", params=" params)
+  (debug:print-info 11 *default-log-port* "open-run-close-no-exception-handling START given a db=" (if idb "yes " "no ") ", params=" params)
   (if (or *db-write-access*
 	  (not (member proc *db:all-write-procs*)))
       (let* ((db (cond
 		  ((pair? idb)                 (db:dbdat-get-db idb))
 		  ((sqlite3:database? idb)     idb)
-		  ((not idb)                   (debug:print 0 "ERROR: cannot open-run-close with #f anymore"))
+		  ((not idb)                   (debug:print-error 0 *default-log-port* "cannot open-run-close with #f anymore"))
 		  ((procedure? idb)            (idb))
-		  (else   	               (debug:print 0 "ERROR: cannot open-run-close with #f anymore"))))
+		  (else   	               (debug:print-error 0 *default-log-port* "cannot open-run-close with #f anymore"))))
 	     (res #f))
 	(set! res (apply proc db params))
 	(if (not idb)(sqlite3:finalize! dbstruct))
-	(debug:print-info 11 "open-run-close-no-exception-handling END" )
+	(debug:print-info 11 *default-log-port* "open-run-close-no-exception-handling END" )
 	res)
       #f))
 
@@ -887,13 +887,13 @@
        ((busy)
 	(thread-sleep! sleep-time))
        (else
-	(debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
-	(debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	(debug:print 0 *default-log-port* "EXCEPTION: database probably overloaded or unreadable.")
+	(debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 	(print "exn=" (condition->list exn))
-	(debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
+	(debug:print 0 *default-log-port* " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
 	(print-call-chain (current-error-port))
 	(thread-sleep! sleep-time)
-	(debug:print-info 0 "trying db call one more time....this may never recover, if necessary kill process " (current-process-id) " on host " (get-host-name) " to clean up")))
+	(debug:print-info 0 *default-log-port* "trying db call one more time....this may never recover, if necessary kill process " (current-process-id) " on host " (get-host-name) " to clean up")))
      (apply open-run-close-exception-handling proc idb params))
    (apply open-run-close-no-exception-handling proc idb params)))
 
@@ -1018,7 +1018,7 @@
        ;; Must do this *after* running patch db !! No more. 
        ;; cannot use db:set-var since it will deadlock, hardwire the code here
        (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" "MEGATEST_VERSION" (common:version-signature))
-       (debug:print-info 11 "db:initialize END")))))
+       (debug:print-info 11 *default-log-port* "db:initialize END")))))
 
 ;;======================================================================
 ;; R U N   S P E C I F I C   D B 
@@ -1310,7 +1310,7 @@
 	   ;; what to do with toplevel? call rollup?
 	   (begin
 	     (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
-	     (debug:print-info 0 "Found old toplevel test in RUNNING state, test-id=" test-id))
+	     (debug:print-info 0 *default-log-port* "Found old toplevel test in RUNNING state, test-id=" test-id))
 	   (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted))))
      db
      "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > (run_duration + ?) AND state IN ('RUNNING','REMOTEHOSTSTART');"
@@ -1330,7 +1330,7 @@
      "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 86400 AND state IN ('LAUNCHED');"
      run-id)
     
-    (debug:print-info 18 "Found " (length oldlaunched) " old LAUNCHED items, " (length toplevels) " old LAUNCHED toplevel tests and " (length incompleted) " tests marked RUNNING but apparently dead.")
+    (debug:print-info 18 *default-log-port* "Found " (length oldlaunched) " old LAUNCHED items, " (length toplevels) " old LAUNCHED toplevel tests and " (length incompleted) " tests marked RUNNING but apparently dead.")
     (if (and (null? incompleted)
 	     (null? oldlaunched)
 	     (null? toplevels))
@@ -1369,7 +1369,7 @@
 	   ;; what to do with toplevel? call rollup?
 	   (begin
 	     (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
-	     (debug:print-info 0 "Found old toplevel test in RUNNING state, test-id=" test-id))
+	     (debug:print-info 0 *default-log-port* "Found old toplevel test in RUNNING state, test-id=" test-id))
 	   (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted))))
      db
      "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > (run_duration + ?) AND state IN ('RUNNING','REMOTEHOSTSTART');"
@@ -1389,7 +1389,7 @@
      "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 86400 AND state IN ('LAUNCHED');"
      run-id)
     
-    (debug:print-info 18 "Found " (length oldlaunched) " old LAUNCHED items, " (length toplevels) " old LAUNCHED toplevel tests and " (length incompleted) " tests marked RUNNING but apparently dead.")
+    (debug:print-info 18 *default-log-port* "Found " (length oldlaunched) " old LAUNCHED items, " (length toplevels) " old LAUNCHED toplevel tests and " (length incompleted) " tests marked RUNNING but apparently dead.")
 
     ;; These are defunct tests, do not do all the overhead of set-state-status. Force them to INCOMPLETE.
     ;;
@@ -1405,7 +1405,7 @@
 	   (all-ids             (append min-incompleted-ids (map car oldlaunched))))
       (if (> (length all-ids) 0)
 	  (begin
-	    (debug:print 0 "WARNING: Marking test(s); " (string-intersperse (map conc all-ids) ", ") " as INCOMPLETE")
+	    (debug:print 0 *default-log-port* "WARNING: Marking test(s); " (string-intersperse (map conc all-ids) ", ") " as INCOMPLETE")
 	    (sqlite3:execute 
 	     db
 	     (conc "UPDATE tests SET state='INCOMPLETE' WHERE id IN (" 
@@ -1438,7 +1438,7 @@
 ;;    b. ....
 ;;
 (define (db:clean-up dbdat)
-  ;; (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
+  ;; (debug:print 0 *default-log-port* "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
   (let* ((db         (db:dbdat-get-db dbdat))
 	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM tests)+(SELECT count(id) FROM runs);"))
 	(statements
@@ -1461,11 +1461,11 @@
      db
      (lambda ()
        (sqlite3:for-each-row (lambda (tot)
-			       (debug:print-info 0 "Records count before clean: " tot))
+			       (debug:print-info 0 *default-log-port* "Records count before clean: " tot))
 			     count-stmt)
        (map sqlite3:execute statements)
        (sqlite3:for-each-row (lambda (tot)
-			       (debug:print-info 0 "Records count after  clean: " tot))
+			       (debug:print-info 0 *default-log-port* "Records count after  clean: " tot))
 			     count-stmt)))
     (map sqlite3:finalize! statements)
     (sqlite3:finalize! count-stmt)
@@ -1485,7 +1485,7 @@
 ;;    b. ....
 ;;
 (define (db:clean-up-rundb dbdat)
-  ;; (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
+  ;; (debug:print 0 *default-log-port* "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
   (let* ((db         (db:dbdat-get-db dbdat))
 	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM tests);"))
 	(statements
@@ -1502,11 +1502,11 @@
      db
      (lambda ()
        (sqlite3:for-each-row (lambda (tot)
-			       (debug:print-info 0 "Records count before clean: " tot))
+			       (debug:print-info 0 *default-log-port* "Records count before clean: " tot))
 			     count-stmt)
        (map sqlite3:execute statements)
        (sqlite3:for-each-row (lambda (tot)
-			       (debug:print-info 0 "Records count after  clean: " tot))
+			       (debug:print-info 0 *default-log-port* "Records count after  clean: " tot))
 			     count-stmt)))
     (map sqlite3:finalize! statements)
     (sqlite3:finalize! count-stmt)
@@ -1526,7 +1526,7 @@
 ;;    b. ....
 ;;
 (define (db:clean-up-maindb dbdat)
-  ;; (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
+  ;; (debug:print 0 *default-log-port* "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
   (let* ((db         (db:dbdat-get-db dbdat))
 	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM runs);"))
 	 (statements
@@ -1549,11 +1549,11 @@
      db
      (lambda ()
        (sqlite3:for-each-row (lambda (tot)
-			       (debug:print-info 0 "Records count before clean: " tot))
+			       (debug:print-info 0 *default-log-port* "Records count before clean: " tot))
 			     count-stmt)
        (map sqlite3:execute statements)
        (sqlite3:for-each-row (lambda (tot)
-			       (debug:print-info 0 "Records count after  clean: " tot))
+			       (debug:print-info 0 *default-log-port* "Records count after  clean: " tot))
 			     count-stmt)))
     (map sqlite3:finalize! statements)
     (sqlite3:finalize! count-stmt)
@@ -1593,7 +1593,7 @@
 ;; 			    2))
 ;;     (if (> (abs (- *last-global-delta-printed* *global-delta*)) 0.08) ;; don't print all the time, only if it changes a bit
 ;; 	(begin
-;; 	  (debug:print-info 4 "launch throttle factor=" *global-delta*)
+;; 	  (debug:print-info 4 *default-log-port* "launch throttle factor=" *global-delta*)
 ;; 	  (set! *last-global-delta-printed* *global-delta*)))
 
 (define (db:set-var dbstruct var val)
@@ -1711,8 +1711,8 @@
 	 (allvals   (append (list runname state status user) (map cadr keyvals)))
 	 (qryvals   (append (list runname) (map cadr keyvals)))
 	 (key=?str  (string-intersperse (map (lambda (k)(conc k "=?")) keys) " AND ")))
-    (debug:print 3 "keys: " keys " allvals: " allvals " keyvals: " keyvals " key=?str is " key=?str)
-    (debug:print 2 "NOTE: using target " (string-intersperse (map cadr keyvals) "/") " for this run")
+    (debug:print 3 *default-log-port* "keys: " keys " allvals: " allvals " keyvals: " keyvals " key=?str is " key=?str)
+    (debug:print 2 *default-log-port* "NOTE: using target " (string-intersperse (map cadr keyvals) "/") " for this run")
     (if (and runname (null? (filter (lambda (x)(not x)) keyvals))) ;; there must be a better way to "apply and"
 	(let ((res #f))
 	  (db:delay-if-busy dbdat)
@@ -1724,14 +1724,14 @@
 		   (set! res id))
 		 db
 		 (let ((qry (conc "SELECT id FROM runs WHERE (runname=? " andstr key=?str ");")))
-					;(debug:print 4 "qry: " qry) 
+					;(debug:print 4 *default-log-port* "qry: " qry) 
 		   qry)
 		 qryvals)
 	  (db:delay-if-busy dbdat)
 	  (sqlite3:execute db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=? AND state='deleted';" state status res)
 	  res) 
 	(begin
-	  (debug:print 0 "ERROR: Called without all necessary keys")
+	  (debug:print-error 0 *default-log-port* "Called without all necessary keys")
 	  #f))))
 
 ;; replace header and keystr with a call to runs:get-std-run-fields
@@ -1765,7 +1765,7 @@
 			   (if (number? offset)
 			       (conc " OFFSET " offset)
 			       ""))))
-    (debug:print-info 11 "db:get-runs START qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
+    (debug:print-info 11 *default-log-port* "db:get-runs START qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
     (db:with-db dbstruct #f #f
 		(lambda (db)		
 		  (sqlite3:for-each-row
@@ -1774,7 +1774,7 @@
 		   db
 		   qrystr
 		   )))
-    (debug:print-info 11 "db:get-runs END qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
+    (debug:print-info 11 *default-log-port* "db:get-runs END qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
     (vector header res)))
 
 ;; TODO: Switch this to use max(update_time) from each run db? Then if using a server there is no disk traffic (using inmem db)
@@ -1791,7 +1791,7 @@
 	      (if res
 		  (string->number (cadr res))
 		  (begin
-		    (debug:print 2 "WARNING: Failed to process " dbfile " for run-id")
+		    (debug:print 2 *default-log-port* "WARNING: Failed to process " dbfile " for run-id")
 		    0))))
 	  changed))))
 
@@ -1818,7 +1818,7 @@
 		  (set! res (cons (apply vector targ) res))))))
 	db
 	qrystr)
-       (debug:print-info 11 "db:get-targets END qrystr: " qrystr )
+       (debug:print-info 11 *default-log-port* "db:get-targets END qrystr: " qrystr )
        (vector header res)))))
 
 ;; just get count of runs
@@ -1829,13 +1829,13 @@
    #f
    (lambda (db)
      (let ((numruns 0))
-       (debug:print-info 11 "db:get-num-runs START " runpatt)
+       (debug:print-info 11 *default-log-port* "db:get-num-runs START " runpatt)
        (sqlite3:for-each-row 
 	(lambda (count)
 	  (set! numruns count))
 	db
 	"SELECT COUNT(id) FROM runs WHERE runname LIKE ? AND state != 'deleted';" runpatt)
-       (debug:print-info 11 "db:get-num-runs END " runpatt)
+       (debug:print-info 11 *default-log-port* "db:get-num-runs END " runpatt)
        numruns))))
 
 ;; (sqlite3#fold-row proc3670 init3671 db-or-stmt3672 . params3673)>
@@ -1980,14 +1980,14 @@
 		  (if patt
 		      (set! key-patt (conc key-patt " AND " key " " wildtype " '" patt "'"))
 		      (begin
-			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
+			(debug:print-error 0 *default-log-port* "searching for runs with no pattern set for " fulkey)
 			(exit 6)))))
 	      keyvals)
     (set! qry-str (conc "SELECT " keystr " FROM runs WHERE state != 'deleted' AND runname " runwildtype " ? " key-patt " ORDER BY event_time "
 			(if limit  (conc " LIMIT " limit)   "")
 			(if offset (conc " OFFSET " offset) "")
 			";"))
-    (debug:print-info 4 "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
+    (debug:print-info 4 *default-log-port* "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
     (db:with-db dbstruct #f #f ;; reads db, does not write to it.
 		(lambda (db)
 		  (sqlite3:for-each-row
@@ -2010,7 +2010,7 @@
 	 (header    (append keys remfields))
 	 (keystr    (conc (keys->keystr keys) ","
 			  (string-intersperse remfields ","))))
-    (debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
+    (debug:print-info 11 *default-log-port* "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
     (db:delay-if-busy dbdat)
     (sqlite3:for-each-row
      (lambda (a . x)
@@ -2018,7 +2018,7 @@
      db 
      (conc "SELECT " keystr " FROM runs WHERE id=? AND state != 'deleted';")
      run-id)
-    (debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
+    (debug:print-info 11 *default-log-port* "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
     (let ((finalres (vector header res)))
       ;; (hash-table-set! *run-info-cache* run-id finalres)
       finalres)))
@@ -2067,7 +2067,7 @@
        (sqlite3:execute db "UPDATE runs SET state=? WHERE id=?;" newlockval run-id)
        (sqlite3:execute db "INSERT INTO access_log (user,accessed,args) VALUES(?,strftime('%s','now'),?);"
 			user (conc newlockval " " run-id))
-       (debug:print-info 1 "" newlockval " run number " run-id)))))
+       (debug:print-info 1 *default-log-port* "" newlockval " run number " run-id)))))
 
 (define (db:set-run-status dbstruct run-id status msg)
   (let* ((dbdat (db:get-db dbstruct #f))
@@ -2170,7 +2170,7 @@
 (define (db:get-tests-for-run dbstruct run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)
   (if (not (number? run-id))
       (begin ;; no need to treat this as an error by default
-	(debug:print 4 "WARNING: call to db:get-tests-for-run with bad run-id=" run-id)
+	(debug:print 4 *default-log-port* "WARNING: call to db:get-tests-for-run with bad run-id=" run-id)
 	;; (print-call-chain (current-error-port))
 	'())
       (let* ((qryvalstr       (case qryvals
@@ -2199,16 +2199,29 @@
 						" IN ('") )
 					(string-intersperse statuses "','")
 					"')")))
+	     (interim-qry       (conc " AND " (if not-in "NOT " "") "( state='COMPLETED' " (if statuses-qry (conc " AND " statuses-qry " ) ") " ) ")
+				      (if states-qry
+					  (conc (if not-in " AND " " OR ") states-qry ) ;; " ) ")
+					  "")))
 	     (states-statuses-qry 
 	      (cond 
 	       ((and states-qry statuses-qry)
 		(case mode
-		  ((dashboard)(conc " AND " (if not-in "NOT " "") "( ( state='COMPLETED' AND " statuses-qry " ) OR " states-qry " ) "))
+		  ((dashboard) 
+		   (if not-in
+		       (conc " AND (state='COMPLETED' AND status NOT IN ('" (string-intersperse statuses "','") "')) "
+			     " OR (state != 'COMPLETED' AND state NOT IN ('" (string-intersperse states "','") "')) ")
+		       (conc " AND (state='COMPLETED' AND status IN ('" (string-intersperse statuses "','") "')) "
+			     " OR (state NOT IN ('COMPLETED','DELETED') AND state IN ('" (string-intersperse states "','") "')) ")))
 		  (else       (conc " AND ( " states-qry " AND " statuses-qry " ) "))))
 	       (states-qry  
-		(conc " AND " states-qry))
+		(case mode
+		  ((dashboard) (conc " AND " (if not-in "NOT " "") " state IN ('" (string-intersperse states    "','") "') ")) ;; interim-qry)
+		  (else        (conc " AND " states-qry))))
 	       (statuses-qry 
-		(conc " AND " statuses-qry))
+		(case mode
+		  ((dashboard) (conc " AND " (if not-in "NOT " "") " status IN ('" (string-intersperse statuses "','") "') ")) ;; interim-qry)
+		  (else        (conc " AND " statuses-qry))))
 	       (else "")))
 	     (tests-match-qry (tests:match->sqlqry testpatt))
 	     (qry             (conc "SELECT " qryvalstr
@@ -2230,7 +2243,7 @@
 				    (if offset (conc " OFFSET " offset) " ")
 				    ";"
 				    )))
-	(debug:print-info 8 "db:get-tests-for-run run-id=" run-id ", qry=" qry)
+	(debug:print-info 8 *default-log-port* "db:get-tests-for-run run-id=" run-id ", qry=" qry)
 	(db:with-db dbstruct run-id #f
 		    (lambda (db)
 		      (sqlite3:for-each-row 
@@ -2262,7 +2275,7 @@
 	 (tests-match-qry (tests:match->sqlqry testpatt))
 	 (qry             (conc "SELECT id,testname,item_path,state,status FROM tests WHERE run_id=? " 
 				(if tests-match-qry (conc " AND (" tests-match-qry ") ") ""))))
-    (debug:print-info 8 "db:get-tests-for-run qry=" qry)
+    (debug:print-info 8 *default-log-port* "db:get-tests-for-run qry=" qry)
     (db:with-db dbstruct run-id #f
 		(lambda (db)
 		  (sqlite3:for-each-row
@@ -2289,13 +2302,6 @@
 
 ;; get a useful subset of the tests data (used in dashboard
 ;; use db:mintest-get-{id ,run_id,testname ...}
-;; 
-(define (db:get-tests-for-runs-mindata dbstruct run-ids testpatt states statuses not-in)
-  (debug:print 0 "ERROR: BROKN!")
-  ;; (db:get-tests-for-runs dbstruct run-ids testpatt states statuses not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
-)
-
-;; get a useful subset of the tests data (used in dashboard
 ;;
 (define (db:get-tests-for-run-mindata dbstruct run-id testpatt states statuses not-in)
   (db:get-tests-for-run dbstruct run-id testpatt states statuses #f #f not-in #f #f "id,run_id,testname,state,status,event_time,item_path" #f))
@@ -2344,7 +2350,7 @@
 ;; WARNING: SQL injection risk. NB// See new but not yet used "faster" version below
 ;;
 ;;  AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
-;;  (debug:print 0 "QRY: " qry)
+;;  (debug:print 0 *default-log-port* "QRY: " qry)
 ;;  (db:delay-if-busy)
 ;;
 ;; NB// This call only operates on toplevel tests. Consider replacing it with more general call
@@ -2572,13 +2578,13 @@
 		(let* ((qmarks (string-intersperse (make-list (length db:test-record-fields) "?") ","))
 		       (qrystr (conc "INSERT OR REPLACE INTO tests (" db:test-record-qry-selector ") VALUES (" qmarks ");"))
 		       (qry    (sqlite3:prepare db qrystr)))
-		  (debug:print 0 "INFO: migrating test records for run with id " run-id)
+		  (debug:print 0 *default-log-port* "INFO: migrating test records for run with id " run-id)
 		  (sqlite3:with-transaction
 		   db
 		   (lambda ()
 		     (for-each 
 		      (lambda (rec)
-			;; (debug:print 0 "INFO: Inserting values: " (string-intersperse (map conc (vector->list rec)) ",") "\n")
+			;; (debug:print 0 *default-log-port* "INFO: Inserting values: " (string-intersperse (map conc (vector->list rec)) ",") "\n")
 			(apply sqlite3:execute qry (vector->list rec)))
 		      testrecs)))
 		  (sqlite3:finalize! qry)))))
@@ -2600,13 +2606,13 @@
 	  (if test-id-found
 	      (loop (+ new-id 1))
 	      (begin
-		(debug:print-info 0 "New test id " new-id " selected for test with id " test-id)
+		(debug:print-info 0 *default-log-port* "New test id " new-id " selected for test with id " test-id)
 		(sqlite3:execute mtdb "UPDATE tests SET id=? WHERE id=?;" new-id test-id)))))))
 
 ;; move test ids into the 30k * run_id range
 ;;
 (define (db:prep-megatest.db-adj-test-ids mtdb run-id testrecs)
-  (debug:print-info 0 "Adjusting test ids in megatest.db for run " run-id)
+  (debug:print-info 0 *default-log-port* "Adjusting test ids in megatest.db for run " run-id)
   (let ((min-test-id (* run-id 30000)))
     (for-each 
      (lambda (testrec)
@@ -2846,7 +2852,7 @@
 ;; EOF
 
 (define (db:csv->test-data dbstruct run-id test-id csvdata)
-  (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
+  (debug:print 4 *default-log-port* "test-id " test-id ", csvdata: " csvdata)
   (let* ((dbdat   (db:get-db dbstruct run-id))
 	 (db      (db:dbdat-get-db dbdat))
 	 (csvlist (csv->list (make-csv-reader
@@ -2870,7 +2876,7 @@
 				 s))) ;; if specified on the input then use, else calculate
 	      (type        (list-ref padded-row 8)))
 	 ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
-	 (debug:print 4 "BEFORE: category: " category " variable: " variable " value: " value 
+	 (debug:print 4 *default-log-port* "BEFORE: category: " category " variable: " variable " value: " value 
 		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment " type: " type)
 	 
 	 (if (and (or (not expected)(equal? expected ""))
@@ -2881,7 +2887,7 @@
 			 (set! tol      new-tol)
 			 (set! units    new-units)))
 	 
-	 (debug:print 4 "AFTER:  category: " category " variable: " variable " value: " value 
+	 (debug:print 4 *default-log-port* "AFTER:  category: " category " variable: " variable " value: " value 
 		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
 	 ;; calculate status if NOT specified
 	 (if (and (not status)(number? expected)(number? value)) ;; need expected and value to be numbers
@@ -2889,7 +2895,7 @@
 		 (let* ((max-val (+ expected tol))
 			(min-val (- expected tol))
 			(result  (and (>=  value min-val)(<= value max-val))))
-		   (debug:print 4 "max-val: " max-val " min-val: " min-val " result: " result)
+		   (debug:print 4 *default-log-port* "max-val: " max-val " min-val: " min-val " result: " result)
 		   (set! status (if result "pass" "fail")))
 		 (set! status ;; NB// need to assess each one (i.e. not return operator since need to act if not valid op.
 		       (case (string->symbol tol) ;; tol should be >, <, >=, <=
@@ -2898,7 +2904,7 @@
 			 ((>=) (if (>= value expected) "pass" "fail"))
 			 ((<=) (if (<= value expected) "pass" "fail"))
 			 (else (conc "ERROR: bad tol comparator " tol))))))
-	 (debug:print 4 "AFTER2: category: " category " variable: " variable " value: " value 
+	 (debug:print 4 *default-log-port* "AFTER2: category: " category " variable: " variable " value: " value 
 		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
 	 (db:delay-if-busy dbdat)
 	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
@@ -2935,7 +2941,7 @@
 		  " AND "))
 	 ;; (testqry (tests:match->sqlqry testpatt))
 	 (runsqry (sqlite3:prepare db (conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';"))))
-    ;; (debug:print 8 "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" testqry)
+    ;; (debug:print 8 *default-log-port* "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" testqry)
     (sqlite3:for-each-row
      (lambda (rid)
        (set! row-ids (cons rid row-ids)))
@@ -3005,7 +3011,7 @@
 		(regexp "_") "=" msg #t)))
 	   (lambda ()(deserialize)))
 	 (begin
-	   (debug:print 0 "ERROR: reception failed. Received " msg " but cannot translate it.")
+	   (debug:print-error 0 *default-log-port* "reception failed. Received " msg " but cannot translate it.")
 	   msg))) ;; crude reply for when things go awry
     ((zmq nmsg)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg)))
@@ -3062,8 +3068,8 @@
 	  (set! logf final_logf)
 	  (set! res (list path final_logf))
 	  (if (directory? path)
-	      (debug:print 2 "Found path: " path)
-	      (debug:print 2 "No such path: " path))) ;; )
+	      (debug:print 2 *default-log-port* "Found path: " path)
+	      (debug:print 2 *default-log-port* "No such path: " path))) ;; )
 	db
 	"SELECT rundir,final_logf FROM tests WHERE testname=? AND item_path='';"
 	test-name)
@@ -3317,13 +3323,13 @@
 		 (conc "SELECT id FROM runs WHERE " qrystr " AND id != ?;") (append keyvals (list run-id)))
 	  ;; collect all matching tests for the runs then
 	  ;; extract the most recent test and return that.
-	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals 
+	  (debug:print 4 *default-log-port* "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals 
 		       ", previous run ids found: " prev-run-ids)
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
 		(let ((results (db:get-tests-for-run dbstruct hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f #f 'normal)))
-		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
+		  (debug:print 4 *default-log-port* "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
 		  (for-each 
@@ -3350,7 +3356,7 @@
 	    (if (handle-exceptions
 		 exn
 		 (begin
-		   (debug:print-info 0 "WARNING: failed to test for existance of " dbfj)
+		   (debug:print-info 0 *default-log-port* "WARNING: failed to test for existance of " dbfj)
 		   (thread-sleep! 1)
 		   (db:delay-if-busy count (- count 1)))
 		 (file-exists? dbfj))
@@ -3374,7 +3380,7 @@
 		   (thread-sleep! 6.4)
 		   (db:delay-if-busy count: 0))
 		  (else
-		   (debug:print-info 0 "delaying db access due to high database load.")
+		   (debug:print-info 0 *default-log-port* "delaying db access due to high database load.")
 		   (thread-sleep! 12.8))))
 	    db)
 	  "bogus result from db:delay-if-busy")))
@@ -3451,11 +3457,11 @@
 ;; path-b is waiting on path-a
 ;;
 (define (db:compare-itempaths test-b-name path-a path-b itemmaps )
-  (debug:print-info 6 "ITEMMAPS: " itemmaps)
+  (debug:print-info 6 *default-log-port* "ITEMMAPS: " itemmaps)
   (let* ((itemmap    (tests:lookup-itemmap itemmaps test-b-name)))
     (if itemmap
 	(let ((path-b-mapped (db:multi-pattern-apply path-b itemmap)))
-	  (debug:print-info 6 "ITEMMAP is " itemmap ", path: " path-b ", mapped path: " path-b-mapped)
+	  (debug:print-info 6 *default-log-port* "ITEMMAP is " itemmap ", path: " path-b ", mapped path: " path-b-mapped)
 	  (equal? path-a path-b-mapped))
 	(equal? path-b path-a))))
 
@@ -3464,7 +3470,7 @@
 ;;       just call db:multi-pattern-apply
 ;;
 (define (db:convert-test-itempath path-in itemmap)
-  (debug:print-info 6 "ITEMMAP is " itemmap)
+  (debug:print-info 6 *default-log-port* "ITEMMAP is " itemmap)
   (let* ((path-parts  (string-split path-in "/"))
 	 (test-name   (if (null? path-parts) "" (car path-parts)))
 	 (item-path   (string-intersperse (if (null? path-parts) '() (cdr path-parts)) "/")))
@@ -3489,7 +3495,7 @@
 		 (newr  (if (and patt repl)
 			    (string-substitute patt repl res)
 			    (begin
-			      (debug:print 0 "WARNING: itemmap has problem \"" itemmap "\", patt: " patt ", repl: " repl)
+			      (debug:print 0 *default-log-port* "WARNING: itemmap has problem \"" itemmap "\", patt: " patt ", repl: " repl)
 			      res))))
 	    (if (null? tal)
 		newr
@@ -3624,7 +3630,7 @@
               host,cpuload
             FROM tests AS t JOIN runs AS r ON t.run_id=r.id JOIN test_meta AS tm ON tm.testname=t.testname
             WHERE runname LIKE ? AND " keyqry ";")))
-    (debug:print 2 "Using " tempdir " for constructing the ods file. keyqry: " keyqry " keystr: " keysstr " with keys: " (map cadr keypatt-alist)
+    (debug:print 2 *default-log-port* "Using " tempdir " for constructing the ods file. keyqry: " keyqry " keystr: " keysstr " with keys: " (map cadr keypatt-alist)
 		 "\n      mainqry: " mainqry)
     ;; "Expected Value"
     ;; "Value Found"
@@ -3648,7 +3654,7 @@
 					       (final-log (vector-ref vb (+  7 numkeys)))
 					       (run-dir   (vector-ref vb (+ 18 numkeys)))
 					       (log-fpath (conc run-dir "/"  final-log))) ;; (string-intersperse keyvals "/") "/" testname "/" item-path "/"
-					  (debug:print 4 "log: " log-fpath " exists: " (file-exists? log-fpath))
+					  (debug:print 4 *default-log-port* "log: " log-fpath " exists: " (file-exists? log-fpath))
 					  (vector-set! vb (+ 7 numkeys) (if (file-exists? log-fpath)
 									    (let ((newpath (conc pathmod "/"
 												 (string-intersperse keyvals "/")
@@ -3666,7 +3672,7 @@
 	   db
 	   mainqry
 	   runspatt (map cadr keypatt-alist))
-    (debug:print 2 "Found " (length test-ids) " records")
+    (debug:print 2 *default-log-port* "Found " (length test-ids) " records")
     (set! results (list (cons "Runs" results)))
     ;; now, for each test, collect the test_data info and add a new sheet
     (for-each
@@ -3692,7 +3698,7 @@
      (if (string-match (regexp "^[/~]+.*") outputfile) ;; full path?
 	 outputfile
 	 (begin
-	   (debug:print 0 "WARNING: path given, " outputfile " is relative, prefixing with current directory")
+	   (debug:print 0 *default-log-port* "WARNING: path given, " outputfile " is relative, prefixing with current directory")
 	   (conc (current-directory) "/" outputfile)))
      results)
     ;; brutal clean up

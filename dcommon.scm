@@ -188,7 +188,7 @@
 	 (testname-to-row (hash-table-ref *cachedata* "testname-to-row")) 
 	 (colnum       1)
 	 (rownum       0)) ;; rownum = 0 is the header
-;; (debug:print 0 "test-ids " test-ids ", tests-detail-changes " tests-detail-changes)
+;; (debug:print 0 *default-log-port* "test-ids " test-ids ", tests-detail-changes " tests-detail-changes)
     
 	 ;; tests related stuff
 	 ;; (all-testnames (delete-duplicates (map db:test-get-testname test-changes))))
@@ -264,7 +264,7 @@
 					       userdata: (conc "test-id: " test-id))
 				(let ((node-num (tree:find-node tb (cons "Runs" test-path)))
 				      (color    (car (gutils:get-color-for-state-status state status))))
-				  (debug:print 0 "node-num: " node-num ", color: " color)
+				  (debug:print 0 *default-log-port* "node-num: " node-num ", color: " color)
 				  (iup:attribute-set! tb (conc "COLOR" node-num) color))
 				(hash-table-set! (dboard:data-get-path-test-ids *data*) test-path test-id)
 				(if (not rownum)
@@ -278,7 +278,7 @@
 							  (conc rownum ":" 0) dispname)
 				      ))
 				;; set the cell text and color
-				;; (debug:print 2 "rownum:colnum=" rownum ":" colnum ", state=" status)
+				;; (debug:print 2 *default-log-port* "rownum:colnum=" rownum ":" colnum ", state=" status)
 				(iup:attribute-set! (dboard:data-get-runs-matrix *data*)
 						    (conc rownum ":" colnum)
 						    (if (member state '("ARCHIVED" "COMPLETED"))
@@ -295,8 +295,8 @@
       (if updater (updater (hash-table-ref/default data get-details-sig #f))))
 
     (iup:attribute-set! (dboard:data-get-runs-matrix *data*) "REDRAW" "ALL")
-    ;; (debug:print 2 "run-changes: " run-changes)
-    ;; (debug:print 2 "test-changes: " test-changes)
+    ;; (debug:print 2 *default-log-port* "run-changes: " run-changes)
+    ;; (debug:print 2 *default-log-port* "test-changes: " test-changes)
     (list run-changes all-test-changes)))
 
 ;;======================================================================
@@ -713,8 +713,8 @@
 	      (waiton-center   (dcommon:get-box-center (or waiton-box-info test-box-info))))
 	 (dcommon:draw-arrow cnv test-box-center waiton-center)))
      waitons)
-    ;; (debug:print 0 "test-box-info=" test-box-info)
-    ;; (debug:print 0 "test-record=" test-record)
+    ;; (debug:print 0 *default-log-port* "test-box-info=" test-box-info)
+    ;; (debug:print 0 *default-log-port* "test-record=" test-record)
     ))
 
 (define (dcommon:estimate-scale sizex sizey originx originy nodes)
@@ -930,12 +930,12 @@
 	  (let loop ((rownum  (+ max-row 1))
 		     (colnum  0)
 		     (deleted #f))
-	    ;; (debug:print-info 0 "cleaning " rownum ":" colnum)
+	    ;; (debug:print-info 0 *default-log-port* "cleaning " rownum ":" colnum)
 	    (let* ((next-row (if (eq? colnum max-col) (+ rownum 1) rownum))
 		   (next-col (if (eq? colnum max-col) 1 (+ colnum 1)))
 		   (mtrx-rc  (conc rownum ":" colnum))
 		   (curr-val (iup:attribute steps-matrix mtrx-rc)))
-	      ;; (debug:print-info 0 "cleaning " rownum ":" colnum " currval= " curr-val)
+	      ;; (debug:print-info 0 *default-log-port* "cleaning " rownum ":" colnum " currval= " curr-val)
 	      (if (and (string? curr-val)
 		       (not (equal? curr-val "")))
 		  (begin
