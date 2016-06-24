@@ -913,27 +913,41 @@
 
 ;; move all the miscellanea into this struct
 ;;
-(defstruct runs:gendat inc-results inc-results-last-update inc-results-fmt)
+(defstruct runs:gendat inc-results inc-results-last-update inc-results-fmt run-info runname target)
 
 (define *runs:general-data* 
   (make-runs:gendat
    inc-results: (make-hash-table)
    inc-results-last-update: 0
-   inc-results-fmt: "~12a~12a~20a~12a~20a~25a\n" ;; state status time duration test-name item-path
+   inc-results-fmt: "~12a~12a~20a~12a~40a\n" ;; state status time duration test-name item-path
+   run-info: #f
+   runname: #f
+   target: #f
    )
 )
 
 (define (runs:incremental-print-results run-id)
   (let ((curr-sec (current-seconds)))
     (if (> (- curr-sec (runs:gendat-inc-results-last-update *runs:general-data*)) 5) ;; at least five seconds since last update
-	(let ((testsdat (rmt:get-tests-for-run run-id "%" '() '()
-						 #f #f
-						 #f ;; hide/not-hide
-						 #f ;; sort-by
-						 #f ;; sort-order
-						 #f ;; get full data (not 'shortlist)
-						 (runs:gendat-inc-results-last-update *runs:general-data*) ;; last update time
-						 'dashboard)))
+	(let* ((run-dat  (or (runs:gendat-run-info *runs:general-data*)(rmt:get-run-info run-id)))
+	       (runname  (or (runs:gendat-runname *runs:general-data*)
+			     (db:get-value-by-header (db:get-rows run-dat)
+						     (db:get-header run-dat) "runname")))
+	       (target   (or (runs:gendat-target *runs:general-data*)(rmt:get-target run-id)))
+	       (testsdat (rmt:get-tests-for-run run-id "%" '() '()
+						#f #f
+						#f ;; hide/not-hide
+						#f ;; sort-by
+						#f ;; sort-order
+						#f ;; get full data (not 'shortlist)
+						(runs:gendat-inc-results-last-update *runs:general-data*) ;; last update time
+						'dashboard)))
+	  (if (not (runs:gendat-run-info *runs:general-data*))
+	      (runs:gendat-run-info-set! *runs:general-data* run-dat))
+	  (if (not (runs:gendat-runname  *runs:general-data*))
+	      (runs:gendat-runname-set! *runs:general-data* runname))
+	  (if (not (runs:gendat-target *runs:general-data*))
+	      (runs:gendat-target-set! *runs:general-data* target))
 	  (for-each
 	   (lambda (testdat)
 	     (let* ((test-id    (db:test-get-id           testdat))
@@ -952,7 +966,7 @@
 		   (let ((fmt   (runs:gendat-inc-results-fmt *runs:general-data*))
 			 (dtime (seconds->year-work-week/day-time event-time))) 
 		     (if (runs:lownoise "inc-print" 600)
-			 (format #t fmt "State" "Status" "Start Time" "Duration" "Test name" "Item path"))
+			 (format #t fmt "State" "Status" "Start Time" "Duration" "Test path"))
 		     ;; (debug:print 0 *default-log-port* "fmt: " fmt " state: " state " status: " status " test-name: " test-name " item-path: " item-path " dtime: " dtime)
 		     ;; (debug:print 0 #f "event-time: " event-time " duration: " duration)
 		     (format #t fmt
@@ -960,8 +974,7 @@
 			     status
 			     dtime
 			     (seconds->hr-min-sec duration)
-			     test-name
-			     item-path)
+			     (conc "lt/" target "/" runname "/" test-name (if (string-null? item-path) "" (conc "/" item-path))))
 		     (hash-table-set! (runs:gendat-inc-results *runs:general-data*) (conc run-id "," test-id) testdat)))))
 	   testsdat)))
     (runs:gendat-inc-results-last-update-set! *runs:general-data* (- curr-sec 10))))
