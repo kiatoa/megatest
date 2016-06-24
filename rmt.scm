@@ -352,6 +352,9 @@
 (define (rmt:get-targets)
   (rmt:send-receive 'get-targets #f '()))
 
+(define (rmt:get-target run-id)
+  (rmt:send-receive 'get-target run-id (list run-id)))
+
 ;;======================================================================
 ;;  T E S T S
 ;;======================================================================

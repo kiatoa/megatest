@@ -183,7 +183,8 @@
 	    ((get-key-val-pairs)               (apply db:get-key-val-pairs dbstruct params))
 	    ((get-keys)                        (db:get-keys dbstruct))
 	    ((get-key-vals)                    (apply db:get-key-vals dbstruct params))
-	    ((get-targets)                     (db:get-targets  dbstruct))
+	    ((get-target)                      (apply db:get-target dbstruct params))
+	    ((get-targets)                     (db:get-targets dbstruct))
 
 	    ;; ARCHIVES
 	    ((test-get-archive-block-info)     (apply db:test-get-archive-block-info dbstruct params))

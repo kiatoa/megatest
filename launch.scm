@@ -800,18 +800,26 @@
     (let* ((linktree (or (getenv "MT_LINKTREE")
 			 (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f))))
       (if linktree
-	  (if (not (file-exists? linktree))
-	      (begin
-		(handle-exceptions
-		 exn
-		 (begin
-		   (debug:print-error 0 *default-log-port* "Something went wrong when trying to create linktree dir at " linktree)
-		   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-		   (exit 1))
-		 (create-directory linktree #t))))
+	  (begin
+	    (if (not (file-exists? linktree))
+		(begin
+		  (handle-exceptions
+		   exn
+		   (begin
+		     (debug:print-error 0 *default-log-port* "Something went wrong when trying to create linktree dir at " linktree)
+		     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+		     (exit 1))
+		   (create-directory linktree #t))))
+	    (handle-exceptions
+	     exn
+	     (begin
+	       (debug:print-error 0 *default-log-port* "Something went wrong when trying to create link to linktree at " *toppath*)
+	       (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn)))
+	     (let ((tlink (conc *toppath* "/lt")))
+	       (if (not (file-exists? tlink))
+		   (create-symbolic-link linktree tlink)))))
 	  (begin
 	    (debug:print-error 0 *default-log-port* "linktree not defined in [setup] section of megatest.config")
-	    ;; (exit 1)
 	    )))
     (if (and *toppath*
 	     (directory-exists? *toppath*))
