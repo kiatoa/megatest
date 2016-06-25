@@ -1767,40 +1767,48 @@ Misc
                                        #:button-cb (lambda (obj a pressed x y btn . rem)
                                                      (print "pressed= " pressed " x= " x " y= " y " rem=" rem " btn=" btn " string? " (string? btn))
                                                      (if  (substring-index "3" btn)
-                                                         (if (eq? pressed 0)
-                                                             (let ((popup-menu (iup:menu 
-                                                                                (iup:menu-item
-                                                                                 "Run"
-                                                                                 (iup:menu              
+                                                          (if (eq? pressed 1)
+                                                              (let* ((toolpath (car (argv)))
+                                                                     (buttndat (hash-table-ref (d:alldat-buttondat *alldat*) button-key))
+                                                                     (test-id  (db:test-get-id (vector-ref buttndat 3)))
+                                                                     (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
+                                                                     (test-name (db:test-get-testname (rmt:get-test-info-by-id run-id test-id)))
+                                                                     (popup-menu (iup:menu 
                                                                                   (iup:menu-item
-                                                                                   "Rerun"
-                                                                                   #:action
-                                                                                   (lambda (obj)(print "Rerun")))
+                                                                                   "Run"
+                                                                                   (iup:menu              
+                                                                                    (iup:menu-item
+                                                                                     "Rerun"
+                                                                                     #:action
+                                                                                     (lambda (obj)(print "Rerun")))))
                                                                                   (iup:menu-item
-                                                                                   "Start xterm"
-                                                                                   #:action
-                                                                                   (let* ((toolpath (car (argv)))
-                                                                                          (buttndat (hash-table-ref (d:alldat-buttondat *alldat*) button-key))
-                                                                                          (test-id  (db:test-get-id (vector-ref buttndat 3)))
-                                                                                          (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
-                                                                                          (cmd  (conc toolpath " -xterm " run-id "," test-id "&")))
-                                                                                     (system cmd))
-                                                                                   ;; (lambda (x)
-                                                                                   ;;            (if (directory-exists? rundir)
-                                                                                   ;;                (let ((shell (if (get-environment-variable "SHELL") 
-                                                                                   ;;                                 (conc "-e " (get-environment-variable "SHELL"))
-                                                                                   ;;                                 "")))
-                                                                                   ;;                  (common:without-vars
-                                                                                   ;;                   (conc "cd " rundir 
-                                                                                   ;;                         ";mt_xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")
-                                                                                   ;;                   "MT_.*"))
-                                                                                   ;;                (message-window  (conc "Directory " rundir " not found"))))
-                                                                                   ))))))
-                                                               (iup:show popup-menu
-                                                                         #:x 'mouse
-                                                                         #:y 'mouse
-                                                                         #:modal? "NO")
-                                                               (print "got here")))
+                                                                                   "Test"
+                                                                                   (iup:menu 
+                                                                                    (iup:menu-item
+                                                                                     "Start xterm"
+                                                                                     #:action
+                                                                                     (lambda (obj)
+                                                                                       (let* ((cmd (conc toolpath " -xterm " run-id "," test-id "&")))
+                                                                                         (system cmd))))
+                                                                                    (iup:menu-item
+                                                                                     "Edit testconfig"
+                                                                                     #:action
+                                                                                     (lambda (obj)
+                                                                                       (let* ((all-tests (tests:get-all))
+                                                                                              (editor (or (get-environment-variable "VISUAL")
+                                                                                                          (get-environment-variable "EDITOR") "gvim"))
+                                                                                              (tconfig (conc (hash-table-ref all-tests test-name) "/testconfig"))
+                                                                                              (cmd (conc (if (string-search "\\b(vim?|nano|pico)\\b")
+                                                                                                             (conc "xterm -e " editor)
+                                                                                                             editor)
+                                                                                                         " " tconfig)))
+                                                                                         (system cmd))))
+                                                                                    )))))
+                                                                (iup:show popup-menu
+                                                                          #:x 'mouse
+                                                                          #:y 'mouse
+                                                                          #:modal? "NO")
+                                                                (print "got here")))
                                                          (if (eq? pressed 0)
                                                              (let* ((toolpath (car (argv)))
                                                                     (buttndat (hash-table-ref (d:alldat-buttondat *alldat*) button-key))
