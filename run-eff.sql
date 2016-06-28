@@ -1,0 +1,1 @@
+select run_id,time(max(event_time+run_duration)-min(event_time),'unixepoch') AS wall_runtime,time(max(run_duration),'unixepoch') AS max_duration,testname from tests where item_path != '' group by run_id;
