@@ -51,6 +51,7 @@ Usage: dashboard [options]
   -h                   : this help
   -server host:port    : connect to host:port instead of db access
   -test run-id,test-id : control test identified by testid
+  -xterm run-id,test-id : Start a new xterm with specified run-id and test-id
   -guimonitor          : control panel for runs
 
 Misc
@@ -63,6 +64,7 @@ Misc
 		 (list  "-rows"
 			"-run"
 			"-test"
+                        "-xterm"
 			"-debug"
 			"-host" 
 			"-transport"
@@ -1753,16 +1755,69 @@ Misc
 	       (butn       (iup:button "" ;; button-key 
 				       #:size "60x15" 
 				       #:expand "HORIZONTAL"
-				       #:fontsize "10" 
-				       #:action (lambda (x)
-						  (let* ((toolpath (car (argv)))
-							 (buttndat (hash-table-ref (d:alldat-buttondat *alldat*) button-key))
-							 (test-id  (db:test-get-id (vector-ref buttndat 3)))
-							 (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
-							 (cmd  (conc toolpath " -test " run-id "," test-id "&")))
-					;(print "Launching " cmd)
-						    (system cmd))))))
-	  (hash-table-set! (d:alldat-buttondat *alldat*) button-key (vector 0 "100 100 100" button-key #f #f)) 
+				       #:fontsize "10"
+				       ;; :action (lambda (x)
+				       ;; 	  (let* ((toolpath (car (argv)))
+				       ;; 		 (buttndat (hash-table-ref (d:alldat-buttondat *alldat*) button-key))
+				       ;; 		 (test-id  (db:test-get-id (vector-ref buttndat 3)))
+				       ;; 		 (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
+				       ;; 		 (cmd  (conc toolpath " -test " run-id "," test-id "&")))
+				       ;; ;(print "Launching " cmd)
+				       ;; 	    (system cmd)))
+                                       #:button-cb (lambda (obj a pressed x y btn . rem)
+                                                     (print "pressed= " pressed " x= " x " y= " y " rem=" rem " btn=" btn " string? " (string? btn))
+                                                     (if  (substring-index "3" btn)
+                                                          (if (eq? pressed 1)
+                                                              (let* ((toolpath (car (argv)))
+                                                                     (buttndat (hash-table-ref (d:alldat-buttondat *alldat*) button-key))
+                                                                     (test-id  (db:test-get-id (vector-ref buttndat 3)))
+                                                                     (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
+                                                                     (test-name (db:test-get-testname (rmt:get-test-info-by-id run-id test-id)))
+                                                                     (popup-menu (iup:menu 
+                                                                                  (iup:menu-item
+                                                                                   "Run"
+                                                                                   (iup:menu              
+                                                                                    (iup:menu-item
+                                                                                     "Rerun"
+                                                                                     #:action
+                                                                                     (lambda (obj)(print "Rerun")))))
+                                                                                  (iup:menu-item
+                                                                                   "Test"
+                                                                                   (iup:menu 
+                                                                                    (iup:menu-item
+                                                                                     "Start xterm"
+                                                                                     #:action
+                                                                                     (lambda (obj)
+                                                                                       (let* ((cmd (conc toolpath " -xterm " run-id "," test-id "&")))
+                                                                                         (system cmd))))
+                                                                                    (iup:menu-item
+                                                                                     "Edit testconfig"
+                                                                                     #:action
+                                                                                     (lambda (obj)
+                                                                                       (let* ((all-tests (tests:get-all))
+                                                                                              (editor (or (get-environment-variable "VISUAL")
+                                                                                                          (get-environment-variable "EDITOR") "gvim"))
+                                                                                              (tconfig (conc (hash-table-ref all-tests test-name) "/testconfig"))
+                                                                                              (cmd (conc (if (string-search "\\b(vim?|nano|pico)\\b")
+                                                                                                             (conc "xterm -e " editor)
+                                                                                                             editor)
+                                                                                                         " " tconfig)))
+                                                                                         (system cmd))))
+                                                                                    )))))
+                                                                (iup:show popup-menu
+                                                                          #:x 'mouse
+                                                                          #:y 'mouse
+                                                                          #:modal? "NO")
+                                                                (print "got here")))
+                                                         (if (eq? pressed 0)
+                                                             (let* ((toolpath (car (argv)))
+                                                                    (buttndat (hash-table-ref (d:alldat-buttondat *alldat*) button-key))
+                                                                    (test-id  (db:test-get-id (vector-ref buttndat 3)))
+                                                                    (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
+                                                                    (cmd  (conc toolpath " -test " run-id "," test-id "&")))
+                                                               (system cmd)))
+                                                         )))))
+          (hash-table-set! (d:alldat-buttondat *alldat*) button-key (vector 0 "100 100 100" button-key #f #f)) 
 	  (vector-set! testvec testnum butn)
 	  (loop runnum (+ testnum 1) testvec (cons butn res))))))
     ;; now assemble the hdrlst and bdylst and kick off the dialog
@@ -1932,6 +1987,20 @@ Misc
 	    (examine-test run-id test-id)
 	    (begin
 	      (debug:print 3 *default-log-port* "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
+	      (exit 1)))))
+     ((args:get-arg "-xterm") ;; run-id,test-id
+      (let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-xterm") ","))))
+			(if (> (length d) 1)
+			    d
+			    (list #f #f))))
+	     (run-id  (car dat))
+	     (test-id (cadr dat)))
+	(if (and (number? run-id)
+		 (number? test-id)
+		 (>= test-id 0))
+	    (dcommon:examine-xterm run-id test-id)
+	    (begin
+	      (debug:print 3 "INFO: tried to open xterm with invalid run-id,test-id. " (args:get-arg "-xterm"))
 	      (exit 1)))))
      ((args:get-arg "-guimonitor")
       (gui-monitor (d:alldat-dblocal data)))
