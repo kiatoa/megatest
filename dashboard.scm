@@ -1891,11 +1891,19 @@ Misc
 								       " -runname " runname
 								       " -testpatt " testpatt
 								       " -preclean -clean-cache")
-								 ;; (print "Rerun")
 								 )))))
 							   (iup:menu-item
 							    "Test"
 							    (iup:menu 
+							     (iup:menu-item
+							      (conc "Rerun " test-name)
+							      #:action
+							      (lambda (obj)
+								(common:run-a-command
+								 (conc "megatest -run -target " target
+								       " -runname " runname
+								       " -testpatt " test-name
+								       " -preclean -clean-cache"))))
 							     (iup:menu-item
 							      "Start xterm"
 							      #:action
