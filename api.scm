@@ -168,6 +168,7 @@
 	    ;; TASKS
 	    ((tasks-add)                 (apply tasks:add dbstruct params))   
 	    ((tasks-set-state-given-param-key) (apply tasks:set-state-given-param-key dbstruct params))
+	    ((tasks-get-last)            (apply tasks:get-last dbstruct params))
 
 	    ;; ARCHIVES
 	    ;; ((archive-get-allocations)   

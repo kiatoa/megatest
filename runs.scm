@@ -226,12 +226,12 @@
 			(debug:print 0 *default-log-port* "WARNING: You do not have a run config file: " runconfigf)
 			#f)))
 
+    (if (not test-patts) ;; first time in - adjust testpatt
+	(set! test-patts (common:args-get-testpatt runconf)))
+
     ;; register this run in monitor.db
     (rmt:tasks-add "run-tests" user target runname test-patts task-key) ;; params)
     (rmt:tasks-set-state-given-param-key task-key "running")
-
-    (if (not test-patts) ;; first time in - adjust testpatt
-	(set! test-patts (common:args-get-testpatt runconf)))
 
     ;; Now generate all the tests lists
     (set! all-tests-registry (tests:get-all))   ;; hash of testname => path-to-test

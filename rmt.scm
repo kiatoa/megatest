@@ -698,6 +698,9 @@
 (define (rmt:tasks-set-state-given-param-key param-key new-state)
   (rmt:send-receive 'tasks-set-state-given-param-key #f (list  param-key new-state)))
 
+(define (rmt:tasks-get-last target runname)
+  (rmt:send-receive 'tasks-get-last #f (list target runname)))
+
 ;;======================================================================
 ;; A R C H I V E S
 ;;======================================================================

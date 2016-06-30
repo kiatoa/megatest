@@ -577,12 +577,8 @@
 			      lbl))
 	       (store-button store-label)
 	       (command-proc (lambda (command-text-box)
-			       (let* ((cmd     (iup:attribute command-text-box "VALUE"))
-				      (fullcmd (conc (dtests:get-pre-command)
-						     cmd 
-						     (dtests:get-post-command))))
-				 (debug:print-info 02 *default-log-port* "Running command: " fullcmd)
-				 (common:without-vars fullcmd "MT_.*"))))
+			       (let* ((cmd     (iup:attribute command-text-box "VALUE")))
+				 (common:run-a-command cmd))))
 	       (command-text-box (iup:textbox
 				  #:expand "HORIZONTAL"
 				  #:font "Courier New, -10"
