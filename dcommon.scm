@@ -13,6 +13,7 @@
 (require-library iup)
 (import (prefix iup iup:))
 (use canvas-draw)
+(import canvas-draw-iup)
 (use regex defstruct)
 
 (declare (unit dcommon))
@@ -902,6 +903,214 @@
 		;; leave a column of space to the right to list items
 		(loop (car tal)
 		      (cdr tal))))))))
+
+;;======================================================================
+;; RUN CONTROLS
+;;======================================================================
+
+(define (dcommon:command-execution-control data)
+  ;; The command line display/exectution control
+  (iup:frame
+   #:title "Command to be exectuted"
+   (iup:hbox
+    (iup:label "Run on" #:size "40x")
+    (iup:radio 
+     (iup:hbox
+      (iup:toggle "Local" #:size "40x")
+      (iup:toggle "Server" #:size "40x")))
+    (let ((tb (iup:textbox 
+	       #:value "megatest "
+	       #:expand "HORIZONTAL"
+	       #:readonly "YES"
+	       #:font "Courier New, -12"
+	       )))
+      (dboard:data-set-command-tb! data tb)
+      tb)
+    (iup:button "Execute" #:size "50x"
+		#:action (lambda (obj)
+			   (let ((cmd (conc "xterm -geometry 180x20 -e \""
+					    (iup:attribute (dboard:data-get-command-tb data) "VALUE")
+					    ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+			     (system cmd)))))))
+
+(define (dcommon:command-action-selector data)
+  (iup:frame
+   #:title "Set the action to take"
+   (iup:hbox
+    ;; (iup:label "Command to run" #:expand "HORIZONTAL" #:size "70x" #:alignment "LEFT:ACENTER")
+    (let* ((cmds-list '("run" "remove-runs" "set-state-status" "lock-runs" "unlock-runs"))
+	   (lb         (iup:listbox #:expand "HORIZONTAL"
+				    #:dropdown "YES"
+				    #:action (lambda (obj val index lbstate)
+					       ;; (print obj " " val " " index " " lbstate)
+					       (dboard:data-set-command! data val)
+					       (dashboard:update-run-command))))
+	   (default-cmd (car cmds-list)))
+      (iuplistbox-fill-list lb cmds-list selected-item: default-cmd)
+      (dboard:data-set-command! data default-cmd)
+      lb))))
+
+(define (dcommon:command-runname-selector alldat data)
+  (iup:frame
+   #:title "Runname"
+   (let* ((default-run-name (seconds->work-week/day (current-seconds)))
+	  (tb (iup:textbox #:expand "HORIZONTAL"
+			   #:action (lambda (obj val txt)
+				      ;; (print "obj: " obj " val: " val " unk: " unk)
+				      (dboard:data-set-run-name! data txt) ;; (iup:attribute obj "VALUE"))
+				      (dashboard:update-run-command))
+			   #:value (or default-run-name (dboard:data-get-run-name data))))
+	  (lb (iup:listbox #:expand "HORIZONTAL"
+			   #:dropdown "YES"
+			   #:action (lambda (obj val index lbstate)
+				      (if (not (equal? val ""))
+					  (begin
+					    (iup:attribute-set! tb "VALUE" val)
+					    (dboard:data-set-run-name! data val)
+					    (dashboard:update-run-command))))))
+	  (refresh-runs-list (lambda ()
+			       (let* ((target        (dboard:data-get-target-string data))
+				      (runs-for-targ (if (d:alldat-useserver alldat)
+							 (rmt:get-runs-by-patt (d:alldat-keys alldat) "%" target #f #f #f)
+							 (db:get-runs-by-patt (d:alldat-dblocal alldat) (d:alldat-keys alldat) "%" target #f #f #f)))
+				      (runs-header   (vector-ref runs-for-targ 0))
+				      (runs-dat      (vector-ref runs-for-targ 1))
+				      (run-names     (cons default-run-name 
+							   (map (lambda (x)
+								  (db:get-value-by-header x runs-header "runname"))
+								runs-dat))))
+				 ;; (iup:attribute-set! lb "REMOVEITEM" "ALL")
+				 (iuplistbox-fill-list lb run-names selected-item: default-run-name)))))
+     (set! updater-for-runs refresh-runs-list)
+     (refresh-runs-list)
+     (dboard:data-set-run-name! *data* default-run-name)
+     (iup:hbox
+      tb
+      lb))))
+
+(define (dcommon:command-testname-selector alldat data update-keyvals key-listboxes)
+  (iup:frame
+   #:title "SELECTORS"
+   (iup:vbox
+    ;; Text box for test patterns
+    (iup:frame
+     #:title "Test patterns (one per line)"
+     (let ((tb (iup:textbox #:action (lambda (val a b)
+				       (dboard:data-set-test-patts!
+					*data*
+					(dboard:lines->test-patt b))
+				       (dashboard:update-run-command))
+			    #:value (dboard:test-patt->lines
+				     (dboard:data-get-test-patts *data*))
+			    #:expand "YES"
+			    #:size "x50"
+			    #:multiline "YES")))
+       (set! test-patterns-textbox tb)
+       tb))
+    (iup:frame
+     #:title "Target"
+     ;; Target selectors
+     (apply iup:hbox
+	    (let* ((dat      (dashboard:update-target-selector key-listboxes action-proc: update-keyvals))
+		   (key-lb   (car dat))
+		   (combos   (cadr dat)))
+	      (set! key-listboxes key-lb)
+	      combos)))
+    (iup:hbox
+     ;; Text box for STATES
+     (iup:frame
+      #:title "States"
+      (dashboard:text-list-toggle-box 
+       ;; Move these definitions to common and find the other useages and replace!
+       (map cadr *common:std-states*) ;; '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
+       (lambda (all)
+	 (dboard:data-set-states! *data* all)
+	 (dashboard:update-run-command))))
+     ;; Text box for STATES
+     (iup:frame
+      #:title "Statuses"
+      (dashboard:text-list-toggle-box 
+       (map cadr *common:std-statuses*) ;; '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
+       (lambda (all)
+	 (dboard:data-set-statuses! *data* all)
+	 (dashboard:update-run-command))))))))
+
+(define (dcommon:command-tests-tasks-canvas data test-records sorted-testnames tests-draw-state)
+  (iup:frame
+   #:title "Tests and Tasks"
+   (let* ((updater #f)
+	  (last-xadj 0)
+	  (last-yadj 0)
+	  (the-cnv   #f)
+	  (canvas-obj 
+	   (iup:canvas #:action (make-canvas-action
+				 (lambda (cnv xadj yadj)
+				   (if (not updater)
+				       (set! updater (lambda (xadj yadj)
+						       ;; (print "cnv: " cnv " xadj: " xadj " yadj: " yadj)
+						       (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames test-records)
+						       (set! last-xadj xadj)
+						       (set! last-yadj yadj))))
+				   (updater xadj yadj)
+				   (set! the-cnv cnv)
+				   ))
+		       ;; Following doesn't work 
+		       #:wheel-cb (lambda (obj step x y dir) ;; dir is 4 for up and 5 for down. I think.
+				    (let ((scalef (hash-table-ref tests-draw-state 'scalef)))
+				      (hash-table-set! tests-draw-state 'scalef (+ scalef
+										   (if (> step 0)
+										       (* scalef 0.01)
+										       (* scalef -0.01))))
+				      (if the-cnv
+					  (dashboard:draw-tests the-cnv last-xadj last-yadj tests-draw-state sorted-testnames test-records))
+				      ))
+		       ;; #:size "50x50"
+		       #:expand "YES"
+		       #:scrollbar "YES"
+		       #:posx "0.5"
+		       #:posy "0.5"
+		       #:button-cb (lambda (obj btn pressed x y status)
+				     ;; (print "obj: " obj ", pressed " pressed ", status " status)
+					; (print "canvas-origin: " (canvas-origin the-cnv))
+				     ;; (let-values (((xx yy)(canvas-origin the-cnv)))
+				     ;; (canvas-transform-set! the-cnv #f)
+				     ;; (print "canvas-origin: " xx " " yy " click at " x " " y))
+				     (let* ((tests-info     (hash-table-ref tests-draw-state 'tests-info))
+					    (selected-tests (hash-table-ref tests-draw-state 'selected-tests))
+					    (scalef         (hash-table-ref tests-draw-state 'scalef))
+					    (sizey          (hash-table-ref tests-draw-state 'sizey))
+					    (xoffset        (dcommon:get-xoffset tests-draw-state #f #f))
+					    (yoffset        (dcommon:get-yoffset tests-draw-state #f #f))
+					    (new-y          (- sizey y)))
+				       ;; (print "xoffset=" xoffset ", yoffset=" yoffset)
+				       ;; (print "\tx\ty\tllx\tlly\turx\tury")
+				       (for-each (lambda (test-name)
+						   (let* ((rec-coords (hash-table-ref tests-info test-name))
+							  (llx        (dcommon:x->canvas (list-ref rec-coords 0) scalef xoffset))
+							  (lly        (dcommon:y->canvas (list-ref rec-coords 1) scalef yoffset))
+							  (urx        (dcommon:x->canvas (list-ref rec-coords 2) scalef xoffset))
+							  (ury        (dcommon:y->canvas (list-ref rec-coords 3) scalef yoffset)))
+						     ;; (if (eq? pressed 1)
+						     ;;    (print "\tx=" x "\ty=" y "\tnew-y=" new-y "\tllx=" llx "\tlly=" lly "\turx=" urx "\tury=" ury "\t" test-name " "))
+						     (if (and (eq? pressed 1)
+							      (>= x llx)
+							      (>= new-y lly)
+							      (<= x urx)
+							      (<= new-y ury))
+							 (let ((patterns (string-split (iup:attribute test-patterns-textbox "VALUE"))))
+							   (let* ((selected     (not (member test-name patterns)))
+								  (newpatt-list (if selected
+										    (cons test-name patterns)
+										    (delete test-name patterns)))
+								  (newpatt      (string-intersperse newpatt-list "\n")))
+							     (iup:attribute-set! obj "REDRAW" "ALL")
+							     (hash-table-set! selected-tests test-name selected)
+							     (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
+							     (dboard:data-set-test-patts! *data* (dboard:lines->test-patt newpatt))
+							     (dashboard:update-run-command)
+							     (if updater (updater last-xadj last-yadj)))))))
+						 (hash-table-keys tests-info)))))))
+     canvas-obj)))
 
 ;;======================================================================
 ;;  S T E P S
