@@ -550,6 +550,17 @@
 ;; NOTE: It might be good to add one more layer of checking to ensure
 ;;       that no task gets run in parallel.
 
+;; id INTEGER PRIMARY KEY,
+;; action TEXT DEFAULT '',
+;; owner TEXT,
+;; state TEXT DEFAULT 'new',
+;; target TEXT DEFAULT '',
+;; name TEXT DEFAULT '',
+;; testpatt TEXT DEFAULT '',
+;; keylock TEXT,
+;; params TEXT,
+;; creation_time TIMESTAMP DEFAULT (strftime('%s','now')),
+;; execution_time TIMESTAMP);
 
 
 ;; register a task
@@ -646,6 +657,23 @@
 	      ;;   state IN " statesstr " AND 
 	      ;;   action IN " actionsstr 
 	      " ORDER BY creation_time DESC;"))
+       res))))
+
+(define (tasks:get-last dbstruct target runname)
+  (let ((res #f))
+    (db:with-db
+     dbstruct #f #f
+     (lambda (db)
+       (sqlite3:for-each-row
+	(lambda (id . rem)
+	  (set! res (apply vector id rem)))
+	db
+	(conc "SELECT id,action,owner,state,target,name,testpatt,keylock,params,creation_time,execution_time 
+                  FROM tasks_queue 
+ 	       WHERE  
+	        target = ? AND name =?
+	       ORDER BY creation_time DESC LIMIT 1;")
+	target runname)
        res))))
 
 ;; remove tasks given by a string of numbers comma separated

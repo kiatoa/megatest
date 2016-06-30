@@ -919,6 +919,13 @@
      (lambda (var val)
        (setenv var val)))
     vars))
+
+(define (common:run-a-command cmd)
+  (let ((fullcmd  (conc (dtests:get-pre-command)
+			cmd 
+			(dtests:get-post-command))))
+    (debug:print-info 02 *default-log-port* "Running command: " fullcmd)
+    (common:without-vars fullcmd "MT_.*")))
 		  
 ;;======================================================================
 ;; T I M E   A N D   D A T E

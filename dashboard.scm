@@ -40,6 +40,7 @@
 (include "common_records.scm")
 (include "db_records.scm")
 (include "run_records.scm")
+(include "task_records.scm")
 (include "megatest-fossil-hash.scm")
 
 (define help (conc 
@@ -1843,76 +1844,96 @@ Misc
 	(loop (+ runnum 1) 0 (make-vector ntests) '()))
        (else
 	(let* ((button-key (mkstr runnum testnum))
-	       (butn       (iup:button "" ;; button-key 
-				       #:size "60x15" 
-				       #:expand "HORIZONTAL"
-				       #:fontsize "10"
-				       ;; :action (lambda (x)
-				       ;; 	  (let* ((toolpath (car (argv)))
-				       ;; 		 (buttndat (hash-table-ref (d:alldat-buttondat *alldat*) button-key))
-				       ;; 		 (test-id  (db:test-get-id (vector-ref buttndat 3)))
-				       ;; 		 (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
-				       ;; 		 (cmd  (conc toolpath " -test " run-id "," test-id "&")))
-				       ;; ;(print "Launching " cmd)
-				       ;; 	    (system cmd)))
-                                       #:button-cb (lambda (obj a pressed x y btn . rem)
-                                                     ;; (print "pressed= " pressed " x= " x " y= " y " rem=" rem " btn=" btn " string? " (string? btn))
-                                                     (if  (substring-index "3" btn)
-                                                          (if (eq? pressed 1)
-                                                              (let* ((toolpath (car (argv)))
-                                                                     (buttndat (hash-table-ref (d:alldat-buttondat *alldat*) button-key))
-                                                                     (test-id  (db:test-get-id (vector-ref buttndat 3)))
-                                                                     (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
-                                                                     (test-name (db:test-get-testname (rmt:get-test-info-by-id run-id test-id)))
-                                                                     (popup-menu (iup:menu 
-                                                                                  (iup:menu-item
-                                                                                   "Run"
-                                                                                   (iup:menu              
-                                                                                    (iup:menu-item
-                                                                                     "Rerun"
-                                                                                     #:action
-                                                                                     (lambda (obj)(print "Rerun")))))
-                                                                                  (iup:menu-item
-                                                                                   "Test"
-                                                                                   (iup:menu 
-                                                                                    (iup:menu-item
-                                                                                     "Start xterm"
-                                                                                     #:action
-                                                                                     (lambda (obj)
-                                                                                       (let* ((cmd (conc toolpath " -xterm " run-id "," test-id "&")))
-                                                                                         (system cmd))))
-                                                                                    (iup:menu-item
-                                                                                     "Edit testconfig"
-                                                                                     #:action
-                                                                                     (lambda (obj)
-                                                                                       (let* ((all-tests (tests:get-all))
-											      (editor-rx (or (configf:lookup *configdat* "setup" "editor-regex") 
-													     "\\b(vim?|nano|pico)\\b"))
-                                                                                              (editor (or (configf:lookup *configdat* "setup" "editor")
-													  (get-environment-variable "VISUAL")
-                                                                                                          (get-environment-variable "EDITOR") "gvim"))
-                                                                                              (tconfig (conc (hash-table-ref all-tests test-name) "/testconfig"))
-                                                                                              (cmd (conc (if (string-search editor-rx editor)
-                                                                                                             (conc "xterm -e " editor)
-                                                                                                             editor)
-                                                                                                         " " tconfig)))
-                                                                                         (system cmd))))
-                                                                                    )))))
-                                                                (iup:show popup-menu
-                                                                          #:x 'mouse
-                                                                          #:y 'mouse
-                                                                          #:modal? "NO")
-                                                                ;; (print "got here")
-								))
-                                                         (if (eq? pressed 0)
-                                                             (let* ((toolpath (car (argv)))
-                                                                    (buttndat (hash-table-ref (d:alldat-buttondat *alldat*) button-key))
-                                                                    (test-id  (db:test-get-id (vector-ref buttndat 3)))
-                                                                    (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
-                                                                    (cmd  (conc toolpath " -test " run-id "," test-id "&")))
-                                                               (system cmd)))
-                                                         )))))
-          (hash-table-set! (d:alldat-buttondat *alldat*) button-key (vector 0 "100 100 100" button-key #f #f)) 
+	       (butn       (iup:button
+			    "" ;; button-key 
+			    #:size "60x15" 
+			    #:expand "HORIZONTAL"
+			    #:fontsize "10"
+			    ;; :action (lambda (x)
+			    ;; 	  (let* ((toolpath (car (argv)))
+			    ;; 		 (buttndat (hash-table-ref (d:alldat-buttondat *alldat*) button-key))
+			    ;; 		 (test-id  (db:test-get-id (vector-ref buttndat 3)))
+			    ;; 		 (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
+			    ;; 		 (cmd  (conc toolpath " -test " run-id "," test-id "&")))
+			    ;; ;(print "Launching " cmd)
+			    ;; 	    (system cmd)))
+			    #:button-cb
+			    (lambda (obj a pressed x y btn . rem)
+			      ;; (print "pressed= " pressed " x= " x " y= " y " rem=" rem " btn=" btn " string? " (string? btn))
+			      (if  (substring-index "3" btn)
+				   (if (eq? pressed 1)
+				       (let* ((toolpath (car (argv)))
+					      (buttndat (hash-table-ref (d:alldat-buttondat *alldat*) button-key))
+					      (test-id  (db:test-get-id (vector-ref buttndat 3)))
+					      (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
+					      (run-info (rmt:get-run-info run-id))
+					      (target   (rmt:get-target run-id))
+					      (runname  (db:get-value-by-header (db:get-rows run-info)
+										(db:get-header run-info) "runname"))
+					      (test-name (db:test-get-testname (rmt:get-test-info-by-id run-id test-id)))
+					      (testpatt  (let ((tlast (rmt:tasks-get-last target runname)))
+							   (if tlast
+							       (let ((tpatt (tasks:task-get-testpatt tlast)))
+								 (if (member tpatt '("0" 0)) ;; known bad historical value - remove in 2017
+								     "%"
+								     tpatt))
+							       "%")))
+					      (popup-menu (iup:menu 
+							   (iup:menu-item
+							    "Run"
+							    (iup:menu              
+							     (iup:menu-item
+							      (conc "Rerun " testpatt)
+							      #:action
+							      (lambda (obj)
+								(common:run-a-command
+								 (conc "megatest -run -target " target
+								       " -runname " runname
+								       " -testpatt " testpatt
+								       " -preclean -clean-cache")
+								 ;; (print "Rerun")
+								 )))))
+							   (iup:menu-item
+							    "Test"
+							    (iup:menu 
+							     (iup:menu-item
+							      "Start xterm"
+							      #:action
+							      (lambda (obj)
+								(let* ((cmd (conc toolpath " -xterm " run-id "," test-id "&")))
+								  (system cmd))))
+							     (iup:menu-item
+							      "Edit testconfig"
+							      #:action
+							      (lambda (obj)
+								(let* ((all-tests (tests:get-all))
+								       (editor-rx (or (configf:lookup *configdat* "setup" "editor-regex") 
+										      "\\b(vim?|nano|pico)\\b"))
+								       (editor (or (configf:lookup *configdat* "setup" "editor")
+										   (get-environment-variable "VISUAL")
+										   (get-environment-variable "EDITOR") "vi"))
+								       (tconfig (conc (hash-table-ref all-tests test-name) "/testconfig"))
+								       (cmd (conc (if (string-search editor-rx editor)
+										      (conc "xterm -e " editor)
+										      editor)
+										  " " tconfig " &")))
+								  (system cmd))))
+							     )))))
+					 (iup:show popup-menu
+						   #:x 'mouse
+						   #:y 'mouse
+						   #:modal? "NO")
+					 ;; (print "got here")
+					 ))
+				   (if (eq? pressed 0)
+				       (let* ((toolpath (car (argv)))
+					      (buttndat (hash-table-ref (d:alldat-buttondat *alldat*) button-key))
+					      (test-id  (db:test-get-id (vector-ref buttndat 3)))
+					      (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
+					      (cmd  (conc toolpath " -test " run-id "," test-id "&")))
+					 (system cmd)))
+				   )))))
+	  (hash-table-set! (d:alldat-buttondat *alldat*) button-key (vector 0 "100 100 100" button-key #f #f)) 
 	  (vector-set! testvec testnum butn)
 	  (loop runnum (+ testnum 1) testvec (cons butn res))))))
     ;; now assemble the hdrlst and bdylst and kick off the dialog
