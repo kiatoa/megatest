@@ -66,6 +66,7 @@
     (if (list? targ)(string-intersperse targ "/") "no-target-specified")))
 (define (dboard:data-get-run-name      vec)    (vector-ref vec 19))
 (define (dboard:data-get-runs-listbox  vec)    (vector-ref vec 20))
+(define (dboard:data-get-updater-for-runs vec) (vector-ref vec 21))
 
 (defstruct d:data runs tests runs-matrix tests-tree run-keys
   curr-test-ids updaters path-run-ids curr-run-id runs-tree test-patts
@@ -95,6 +96,7 @@
 (define (dboard:data-set-target!        vec val)(vector-set! vec 18 val))
 (define (dboard:data-set-run-name!      vec val)(vector-set! vec 19 val))
 (define (dboard:data-set-runs-listbox!  vec val)(vector-set! vec 20 val))
+(define (dboard:data-set-updater-for-runs! vec val)(vector-set! vec 21 val))
 
 (dboard:data-set-run-keys! *data* (make-hash-table))
 
@@ -944,7 +946,7 @@
 				    #:action (lambda (obj val index lbstate)
 					       ;; (print obj " " val " " index " " lbstate)
 					       (dboard:data-set-command! data val)
-					       (dashboard:update-run-command))))
+					       (dashboard:update-run-command data))))
 	   (default-cmd (car cmds-list)))
       (iuplistbox-fill-list lb cmds-list selected-item: default-cmd)
       (dboard:data-set-command! data default-cmd)
@@ -958,7 +960,7 @@
 			   #:action (lambda (obj val txt)
 				      ;; (print "obj: " obj " val: " val " unk: " unk)
 				      (dboard:data-set-run-name! data txt) ;; (iup:attribute obj "VALUE"))
-				      (dashboard:update-run-command))
+				      (dashboard:update-run-command data))
 			   #:value (or default-run-name (dboard:data-get-run-name data))))
 	  (lb (iup:listbox #:expand "HORIZONTAL"
 			   #:dropdown "YES"
@@ -967,7 +969,7 @@
 					  (begin
 					    (iup:attribute-set! tb "VALUE" val)
 					    (dboard:data-set-run-name! data val)
-					    (dashboard:update-run-command))))))
+					    (dashboard:update-run-command data))))))
 	  (refresh-runs-list (lambda ()
 			       (let* ((target        (dboard:data-get-target-string data))
 				      (runs-for-targ (if (d:alldat-useserver alldat)
@@ -981,9 +983,9 @@
 								runs-dat))))
 				 ;; (iup:attribute-set! lb "REMOVEITEM" "ALL")
 				 (iuplistbox-fill-list lb run-names selected-item: default-run-name)))))
-     (set! updater-for-runs refresh-runs-list)
+     (dboard:data-set-updater-for-runs! data refresh-runs-list)
      (refresh-runs-list)
-     (dboard:data-set-run-name! *data* default-run-name)
+     (dboard:data-set-run-name! data default-run-name)
      (iup:hbox
       tb
       lb))))
@@ -999,7 +1001,7 @@
 				       (dboard:data-set-test-patts!
 					*data*
 					(dboard:lines->test-patt b))
-				       (dashboard:update-run-command))
+				       (dashboard:update-run-command data))
 			    #:value (dboard:test-patt->lines
 				     (dboard:data-get-test-patts *data*))
 			    #:expand "YES"
@@ -1025,7 +1027,7 @@
        (map cadr *common:std-states*) ;; '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
        (lambda (all)
 	 (dboard:data-set-states! *data* all)
-	 (dashboard:update-run-command))))
+	 (dashboard:update-run-command data))))
      ;; Text box for STATES
      (iup:frame
       #:title "Statuses"
@@ -1033,7 +1035,7 @@
        (map cadr *common:std-statuses*) ;; '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
        (lambda (all)
 	 (dboard:data-set-statuses! *data* all)
-	 (dashboard:update-run-command))))))))
+	 (dashboard:update-run-command data))))))))
 
 (define (dcommon:command-tests-tasks-canvas data test-records sorted-testnames tests-draw-state)
   (iup:frame
@@ -1106,8 +1108,8 @@
 							     (iup:attribute-set! obj "REDRAW" "ALL")
 							     (hash-table-set! selected-tests test-name selected)
 							     (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
-							     (dboard:data-set-test-patts! *data* (dboard:lines->test-patt newpatt))
-							     (dashboard:update-run-command)
+							     (dboard:data-set-test-patts! data (dboard:lines->test-patt newpatt))
+							     (dashboard:update-run-command data)
 							     (if updater (updater last-xadj last-yadj)))))))
 						 (hash-table-keys tests-info)))))))
      canvas-obj)))

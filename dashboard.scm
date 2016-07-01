@@ -809,16 +809,16 @@ Misc
 
 ;; Extract the various bits of data from *data* and create the command line equivalent that will be displayed
 ;;
-(define (dashboard:update-run-command)
-  (let* ((cmd-tb       (dboard:data-get-command-tb *data*))
-	 (cmd          (dboard:data-get-command    *data*))
-	 (test-patt    (let ((tp (dboard:data-get-test-patts *data*)))
+(define (dashboard:update-run-command data)
+  (let* ((cmd-tb       (dboard:data-get-command-tb data))
+	 (cmd          (dboard:data-get-command    data))
+	 (test-patt    (let ((tp (dboard:data-get-test-patts data)))
 			 (if (equal? tp "") "%" tp)))
-	 (states       (dboard:data-get-states     *data*))
-	 (statuses     (dboard:data-get-statuses   *data*))
-	 (target       (let ((targ-list (dboard:data-get-target     *data*)))
+	 (states       (dboard:data-get-states     data))
+	 (statuses     (dboard:data-get-statuses   data))
+	 (target       (let ((targ-list (dboard:data-get-target     data)))
 			 (if targ-list (string-intersperse targ-list "/") "no-target-selected")))
-	 (run-name     (dboard:data-get-run-name   *data*))
+	 (run-name     (dboard:data-get-run-name   data))
 	 (states-str   (if (or (not states)
 			       (null? states))
 			   ""
@@ -881,8 +881,9 @@ Misc
 ;; A gui for launching tests
 ;;
 
-(define (dashboard:run-controls)
-  (let* ((targets       (make-hash-table))
+(define (dashboard:run-controls alldat)
+  (let* ((data          (make-vector 25 #f))
+	 (targets       (make-hash-table))
 	 (test-records  (make-hash-table))
 	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests *toppath* '()))
 	 (test-names    (hash-table-keys all-tests-registry))
@@ -891,18 +892,19 @@ Misc
 	 (cmdln         "")
 	 (runlogs       (make-hash-table))
 	 (key-listboxes #f)
-	 (updater-for-runs #f)
+	 ;; (updater-for-runs #f)
 	 (update-keyvals (lambda ()
 			   (let ((targ (map (lambda (x)
 					      (iup:attribute x "VALUE"))
 					    (car (dashboard:update-target-selector key-listboxes))))
-				 (curr-runname (dboard:data-get-run-name *data*)))
-			     (dboard:data-set-target! *data* targ)
-			     (if updater-for-runs (updater-for-runs))
-			     (if (or (not (equal? curr-runname (dboard:data-get-run-name *data*)))
-				     (equal? (dboard:data-get-run-name *data*) ""))
-				 (dboard:data-set-run-name! *data* curr-runname))
-			     (dashboard:update-run-command))))
+				 (curr-runname (dboard:data-get-run-name data)))
+			     (dboard:data-set-target! data targ)
+			     (if (dboard:data-get-updater-for-runs data)
+				 ((dboard:data-get-updater-for-runs data)))
+			     (if (or (not (equal? curr-runname (dboard:data-get-run-name data)))
+				     (equal? (dboard:data-get-run-name data) ""))
+				 (dboard:data-set-run-name! data curr-runname))
+			     (dashboard:update-run-command data))))
 	 (tests-draw-state (make-hash-table)) ;; use for keeping state of the test canvas
 	 (test-patterns-textbox  #f))
     (hash-table-set! tests-draw-state 'first-time #t)
@@ -912,276 +914,31 @@ Misc
     
     ;; refer to (d:alldat-keys *alldat*), (d:alldat-dbkeys *alldat*) for keys
     (iup:vbox
-     (dcommon:command-execution-control *data*)
+     (dcommon:command-execution-control data)
      (iup:split
-      #:orientation "HORIZONTAL"
-      
-      (iup:split
-       #:value 300
+      #:orientation "VERTICAL" ;; "HORIZONTAL"
+      #:value 300
+;; 
+;;       (iup:split
+;;        #:value 300
 
        ;; Target, testpatt, state and status input boxes
        ;;
        (iup:vbox
 	;; Command to run, placed over the top of the canvas
-	(dcommon:command-action-selector *data*)
-	(dcommon:command-runname-selector *alldat* *data*)
-	(dcommon:command-testname-selector *alldat* *data* update-keyvals key-listboxes))
+	(dcommon:command-action-selector data)
+	(dcommon:command-runname-selector alldat data)
+	(dcommon:command-testname-selector alldat data update-keyvals key-listboxes))
        
-       (dcommon:command-tests-tasks-canvas *data* test-records sorted-testnames tests-draw-state))
+       (dcommon:command-tests-tasks-canvas data test-records sorted-testnames tests-draw-state))
        
-      (iup:frame
-       #:title "Logs" ;; To be replaced with tabs
-       (let ((logs-tb (iup:textbox #:expand "YES"
-				   #:multiline "YES")))
-	 (dboard:data-set-logs-textbox! *data* logs-tb)
-	 logs-tb))))))
-;; 
-;; (define (dashboard:run-controls)
-;;   (let* ((targets       (make-hash-table))
-;; 	 (test-records  (make-hash-table))
-;; 	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests *toppath* '()))
-;; 	 (test-names    (hash-table-keys all-tests-registry))
-;; 	 (sorted-testnames #f)
-;; 	 (action        "-run")
-;; 	 (cmdln         "")
-;; 	 (runlogs       (make-hash-table))
-;; 	 (key-listboxes #f)
-;; 	 (updater-for-runs #f)
-;; 	 (update-keyvals (lambda ()
-;; 			   (let ((targ (map (lambda (x)
-;; 					      (iup:attribute x "VALUE"))
-;; 					    (car (dashboard:update-target-selector key-listboxes))))
-;; 				 (curr-runname (dboard:data-get-run-name *data*)))
-;; 			     (dboard:data-set-target! *data* targ)
-;; 			     (if updater-for-runs (updater-for-runs))
-;; 			     (if (or (not (equal? curr-runname (dboard:data-get-run-name *data*)))
-;; 				     (equal? (dboard:data-get-run-name *data*) ""))
-;; 				 (dboard:data-set-run-name! *data* curr-runname))
-;; 			     (dashboard:update-run-command))))
-;; 	 (tests-draw-state (make-hash-table)) ;; use for keeping state of the test canvas
-;; 	 (test-patterns-textbox  #f))
-;;     (hash-table-set! tests-draw-state 'first-time #t)
-;;     ;; (hash-table-set! tests-draw-state 'scalef 1)
-;;     (tests:get-full-data test-names test-records '() all-tests-registry)
-;;     (set! sorted-testnames (tests:sort-by-priority-and-waiton test-records))
-;;     
-;;     ;; refer to (d:alldat-keys *alldat*), (d:alldat-dbkeys *alldat*) for keys
-;;     (iup:vbox
-;;      ;; The command line display/exectution control
-;;      (iup:frame
-;;       #:title "Command to be exectuted"
-;;       (iup:hbox
-;;        (iup:label "Run on" #:size "40x")
-;;        (iup:radio 
-;; 	(iup:hbox
-;; 	 (iup:toggle "Local" #:size "40x")
-;; 	 (iup:toggle "Server" #:size "40x")))
-;;        (let ((tb (iup:textbox 
-;; 		  #:value "megatest "
-;; 		  #:expand "HORIZONTAL"
-;; 		  #:readonly "YES"
-;; 		  #:font "Courier New, -12"
-;; 		  )))
-;; 	 (dboard:data-set-command-tb! *data* tb)
-;; 	 tb)
-;;        (iup:button "Execute" #:size "50x"
-;; 		   #:action (lambda (obj)
-;; 			      (let ((cmd (conc "xterm -geometry 180x20 -e \""
-;; 					       (iup:attribute (dboard:data-get-command-tb *data*) "VALUE")
-;; 					       ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-;; 				(system cmd))))))
-;; 
-;;      (iup:split
-;;       #:orientation "HORIZONTAL"
-;;       
-;;       (iup:split
-;;        #:value 300
-;; 
-;;        ;; Target, testpatt, state and status input boxes
-;;        ;;
-;;        (iup:vbox
-;; 	;; Command to run
-;; 	(iup:frame
-;; 	 #:title "Set the action to take"
-;; 	 (iup:hbox
-;; 	  ;; (iup:label "Command to run" #:expand "HORIZONTAL" #:size "70x" #:alignment "LEFT:ACENTER")
-;; 	  (let* ((cmds-list '("run" "remove-runs" "set-state-status" "lock-runs" "unlock-runs"))
-;; 		 (lb         (iup:listbox #:expand "HORIZONTAL"
-;; 					  #:dropdown "YES"
-;; 					  #:action (lambda (obj val index lbstate)
-;; 						     ;; (print obj " " val " " index " " lbstate)
-;; 						     (dboard:data-set-command! *data* val)
-;; 						     (dashboard:update-run-command))))
-;; 		 (default-cmd (car cmds-list)))
-;; 	    (iuplistbox-fill-list lb cmds-list selected-item: default-cmd)
-;; 	    (dboard:data-set-command! *data* default-cmd)
-;; 	    lb)))
-;; 
-;; 	(iup:frame
-;; 	 #:title "Runname"
-;; 	 (let* ((default-run-name (seconds->work-week/day (current-seconds)))
-;; 		(tb (iup:textbox #:expand "HORIZONTAL"
-;; 				 #:action (lambda (obj val txt)
-;; 					    ;; (print "obj: " obj " val: " val " unk: " unk)
-;; 					    (dboard:data-set-run-name! *data* txt) ;; (iup:attribute obj "VALUE"))
-;; 					    (dashboard:update-run-command))
-;; 				 #:value (or default-run-name (dboard:data-get-run-name *data*))))
-;; 		(lb (iup:listbox #:expand "HORIZONTAL"
-;; 				 #:dropdown "YES"
-;; 				 #:action (lambda (obj val index lbstate)
-;; 					    (if (not (equal? val ""))
-;; 						(begin
-;; 						  (iup:attribute-set! tb "VALUE" val)
-;; 						  (dboard:data-set-run-name! *data* val)
-;; 						  (dashboard:update-run-command))))))
-;; 		(refresh-runs-list (lambda ()
-;; 				     (let* ((target        (dboard:data-get-target-string *data*))
-;; 					    (runs-for-targ (if (d:alldat-useserver *alldat*)
-;; 							       (rmt:get-runs-by-patt (d:alldat-keys *alldat*) "%" target #f #f #f)
-;; 							       (db:get-runs-by-patt (d:alldat-dblocal *alldat*) (d:alldat-keys *alldat*) "%" target #f #f #f)))
-;; 					    (runs-header   (vector-ref runs-for-targ 0))
-;; 					    (runs-dat      (vector-ref runs-for-targ 1))
-;; 					    (run-names     (cons default-run-name 
-;; 								 (map (lambda (x)
-;; 									(db:get-value-by-header x runs-header "runname"))
-;; 								      runs-dat))))
-;; 				       ;; (iup:attribute-set! lb "REMOVEITEM" "ALL")
-;; 				       (iuplistbox-fill-list lb run-names selected-item: default-run-name)))))
-;; 	   (set! updater-for-runs refresh-runs-list)
-;; 	   (refresh-runs-list)
-;; 	   (dboard:data-set-run-name! *data* default-run-name)
-;; 	   (iup:hbox
-;; 	    tb
-;; 	    lb)))
-;; 
-;; 	(iup:frame
-;; 	 #:title "SELECTORS"
-;; 	 (iup:vbox
-;; 	  ;; Text box for test patterns
-;; 	  (iup:frame
-;; 	   #:title "Test patterns (one per line)"
-;; 	   (let ((tb (iup:textbox #:action (lambda (val a b)
-;; 					     (dboard:data-set-test-patts!
-;; 					      *data*
-;; 					      (dboard:lines->test-patt b))
-;; 					     (dashboard:update-run-command))
-;; 				  #:value (dboard:test-patt->lines
-;; 					   (dboard:data-get-test-patts *data*))
-;; 				  #:expand "YES"
-;; 				  #:size "x50"
-;; 				  #:multiline "YES")))
-;; 	     (set! test-patterns-textbox tb)
-;; 	     tb))
-;; 	  (iup:frame
-;; 	   #:title "Target"
-;; 	   ;; Target selectors
-;; 	   (apply iup:hbox
-;; 		  (let* ((dat      (dashboard:update-target-selector key-listboxes action-proc: update-keyvals))
-;; 			 (key-lb   (car dat))
-;; 			 (combos   (cadr dat)))
-;; 		    (set! key-listboxes key-lb)
-;; 		    combos)))
-;; 	  (iup:hbox
-;; 	   ;; Text box for STATES
-;; 	   (iup:frame
-;; 	    #:title "States"
-;; 	    (dashboard:text-list-toggle-box 
-;; 	     ;; Move these definitions to common and find the other useages and replace!
-;; 	     (map cadr *common:std-states*) ;; '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
-;; 	     (lambda (all)
-;; 	       (dboard:data-set-states! *data* all)
-;; 	       (dashboard:update-run-command))))
-;; 	   ;; Text box for STATES
-;; 	   (iup:frame
-;; 	    #:title "Statuses"
-;; 	    (dashboard:text-list-toggle-box 
-;; 	     (map cadr *common:std-statuses*) ;; '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
-;; 	     (lambda (all)
-;; 	       (dboard:data-set-statuses! *data* all)
-;; 	       (dashboard:update-run-command))))))))
-;;        
-;;        (iup:frame
-;; 	#:title "Tests and Tasks"
-;; 	(let* ((updater #f)
-;; 	       (last-xadj 0)
-;; 	       (last-yadj 0)
-;; 	       (the-cnv   #f)
-;; 	       (canvas-obj 
-;;                 (iup:canvas #:action (make-canvas-action
-;; 				      (lambda (cnv xadj yadj)
-;; 					(if (not updater)
-;; 					    (set! updater (lambda (xadj yadj)
-;; 							    ;; (print "cnv: " cnv " xadj: " xadj " yadj: " yadj)
-;; 							    (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames test-records)
-;; 							    (set! last-xadj xadj)
-;; 							    (set! last-yadj yadj))))
-;; 					(updater xadj yadj)
-;; 					(set! the-cnv cnv)
-;; 					))
-;; 			    ;; Following doesn't work 
-;; 			    #:wheel-cb (lambda (obj step x y dir) ;; dir is 4 for up and 5 for down. I think.
-;; 					 (let ((scalef (hash-table-ref tests-draw-state 'scalef)))
-;; 					   (hash-table-set! tests-draw-state 'scalef (+ scalef
-;; 											(if (> step 0)
-;; 											    (* scalef 0.01)
-;; 											    (* scalef -0.01))))
-;; 					   (if the-cnv
-;; 					       (dashboard:draw-tests the-cnv last-xadj last-yadj tests-draw-state sorted-testnames test-records))
-;; 					   ))
-;; 			    ;; #:size "50x50"
-;; 			    #:expand "YES"
-;; 			    #:scrollbar "YES"
-;; 			    #:posx "0.5"
-;; 			    #:posy "0.5"
-;; 			    #:button-cb (lambda (obj btn pressed x y status)
-;; 					  ;; (print "obj: " obj ", pressed " pressed ", status " status)
-;; 					; (print "canvas-origin: " (canvas-origin the-cnv))
-;; 					  ;; (let-values (((xx yy)(canvas-origin the-cnv)))
-;; 					  ;; (canvas-transform-set! the-cnv #f)
-;; 					  ;; (print "canvas-origin: " xx " " yy " click at " x " " y))
-;; 					  (let* ((tests-info     (hash-table-ref tests-draw-state 'tests-info))
-;; 						 (selected-tests (hash-table-ref tests-draw-state 'selected-tests))
-;; 						 (scalef         (hash-table-ref tests-draw-state 'scalef))
-;; 						 (sizey          (hash-table-ref tests-draw-state 'sizey))
-;; 						 (xoffset        (dcommon:get-xoffset tests-draw-state #f #f))
-;; 						 (yoffset        (dcommon:get-yoffset tests-draw-state #f #f))
-;; 						 (new-y          (- sizey y)))
-;; 					    ;; (print "xoffset=" xoffset ", yoffset=" yoffset)
-;; 					    ;; (print "\tx\ty\tllx\tlly\turx\tury")
-;; 					    (for-each (lambda (test-name)
-;; 							(let* ((rec-coords (hash-table-ref tests-info test-name))
-;; 							       (llx        (dcommon:x->canvas (list-ref rec-coords 0) scalef xoffset))
-;; 							       (lly        (dcommon:y->canvas (list-ref rec-coords 1) scalef yoffset))
-;; 							       (urx        (dcommon:x->canvas (list-ref rec-coords 2) scalef xoffset))
-;; 							       (ury        (dcommon:y->canvas (list-ref rec-coords 3) scalef yoffset)))
-;; 							  ;; (if (eq? pressed 1)
-;; 							  ;;    (print "\tx=" x "\ty=" y "\tnew-y=" new-y "\tllx=" llx "\tlly=" lly "\turx=" urx "\tury=" ury "\t" test-name " "))
-;; 							  (if (and (eq? pressed 1)
-;; 								   (>= x llx)
-;; 								   (>= new-y lly)
-;; 								   (<= x urx)
-;; 								   (<= new-y ury))
-;; 							      (let ((patterns (string-split (iup:attribute test-patterns-textbox "VALUE"))))
-;; 								(let* ((selected     (not (member test-name patterns)))
-;; 								       (newpatt-list (if selected
-;; 											 (cons test-name patterns)
-;; 											 (delete test-name patterns)))
-;; 								       (newpatt      (string-intersperse newpatt-list "\n")))
-;; 								  (iup:attribute-set! obj "REDRAW" "ALL")
-;; 								  (hash-table-set! selected-tests test-name selected)
-;; 								  (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
-;; 								  (dboard:data-set-test-patts! *data* (dboard:lines->test-patt newpatt))
-;; 								  (dashboard:update-run-command)
-;; 								  (if updater (updater last-xadj last-yadj)))))))
-;; 						      (hash-table-keys tests-info)))))))
-;; 	  canvas-obj)))
-;;       
-;;       (iup:frame
-;;        #:title "Logs" ;; To be replaced with tabs
-;;        (let ((logs-tb (iup:textbox #:expand "YES"
-;; 				   #:multiline "YES")))
-;; 	 (dboard:data-set-logs-textbox! *data* logs-tb)
-;; 	 logs-tb))))))
+ ;;(iup:frame
+ ;; #:title "Logs" ;; To be replaced with tabs
+ ;; (let ((logs-tb (iup:textbox #:expand "YES"
+ ;;				   #:multiline "YES")))
+ ;;	 (dboard:data-set-logs-textbox! data logs-tb)
+ ;;	 logs-tb))
+      )))
 
 ;;======================================================================
 ;; R U N   C O N T R O L S
@@ -1189,8 +946,9 @@ Misc
 ;;
 ;; A gui for launching tests
 ;;
-(define (dashboard:run-times)
-  (let* ((targets       (make-hash-table))
+(define (dashboard:run-times alldat)
+  (let* ((data          (make-vector 25 #f))
+	 (targets       (make-hash-table))
 	 (test-records  (make-hash-table))
 	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests *toppath* '()))
 	 (test-names    (hash-table-keys all-tests-registry))
@@ -1204,13 +962,13 @@ Misc
 			   (let ((targ (map (lambda (x)
 					      (iup:attribute x "VALUE"))
 					    (car (dashboard:update-target-selector key-listboxes))))
-				 (curr-runname (dboard:data-get-run-name *data*)))
-			     (dboard:data-set-target! *data* targ)
+				 (curr-runname (dboard:data-get-run-name data)))
+			     (dboard:data-set-target! data targ)
 			     (if updater-for-runs (updater-for-runs))
-			     (if (or (not (equal? curr-runname (dboard:data-get-run-name *data*)))
-				     (equal? (dboard:data-get-run-name *data*) ""))
-				 (dboard:data-set-run-name! *data* curr-runname))
-			     (dashboard:update-run-command))))
+			     (if (or (not (equal? curr-runname (dboard:data-get-run-name data)))
+				     (equal? (dboard:data-get-run-name data) ""))
+				 (dboard:data-set-run-name! data curr-runname))
+			     (dashboard:update-run-command data))))
 	 (tests-draw-state (make-hash-table)) ;; use for keeping state of the test canvas
 	 (test-patterns-textbox  #f))
     (hash-table-set! tests-draw-state 'first-time #t)
@@ -1220,29 +978,30 @@ Misc
     
     ;; refer to (d:alldat-keys *alldat*), (d:alldat-dbkeys *alldat*) for keys
     (iup:vbox
-     (dcommon:command-execution-control *data*)
+     (dcommon:command-execution-control data)
      (iup:split
-      #:orientation "HORIZONTAL"
-      
-      (iup:split
-       #:value 300
+      #:orientation "VERTICAL" ;; "HORIZONTAL"
+      #:value 200
+      ;; (iup:split
+      ;;  #:value 300
 
        ;; Target, testpatt, state and status input boxes
        ;;
        (iup:vbox
 	;; Command to run, placed over the top of the canvas
-	(dcommon:command-action-selector *data*)
-	(dcommon:command-runname-selector *alldat* *data*)
-	(dcommon:command-testname-selector *alldat* *data* update-keyvals key-listboxes))
+	(dcommon:command-action-selector data)
+	(dcommon:command-runname-selector alldat data)
+	(dcommon:command-testname-selector alldat data update-keyvals key-listboxes))
        
-       (dcommon:command-tests-tasks-canvas *data* test-records sorted-testnames tests-draw-state))
+       (dcommon:command-tests-tasks-canvas data test-records sorted-testnames tests-draw-state))
        
-      (iup:frame
-       #:title "Logs" ;; To be replaced with tabs
-       (let ((logs-tb (iup:textbox #:expand "YES"
-				   #:multiline "YES")))
-	 (dboard:data-set-logs-textbox! *data* logs-tb)
-	 logs-tb))))))
+;; (iup:frame
+;;  #:title "Logs" ;; To be replaced with tabs
+;;  (let ((logs-tb (iup:textbox #:expand "YES"
+;; 				   #:multiline "YES")))
+;; 	 (dboard:data-set-logs-textbox! data logs-tb)
+;; 	 logs-tb))
+      )))
 
 ;;======================================================================
 ;; S U M M A R Y 
@@ -1751,6 +1510,57 @@ Misc
 					;(iup:button "dec rows" #:action (lambda (obj)(d:alldat-num-tests-set! data (if (> (d:alldat-num-tests data) 0)(- (d:alldat-num-tests data) 1) 0))))
 	   ))
 
+(define (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt)
+  (iup:menu 
+   (iup:menu-item
+    "Run"
+    (iup:menu              
+     (iup:menu-item
+      (conc "Rerun " testpatt)
+      #:action
+      (lambda (obj)
+	(common:run-a-command
+	 (conc "megatest -run -target " target
+	       " -runname " runname
+	       " -testpatt " testpatt
+	       " -preclean -clean-cache")
+	 )))))
+   (iup:menu-item
+    "Test"
+    (iup:menu 
+     (iup:menu-item
+      (conc "Rerun " test-name)
+      #:action
+      (lambda (obj)
+	(common:run-a-command
+	 (conc "megatest -run -target " target
+	       " -runname " runname
+	       " -testpatt " test-name
+	       " -preclean -clean-cache"))))
+     (iup:menu-item
+      "Start xterm"
+      #:action
+      (lambda (obj)
+	(let* ((cmd (conc toolpath " -xterm " run-id "," test-id "&")))
+	  (system cmd))))
+     (iup:menu-item
+      "Edit testconfig"
+      #:action
+      (lambda (obj)
+	(let* ((all-tests (tests:get-all))
+	       (editor-rx (or (configf:lookup *configdat* "setup" "editor-regex") 
+			      "\\b(vim?|nano|pico)\\b"))
+	       (editor (or (configf:lookup *configdat* "setup" "editor")
+			   (get-environment-variable "VISUAL")
+			   (get-environment-variable "EDITOR") "vi"))
+	       (tconfig (conc (hash-table-ref all-tests test-name) "/testconfig"))
+	       (cmd (conc (if (string-search editor-rx editor)
+			      (conc "xterm -e " editor)
+			      editor)
+			  " " tconfig " &")))
+	  (system cmd))))
+     ))))
+
 (define (make-dashboard-buttons data nruns ntests keynames runs-sum-dat new-view-dat)
   (let* ((db      (d:alldat-dblocal data))
 	 (nkeys   (length keynames))
@@ -1849,14 +1659,6 @@ Misc
 			    #:size "60x15" 
 			    #:expand "HORIZONTAL"
 			    #:fontsize "10"
-			    ;; :action (lambda (x)
-			    ;; 	  (let* ((toolpath (car (argv)))
-			    ;; 		 (buttndat (hash-table-ref (d:alldat-buttondat *alldat*) button-key))
-			    ;; 		 (test-id  (db:test-get-id (vector-ref buttndat 3)))
-			    ;; 		 (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
-			    ;; 		 (cmd  (conc toolpath " -test " run-id "," test-id "&")))
-			    ;; ;(print "Launching " cmd)
-			    ;; 	    (system cmd)))
 			    #:button-cb
 			    (lambda (obj a pressed x y btn . rem)
 			      ;; (print "pressed= " pressed " x= " x " y= " y " rem=" rem " btn=" btn " string? " (string? btn))
@@ -1877,57 +1679,8 @@ Misc
 								 (if (member tpatt '("0" 0)) ;; known bad historical value - remove in 2017
 								     "%"
 								     tpatt))
-							       "%")))
-					      (popup-menu (iup:menu 
-							   (iup:menu-item
-							    "Run"
-							    (iup:menu              
-							     (iup:menu-item
-							      (conc "Rerun " testpatt)
-							      #:action
-							      (lambda (obj)
-								(common:run-a-command
-								 (conc "megatest -run -target " target
-								       " -runname " runname
-								       " -testpatt " testpatt
-								       " -preclean -clean-cache")
-								 )))))
-							   (iup:menu-item
-							    "Test"
-							    (iup:menu 
-							     (iup:menu-item
-							      (conc "Rerun " test-name)
-							      #:action
-							      (lambda (obj)
-								(common:run-a-command
-								 (conc "megatest -run -target " target
-								       " -runname " runname
-								       " -testpatt " test-name
-								       " -preclean -clean-cache"))))
-							     (iup:menu-item
-							      "Start xterm"
-							      #:action
-							      (lambda (obj)
-								(let* ((cmd (conc toolpath " -xterm " run-id "," test-id "&")))
-								  (system cmd))))
-							     (iup:menu-item
-							      "Edit testconfig"
-							      #:action
-							      (lambda (obj)
-								(let* ((all-tests (tests:get-all))
-								       (editor-rx (or (configf:lookup *configdat* "setup" "editor-regex") 
-										      "\\b(vim?|nano|pico)\\b"))
-								       (editor (or (configf:lookup *configdat* "setup" "editor")
-										   (get-environment-variable "VISUAL")
-										   (get-environment-variable "EDITOR") "vi"))
-								       (tconfig (conc (hash-table-ref all-tests test-name) "/testconfig"))
-								       (cmd (conc (if (string-search editor-rx editor)
-										      (conc "xterm -e " editor)
-										      editor)
-										  " " tconfig " &")))
-								  (system cmd))))
-							     )))))
-					 (iup:show popup-menu
+							       "%"))))
+					 (iup:show (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt) ;; popup-menu
 						   #:x 'mouse
 						   #:y 'mouse
 						   #:modal? "NO")
@@ -1968,8 +1721,8 @@ Misc
 		    runs-view
 		    (dashboard:one-run db  data runs-sum-dat)
 		    ;; (dashboard:new-view db data new-view-dat)
-		    (dashboard:run-controls)
-		    (dashboard:run-times)
+		    (dashboard:run-controls *alldat*)
+		    (dashboard:run-times *alldat*)
 		    )))
 	;; (set! (iup:callback tabs tabchange-cb:) (lambda (a b c)(print "SWITCHED TO TAB: " a " " b " " c)))
 	(iup:attribute-set! tabs "TABTITLE0" "Summary")
