@@ -807,18 +807,18 @@ Misc
 				(proc all)))))
 		items))))
 
-;; Extract the various bits of data from *data* and create the command line equivalent that will be displayed
+;; Extract the various bits of data from data and create the command line equivalent that will be displayed
 ;;
 (define (dashboard:update-run-command data)
-  (let* ((cmd-tb       (dboard:data-get-command-tb data))
-	 (cmd          (dboard:data-get-command    data))
-	 (test-patt    (let ((tp (dboard:data-get-test-patts data)))
+  (let* ((cmd-tb       (dboard:data-command-tb data))
+	 (cmd          (dboard:data-command    data))
+	 (test-patt    (let ((tp (dboard:data-test-patts data)))
 			 (if (equal? tp "") "%" tp)))
-	 (states       (dboard:data-get-states     data))
-	 (statuses     (dboard:data-get-statuses   data))
-	 (target       (let ((targ-list (dboard:data-get-target     data)))
+	 (states       (dboard:data-states     data))
+	 (statuses     (dboard:data-statuses   data))
+	 (target       (let ((targ-list (dboard:data-target     data)))
 			 (if targ-list (string-intersperse targ-list "/") "no-target-selected")))
-	 (run-name     (dboard:data-get-run-name   data))
+	 (run-name     (dboard:data-run-name   data))
 	 (states-str   (if (or (not states)
 			       (null? states))
 			   ""
@@ -897,13 +897,13 @@ Misc
 			   (let ((targ (map (lambda (x)
 					      (iup:attribute x "VALUE"))
 					    (car (dashboard:update-target-selector key-listboxes))))
-				 (curr-runname (dboard:data-get-run-name data)))
-			     (dboard:data-set-target! data targ)
-			     (if (dboard:data-get-updater-for-runs data)
-				 ((dboard:data-get-updater-for-runs data)))
-			     (if (or (not (equal? curr-runname (dboard:data-get-run-name data)))
-				     (equal? (dboard:data-get-run-name data) ""))
-				 (dboard:data-set-run-name! data curr-runname))
+				 (curr-runname (dboard:data-run-name data)))
+			     (dboard:data-target-set! data targ)
+			     (if (dboard:data-updater-for-runs data)
+				 ((dboard:data-updater-for-runs data)))
+			     (if (or (not (equal? curr-runname (dboard:data-run-name data)))
+				     (equal? (dboard:data-run-name data) ""))
+				 (dboard:data-run-name-set! data curr-runname))
 			     (dashboard:update-run-command data))))
 	 (tests-draw-state (make-hash-table)) ;; use for keeping state of the test canvas
 	 (test-patterns-textbox  #f))
@@ -936,7 +936,7 @@ Misc
  ;; #:title "Logs" ;; To be replaced with tabs
  ;; (let ((logs-tb (iup:textbox #:expand "YES"
  ;;				   #:multiline "YES")))
- ;;	 (dboard:data-set-logs-textbox! data logs-tb)
+ ;;	 (dboard:data-logs-textbox-set! data logs-tb)
  ;;	 logs-tb))
       )))
 
@@ -962,12 +962,12 @@ Misc
 			   (let ((targ (map (lambda (x)
 					      (iup:attribute x "VALUE"))
 					    (car (dashboard:update-target-selector key-listboxes))))
-				 (curr-runname (dboard:data-get-run-name data)))
-			     (dboard:data-set-target! data targ)
+				 (curr-runname (dboard:data-run-name data)))
+			     (dboard:data-target-set! data targ)
 			     (if updater-for-runs (updater-for-runs))
-			     (if (or (not (equal? curr-runname (dboard:data-get-run-name data)))
-				     (equal? (dboard:data-get-run-name data) ""))
-				 (dboard:data-set-run-name! data curr-runname))
+			     (if (or (not (equal? curr-runname (dboard:data-run-name data)))
+				     (equal? (dboard:data-run-name data) ""))
+				 (dboard:data-run-name-set! data curr-runname))
 			     (dashboard:update-run-command data))))
 	 (tests-draw-state (make-hash-table)) ;; use for keeping state of the test canvas
 	 (test-patterns-textbox  #f))
@@ -999,7 +999,7 @@ Misc
 ;;  #:title "Logs" ;; To be replaced with tabs
 ;;  (let ((logs-tb (iup:textbox #:expand "YES"
 ;; 				   #:multiline "YES")))
-;; 	 (dboard:data-set-logs-textbox! data logs-tb)
+;; 	 (dboard:data-logs-textbox-set! data logs-tb)
 ;; 	 logs-tb))
       )))
 
@@ -1168,7 +1168,7 @@ Misc
 				     (if (not (hash-table-ref/default (d:data-path-run-ids ddata) run-path #f))
 					 (begin
 					   (hash-table-set! (d:data-run-keys ddata) run-id run-path)
-					   ;; (iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+					   ;; (iup:attribute-set! (dboard:data-runs-matrix data)
 					   ;;    		 (conc rownum ":" colnum) col-name)
 					   ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
 					   ;; Here we update the tests treebox and tree keys
@@ -1314,7 +1314,7 @@ Misc
 				     (if (not (hash-table-ref/default (d:data-path-run-ids ddata) run-path #f))
 					 (begin
 					   (hash-table-set! (d:data-run-keys ddata) run-id run-path)
-					   ;; (iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+					   ;; (iup:attribute-set! (dboard:data-runs-matrix data)
 					   ;;    		 (conc rownum ":" colnum) col-name)
 					   ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
 					   ;; Here we update the tests treebox and tree keys

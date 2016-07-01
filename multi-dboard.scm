@@ -391,14 +391,14 @@ Misc
 		       #f
 		       ;; (test-id  (tree-path->test-id (cdr run-path))))
 		       ;; (if test-id
-		       ;;    (hash-table-set! (dboard:data-get-curr-test-ids *data*)
+		       ;;    (hash-table-set! (dboard:data-curr-test-ids *data*)
 		       ;;		     window-id test-id))
 		       ;; (print "path: " (tree:node->path obj id) " test-id: " test-id))))))
 		       )))))
     ;; (iup:attribute-set! tb "VALUE" "0")
     ;; (iup:attribute-set! tb "NAME" "Runs")
     ;; (iup:attribute-set! tb "ADDEXPANDED" "NO")
-    ;; (dboard:data-set-tests-tree! *data* tb)
+    ;; (dboard:data-tests-tree-set! *data* tb)
     tb))
 
 ;;======================================================================
@@ -424,7 +424,7 @@ Misc
     
     ;; (iup:attribute-set! view-matrix "RESIZEMATRIX" "YES")
     (iup:attribute-set! view-matrix "WIDTH0" "100")
-    ;; (dboard:data-set-runs-matrix! *data* runs-matrix)
+    ;; (dboard:data-runs-matrix-set! *data* runs-matrix)
     ;; (iup:hbox
     ;;  (iup:frame 
     ;;   #:title "Runs browser"
