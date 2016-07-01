@@ -1541,7 +1541,7 @@ Misc
       "Start xterm"
       #:action
       (lambda (obj)
-	(let* ((cmd (conc toolpath " -xterm " run-id "," test-id "&")))
+	(let* ((cmd (conc (car (argv)) " -xterm " run-id "," test-id "&")))
 	  (system cmd))))
      (iup:menu-item
       "Edit testconfig"
