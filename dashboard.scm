@@ -1021,7 +1021,7 @@ Misc
 ;;======================================================================
 ;;
 ;; General info about the run(s) and megatest area
-(define (dashboard:summary data)
+(define (dashboard:summary alldat)
   (let* ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f #f))) ;; changed to #f since I want #{} to be expanded by [system ...] to NOT be expanded. WAS: 'return-string)))
     (iup:vbox
      (iup:split
@@ -1050,7 +1050,7 @@ Misc
 	(dcommon:section-matrix rawconfig "disks" "Disk area" "Path"))))
      (iup:frame
       #:title "Run statistics"
-      (dcommon:run-stats)))))
+      (dcommon:run-stats alldat)))))
 
 ;;======================================================================
 ;; R U N
@@ -1553,7 +1553,7 @@ Misc
       "Start xterm"
       #:action
       (lambda (obj)
-	(let* ((cmd (conc toolpath " -xterm " run-id "," test-id "&")))
+	(let* ((cmd (conc (car (argv)) " -xterm " run-id "," test-id "&")))
 	  (system cmd))))
      (iup:menu-item
       "Edit testconfig"
@@ -1573,7 +1573,7 @@ Misc
 	  (system cmd))))
      ))))
 
-(define (make-dashboard-buttons data nruns ntests keynames runs-sum-dat new-view-dat)
+(define (make-dashboard-buttons alldat nruns ntests keynames runs-sum-dat new-view-dat)
   (let* ((nkeys   (length keynames))
 	 (runsvec (make-vector nruns))
 	 (header  (make-vector nruns))
@@ -1586,7 +1586,7 @@ Misc
 	 (result  '())
 	 (i       0))
     ;; controls (along bottom)
-    (set! controls (dboard:make-controls data))
+    (set! controls (dboard:make-controls alldat))
     
     ;; create the left most column for the run key names and the test names 
     (set! lftlst (list (iup:hbox
@@ -1598,7 +1598,7 @@ Misc
 							   (iup:textbox #:size "x15" #:fontsize "10" #:value "%" #:expand "HORIZONTAL"
 									#:action (lambda (obj unk val)
 										   (mark-for-update)
-										   (update-search data x val))))))
+										   (update-search alldat x val))))))
 					(set! i (+ i 1))
 					res))
 				    keynames)))))
@@ -1612,7 +1612,7 @@ Misc
 										       (let ((val (string->number (iup:attribute obj "VALUE")))
 											     (oldmax  (string->number (iup:attribute obj "MAX")))
 											     (newmax  (* 10 (length *alltestnamelst*))))
-											 (dboard:alldat-please-update-set! data #t)
+											 (dboard:alldat-please-update-set! alldat #t)
 											 (dboard:alldat-start-test-offset-set! alldat (inexact->exact (round (/ val 10))))
 											 (debug:print 6 *default-log-port* "(dboard:alldat-start-test-offset alldat) " (dboard:alldat-start-test-offset alldat) " val: " val " newmax: " newmax " oldmax: " oldmax)
 											 (if (< val 10)
@@ -1730,7 +1730,7 @@ Misc
 					(dboard:alldat-curr-tab-num-set! alldat curr))
 		    (dashboard:summary alldat)
 		    runs-view
-		    (dashboard:one-run data runs-sum-dat)
+		    (dashboard:one-run alldat runs-sum-dat)
 		    ;; (dashboard:new-view db data new-view-dat)
 		    (dashboard:run-controls alldat)
 		    (dashboard:run-times alldat)
@@ -1785,7 +1785,7 @@ Misc
 ;; Force creation of the db in case it isn't already there.
 (tasks:open-db)
 
-(define (dashboard:get-youngest-run-db-mod-time)
+(define (dashboard:get-youngest-run-db-mod-time alldat)
   (handle-exceptions
    exn
    (begin
@@ -1796,7 +1796,7 @@ Misc
 		   (glob (conc (dboard:alldat-dbdir alldat) "/*.db"))))))
 
 (define (dashboard:run-update x alldat)
-  (let* ((modtime         (dashboard:get-youngest-run-db-mod-time)) ;; (file-modification-time (dboard:alldat-dbfpath alldat)))
+  (let* ((modtime         (dashboard:get-youngest-run-db-mod-time alldat)) ;; (file-modification-time (dboard:alldat-dbfpath alldat)))
 	 (monitor-modtime (if (file-exists? *monitor-db-path*)
 			      (file-modification-time *monitor-db-path*)
 			      -1))
@@ -1851,6 +1851,7 @@ Misc
   (let* ((runs-sum-dat (dboard:alldat-make-data)) ;; init (make-d:data))) ;; data for run-summary tab
 	 (new-view-dat runs-sum-dat) ;; (dboard:alldat-make-data)) ;; init (make-d:data)))
 	 (alldat       runs-sum-dat))
+    (dboard:setup-alldat alldat)
     (dboard:setup-num-rows alldat)
     ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
     ;; (dboard:alldat-last-db-update-set! alldat (file-modification-time (dboard:alldat-dbfpath alldat))) ;; (conc *toppath* "/db/main.db")))
@@ -1922,7 +1923,7 @@ Misc
     (let ((th1 (make-thread (lambda ()
 			      (thread-sleep! 1)
 			      (dboard:alldat-please-update-set! alldat #t)
-			      (dashboard:run-update 1)) "update buttons once"))
+			      (dashboard:run-update 1 alldat)) "update buttons once"))
 	  (th2 (make-thread iup:main-loop "Main loop")))
       (thread-start! th1)
       (thread-start! th2)
