@@ -200,6 +200,7 @@ Misc
 	      last-db-update:       0
 	      num-tests:            15
 	      numruns:              16
+	      path-run-ids:         (make-hash-table)
 	      run-ids:              (make-hash-table)
 	      run-keys:             (make-hash-table)
 	      searchpatts:          (make-hash-table)
@@ -379,33 +380,33 @@ Misc
 
 ;; This is roughly the same as dboard:get-tests-dat, should merge them if possible
 ;;
-(define (dboard:get-tests-for-run-duplicate data run-id run testnamepatt key-vals)
-  (let* ((states      (hash-table-keys (dboard:tabdat-state-ignore-hash data)))
-	 (statuses    (hash-table-keys (dboard:tabdat-status-ignore-hash data)))
+(define (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)
+  (let* ((states      (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
+	 (statuses    (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)))
 	 (sort-info   (get-curr-sort))
 	 (sort-by     (vector-ref sort-info 1))
 	 (sort-order  (vector-ref sort-info 2))
 	 (bubble-type (if (member sort-order '(testname))
 			  'testname
 			  'itempath))
-	 (prev-dat    (let ((rec (hash-table-ref/default (dboard:tabdat-allruns-by-id data) run-id #f)))
+	 (prev-dat    (let ((rec (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f)))
 			(if rec rec (vector run '() key-vals -100)))) ;; -100 is before time began
 	 (prev-tests  (vector-ref prev-dat 1))
 	 (last-update (vector-ref prev-dat 3))
 	 (tmptests    (rmt:get-tests-for-run run-id testnamepatt states statuses
 						 #f #f
-						 (dboard:tabdat-hide-not-hide data)
+						 (dboard:tabdat-hide-not-hide tabdat)
 						 sort-by
 						 sort-order
 						 'shortlist
-						 (if (dboard:tabdat-filters-changed data)
+						 (if (dboard:tabdat-filters-changed tabdat)
 						     0
 						     last-update)
 						 *dashboard-mode*)) ;; use dashboard mode
 	 (tests       (let ((newdat (filter
 				     (lambda (x)
 				       (not (equal? (db:test-get-state x) "DELETED"))) ;; remove deleted tests but do it after merging
-				     (delete-duplicates (if (dboard:tabdat-filters-changed data)
+				     (delete-duplicates (if (dboard:tabdat-filters-changed tabdat)
 							    tmptests
 							    (append tmptests prev-tests))
 							(lambda (a b)
@@ -414,14 +415,14 @@ Misc
 			    (sort newdat dboard:compare-tests)
 			    newdat))))
     (vector-set! prev-dat 3 (- (current-seconds) 2)) ;; go back two seconds in time to ensure all changes are captured.
-    ;; (debug:print 0 *default-log-port* "(dboard:get-tests-for-run-duplicate: filters-changed=" (dboard:tabdat-filters-changed data) " last-update=" last-update " got " (length tmptests) " test records for run " run-id)
+    ;; (debug:print 0 *default-log-port* "(dboard:get-tests-for-run-duplicate: filters-changed=" (dboard:tabdat-filters-changed tabdat) " last-update=" last-update " got " (length tmptests) " test records for run " run-id)
     tests))
 
 ;; create a virtual table of all the tests
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
-(define (update-rundat data runnamepatt numruns testnamepatt keypatts)
+(define (update-rundat tabdat runnamepatt numruns testnamepatt keypatts)
   (let* ((referenced-run-ids '())
-	 (allruns     (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset data) keypatts))
+	 (allruns     (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
 	 (result      '())
@@ -432,8 +433,8 @@ Misc
     (for-each (lambda (run)
 		(let* ((run-id      (db:get-value-by-header run header "id"))
 		       (key-vals    (rmt:get-key-vals run-id))
-		       (tests       (dboard:get-tests-for-run-duplicate data run-id run testnamepatt key-vals)))
-		  ;; NOTE: bubble-up also sets the global (dboard:tabdat-item-test-names data)
+		       (tests       (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)))
+		  ;; NOTE: bubble-up also sets the global (dboard:tabdat-item-test-names tabdat)
 		  ;; (tests       (bubble-up tmptests priority: bubble-type))
 		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
 		  ;; (debug:print 0 *default-log-port* "Getting data for run " run-id " with key-vals=" key-vals)
@@ -443,16 +444,16 @@ Misc
 			(set! referenced-run-ids (cons run-id referenced-run-ids))
 			(if (> (length tests) maxtests)
 			    (set! maxtests (length tests)))
-			(if (or (not (dboard:tabdat-hide-empty-runs data)) ;; this reduces the data burden when set
+			(if (or (not (dboard:tabdat-hide-empty-runs tabdat)) ;; this reduces the data burden when set
 				(not (null? tests)))
 			    (let ((dstruct (vector run tests key-vals (- (current-seconds) 10))))
-			      (hash-table-set! (dboard:tabdat-allruns-by-id data) run-id dstruct)
+			      (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id dstruct)
 			      (set! result (cons dstruct result))))))))
 	      runs)
 
-    (dboard:tabdat-header-set! data header)
-    (dboard:tabdat-allruns-set! data result)
-    (debug:print-info 6 *default-log-port* "(dboard:tabdat-allruns data) has " (length (dboard:tabdat-allruns data)) " runs")
+    (dboard:tabdat-header-set! tabdat header)
+    (dboard:tabdat-allruns-set! tabdat result)
+    (debug:print-info 6 *default-log-port* "(dboard:tabdat-allruns tabdat) has " (length (dboard:tabdat-allruns tabdat)) " runs")
     maxtests))
 
 (define *collapsed* (make-hash-table))
@@ -704,7 +705,7 @@ Misc
 					    (hash-table-keys (dboard:tabdat-searchpatts tabdat))))))
 	(state-changed  (not (null? (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))))
 	(status-changed (not (null? (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat))))))
-    (iup:attribute-set! (dboard:tabdat-hide-not-hide-tabs commondat) "BGCOLOR"
+    (iup:attribute-set! (dboard:tabdat-hide-not-hide-tabs tabdat) "BGCOLOR"
 			(if (or search-changed
 				state-changed
 				status-changed)
@@ -718,7 +719,7 @@ Misc
   (dboard:tabdat-filters-changed-set! tabdat #t)
   (set-bg-on-filter commondat tabdat))
 
-(define (mark-for-update)
+(define (mark-for-update tabdat)
   (dboard:tabdat-filters-changed-set! tabdat #t)
   (dboard:tabdat-last-db-update-set! tabdat 0))
 
@@ -835,18 +836,18 @@ Misc
 				(proc all)))))
 		items))))
 
-;; Extract the various bits of data from data and create the command line equivalent that will be displayed
+;; Extract the various bits of data from tabdat and create the command line equivalent that will be displayed
 ;;
-(define (dashboard:update-run-command data)
-  (let* ((cmd-tb       (dboard:tabdat-command-tb data))
-	 (cmd          (dboard:tabdat-command    data))
-	 (test-patt    (let ((tp (dboard:tabdat-test-patts data)))
+(define (dashboard:update-run-command tabdat)
+  (let* ((cmd-tb       (dboard:tabdat-command-tb tabdat))
+	 (cmd          (dboard:tabdat-command    tabdat))
+	 (test-patt    (let ((tp (dboard:tabdat-test-patts tabdat)))
 			 (if (equal? tp "") "%" tp)))
-	 (states       (dboard:tabdat-states     data))
-	 (statuses     (dboard:tabdat-statuses   data))
-	 (target       (let ((targ-list (dboard:tabdat-target     data)))
+	 (states       (dboard:tabdat-states     tabdat))
+	 (statuses     (dboard:tabdat-statuses   tabdat))
+	 (target       (let ((targ-list (dboard:tabdat-target     tabdat)))
 			 (if targ-list (string-intersperse targ-list "/") "no-target-selected")))
-	 (run-name     (dboard:tabdat-run-name   data))
+	 (run-name     (dboard:tabdat-run-name   tabdat))
 	 (states-str   (if (or (not states)
 			       (null? states))
 			   ""
@@ -910,8 +911,7 @@ Misc
 ;;
 
 (define (dashboard:run-controls commondat tabdat)
-  (let* ((data          tabdat) ;; (dboard:tabdat-make-data)) ;; (make-vector 25 #f))
-	 (targets       (make-hash-table))
+  (let* ((targets       (make-hash-table))
 	 (test-records  (make-hash-table))
 	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests *toppath* '()))
 	 (test-names    (hash-table-keys all-tests-registry))
@@ -925,14 +925,14 @@ Misc
 			   (let ((targ (map (lambda (x)
 					      (iup:attribute x "VALUE"))
 					    (car (dashboard:update-target-selector key-listboxes))))
-				 (curr-runname (dboard:tabdat-run-name data)))
-			     (dboard:tabdat-target-set! data targ)
-			     (if (dboard:tabdat-updater-for-runs data)
-				 ((dboard:tabdat-updater-for-runs data)))
-			     (if (or (not (equal? curr-runname (dboard:tabdat-run-name data)))
-				     (equal? (dboard:tabdat-run-name data) ""))
-				 (dboard:tabdat-run-name-set! data curr-runname))
-			     (dashboard:update-run-command data))))
+				 (curr-runname (dboard:tabdat-run-name tabdat)))
+			     (dboard:tabdat-target-set! tabdat targ)
+			     (if (dboard:tabdat-updater-for-runs tabdat)
+				 ((dboard:tabdat-updater-for-runs tabdat)))
+			     (if (or (not (equal? curr-runname (dboard:tabdat-run-name tabdat)))
+				     (equal? (dboard:tabdat-run-name tabdat) ""))
+				 (dboard:tabdat-run-name-set! tabdat curr-runname))
+			     (dashboard:update-run-command tabdat))))
 	 (tests-draw-state (make-hash-table)) ;; use for keeping state of the test canvas
 	 (test-patterns-textbox  #f))
     (hash-table-set! tests-draw-state 'first-time #t)
@@ -942,7 +942,7 @@ Misc
     
     ;; refer to (dboard:tabdat-keys tabdat), (dboard:tabdat-dbkeys tabdat) for keys
     (iup:vbox
-     (dcommon:command-execution-control data)
+     (dcommon:command-execution-control tabdat)
      (iup:split
       #:orientation "VERTICAL" ;; "HORIZONTAL"
       #:value 300
@@ -954,17 +954,17 @@ Misc
        ;;
        (iup:vbox
 	;; Command to run, placed over the top of the canvas
-	(dcommon:command-action-selector data)
-	(dcommon:command-runname-selector tabdat data)
-	(dcommon:command-testname-selector tabdat data update-keyvals key-listboxes))
+	(dcommon:command-action-selector tabdat)
+	(dcommon:command-runname-selector tabdat tabdat)
+	(dcommon:command-testname-selector tabdat tabdat update-keyvals key-listboxes))
        
-       (dcommon:command-tests-tasks-canvas data test-records sorted-testnames tests-draw-state))
+       (dcommon:command-tests-tasks-canvas tabdat test-records sorted-testnames tests-draw-state))
        
  ;;(iup:frame
  ;; #:title "Logs" ;; To be replaced with tabs
  ;; (let ((logs-tb (iup:textbox #:expand "YES"
  ;;				   #:multiline "YES")))
- ;;	 (dboard:tabdat-logs-textbox-set! data logs-tb)
+ ;;	 (dboard:tabdat-logs-textbox-set! tabdat logs-tb)
  ;;	 logs-tb))
       )))
 
@@ -975,7 +975,7 @@ Misc
 ;; A gui for launching tests
 ;;
 (define (dashboard:run-times commondat tabdat)
-  (let* ((data          tabdat) ;; (dboard:tabdat-make-data)) ;; (make-vector 25 #f))
+  (let* ((tabdat          tabdat) ;; (dboard:tabdat-make-data)) ;; (make-vector 25 #f))
 	 (targets       (make-hash-table))
 	 (test-records  (make-hash-table))
 	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests *toppath* '()))
@@ -990,13 +990,13 @@ Misc
 			   (let ((targ (map (lambda (x)
 					      (iup:attribute x "VALUE"))
 					    (car (dashboard:update-target-selector key-listboxes))))
-				 (curr-runname (dboard:tabdat-run-name data)))
-			     (dboard:tabdat-target-set! data targ)
+				 (curr-runname (dboard:tabdat-run-name tabdat)))
+			     (dboard:tabdat-target-set! tabdat targ)
 			     (if updater-for-runs (updater-for-runs))
-			     (if (or (not (equal? curr-runname (dboard:tabdat-run-name data)))
-				     (equal? (dboard:tabdat-run-name data) ""))
-				 (dboard:tabdat-run-name-set! data curr-runname))
-			     (dashboard:update-run-command data))))
+			     (if (or (not (equal? curr-runname (dboard:tabdat-run-name tabdat)))
+				     (equal? (dboard:tabdat-run-name tabdat) ""))
+				 (dboard:tabdat-run-name-set! tabdat curr-runname))
+			     (dashboard:update-run-command tabdat))))
 	 (tests-draw-state (make-hash-table)) ;; use for keeping state of the test canvas
 	 (test-patterns-textbox  #f))
     (hash-table-set! tests-draw-state 'first-time #t)
@@ -1006,7 +1006,7 @@ Misc
     
     ;; refer to (dboard:tabdat-keys tabdat), (dboard:tabdat-dbkeys tabdat) for keys
     (iup:vbox
-     (dcommon:command-execution-control data)
+     (dcommon:command-execution-control tabdat)
      (iup:split
       #:orientation "VERTICAL" ;; "HORIZONTAL"
       #:value 200
@@ -1017,17 +1017,17 @@ Misc
        ;;
        (iup:vbox
 	;; Command to run, placed over the top of the canvas
-	(dcommon:command-action-selector data)
-	(dcommon:command-runname-selector tabdat data)
-	(dcommon:command-testname-selector tabdat data update-keyvals key-listboxes))
+	(dcommon:command-action-selector tabdat)
+	(dcommon:command-runname-selector tabdat tabdat)
+	(dcommon:command-testname-selector tabdat tabdat update-keyvals key-listboxes))
        
-       (dcommon:command-tests-tasks-canvas data test-records sorted-testnames tests-draw-state))
+       (dcommon:command-tests-tasks-canvas tabdat test-records sorted-testnames tests-draw-state))
        
 ;; (iup:frame
 ;;  #:title "Logs" ;; To be replaced with tabs
 ;;  (let ((logs-tb (iup:textbox #:expand "YES"
 ;; 				   #:multiline "YES")))
-;; 	 (dboard:tabdat-logs-textbox-set! data logs-tb)
+;; 	 (dboard:tabdat-logs-textbox-set! tabdat logs-tb)
 ;; 	 logs-tb))
       )))
 
@@ -1073,27 +1073,28 @@ Misc
 ;;
 ;; display and manage a single run at a time
 
-(define (tree-path->run-id data path)
+(define (tree-path->run-id tabdat path)
   (if (not (null? path))
-      (hash-table-ref/default (dboard:tabdat-path-run-ids data) path #f)
+      (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) path #f)
       #f))
 
 (define dashboard:update-run-summary-tab #f)
 (define dashboard:update-new-view-tab #f)
 
-(define (dboard:get-tests-dat data run-id last-update)
+(define (dboard:get-tests-dat tabdat run-id last-update)
   (let ((tdat (if run-id (rmt:get-tests-for-run run-id 
-					     (hash-table-ref/default (dboard:tabdat-searchpatts data) "test-name" "%/%")
-					     (hash-table-keys (dboard:tabdat-state-ignore-hash data)) ;; '()
-					     (hash-table-keys (dboard:tabdat-status-ignore-hash data)) ;; '()
+					     (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
+					     (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)) ;; '()
+					     (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)) ;; '()
 					     #f #f
-					     (dboard:tabdat-hide-not-hide data)
+					     (dboard:tabdat-hide-not-hide tabdat)
 					     #f #f
 					     "id,testname,item_path,state,status"
-					     (if (dboard:tabdat-filters-changed data)
+					     (if (dboard:tabdat-filters-changed tabdat)
 						 0
 						 last-update)
-					     *dashboard-mode*)))) ;; get 'em all
+					     *dashboard-mode*)
+		  '()))) ;; get 'em all
     (debug:print 0 *default-log-port* "dboard:get-tests-dat: got " (length tdat) " test records for run " run-id)
     (sort tdat (lambda (a b)
 		 (let* ((aval (vector-ref a 2))
@@ -1106,7 +1107,7 @@ Misc
 
 ;; This is the Run Summary tab
 ;; 
-(define (dashboard:one-run data ddata)
+(define (dashboard:one-run commondat tabdat)
   (let* ((tb      (iup:treebox
 		   #:value 0
 		   #:name "Runs"
@@ -1116,10 +1117,10 @@ Misc
 		   (lambda (obj id state)
 		     ;; (print "obj: " obj ", id: " id ", state: " state)
 		     (let* ((run-path (tree:node->path obj id))
-			    (run-id   (tree-path->run-id ddata (cdr run-path))))
+			    (run-id   (tree-path->run-id tabdat (cdr run-path))))
 		       (if (number? run-id)
 			   (begin
-			     (dboard:tabdat-curr-run-id-set! ddata run-id)
+			     (dboard:tabdat-curr-run-id-set! tabdat run-id)
 			     (dashboard:update-run-summary-tab))
 			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
@@ -1132,21 +1133,21 @@ Misc
 			(let* ((toolpath (car (argv)))
 			       (key      (conc lin ":" col))
 			       (test-id  (hash-table-ref/default cell-lookup key -1))
-			       (cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id ddata) "," test-id "&")))
+			       (cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id "&")))
 			  (system cmd)))))
 	 (updater  (lambda ()
-		     (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys data) "%" #f #f #f #f))
+		     (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
 			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
-			    (run-id       (dboard:tabdat-curr-run-id ddata))
+			    (run-id       (dboard:tabdat-curr-run-id tabdat))
 			    (last-update  0) ;; fix me
-			    (tests-dat    (dboard:get-tests-dat data run-id last-update))
+			    (tests-dat    (dboard:get-tests-dat tabdat run-id last-update))
 			    (tests-mindat (dcommon:minimize-test-data tests-dat))
 			    (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
 			    (row-indices  (cadr indices))
 			    (col-indices  (car indices))
 			    (max-row      (if (null? row-indices) 1 (common:max (map cadr row-indices))))
 			    (max-col      (if (null? col-indices) 1 (common:max (map cadr col-indices))))
-			    (max-visible  (max (- (dboard:tabdat-num-tests data) 15) 3)) ;; (dboard:tabdat-num-tests data) is proportional to the size of the window
+			    (max-visible  (max (- (dboard:tabdat-num-tests tabdat) 15) 3)) ;; (dboard:tabdat-num-tests tabdat) is proportional to the size of the window
 			    (numrows      1)
 			    (numcols      1)
 			    (changed      #f)
@@ -1163,28 +1164,28 @@ Misc
 							 (time-b   (db:get-value-by-header record-b runs-header "event_time")))
 						    (< time-a time-b))))))
 		       
-		       (dboard:tabdat-filters-changed-set! data #f)
+		       (dboard:tabdat-filters-changed-set! tabdat #f)
 		       ;; (iup:attribute-set! tb "VALUE" "0")
 		       ;; (iup:attribute-set! tb "NAME" "Runs")
 		       ;; Update the runs tree
 		       (for-each (lambda (run-id)
 				   (let* ((run-record (hash-table-ref/default runs-hash run-id #f))
 					  (key-vals   (map (lambda (key)(db:get-value-by-header run-record runs-header key))
-							   (dboard:tabdat-keys data)))
+							   (dboard:tabdat-keys tabdat)))
 					  (run-name   (db:get-value-by-header run-record runs-header "runname"))
 					  (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
 					  (run-path   (append key-vals (list run-name)))
 					  (existing   (tree:find-node tb run-path)))
-				     (if (not (hash-table-ref/default (dboard:tabdat-path-run-ids ddata) run-path #f))
+				     (if (not (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) run-path #f))
 					 (begin
-					   (hash-table-set! (dboard:tabdat-run-keys ddata) run-id run-path)
-					   ;; (iup:attribute-set! (dboard:tabdat-runs-matrix data)
+					   (hash-table-set! (dboard:tabdat-run-keys tabdat) run-id run-path)
+					   ;; (iup:attribute-set! (dboard:tabdat-runs-matrix tabdat)
 					   ;;    		 (conc rownum ":" colnum) col-name)
 					   ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
 					   ;; Here we update the tests treebox and tree keys
 					   (tree:add-node tb "Runs" run-path ;; (append key-vals (list run-name))
 							  userdata: (conc "run-id: " run-id))
-					   (hash-table-set! (dboard:tabdat-path-run-ids ddata) run-path run-id)
+					   (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
 					   ;; (set! colnum (+ colnum 1))
 					   ))))
 				 run-ids)
@@ -1244,14 +1245,14 @@ Misc
 		       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
     
     (set! dashboard:update-run-summary-tab updater)
-    (dboard:tabdat-runs-tree-set! ddata tb)
+    (dboard:tabdat-runs-tree-set! tabdat tb)
     (iup:split
      tb
      run-matrix)))
 
 ;; This is the New View tab
 ;; 
-(define (dashboard:new-view db data ddata)
+(define (dashboard:new-view db commondat tabdat)
   (let* ((tb      (iup:treebox
 		   #:value 0
 		   #:name "Runs"
@@ -1261,10 +1262,10 @@ Misc
 		   (lambda (obj id state)
 		     ;; (print "obj: " obj ", id: " id ", state: " state)
 		     (let* ((run-path (tree:node->path obj id))
-			    (run-id   (tree-path->run-id ddata (cdr run-path))))
+			    (run-id   (tree-path->run-id tabdat (cdr run-path))))
 		       (if (number? run-id)
 			   (begin
-			     (dboard:tabdat-curr-run-id-set! ddata run-id)
+			     (dboard:tabdat-curr-run-id-set! tabdat run-id)
 			     (dashboard:update-new-view-tab))
 			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
@@ -1277,21 +1278,21 @@ Misc
 			(let* ((toolpath (car (argv)))
 			       (key      (conc lin ":" col))
 			       (test-id  (hash-table-ref/default cell-lookup key -1))
-			       (cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id ddata) "," test-id "&")))
+			       (cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id "&")))
 			  (system cmd)))))
 	 (updater  (lambda ()
-		     (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys data) "%" #f #f #f #f))
+		     (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
 			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
-			    (run-id       (dboard:tabdat-curr-run-id ddata))
+			    (run-id       (dboard:tabdat-curr-run-id tabdat))
 			    (last-update  0) ;; fix me
-			    (tests-dat    (dboard:get-tests-dat data run-id last-update))
+			    (tests-dat    (dboard:get-tests-dat tabdat run-id last-update))
 			    (tests-mindat (dcommon:minimize-test-data tests-dat))
 			    (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
 			    (row-indices  (cadr indices))
 			    (col-indices  (car indices))
 			    (max-row      (if (null? row-indices) 1 (common:max (map cadr row-indices))))
 			    (max-col      (if (null? col-indices) 1 (common:max (map cadr col-indices))))
-			    (max-visible  (max (- (dboard:tabdat-num-tests data) 15) 3)) ;; (dboard:tabdat-num-tests data) is proportional to the size of the window
+			    (max-visible  (max (- (dboard:tabdat-num-tests tabdat) 15) 3)) ;; (dboard:tabdat-num-tests tabdat) is proportional to the size of the window
 			    (numrows      1)
 			    (numcols      1)
 			    (changed      #f)
@@ -1314,21 +1315,21 @@ Misc
 		       (for-each (lambda (run-id)
 				   (let* ((run-record (hash-table-ref/default runs-hash run-id #f))
 					  (key-vals   (map (lambda (key)(db:get-value-by-header run-record runs-header key))
-							   (dboard:tabdat-keys data)))
+							   (dboard:tabdat-keys tabdat)))
 					  (run-name   (db:get-value-by-header run-record runs-header "runname"))
 					  (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
 					  (run-path   (append key-vals (list run-name)))
 					  (existing   (tree:find-node tb run-path)))
-				     (if (not (hash-table-ref/default (dboard:tabdat-path-run-ids ddata) run-path #f))
+				     (if (not (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) run-path #f))
 					 (begin
-					   (hash-table-set! (dboard:tabdat-run-keys ddata) run-id run-path)
-					   ;; (iup:attribute-set! (dboard:tabdat-runs-matrix data)
+					   (hash-table-set! (dboard:tabdat-run-keys tabdat) run-id run-path)
+					   ;; (iup:attribute-set! (dboard:tabdat-runs-matrix tabdat)
 					   ;;    		 (conc rownum ":" colnum) col-name)
 					   ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
 					   ;; Here we update the tests treebox and tree keys
 					   (tree:add-node tb "Runs" run-path ;; (append key-vals (list run-name))
 							  userdata: (conc "run-id: " run-id))
-					   (hash-table-set! (dboard:tabdat-path-run-ids ddata) run-path run-id)
+					   (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
 					   ;; (set! colnum (+ colnum 1))
 					   ))))
 				 run-ids)
@@ -1388,7 +1389,7 @@ Misc
 		       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
     
     (set! dashboard:update-new-view-tab updater)
-    (dboard:tabdat-runs-tree-set! ddata tb)
+    (dboard:tabdat-runs-tree-set! tabdat tb)
     (iup:split
      tb
      run-matrix)))
@@ -1397,7 +1398,7 @@ Misc
 ;; R U N S 
 ;;======================================================================
 
-(define (dboard:make-controls commondat data)
+(define (dboard:make-controls commondat tabdat)
 	  (iup:hbox
 	   (iup:vbox
 	    (iup:frame 
@@ -1406,34 +1407,34 @@ Misc
 	      (iup:vbox
 	       (iup:textbox #:size "120x15" #:fontsize "10" #:value "%"
 			    #:action (lambda (obj unk val)
-				       (mark-for-update)
-				       (update-search commondat data "test-name" val)))
+				       (mark-for-update tabdat)
+				       (update-search commondat tabdat "test-name" val)))
 	       (iup:hbox
 		(iup:button "Quit"      #:action (lambda (obj)
-						   ;; (if (dboard:tabdat-dblocal data) (db:close-all (dboard:tabdat-dblocal data)))
+						   ;; (if (dboard:tabdat-dblocal tabdat) (db:close-all (dboard:tabdat-dblocal tabdat)))
 						   (exit)))
 		(iup:button "Refresh"   #:action (lambda (obj)
-						   (mark-for-update)))
+						   (mark-for-update tabdat)))
 		(iup:button "Collapse"  #:action (lambda (obj)
 						   (let ((myname (iup:attribute obj "TITLE")))
 						     (if (equal? myname "Collapse")
 							 (begin
 							   (for-each (lambda (tname)
 								       (hash-table-set! *collapsed* tname #t))
-								     (dboard:tabdat-item-test-names data))
+								     (dboard:tabdat-item-test-names tabdat))
 							   (iup:attribute-set! obj "TITLE" "Expand"))
 							 (begin
 							   (for-each (lambda (tname)
 								       (hash-table-delete! *collapsed* tname))
 								     (hash-table-keys *collapsed*))
 							   (iup:attribute-set! obj "TITLE" "Collapse"))))
-						   (mark-for-update))))
+						   (mark-for-update tabdat))))
 	       )
 	      (iup:vbox
 	       ;; (iup:button "Sort -t"   #:action (lambda (obj)
 	       ;;   				 (next-sort-option)
 	       ;;   				 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
-	       ;;   				 (mark-for-update)))
+	       ;;   				 (mark-for-update tabdat)))
 	       
 	       (let* ((hide #f)
 		      (show #f)
@@ -1445,34 +1446,34 @@ Misc
 					       #:dropdown "YES"
 					       #:action (lambda (obj val index lbstate)
 							  (set! *tests-sort-reverse* index)
-							  (mark-for-update))))
+							  (mark-for-update tabdat))))
 		      (default-cmd (car (list-ref *tests-sort-type-index* *tests-sort-reverse*))))
 		 (iuplistbox-fill-list sort-lb cmds-list selected-item: default-cmd)
 		 
 		 (set! hide-empty (iup:button "HideEmpty"
 					      #:expand "YES"
 					      #:action (lambda (obj)
-							 (dboard:tabdat-hide-empty-runs-set! data (not (dboard:tabdat-hide-empty-runs data)))
-							 (iup:attribute-set! obj "TITLE" (if (dboard:tabdat-hide-empty-runs data) "+HideE" "-HideE"))
-							 (mark-for-update))))
+							 (dboard:tabdat-hide-empty-runs-set! tabdat (not (dboard:tabdat-hide-empty-runs tabdat)))
+							 (iup:attribute-set! obj "TITLE" (if (dboard:tabdat-hide-empty-runs tabdat) "+HideE" "-HideE"))
+							 (mark-for-update tabdat))))
 		 (set! hide (iup:button "Hide"
 					#:expand "YES"
 					#:action (lambda (obj)
-						   (dboard:tabdat-hide-not-hide-set! data #t) ;; (not (dboard:tabdat-hide-not-hide data)))
-						   ;; (iup:attribute-set! obj "TITLE" (if (dboard:tabdat-hide-not-hide data) "HideTests" "NotHide"))
+						   (dboard:tabdat-hide-not-hide-set! tabdat #t) ;; (not (dboard:tabdat-hide-not-hide tabdat)))
+						   ;; (iup:attribute-set! obj "TITLE" (if (dboard:tabdat-hide-not-hide tabdat) "HideTests" "NotHide"))
 						   (iup:attribute-set! hide "BGCOLOR" sel-color)
 						   (iup:attribute-set! show "BGCOLOR" nonsel-color)
-						   (mark-for-update))))
+						   (mark-for-update tabdat))))
 		 (set! show (iup:button "Show"
 					#:expand "YES"
 					#:action (lambda (obj)
-						   (dboard:tabdat-hide-not-hide-set! data #f) ;; (not (dboard:tabdat-hide-not-hide data)))
+						   (dboard:tabdat-hide-not-hide-set! tabdat #f) ;; (not (dboard:tabdat-hide-not-hide tabdat)))
 						   (iup:attribute-set! show "BGCOLOR" sel-color)
 						   (iup:attribute-set! hide "BGCOLOR" nonsel-color)
-						   (mark-for-update))))
+						   (mark-for-update tabdat))))
 		 (iup:attribute-set! hide "BGCOLOR" sel-color)
 		 (iup:attribute-set! show "BGCOLOR" nonsel-color)
-		 ;; (dboard:tabdat-hide-not-hide-button-set! data hideit) ;; never used, can eliminate ...
+		 ;; (dboard:tabdat-hide-not-hide-button-set! tabdat hideit) ;; never used, can eliminate ...
 		 (iup:vbox
 		  (iup:hbox hide show)
 		  hide-empty sort-lb)))
@@ -1485,10 +1486,10 @@ Misc
 	      (map (lambda (status)
 		     (iup:toggle (conc status "  ")
 				 #:action   (lambda (obj val)
-					      (mark-for-update)
+					      (mark-for-update tabdat)
 					      (if (eq? val 1)
-						  (hash-table-set! (dboard:tabdat-status-ignore-hash data) status #t)
-						  (hash-table-delete! (dboard:tabdat-status-ignore-hash data) status))
+						  (hash-table-set! (dboard:tabdat-status-ignore-hash tabdat) status #t)
+						  (hash-table-delete! (dboard:tabdat-status-ignore-hash tabdat) status))
 					      (set-bg-on-filter commondat tabdat))))
 		   (map cadr *common:std-statuses*))) ;; '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
 	     (apply 
@@ -1496,26 +1497,26 @@ Misc
 	      (map (lambda (state)
 		     (iup:toggle (conc state "  ")
 				 #:action   (lambda (obj val)
-					      (mark-for-update)
+					      (mark-for-update tabdat)
 					      (if (eq? val 1)
-						  (hash-table-set! (dboard:tabdat-state-ignore-hash data) state #t)
-						  (hash-table-delete! (dboard:tabdat-state-ignore-hash data) state))
+						  (hash-table-set! (dboard:tabdat-state-ignore-hash tabdat) state #t)
+						  (hash-table-delete! (dboard:tabdat-state-ignore-hash tabdat) state))
 					      (set-bg-on-filter commondat tabdat))))
 		   (map cadr *common:std-states*))) ;; '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
 	     (iup:valuator #:valuechanged_cb (lambda (obj)
 					       (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))
 						     (oldmax   (string->number (iup:attribute obj "MAX")))
-						     (maxruns  (dboard:tabdat-tot-runs data)))
-						 (dboard:tabdat-start-run-offset-set! data val)
-						 (mark-for-update)
-						 (debug:print 6 *default-log-port* "(dboard:tabdat-start-run-offset data) " (dboard:tabdat-start-run-offset data) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
+						     (maxruns  (dboard:tabdat-tot-runs tabdat)))
+						 (dboard:tabdat-start-run-offset-set! tabdat val)
+						 (mark-for-update tabdat)
+						 (debug:print 6 *default-log-port* "(dboard:tabdat-start-run-offset tabdat) " (dboard:tabdat-start-run-offset tabdat) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
 						 (iup:attribute-set! obj "MAX" (* maxruns 10))))
 			   #:expand "HORIZONTAL"
-			   #:max (* 10 (length (dboard:tabdat-allruns data)))
+			   #:max (* 10 (length (dboard:tabdat-allruns tabdat)))
 			   #:min 0
 			   #:step 0.01)))
-					;(iup:button "inc rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! data (+ (dboard:tabdat-num-tests data) 1))))
-					;(iup:button "dec rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! data (if (> (dboard:tabdat-num-tests data) 0)(- (dboard:tabdat-num-tests data) 1) 0))))
+					;(iup:button "inc rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (+ (dboard:tabdat-num-tests tabdat) 1))))
+					;(iup:button "dec rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (if (> (dboard:tabdat-num-tests tabdat) 0)(- (dboard:tabdat-num-tests tabdat) 1) 0))))
 	   ))
 
 (define (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt)
@@ -1600,7 +1601,7 @@ Misc
 							   (iup:label x #:size "x15" #:fontsize "10" #:expand "HORIZONTAL")
 							   (iup:textbox #:size "x15" #:fontsize "10" #:value "%" #:expand "HORIZONTAL"
 									#:action (lambda (obj unk val)
-										   (mark-for-update)
+										   (mark-for-update tabdat)
 										   (update-search commondat tabdat x val))))))
 					(set! i (+ i 1))
 					res))
@@ -1636,7 +1637,7 @@ Misc
 				 #:expand "HORIZONTAL"
 				 #:fontsize "10"
 				 #:action (lambda (obj)
-					    (mark-for-update)
+					    (mark-for-update tabdat)
 					    (toggle-hide testnum))))) ;; (iup:attribute obj "TITLE"))))
 	  (vector-set! lftcol testnum labl)
 	  (loop (+ testnum 1)(cons labl res))))))
@@ -1803,7 +1804,7 @@ Misc
      (current-seconds)) ;; something went wrong - just print an error and return current-seconds
    (apply max (map (lambda (filen)
 		     (file-modification-time filen))
-		   (glob (conc (dboard:tabdat-dbdir dat) "/*.db"))))))
+		   (glob (conc (dboard:tabdat-dbdir tabdat) "/*.db"))))))
 
 (define (dashboard:run-update x commondat)
   (let* ((tabdat          (dboard:common-get-tabdat commondat)) ;; uses curr-tab-num
@@ -1842,8 +1843,7 @@ Misc
 	    ((3)
 	     (dashboard:update-new-view-tab))
 	    (else
-	     (let ((updater (hash-table-ref/default (dboard:commondat-updaters tabdat)
-						    (dboard:commondat-curr-tab-num tabdat) #f)))
+	     (let ((updater (dboard:common-get-tabdat commondat)))
 	       (if updater (updater)))))
 	  (dboard:commondat-please-update-set! commondat #f)
 	  (dboard:tabdat-last-db-update-set! tabdat modtime)
