@@ -705,7 +705,7 @@ Misc
 					    (hash-table-keys (dboard:tabdat-searchpatts tabdat))))))
 	(state-changed  (not (null? (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))))
 	(status-changed (not (null? (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat))))))
-    (iup:attribute-set! (dboard:tabdat-hide-not-hide-tabs tabdat) "BGCOLOR"
+    (iup:attribute-set! (dboard:commondat-hide-not-hide-tabs commondat) "BGCOLOR"
 			(if (or search-changed
 				state-changed
 				status-changed)
