@@ -625,7 +625,7 @@
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
 		(let ((results (rmt:get-tests-for-run hed (conc test-name "/" item-path) '() '() ;; run-id testpatt states statuses
-						      #f #f #f #f         ;; offset limit not-in hide/not-hide
+						      #f #f #f               ;; offset limit not-in hide/not-hide
 						      #f #f #f #f 'normal))) ;; sort-by sort-order qryvals last-update mode
 		  (debug:print 4 *default-log-port* "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
