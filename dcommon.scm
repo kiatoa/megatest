@@ -35,85 +35,6 @@
 ;; C O M M O N   D A T A   S T R U C T U R E
 ;;======================================================================
 ;; 
-;; A single data structure for all the data used in a dashboard.
-;; Share this structure between newdashboard and dashboard with the 
-;; intent of converging on a single app.
-;;
-(define *data* (make-vector 25 #f))
-(define (dboard:data-runs          vec)    (vector-ref  vec 0))
-(define (dboard:data-tests         vec)    (vector-ref  vec 1))
-(define (dboard:data-runs-matrix   vec)    (vector-ref  vec 2))
-(define (dboard:data-tests-tree    vec)    (vector-ref  vec 3))
-(define (dboard:data-run-keys      vec)    (vector-ref  vec 4))
-(define (dboard:data-curr-test-ids vec)    (vector-ref  vec 5))
-;; (define (dboard:data-test-details  vec)    (vector-ref  vec 6))
-(define (dboard:data-path-test-ids vec)    (vector-ref  vec 7))
-(define (dboard:data-updaters      vec)    (vector-ref  vec 8))
-(define (dboard:data-path-run-ids  vec)    (vector-ref  vec 9))
-(define (dboard:data-curr-run-id   vec)    (vector-ref  vec 10))
-(define (dboard:data-runs-tree     vec)    (vector-ref  vec 11))
-;; For test-patts convert #f to ""
-(define (dboard:data-test-patts    vec)    
-  (let ((val (vector-ref  vec 12)))(if val val "")))
-(define (dboard:data-states        vec)    (vector-ref vec 13))
-(define (dboard:data-statuses      vec)    (vector-ref vec 14))
-(define (dboard:data-logs-textbox  vec val)(vector-ref vec 15))
-(define (dboard:data-command       vec)    (vector-ref vec 16))
-(define (dboard:data-command-tb    vec)    (vector-ref vec 17))
-(define (dboard:data-target        vec)    (vector-ref vec 18))
-(define (dboard:data-target-string vec)
-  (let ((targ (dboard:data-target vec)))
-    (if (list? targ)(string-intersperse targ "/") "no-target-specified")))
-(define (dboard:data-run-name      vec)    (vector-ref vec 19))
-(define (dboard:data-runs-listbox  vec)    (vector-ref vec 20))
-(define (dboard:data-updater-for-runs vec) (vector-ref vec 21))
-
-(defstruct d:data runs tests runs-matrix tests-tree run-keys
-  curr-test-ids updaters path-run-ids curr-run-id runs-tree test-patts
-  states statuses logs-textbox command command-tb target run-name
-  runs-listbox)
-
-(define (dboard:data-runs-set!          vec val)(vector-set! vec 0 val))
-(define (dboard:data-tests-set!         vec val)(vector-set! vec 1 val))
-(define (dboard:data-runs-matrix-set!   vec val)(vector-set! vec 2 val))
-(define (dboard:data-tests-tree-set!    vec val)(vector-set! vec 3 val))
-(define (dboard:data-run-keys-set!      vec val)(vector-set! vec 4 val))
-(define (dboard:data-curr-test-ids-set! vec val)(vector-set! vec 5 val))
-;; (define (dboard:data-test-details-set!  vec val)(vector-set! vec 6 val))
-(define (dboard:data-path-test-ids-set! vec val)(vector-set! vec 7 val))
-(define (dboard:data-updaters-set!      vec val)(vector-set! vec 8 val))
-(define (dboard:data-path-run-ids-set!  vec val)(vector-set! vec 9 val))
-(define (dboard:data-curr-run-id-set!   vec val)(vector-set! vec 10 val))
-(define (dboard:data-runs-tree-set!     vec val)(vector-set! vec 11 val))
-;; For test-patts convert "" to #f 
-(define (dboard:data-test-patts-set!    vec val)
-  (vector-set! vec 12 (if (equal? val "") #f val)))
-(define (dboard:data-states-set!        vec val)(vector-set! vec 13 val))
-(define (dboard:data-statuses-set!      vec val)(vector-set! vec 14 val))
-(define (dboard:data-logs-textbox-set!  vec val)(vector-set! vec 15 val))
-(define (dboard:data-command-set!       vec val)(vector-set! vec 16 val))
-(define (dboard:data-command-tb-set!    vec val)(vector-set! vec 17 val))
-(define (dboard:data-target-set!        vec val)(vector-set! vec 18 val))
-(define (dboard:data-run-name-set!      vec val)(vector-set! vec 19 val))
-(define (dboard:data-runs-listbox-set!  vec val)(vector-set! vec 20 val))
-(define (dboard:data-updater-for-runs-set! vec val)(vector-set! vec 21 val))
-
-(dboard:data-run-keys-set! *data* (make-hash-table))
-
-;; List of test ids being viewed in various panels
-(dboard:data-curr-test-ids-set! *data* (make-hash-table))
-
-;; Look up test-ids by (key1 key2 ... testname [itempath])
-(dboard:data-path-test-ids-set! *data* (make-hash-table))
-
-;; Look up run-ids by ??
-(dboard:data-path-run-ids-set! *data* (make-hash-table))
-
-(define (d:data-init dat)
-  (d:data-run-keys-set!      dat (make-hash-table))
-  (d:data-curr-test-ids-set! dat (make-hash-table))
-  (d:data-path-run-ids-set!  dat (make-hash-table))
-  dat)
 
 ;;======================================================================
 ;; D O T F I L E
@@ -160,7 +81,7 @@
 	 (get-details-sig (conc (client:get-signature) " get-test-details"))
 
 	 ;; test-ids to get and display are indexed on window-id in curr-test-ids hash
-	 (test-ids        (hash-table-values (dboard:data-curr-test-ids *data*)))
+	 (test-ids        (hash-table-values (dboard:tabdat-curr-test-ids data)))
 	 ;; run-id is #f in next line to send the query to server 0
  	 (run-changes     (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data #f runname #f #f keypatts))
 	 (tests-detail-changes (if (not (null? test-ids))
@@ -208,12 +129,12 @@
 		       (run-name   (db:get-value-by-header run-record header "runname"))
 		       (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
 		       (run-path   (append key-vals (list run-name))))
-		  (hash-table-set! (dboard:data-run-keys *data*) run-id run-path)
-		  (iup:attribute-set! (dboard:data-runs-matrix *data*)
+		  (hash-table-set! (dboard:tabdat-run-keys data) run-id run-path)
+		  (iup:attribute-set! (dboard:tabdat-runs-matrix data)
 				      (conc rownum ":" colnum) col-name)
 		  (hash-table-set! runid-to-col run-id (list colnum run-record))
 		  ;; Here we update the tests treebox and tree keys
-		  (tree:add-node (dboard:data-tests-tree *data*) "Runs" (append key-vals (list run-name))
+		  (tree:add-node (dboard:tabdat-tests-tree data) "Runs" (append key-vals (list run-name))
 				 userdata: (conc "run-id: " run-id))
 		  (set! colnum (+ colnum 1))))
 	      run-ids)
@@ -221,7 +142,7 @@
     ;; Scan all tests to be displayed and organise all the test names, respecting what is in the hash table
     ;; Do this analysis in the order of the run-ids, the most recent run wins
     (for-each (lambda (run-id)
-		(let* ((run-path       (hash-table-ref (dboard:data-run-keys *data*) run-id))
+		(let* ((run-path       (hash-table-ref (dboard:tabdat-run-keys data) run-id))
 		       (test-changes   (hash-table-ref all-test-changes run-id))
 		       (new-test-dat   (car test-changes))
 		       (removed-tests  (cadr test-changes))
@@ -260,16 +181,16 @@
 				     (test-path (append run-path (if (equal? itempath "") 
 								     (list testname)
 								     (list testname itempath))))
-				     (tb         (dboard:data-tests-tree *data*)))
+				     (tb         (dboard:tabdat-tests-tree data)))
 				(print "INFONOTE: run-path: " run-path)
-				(tree:add-node (dboard:data-tests-tree *data*) "Runs" 
+				(tree:add-node (dboard:tabdat-tests-tree data) "Runs" 
 					       test-path
 					       userdata: (conc "test-id: " test-id))
 				(let ((node-num (tree:find-node tb (cons "Runs" test-path)))
 				      (color    (car (gutils:get-color-for-state-status state status))))
 				  (debug:print 0 *default-log-port* "node-num: " node-num ", color: " color)
 				  (iup:attribute-set! tb (conc "COLOR" node-num) color))
-				(hash-table-set! (dboard:data-path-test-ids *data*) test-path test-id)
+				(hash-table-set! (dboard:tabdat-path-test-ids data) test-path test-id)
 				(if (not rownum)
 				    (let ((rownums (hash-table-values testname-to-row)))
 				      (set! rownum (if (null? rownums)
@@ -277,27 +198,27 @@
 						       (+ 1 (apply max rownums))))
 				      (hash-table-set! testname-to-row fullname rownum)
 				      ;; create the label
-				      (iup:attribute-set! (dboard:data-runs-matrix *data*)
+				      (iup:attribute-set! (dboard:tabdat-runs-matrix data)
 							  (conc rownum ":" 0) dispname)
 				      ))
 				;; set the cell text and color
 				;; (debug:print 2 *default-log-port* "rownum:colnum=" rownum ":" colnum ", state=" status)
-				(iup:attribute-set! (dboard:data-runs-matrix *data*)
+				(iup:attribute-set! (dboard:tabdat-runs-matrix data)
 						    (conc rownum ":" colnum)
 						    (if (member state '("ARCHIVED" "COMPLETED"))
 							status
 							state))
-				(iup:attribute-set! (dboard:data-runs-matrix *data*)
+				(iup:attribute-set! (dboard:tabdat-runs-matrix data)
 						    (conc "BGCOLOR" rownum ":" colnum)
 						    (car (gutils:get-color-for-state-status state status)))
 				))
 			    tests)))
 	      run-ids)
 
-    (let ((updater (hash-table-ref/default  (dboard:data-updaters *data*) window-id #f)))
+    (let ((updater (hash-table-ref/default  (dboard:commondat-updaters commondat) window-id #f)))
       (if updater (updater (hash-table-ref/default data get-details-sig #f))))
 
-    (iup:attribute-set! (dboard:data-runs-matrix *data*) "REDRAW" "ALL")
+    (iup:attribute-set! (dboard:tabdat-runs-matrix data) "REDRAW" "ALL")
     ;; (debug:print 2 *default-log-port* "run-changes: " run-changes)
     ;; (debug:print 2 *default-log-port* "test-changes: " test-changes)
     (list run-changes all-test-changes)))
@@ -437,18 +358,18 @@
 
     general-matrix))
 
-(define (dcommon:run-stats dbstruct)
+(define (dcommon:run-stats alldat)
   (let* ((stats-matrix (iup:matrix expand: "YES"))
 	 (changed      #f)
 	 (updater      (lambda ()
-			 (let* ((run-stats    (db:get-run-stats dbstruct))
+			 (let* ((run-stats    (rmt:get-run-stats))
 				(indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
 				(row-indices  (car indices))
 				(col-indices  (cadr indices))
 				(max-row      (if (null? row-indices) 1 (apply max (map cadr row-indices))))
 				(max-col      (if (null? col-indices) 1 
 						  (apply max (map cadr col-indices))))
-				(max-visible  (max (- (d:alldat-num-tests *alldat*) 15) 3))
+				(max-visible  (max (- (dboard:tabdat-num-tests alldat) 15) 3))
 				(max-col-vis  (if (> max-col 10) 10 max-col))
 				(numrows      1)
 				(numcols      1))
@@ -925,12 +846,12 @@
 	       #:readonly "YES"
 	       #:font "Courier New, -12"
 	       )))
-      (dboard:data-command-tb-set! data tb)
+      (dboard:tabdat-command-tb-set! data tb)
       tb)
     (iup:button "Execute" #:size "50x"
 		#:action (lambda (obj)
 			   (let ((cmd (conc "xterm -geometry 180x20 -e \""
-					    (iup:attribute (dboard:data-command-tb data) "VALUE")
+					    (iup:attribute (dboard:tabdat-command-tb data) "VALUE")
 					    ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
 			     (system cmd)))))))
 
@@ -944,11 +865,11 @@
 				    #:dropdown "YES"
 				    #:action (lambda (obj val index lbstate)
 					       ;; (print obj " " val " " index " " lbstate)
-					       (dboard:data-command-set! data val)
+					       (dboard:tabdat-command-set! data val)
 					       (dashboard:update-run-command data))))
 	   (default-cmd (car cmds-list)))
       (iuplistbox-fill-list lb cmds-list selected-item: default-cmd)
-      (dboard:data-command-set! data default-cmd)
+      (dboard:tabdat-command-set! data default-cmd)
       lb))))
 
 (define (dcommon:command-runname-selector alldat data)
@@ -958,22 +879,20 @@
 	  (tb (iup:textbox #:expand "HORIZONTAL"
 			   #:action (lambda (obj val txt)
 				      ;; (print "obj: " obj " val: " val " unk: " unk)
-				      (dboard:data-run-name-set! data txt) ;; (iup:attribute obj "VALUE"))
+				      (dboard:tabdat-run-name-set! data txt) ;; (iup:attribute obj "VALUE"))
 				      (dashboard:update-run-command data))
-			   #:value (or default-run-name (dboard:data-run-name data))))
+			   #:value (or default-run-name (dboard:tabdat-run-name data))))
 	  (lb (iup:listbox #:expand "HORIZONTAL"
 			   #:dropdown "YES"
 			   #:action (lambda (obj val index lbstate)
 				      (if (not (equal? val ""))
 					  (begin
 					    (iup:attribute-set! tb "VALUE" val)
-					    (dboard:data-run-name-set! data val)
+					    (dboard:tabdat-run-name-set! data val)
 					    (dashboard:update-run-command data))))))
 	  (refresh-runs-list (lambda ()
-			       (let* ((target        (dboard:data-target-string data))
-				      (runs-for-targ (if (d:alldat-useserver alldat)
-							 (rmt:get-runs-by-patt (d:alldat-keys alldat) "%" target #f #f #f)
-							 (db:get-runs-by-patt (d:alldat-dblocal alldat) (d:alldat-keys alldat) "%" target #f #f #f)))
+			       (let* ((target        (dboard:tabdat-target-string data))
+				      (runs-for-targ (rmt:get-runs-by-patt (dboard:tabdat-keys alldat) "%" target #f #f #f))
 				      (runs-header   (vector-ref runs-for-targ 0))
 				      (runs-dat      (vector-ref runs-for-targ 1))
 				      (run-names     (cons default-run-name 
@@ -982,9 +901,9 @@
 								runs-dat))))
 				 ;; (iup:attribute-set! lb "REMOVEITEM" "ALL")
 				 (iuplistbox-fill-list lb run-names selected-item: default-run-name)))))
-     (dboard:data-updater-for-runs-set! data refresh-runs-list)
+     (dboard:tabdat-updater-for-runs-set! data refresh-runs-list)
      (refresh-runs-list)
-     (dboard:data-run-name-set! data default-run-name)
+     (dboard:tabdat-run-name-set! data default-run-name)
      (iup:hbox
       tb
       lb))))
@@ -997,12 +916,12 @@
     (iup:frame
      #:title "Test patterns (one per line)"
      (let ((tb (iup:textbox #:action (lambda (val a b)
-				       (dboard:data-test-patts-set!
-					*data*
+				       (dboard:tabdat-test-patts-set!-use
+					data
 					(dboard:lines->test-patt b))
 				       (dashboard:update-run-command data))
 			    #:value (dboard:test-patt->lines
-				     (dboard:data-test-patts *data*))
+				     (dboard:tabdat-test-patts-use data))
 			    #:expand "YES"
 			    #:size "x50"
 			    #:multiline "YES")))
@@ -1025,7 +944,7 @@
        ;; Move these definitions to common and find the other useages and replace!
        (map cadr *common:std-states*) ;; '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
        (lambda (all)
-	 (dboard:data-states-set! *data* all)
+	 (dboard:tabdat-states-set! data all)
 	 (dashboard:update-run-command data))))
      ;; Text box for STATES
      (iup:frame
@@ -1033,7 +952,7 @@
       (dashboard:text-list-toggle-box 
        (map cadr *common:std-statuses*) ;; '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
        (lambda (all)
-	 (dboard:data-statuses-set! *data* all)
+	 (dboard:tabdat-statuses-set! data all)
 	 (dashboard:update-run-command data))))))))
 
 (define (dcommon:command-tests-tasks-canvas data test-records sorted-testnames tests-draw-state)
@@ -1107,7 +1026,7 @@
 							     (iup:attribute-set! obj "REDRAW" "ALL")
 							     (hash-table-set! selected-tests test-name selected)
 							     (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
-							     (dboard:data-test-patts-set! data (dboard:lines->test-patt newpatt))
+							     (dboard:tabdat-test-patts-set!-use data (dboard:lines->test-patt newpatt))
 							     (dashboard:update-run-command data)
 							     (if updater (updater last-xadj last-yadj)))))))
 						 (hash-table-keys tests-info)))))))
