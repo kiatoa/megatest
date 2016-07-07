@@ -91,6 +91,8 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
+;; data common to all tabs goes here
+;;
 (defstruct dboard:commondat
   curr-tab-num
   please-update  
@@ -98,6 +100,7 @@ Misc
   update-mutex
   updaters 
   updating
+  uidat ;; needs to move to tabdat at some time
   hide-not-hide-tabs
   )
 
@@ -124,7 +127,7 @@ Misc
    tabnum
    tabdat))
 
-;; create a stuct for all the miscellaneous state
+;; data for each specific tab goes here
 ;;
 (defstruct dboard:tabdat 
   allruns 
@@ -170,6 +173,7 @@ Misc
   tests
   tests-tree
   tot-runs   
+;;  uidat
   updater-for-runs
   )
 
@@ -212,6 +216,19 @@ Misc
     (dboard:setup-tabdat dat)
     (dboard:setup-num-rows dat)
     dat))
+
+(define (dboard:setup-tabdat tabdat)
+  (dboard:tabdat-dbdir-set! tabdat (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+  (dboard:tabdat-dbfpath-set! tabdat (db:dbfile-path 0))
+  (dboard:tabdat-monitor-db-path-set! tabdat (conc (dboard:tabdat-dbdir tabdat) "/monitor.db"))
+
+  ;; HACK ALERT: this is a hack, please fix.
+  (dboard:tabdat-ro-set! tabdat (not (file-read-access? (dboard:tabdat-dbfpath tabdat))))
+  
+  (dboard:tabdat-keys-set! tabdat (rmt:get-keys))
+  (dboard:tabdat-dbkeys-set! tabdat (append (dboard:tabdat-keys tabdat) (list "runname")))
+  (dboard:tabdat-tot-runs-set! tabdat (rmt:get-num-runs "%"))
+  )
 
 ;; data for runs, tests etc
 ;;
@@ -272,19 +289,6 @@ Misc
 
 (define *dashboard-mode* (string->symbol (or (configf:lookup *configdat* "dashboard" "mode") "dashboard")))
   
-(define (dboard:setup-tabdat tabdat)
-  (dboard:tabdat-dbdir-set! tabdat (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
-  (dboard:tabdat-dbfpath-set! tabdat (db:dbfile-path 0))
-  (dboard:tabdat-monitor-db-path-set! tabdat (conc (dboard:tabdat-dbdir tabdat) "/monitor.db"))
-
-  ;; HACK ALERT: this is a hack, please fix.
-  (dboard:tabdat-ro-set! tabdat (not (file-read-access? (dboard:tabdat-dbfpath tabdat))))
-  
-  (dboard:tabdat-keys-set! tabdat (rmt:get-keys))
-  (dboard:tabdat-dbkeys-set! tabdat (append (dboard:tabdat-keys tabdat) (list "runname")))
-  (dboard:tabdat-tot-runs-set! tabdat (rmt:get-num-runs "%"))
-  )
-
 
 (define *exit-started* #f)
 
@@ -323,7 +327,7 @@ Misc
 
 (debug:setup)
 
-(define uidat #f)
+;; (define uidat #f)
 
 (define-inline (dboard:uidat-get-keycol  vec)(vector-ref vec 0))
 (define-inline (dboard:uidat-get-lftcol  vec)(vector-ref vec 1))
@@ -457,9 +461,8 @@ Misc
     maxtests))
 
 (define *collapsed* (make-hash-table))
-					; (define *row-lookup* (make-hash-table)) ;; testname => (rownum lableobj)
 
-(define (toggle-hide lnum) ; fulltestname)
+(define (toggle-hide lnum uidat) ; fulltestname)
   (let* ((btn (vector-ref (dboard:uidat-get-lftcol uidat) lnum))
 	 (fulltestname (iup:attribute btn "TITLE"))
 	 (parts        (string-split fulltestname "("))
@@ -1638,7 +1641,7 @@ Misc
 				 #:fontsize "10"
 				 #:action (lambda (obj)
 					    (mark-for-update tabdat)
-					    (toggle-hide testnum))))) ;; (iup:attribute obj "TITLE"))))
+					    (toggle-hide testnum uidat))))) ;; (iup:attribute obj "TITLE"))))
 	  (vector-set! lftcol testnum labl)
 	  (loop (+ testnum 1)(cons labl res))))))
     ;; 
@@ -1807,47 +1810,49 @@ Misc
 		   (glob (conc (dboard:tabdat-dbdir tabdat) "/*.db"))))))
 
 (define (dashboard:run-update x commondat)
-  (let* ((tabdat          (dboard:common-get-tabdat commondat)) ;; uses curr-tab-num
-	 (monitor-db-path (dboard:tabdat-monitor-db-path tabdat))
-	 (modtime         (dashboard:get-youngest-run-db-mod-time tabdat)) ;; NOTE: ensure this is tabdat!! 
-	 (monitor-modtime (if (file-exists? monitor-db-path)
-			      (file-modification-time monitor-db-path)
-			      -1))
-	 (run-update-time (current-seconds))
-	 (recalc          (dashboard:recalc modtime (dboard:commondat-please-update commondat) (dboard:tabdat-last-db-update tabdat))))
-    (if (and (eq? (dboard:commondat-curr-tab-num commondat) 0)
-	     (or (> monitor-modtime *last-monitor-update-time*)
-		 (> (- run-update-time *last-monitor-update-time*) 5))) ;; update every 1/2 minute just in case
-	(begin
-	  (set! *last-monitor-update-time* run-update-time) ;; monitor-modtime)
-	  (if dashboard:update-servers-table (dashboard:update-servers-table))))
-    (if recalc
-	(begin	
-	  (case (dboard:commondat-curr-tab-num commondat) 
-	    ((0) 
-	     (if dashboard:update-summary-tab (dashboard:update-summary-tab)))
-	    ((1) ;; The runs table is active
-	     (update-rundat tabdat (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") (dboard:tabdat-numruns tabdat)
-			    (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
-			    ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
-			    (let ((res '()))
-			      (for-each (lambda (key)
-					  (if (not (equal? key "runname"))
-					      (let ((val (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) key #f)))
-						(if val (set! res (cons (list key val) res))))))
-					(dboard:tabdat-dbkeys tabdat))
-			      res))
-	     (update-buttons tabdat uidat (dboard:tabdat-numruns tabdat) (dboard:tabdat-num-tests tabdat)))
-	    ((2)
-	     (dashboard:update-run-summary-tab))
-	    ((3)
-	     (dashboard:update-new-view-tab))
-	    (else
-	     (let ((updater (dboard:common-get-tabdat commondat)))
-	       (if updater (updater)))))
-	  (dboard:commondat-please-update-set! commondat #f)
-	  (dboard:tabdat-last-db-update-set! tabdat modtime)
-	  (set! *last-recalc-ended-time* (current-milliseconds))))))
+  (let* ((tabdat          (dboard:common-get-tabdat commondat))) ;; uses curr-tab-num
+    (if tabdat ;; if there is no tabdat then likely we are in a test control panel, no update calls needed
+	(let* ((monitor-db-path (dboard:tabdat-monitor-db-path tabdat))
+	       (modtime         (dashboard:get-youngest-run-db-mod-time tabdat)) ;; NOTE: ensure this is tabdat!! 
+	       (monitor-modtime (if (and monitor-db-path (file-exists? monitor-db-path))
+				    (file-modification-time monitor-db-path)
+				    -1))
+	       (run-update-time (current-seconds))
+	       (uidat           (dboard:commondat-uidat commondat))
+	       (recalc          (dashboard:recalc modtime (dboard:commondat-please-update commondat) (dboard:tabdat-last-db-update tabdat))))
+	  (if (and (eq? (dboard:commondat-curr-tab-num commondat) 0)
+		   (or (> monitor-modtime *last-monitor-update-time*)
+		       (> (- run-update-time *last-monitor-update-time*) 5))) ;; update every 1/2 minute just in case
+	      (begin
+		(set! *last-monitor-update-time* run-update-time) ;; monitor-modtime)
+		(if dashboard:update-servers-table (dashboard:update-servers-table))))
+	  (if recalc
+	      (begin	
+		(case (dboard:commondat-curr-tab-num commondat) 
+		  ((0) 
+		   (if dashboard:update-summary-tab (dashboard:update-summary-tab)))
+		  ((1) ;; The runs table is active
+		   (update-rundat tabdat (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") (dboard:tabdat-numruns tabdat)
+				  (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
+				  ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
+				  (let ((res '()))
+				    (for-each (lambda (key)
+						(if (not (equal? key "runname"))
+						    (let ((val (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) key #f)))
+						      (if val (set! res (cons (list key val) res))))))
+					      (dboard:tabdat-dbkeys tabdat))
+				    res))
+		   (update-buttons tabdat uidat (dboard:tabdat-numruns tabdat) (dboard:tabdat-num-tests tabdat)))
+		  ((2)
+		   (dashboard:update-run-summary-tab))
+		  ((3)
+		   (dashboard:update-new-view-tab))
+		  (else
+		   (let ((updater (dboard:common-get-tabdat commondat)))
+		     (if updater (updater)))))
+		(dboard:commondat-please-update-set! commondat #f)
+		(dboard:tabdat-last-db-update-set! tabdat modtime)
+		(set! *last-recalc-ended-time* (current-milliseconds))))))))
 
 ;;======================================================================
 ;; The heavy lifting starts here
@@ -1860,13 +1865,8 @@ Misc
 
 (define (main)
   (common:exit-on-version-changed)
-  (let* (;; (runs-dat     (dboard:tabdat-make-data))
-	 ;; (runs-sum-dat (dboard:tabdat-make-data)) ;; init (make-d:data))) ;; data for run-summary tab
-	 ;; (new-view-dat (dboard:tabdat-make-data)) ;; (dboard:tabdat-make-data)) ;; init (make-d:data)))
-	 (commondat       (dboard:commondat-make)))
+  (let* ((commondat       (dboard:commondat-make)))
     ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
-    ;; (dboard:tabdat-last-db-update-set! tabdat (file-modification-time (dboard:tabdat-dbfpath tabdat))) ;; (conc *toppath* "/db/main.db")))
-    ;; (set! *monitor-db-path* (conc (dboard:commondat-dbdir commondat) "/monitor.db"))
     (cond 
      ((args:get-arg "-test") ;; run-id,test-id
       (let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-test") ","))))
@@ -1885,7 +1885,7 @@ Misc
      ;; ((args:get-arg "-guimonitor")
      ;;  (gui-monitor (dboard:tabdat-dblocal tabdat)))
      (else
-      (set! uidat (make-dashboard-buttons commondat)) ;; (dboard:tabdat-dblocal data)
+      (dboard:commondat-uidat-set! commondat (make-dashboard-buttons commondat)) ;; (dboard:tabdat-dblocal data)
 					  ;; (dboard:tabdat-numruns tabdat)
 					  ;; (dboard:tabdat-num-tests tabdat)
 					  ;; (dboard:tabdat-dbkeys tabdat)
