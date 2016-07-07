@@ -917,7 +917,7 @@ Misc
      (dcommon:command-execution-control data)
      (iup:split
       #:orientation "VERTICAL" ;; "HORIZONTAL"
-      #:value 300
+      #:value 200
 ;; 
 ;;       (iup:split
 ;;        #:value 300
