@@ -2304,7 +2304,7 @@
 ;; use db:mintest-get-{id ,run_id,testname ...}
 ;;
 (define (db:get-tests-for-run-mindata dbstruct run-id testpatt states statuses not-in)
-  (db:get-tests-for-run dbstruct run-id testpatt states statuses #f #f not-in #f #f "id,run_id,testname,state,status,event_time,item_path" #f))
+  (db:get-tests-for-run dbstruct run-id testpatt states statuses #f #f not-in #f #f "id,run_id,testname,state,status,event_time,item_path" 0 #f))
 
 ;; do not use.
 ;;

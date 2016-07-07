@@ -934,9 +934,9 @@
 			     (db:get-value-by-header (db:get-rows run-dat)
 						     (db:get-header run-dat) "runname")))
 	       (target   (or (runs:gendat-target *runs:general-data*)(rmt:get-target run-id)))
-	       (testsdat (rmt:get-tests-for-run run-id "%" '() '()
-						#f #f
-						#f ;; hide/not-hide
+	       (testsdat (rmt:get-tests-for-run run-id "%" '() '() ;; run-id testpatt states statuses
+						#f #f ;; offset limit
+						#f ;; not-in
 						#f ;; sort-by
 						#f ;; sort-order
 						#f ;; get full data (not 'shortlist)

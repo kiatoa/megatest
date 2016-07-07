@@ -397,16 +397,16 @@ Misc
 			(if rec rec (vector run '() key-vals -100)))) ;; -100 is before time began
 	 (prev-tests  (vector-ref prev-dat 1))
 	 (last-update (vector-ref prev-dat 3))
-	 (tmptests    (rmt:get-tests-for-run run-id testnamepatt states statuses
-						 #f #f
-						 (dboard:tabdat-hide-not-hide tabdat)
-						 sort-by
-						 sort-order
-						 'shortlist
-						 (if (dboard:tabdat-filters-changed tabdat)
-						     0
-						     last-update)
-						 *dashboard-mode*)) ;; use dashboard mode
+	 (tmptests    (rmt:get-tests-for-run run-id testnamepatt states statuses  ;; run-id testpatt states statuses
+					     #f #f                                ;; offset limit 
+					     (dboard:tabdat-hide-not-hide tabdat) ;; no-in
+					     sort-by                              ;; sort-by
+					     sort-order                           ;; sort-order
+					     'shortlist                           ;; qrytype
+					     (if (dboard:tabdat-filters-changed tabdat) 
+						 0
+						 last-update) ;; last-update
+					     *dashboard-mode*)) ;; use dashboard mode
 	 (tests       (let ((newdat (filter
 				     (lambda (x)
 				       (not (equal? (db:test-get-state x) "DELETED"))) ;; remove deleted tests but do it after merging
@@ -1087,12 +1087,12 @@ Misc
 (define (dboard:get-tests-dat tabdat run-id last-update)
   (let ((tdat (if run-id (rmt:get-tests-for-run run-id 
 					     (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
-					     (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)) ;; '()
+					     (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat))  ;; '()
 					     (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)) ;; '()
-					     #f #f
-					     (dboard:tabdat-hide-not-hide tabdat)
-					     #f #f
-					     "id,testname,item_path,state,status"
+					     #f #f                                                       ;; offset limit
+					     (dboard:tabdat-hide-not-hide tabdat)                        ;; not-in
+					     #f #f                                                       ;; sort-by sort-order
+					     "id,testname,item_path,state,status"                        ;; qryval
 					     (if (dboard:tabdat-filters-changed tabdat)
 						 0
 						 last-update)
