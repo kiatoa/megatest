@@ -115,10 +115,10 @@ Misc
    hide-not-hide-tabs:   #f
    ))
 
-(define (dboard:common-get-tabdat commondat)
+(define (dboard:common-get-tabdat commondat #!key (tab-num #f))
   (hash-table-ref/default 
    (dboard:commondat-tabdats commondat)
-   (dboard:commondat-curr-tab-num commondat)
+   (or tab-num (dboard:commondat-curr-tab-num commondat))
    #f))
 
 (define (dboard:common-set-tabdat! commondat tabnum tabdat)
@@ -126,6 +126,29 @@ Misc
    (dboard:commondat-tabdats commondat)
    tabnum
    tabdat))
+
+;; gets and calls updater based on curr-tab-num
+(define (dboard:common-run-curr-updaters commondat #!key (tab-num #f))
+  (if (dboard:common-get-tabdat commondat tab-num: tab-num) ;; only update if there is a tabdat
+      (let* ((tnum     (or tab-num (dboard:commondat-curr-tab-num commondat)))
+	     (updaters (hash-table-ref/default (dboard:commondat-updaters commondat)
+					       tnum
+					       '())))
+	(debug:print 0 *default-log-port* "Found these updaters: " updaters)
+	(for-each
+	 (lambda (updater)
+	   (updater))
+	 updaters))))
+
+;; if tab-num passed in then use it, otherwise look in commondat at curr-tab-num
+;;
+(define (dboard:commondat-add-updater commondat updater #!key (tab-num #f))
+  (let* ((tnum          (or tab-num
+			     (dboard:commondat-curr-tab-num commondat)))
+	 (curr-updaters (hash-table-ref/default (dboard:commondat-updaters commondat) tnum '())))
+    (hash-table-set! (dboard:commondat-updaters commondat)
+		     tnum
+		     (cons updater curr-updaters))))
 
 ;; data for each specific tab goes here
 ;;
@@ -173,8 +196,6 @@ Misc
   tests
   tests-tree
   tot-runs   
-;;  uidat
-  updater-for-runs
   )
 
 (define (dboard:tabdat-target-string vec)
@@ -923,15 +944,14 @@ Misc
 	 (cmdln         "")
 	 (runlogs       (make-hash-table))
 	 (key-listboxes #f)
-	 ;; (updater-for-runs #f)
 	 (update-keyvals (lambda ()
 			   (let ((targ (map (lambda (x)
 					      (iup:attribute x "VALUE"))
 					    (car (dashboard:update-target-selector key-listboxes))))
 				 (curr-runname (dboard:tabdat-run-name tabdat)))
 			     (dboard:tabdat-target-set! tabdat targ)
-			     (if (dboard:tabdat-updater-for-runs tabdat)
-				 ((dboard:tabdat-updater-for-runs tabdat)))
+			;; (if (dboard:tabdat-updater-for-runs tabdat)
+			;; 	 ((dboard:tabdat-updater-for-runs tabdat)))
 			     (if (or (not (equal? curr-runname (dboard:tabdat-run-name tabdat)))
 				     (equal? (dboard:tabdat-run-name tabdat) ""))
 				 (dboard:tabdat-run-name-set! tabdat curr-runname))
@@ -957,9 +977,9 @@ Misc
        ;;
        (iup:vbox
 	;; Command to run, placed over the top of the canvas
-	(dcommon:command-action-selector tabdat)
-	(dcommon:command-runname-selector tabdat tabdat)
-	(dcommon:command-testname-selector tabdat tabdat update-keyvals key-listboxes))
+	(dcommon:command-action-selector commondat tabdat)
+	(dcommon:command-runname-selector commondat tabdat)
+	(dcommon:command-testname-selector commondat tabdat update-keyvals key-listboxes))
        
        (dcommon:command-tests-tasks-canvas tabdat test-records sorted-testnames tests-draw-state))
        
@@ -988,14 +1008,14 @@ Misc
 	 (cmdln         "")
 	 (runlogs       (make-hash-table))
 	 (key-listboxes #f)
-	 (updater-for-runs (dboard:tabdat-updater-for-runs tabdat))
+	 ;; (updater-for-runs (dboard:tabdat-updater-for-runs tabdat))
 	 (update-keyvals (lambda ()
 			   (let ((targ (map (lambda (x)
 					      (iup:attribute x "VALUE"))
 					    (car (dashboard:update-target-selector key-listboxes))))
 				 (curr-runname (dboard:tabdat-run-name tabdat)))
 			     (dboard:tabdat-target-set! tabdat targ)
-			     (if updater-for-runs (updater-for-runs))
+			     ;; (if updater-for-runs (updater-for-runs))
 			     (if (or (not (equal? curr-runname (dboard:tabdat-run-name tabdat)))
 				     (equal? (dboard:tabdat-run-name tabdat) ""))
 				 (dboard:tabdat-run-name-set! tabdat curr-runname))
@@ -1020,8 +1040,8 @@ Misc
        ;;
        (iup:vbox
 	;; Command to run, placed over the top of the canvas
-	(dcommon:command-action-selector tabdat)
-	(dcommon:command-runname-selector tabdat tabdat)
+	(dcommon:command-action-selector commondat tabdat)
+	(dcommon:command-runname-selector commondat tabdat)
 	(dcommon:command-testname-selector tabdat tabdat update-keyvals key-listboxes))
        
        (dcommon:command-tests-tasks-canvas tabdat test-records sorted-testnames tests-draw-state))
@@ -1039,7 +1059,7 @@ Misc
 ;;======================================================================
 ;;
 ;; General info about the run(s) and megatest area
-(define (dashboard:summary tabdat)
+(define (dashboard:summary commondat tabdat)
   (let* ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f #f))) ;; changed to #f since I want #{} to be expanded by [system ...] to NOT be expanded. WAS: 'return-string)))
     (iup:vbox
      (iup:split
@@ -1056,7 +1076,7 @@ Misc
 	 )))
       (iup:frame
        #:title "Server"
-       (dcommon:servers-table)))
+       (dcommon:servers-table commondat tabdat)))
      (iup:frame 
       #:title "Megatest config settings"
       (iup:hbox
@@ -1081,8 +1101,8 @@ Misc
       (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) path #f)
       #f))
 
-(define dashboard:update-run-summary-tab #f)
-(define dashboard:update-new-view-tab #f)
+;; (define dashboard:update-run-summary-tab #f)
+;; (define dashboard:update-new-view-tab #f)
 
 (define (dboard:get-tests-dat tabdat run-id last-update)
   (let ((tdat (if run-id (rmt:get-tests-for-run run-id 
@@ -1124,7 +1144,8 @@ Misc
 		       (if (number? run-id)
 			   (begin
 			     (dboard:tabdat-curr-run-id-set! tabdat run-id)
-			     (dashboard:update-run-summary-tab))
+			     ;; (dashboard:update-run-summary-tab)
+			     )
 			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		     )))
@@ -1247,7 +1268,9 @@ Misc
 				 col-indices)
 		       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
     
-    (set! dashboard:update-run-summary-tab updater)
+    ;; REPLACE ME!!!! BUGGG!!!!
+    ;; (set! dashboard:update-run-summary-tab updater)
+    (dboard:commondat-add-updater commondat updater)
     (dboard:tabdat-runs-tree-set! tabdat tb)
     (iup:split
      tb
@@ -1269,7 +1292,8 @@ Misc
 		       (if (number? run-id)
 			   (begin
 			     (dboard:tabdat-curr-run-id-set! tabdat run-id)
-			     (dashboard:update-new-view-tab))
+			     ;; (dashboard:update-new-view-tab)
+			     )
 			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		     )))
@@ -1390,8 +1414,7 @@ Misc
 					   (iup:attribute-set! run-matrix "FITTOTEXT" (conc "C" num))))))
 				 col-indices)
 		       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
-    
-    (set! dashboard:update-new-view-tab updater)
+    (dboard:commondat-add-updater commondat updater)
     (dboard:tabdat-runs-tree-set! tabdat tb)
     (iup:split
      tb
@@ -1735,7 +1758,7 @@ Misc
 		    #:tabchangepos-cb (lambda (obj curr prev)
 					(dboard:commondat-please-update-set! commondat #t)
 					(dboard:commondat-curr-tab-num-set! commondat curr))
-		    (dashboard:summary runs-dat)
+		    (dashboard:summary commondat runs-dat)
 		    runs-view
 		    (dashboard:one-run commondat onerun-dat)
 		    ;; (dashboard:new-view db data new-view-dat)
@@ -1809,50 +1832,55 @@ Misc
 		     (file-modification-time filen))
 		   (glob (conc (dboard:tabdat-dbdir tabdat) "/*.db"))))))
 
-(define (dashboard:run-update x commondat)
-  (let* ((tabdat          (dboard:common-get-tabdat commondat))) ;; uses curr-tab-num
-    (if tabdat ;; if there is no tabdat then likely we are in a test control panel, no update calls needed
-	(let* ((monitor-db-path (dboard:tabdat-monitor-db-path tabdat))
-	       (modtime         (dashboard:get-youngest-run-db-mod-time tabdat)) ;; NOTE: ensure this is tabdat!! 
-	       (monitor-modtime (if (and monitor-db-path (file-exists? monitor-db-path))
-				    (file-modification-time monitor-db-path)
-				    -1))
-	       (run-update-time (current-seconds))
-	       (uidat           (dboard:commondat-uidat commondat))
-	       (recalc          (dashboard:recalc modtime (dboard:commondat-please-update commondat) (dboard:tabdat-last-db-update tabdat))))
-	  (if (and (eq? (dboard:commondat-curr-tab-num commondat) 0)
-		   (or (> monitor-modtime *last-monitor-update-time*)
-		       (> (- run-update-time *last-monitor-update-time*) 5))) ;; update every 1/2 minute just in case
-	      (begin
-		(set! *last-monitor-update-time* run-update-time) ;; monitor-modtime)
-		(if dashboard:update-servers-table (dashboard:update-servers-table))))
-	  (if recalc
-	      (begin	
-		(case (dboard:commondat-curr-tab-num commondat) 
-		  ((0) 
-		   (if dashboard:update-summary-tab (dashboard:update-summary-tab)))
-		  ((1) ;; The runs table is active
-		   (update-rundat tabdat (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") (dboard:tabdat-numruns tabdat)
-				  (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
-				  ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
-				  (let ((res '()))
-				    (for-each (lambda (key)
-						(if (not (equal? key "runname"))
-						    (let ((val (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) key #f)))
-						      (if val (set! res (cons (list key val) res))))))
-					      (dboard:tabdat-dbkeys tabdat))
-				    res))
-		   (update-buttons tabdat uidat (dboard:tabdat-numruns tabdat) (dboard:tabdat-num-tests tabdat)))
-		  ((2)
-		   (dashboard:update-run-summary-tab))
-		  ((3)
-		   (dashboard:update-new-view-tab))
-		  (else
-		   (let ((updater (dboard:common-get-tabdat commondat)))
-		     (if updater (updater)))))
-		(dboard:commondat-please-update-set! commondat #f)
-		(dboard:tabdat-last-db-update-set! tabdat modtime)
-		(set! *last-recalc-ended-time* (current-milliseconds))))))))
+(define (dashboard:monitor-changed? commondat tabdat)
+  (let* ((monitor-db-path (dboard:tabdat-monitor-db-path tabdat))
+	 (monitor-modtime (if (and monitor-db-path (file-exists? monitor-db-path))
+			      (file-modification-time monitor-db-path)
+			      -1)))
+    (if (and (eq? (dboard:commondat-curr-tab-num commondat) 0)
+	     (or (> monitor-modtime *last-monitor-update-time*)
+		 (> (- run-update-time *last-monitor-update-time*) 5))) ;; update every 1/2 minute just in case
+	(begin
+	  (set! *last-monitor-update-time* run-update-time) ;; monitor-modtime)
+	  #t)
+	#f)))
+
+(define (dashboard:database-changed? commondat tabdat)
+  (let* ((run-update-time (current-seconds))
+	 (modtime         (dashboard:get-youngest-run-db-mod-time tabdat)) ;; NOTE: ensure this is tabdat!! 
+	 (recalc          (dashboard:recalc modtime (dboard:commondat-please-update commondat) (dboard:tabdat-last-db-update tabdat))))
+    recalc))
+
+;; (if dashboard:update-servers-table (dashboard:update-servers-table))))
+
+(define (dashboard:summary-tab-updater commondat tab-num)
+  (if dashboard:update-summary-tab (dashboard:update-summary-tab)))
+
+(define (dashboard:runs-tab-updater commondat tab-num)
+  (let ((tabdat (dboard:common-get-tabdat commondat tab-num: tab-num)))
+    (update-rundat tabdat (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") (dboard:tabdat-numruns tabdat)
+		   (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
+		   ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
+		   (let ((res '()))
+		     (for-each (lambda (key)
+				 (if (not (equal? key "runname"))
+				     (let ((val (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) key #f)))
+				       (if val (set! res (cons (list key val) res))))))
+			       (dboard:tabdat-dbkeys tabdat))
+		     res))
+    (let ((uidat (dboard:commondat-uidat commondat)))
+      (update-buttons tabdat uidat (dboard:tabdat-numruns tabdat) (dboard:tabdat-num-tests tabdat)))
+    (dboard:commondat-please-update-set! commondat #f) ;; NOTE BUG! THIS NEEDS TO BE MADE TAB SPECIFIC!!!
+    ;; (dboard:tabdat-last-db-update-set! tabdat modtime)
+    ))
+
+;; ((2)
+;;  (dashboard:update-run-summary-tab))
+;; ((3)
+;;  (dashboard:update-new-view-tab))
+;; (else
+;;  (dboard:common-run-curr-updater commondat)))
+;; (set! *last-recalc-ended-time* (current-milliseconds))))))))
 
 ;;======================================================================
 ;; The heavy lifting starts here
@@ -1890,28 +1918,41 @@ Misc
 					  ;; (dboard:tabdat-num-tests tabdat)
 					  ;; (dboard:tabdat-dbkeys tabdat)
 					  ;; runs-sum-dat new-view-dat))
+      ;; legacy setup of updaters for summary tab and runs tab
+      ;; summary tab
+      (dboard:commondat-add-updater 
+       commondat 
+       (lambda ()
+	 (dashboard:summary-tab-updater commondat 0))
+       tab-num: 0)
+      ;; runs tab
+      (dboard:commondat-add-updater 
+       commondat 
+       (lambda ()
+	 (dashboard:runs-tab-updater commondat 1))
+       tab-num: 1)
       (iup:callback-set! *tim*
 			 "ACTION_CB"
-			 (lambda (x)
-			(let ((update-is-running #f))
-			  (mutex-lock! (dboard:commondat-update-mutex commondat))
-			  (set! update-is-running (dboard:commondat-updating commondat))
-			  (if (not update-is-running)
-			      (dboard:commondat-updating-set! commondat #t))
-			  (mutex-unlock! (dboard:commondat-update-mutex commondat))
-			  (if (not update-is-running)
-			      (begin
-				(dashboard:run-update x commondat)
-				(mutex-lock! (dboard:commondat-update-mutex commondat))
-				(dboard:commondat-updating-set! commondat #f)
-				(mutex-unlock! (dboard:commondat-update-mutex commondat)))
-			      ))
-			1))))
+			 (lambda (time-obj)
+			   (let ((update-is-running #f))
+			     (mutex-lock! (dboard:commondat-update-mutex commondat))
+			     (set! update-is-running (dboard:commondat-updating commondat))
+			     (if (not update-is-running)
+				 (dboard:commondat-updating-set! commondat #t))
+			     (mutex-unlock! (dboard:commondat-update-mutex commondat))
+			     (if (not update-is-running) ;; we know that the update was not running and we now have a lock on doing an update
+				 (begin
+				    (dboard:common-run-curr-updaters commondat) ;; (dashboard:run-update commondat)
+				   (mutex-lock! (dboard:commondat-update-mutex commondat))
+				   (dboard:commondat-updating-set! commondat #f)
+				   (mutex-unlock! (dboard:commondat-update-mutex commondat)))
+				 ))
+			   1))))
     
     (let ((th1 (make-thread (lambda ()
 			      (thread-sleep! 1)
-			      (dboard:commondat-please-update-set! commondat #t)
-			      (dashboard:run-update 1 commondat)
+			      (dboard:common-run-curr-updaters commondat 0) ;; force update of summary tab (dboard:commondat-please-update-set! commondat #t)
+			      (dashboard:run-update commondat)
 			      ) "update buttons once"))
 	  (th2 (make-thread iup:main-loop "Main loop")))
       (thread-start! th1)
