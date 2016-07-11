@@ -207,7 +207,7 @@ Misc
 
 ;; additional setters for dboard:data
 (define (dboard:tabdat-test-patts-set!-use    vec val)
-  (dboard:tabdat-test-patts-set! vec(if (equal? val "") #f val)))
+  (dboard:tabdat-test-patts-set! vec (if (equal? val "") #f val)))
 
 (define (dboard:tabdat-make-data)
   (let ((dat (make-dboard:tabdat
@@ -1088,7 +1088,7 @@ Misc
 	(dcommon:section-matrix rawconfig "disks" "Disk area" "Path"))))
      (iup:frame
       #:title "Run statistics"
-      (dcommon:run-stats tabdat)))))
+      (dcommon:run-stats commondat tabdat)))))
 
 ;;======================================================================
 ;; R U N
@@ -1833,7 +1833,8 @@ Misc
 		   (glob (conc (dboard:tabdat-dbdir tabdat) "/*.db"))))))
 
 (define (dashboard:monitor-changed? commondat tabdat)
-  (let* ((monitor-db-path (dboard:tabdat-monitor-db-path tabdat))
+  (let* ((run-update-time (current-seconds))
+	 (monitor-db-path (dboard:tabdat-monitor-db-path tabdat))
 	 (monitor-modtime (if (and monitor-db-path (file-exists? monitor-db-path))
 			      (file-modification-time monitor-db-path)
 			      -1)))
@@ -1920,11 +1921,11 @@ Misc
 					  ;; runs-sum-dat new-view-dat))
       ;; legacy setup of updaters for summary tab and runs tab
       ;; summary tab
-      (dboard:commondat-add-updater 
-       commondat 
-       (lambda ()
-	 (dashboard:summary-tab-updater commondat 0))
-       tab-num: 0)
+      ;; (dboard:commondat-add-updater 
+      ;;  commondat 
+      ;;  (lambda ()
+      ;; 	 (dashboard:summary-tab-updater commondat 0))
+      ;;  tab-num: 0)
       ;; runs tab
       (dboard:commondat-add-updater 
        commondat 
@@ -1942,7 +1943,7 @@ Misc
 			     (mutex-unlock! (dboard:commondat-update-mutex commondat))
 			     (if (not update-is-running) ;; we know that the update was not running and we now have a lock on doing an update
 				 (begin
-				    (dboard:common-run-curr-updaters commondat) ;; (dashboard:run-update commondat)
+				   (dboard:common-run-curr-updaters commondat) ;; (dashboard:run-update commondat)
 				   (mutex-lock! (dboard:commondat-update-mutex commondat))
 				   (dboard:commondat-updating-set! commondat #f)
 				   (mutex-unlock! (dboard:commondat-update-mutex commondat)))
@@ -1952,7 +1953,7 @@ Misc
     (let ((th1 (make-thread (lambda ()
 			      (thread-sleep! 1)
 			      (dboard:common-run-curr-updaters commondat 0) ;; force update of summary tab (dboard:commondat-please-update-set! commondat #t)
-			      (dashboard:run-update commondat)
+			      ;; (dashboard:run-update commondat)
 			      ) "update buttons once"))
 	  (th2 (make-thread iup:main-loop "Main loop")))
       (thread-start! th1)
