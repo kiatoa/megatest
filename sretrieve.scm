@@ -21,8 +21,10 @@
 ;; (use csv)
 ;; (use directory-utils)
 (use srfi-18)
-(use format)
-
+(use srfi-19)
+;;(use utils)
+;;(use format)
+(use refdb)
 ;; (require-library ini-file)
 ;; (import (prefix ini-file ini:))
 
@@ -115,7 +117,7 @@ Version: " megatest-fossil-hash)) ;; "
   (let ((path (configf:lookup configdat "database" "location")))
     (if (not path)
 	(begin
-	  (debug:print 0 *default-log-port* "[database]\nlocation /some/path\n\n Is missing from the config file!")
+	  (debug:print 0 "[database]\nlocation /some/path\n\n Is missing from the config file!")
 	  (exit 1)))
     (if (and path
 	     (directory? path)
@@ -126,18 +128,18 @@ Version: " megatest-fossil-hash)) ;; "
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 2 *default-log-port* "ERROR: problem accessing db " dbpath
+	     (debug:print 2 "ERROR: problem accessing db " dbpath
 			  ((condition-property-accessor 'exn 'message) exn))
 	     (exit 1))
-            ;;(debug:print 0 *default-log-port* "calling proc " proc "db path " dbpath )
+            ;;(debug:print 0 "calling proc " proc "db path " dbpath )
 	   (call-with-database
             dbpath
 	    (lambda (db)
-	       ;;(debug:print 0 *default-log-port* "calling proc " proc " on db " db)
+	       ;;(debug:print 0 "calling proc " proc " on db " db)
 	      (set-busy-handler! db (busy-timeout 10000)) ;; 10 sec timeout
 	      (if (not dbexists)(sretrieve:initialize-db db))
 	      (proc db)))))
-	(debug:print-error 0 *default-log-port* "invalid path for storing database: " path))))
+	(debug:print 0 "ERROR: invalid path for storing database: " path))))
 
 ;; copy in directory to dest, validation is done BEFORE calling this
 ;;
@@ -147,12 +149,12 @@ Version: " megatest-fossil-hash)) ;; "
     (if (or (not base-dir)
 	    (not (file-exists? base-dir)))
 	(begin
-	  (debug:print-error 0 *default-log-port* "Bad configuration! base-dir " base-dir " not found")
+	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
 	  (exit 1)))
     (print datadir)
     (if (not (file-exists? datadir))
 	(begin
-	  (debug:print-error 0 *default-log-port* "Bad version (" version "), no data found at " datadir "." )
+	  (debug:print 0 "ERROR: Bad version (" version "), no data found at " datadir "." )
 	  (exit 1)))
     
     (sretrieve:db-do
@@ -189,20 +191,20 @@ Version: " megatest-fossil-hash)) ;; "
     (if (or (not base-dir)
 	    (not (file-exists? base-dir)))
 	(begin
-	  (debug:print-error 0 *default-log-port* "Bad configuration! base-dir " base-dir " not found")
+	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
 	  (exit 1)))
     (print datadir)
     (if (not (file-exists? datadir))
 	(begin
-	  (debug:print-error 0 *default-log-port* "File  (" file "), not found at " base-dir "." )
+	  (debug:print 0 "ERROR: File  (" file "), not found at " base-dir "." )
 	  (exit 1)))
     (if (directory? datadir)
 	(begin
-	  (debug:print-error 0 *default-log-port* "(" file ") is a dirctory!! cp cmd works only on files ." )
+	  (debug:print 0 "ERROR: (" file ") is a dirctory!! cp cmd works only on files ." )
 	  (exit 1)))
     (if(not (string-match (regexp  allowed-sub-paths) file))
         (begin
-	  (debug:print-error 0 *default-log-port* "Access denied to file (" file ")!! " )
+	  (debug:print 0 "ERROR: Access denied to file (" file ")!! " )
 	  (exit 1)))
      
      (sretrieve:db-do
@@ -210,9 +212,9 @@ Version: " megatest-fossil-hash)) ;; "
      (lambda (db)
        (sretrieve:register-action db "cp" retriever datadir comment)))
       (sretrieve:do-as-calling-user
-      ;;  (debug:print 0 *default-log-port* "ph:  "(pathname-directory datadir)  "!! " )
+      ;;  (debug:print 0 "ph:  "(pathname-directory datadir)  "!! " )
        (change-directory (pathname-directory datadir))  
-       ;;(debug:print 0 *default-log-port* "ph: /bin/tar" (list "chfv" "-" filename) )
+       ;;(debug:print 0 "ph: /bin/tar" (list "chfv" "-" filename) )
       (process-execute "/bin/tar" (list "chfv" "-" filename)))
       ))
 
@@ -226,144 +228,40 @@ Version: " megatest-fossil-hash)) ;; "
     (if (or (not base-dir)
 	    (not (file-exists? base-dir)))
 	(begin
-	  (debug:print-error 0 *default-log-port* "Bad configuration! base-dir " base-dir " not found")
+	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
 	  (exit 1)))
     (print datadir)
     (if (not (file-exists? datadir))
 	(begin
-	  (debug:print-error 0 *default-log-port* "File  (" file "), not found at " base-dir "." )
+	  (debug:print 0 "ERROR: File  (" file "), not found at " base-dir "." )
 	  (exit 1)))
       (if(not (string-match (regexp  allowed-sub-paths) file))
         (begin
-	  (debug:print-error 0 *default-log-port* "Access denied to file (" file ")!! " )
+	  (debug:print 0 "ERROR: Access denied to file (" file ")!! " )
 	  (exit 1)))
    
         (sretrieve:do-as-calling-user
         (lambda ()
-	 ;;(change-directory datadir)
-         ;; (debug:print 0 *default-log-port*  "/usr/bin/find" (list datadir "-ls" "|" "grep" "-E" "'"allowed-file-patt"'"))
-         ;; (status (with-input-from-pipe "find " datadir " -ls | grep -E '" allowed-file-patt "'" (lambda () (read-line))))
-         ;; (debug:print 0 *default-log-port* status) 
 	  (process-execute "/bin/ls" (list "-ls"  "-lrt" datadir ))
  ))))
 
 
-
-;;(filter (lambda (x)
-;;							     (not (member x '("." ".."))))
-;;							   (glob "*" ".*"))))))))
 
 (define (sretrieve:validate target-dir targ-mk)
   (let* ((normal-path (normalize-pathname targ-mk))
         (targ-path (conc target-dir "/" normal-path)))
     (if (string-contains   normal-path "..")
     (begin
-      (debug:print-error 0 *default-log-port* "Path  " targ-mk " resolved outside target area "  target-dir )
+      (debug:print 0 "ERROR: Path  " targ-mk " resolved outside target area "  target-dir )
       (exit 1)))
 
     (if (not (string-contains targ-path target-dir))
     (begin
-      (debug:print-error 0 *default-log-port* "You cannot update data outside " target-dir ".")
+      (debug:print 0 "ERROR: You cannot update data outside " target-dir ".")
       (exit 1)))
-    (debug:print 0 *default-log-port* "Path " targ-mk " is valid.")   
+    (debug:print 0 "Path " targ-mk " is valid.")   
  ))
-;; make directory in dest
-;;
 
-(define (sretrieve:mkdir configdat submitter target-dir targ-mk comment)
-  (let ((targ-path (conc target-dir "/" targ-mk)))
-    
-    (if (file-exists? targ-path)
-	(begin
-	  (debug:print-error 0 *default-log-port* "target Directory " targ-path " already exist!!")
-	  (exit 1)))
-    (sretrieve:db-do
-     configdat
-     (lambda (db)
-       (sretrieve:register-action db "mkdir" submitter targ-mk comment)))
-    (let* ((th1         (make-thread
-			 (lambda ()
-			   (create-directory targ-path #t)
-			   (debug:print 0 *default-log-port* " ... dir " targ-path " created"))
-			 "mkdir thread"))
-	   (th2         (make-thread
-			 (lambda ()
-			   (let loop ()
-			     (thread-sleep! 15)
-			     (display ".")
-			     (flush-output)
-			     (loop)))
-			 "action is happening thread")))
-      (thread-start! th1)
-      (thread-start! th2)
-      (thread-join! th1))
-    (cons #t "Successfully saved data")))
-
-;; create a symlink in dest
-;;
-(define (sretrieve:ln configdat submitter target-dir targ-link link-name comment)
-  (let ((targ-path (conc target-dir "/" link-name)))
-    (if (file-exists? targ-path)
-	(begin
-	  (debug:print-error 0 *default-log-port* "target file " targ-path " already exist!!")
-	  (exit 1)))
-     (if (not (file-exists? targ-link ))
-	(begin
-	  (debug:print-error 0 *default-log-port* "target file " targ-link " does not exist!!")
-	  (exit 1)))
- 
-    (sretrieve:db-do
-     configdat
-     (lambda (db)
-       (sretrieve:register-action db "ln" submitter link-name comment)))
-    (let* ((th1         (make-thread
-			 (lambda ()
-			   (create-symbolic-link targ-link targ-path  )
-			   (debug:print 0 *default-log-port* " ... link " targ-path " created"))
-			 "symlink thread"))
-	   (th2         (make-thread
-			 (lambda ()
-			   (let loop ()
-			     (thread-sleep! 15)
-			     (display ".")
-			     (flush-output)
-			     (loop)))
-			 "action is happening thread")))
-      (thread-start! th1)
-      (thread-start! th2)
-      (thread-join! th1))
-    (cons #t "Successfully saved data")))
-
-
-;; remove copy of file in dest
-;;
-(define (sretrieve:rm configdat submitter target-dir targ-file comment)
-  (let ((targ-path (conc target-dir "/" targ-file)))
-    (if (not (file-exists? targ-path))
-	(begin
-	  (debug:print-error 0 *default-log-port* "target file " targ-path " not found, nothing to remove.")
-	  (exit 1)))
-    (sretrieve:db-do
-     configdat
-     (lambda (db)
-       (sretrieve:register-action db "rm" submitter targ-file comment)))
-    (let* ((th1         (make-thread
-			 (lambda ()
-			   (delete-file targ-path)
-			   (debug:print 0 *default-log-port* " ... file " targ-path " removed"))
-			 "rm thread"))
-	   (th2         (make-thread
-			 (lambda ()
-			   (let loop ()
-			     (thread-sleep! 15)
-			     (display ".")
-			     (flush-output)
-			     (loop)))
-			 "action is happening thread")))
-      (thread-start! th1)
-      (thread-start! th2)
-      (thread-join! th1))
-    (cons #t "Successfully saved data")))
 
 (define (sretrieve:backup-move path)
   (let* ((trashdir  (conc (pathname-directory path) "/.trash"))
@@ -394,7 +292,7 @@ Version: " megatest-fossil-hash)) ;; "
         (cid (current-user-id)))
     (if (not (eq? eid cid)) ;; running suid
             (set! (current-effective-user-id) cid))
-    ;; (debug:print 0 *default-log-port* "running as " (current-effective-user-id))
+    ;; (debug:print 0 "running as " (current-effective-user-id))
     (proc)
     (if (not (eq? eid cid))
         (set! (current-effective-user-id) eid))))
@@ -419,45 +317,270 @@ Version: " megatest-fossil-hash)) ;; "
 ;; SHELL
 ;;======================================================================
 
+
+(define *refdb*     "/p/foundry/env/pkgs/chicken/4.10.0_ext/bin/refdb") 
+(define *refdbloc*     "/nfs/site/disks/ch_ciaf_disk023/fdk_gwa_disk003/pjhatwal/fossil/megatest1.60/megatest/datashare-testing/sretrieve_configs") 
+
+;; function to find sheets to which use has access 
+(define (sretrieve:has-permission sheet configfile)
+  (let* ((users (get-rowcol-names  configfile sheet car))
+          (retuser ""))
+    (if (member (current-user-name) users)
+        #t
+        #f))) 
+    
+ ;; function  to check if user is trying to access a restricted area
+ 
+(define (sretrieve:is-permitted-area dir allowed-list)
+    (for-each 
+        (lambda (allowed-dir)
+          
+         (if (equal? dir allowed-dir)
+          allowed-dir))
+        (cdr allowed-list)))
+
+;; function to validate the users input for target path and resolve the path
+;; TODO: Check for restriction in subpath 
+(define (sretrieve:resolve-path  new current allowed-sheets)
+   (let* ((target-path (append  current (string-split new "/")))
+          (target-path-string (string-join target-path "/"))
+          (normal-path (normalize-pathname target-path-string))
+          (normal-list (string-split normal-path "/"))
+          ;(sheet (car normal-list))
+           (ret '()))
+   (if (string-contains   normal-path "..")
+    (begin
+      (print "ERROR: Path  " new " resolved outside target area ")
+      #f)
+    (if(equal? normal-path ".")
+      ret  
+    (if (not (member  (car normal-list) allowed-sheets))
+      (begin
+      (print "ERROR: Permision denied to  " new )
+       #f)
+    normal-list)))
+))
+
+
+(define (sretrieve:is-access-valid sheet configfile)
+   (let* ((exp-str (lookup configfile sheet (current-user-name) "expiration")))
+    (if (equal? exp-str #f)
+        #f
+        (let* ((date-parts  (string-split exp-str "/"))
+                (yr (string->number (car date-parts)))
+                (month (string->number(car (cdr date-parts)))) 
+                (day (string->number(caddr date-parts)))
+                (exp-date (make-date 0 0 0 0 day month yr )))
+               (if (< (date-compare exp-date  (current-date)) 1)
+                   #f
+                   #t)))))
+
+
+(define (sretrieve:get-accessable-projects  sheets configfile)
+ ;;(print sheets)
+ (if (null? sheets)
+      #f
+      (let loop ((hed (car sheets))
+		 (tal (cdr sheets))
+                  (res '()))
+        (let* ((user (sretrieve:has-permission hed configfile))
+              (access-valid (sretrieve:is-access-valid  hed configfile)))
+        ;;(print "access-valid " access-valid)
+	(if (and (equal? user #t ) (equal? access-valid #t))
+               (begin  
+               ;;(print "got perm " (sretrieve:has-permission hed configfile)) 
+               (if (null? tal)
+		 (cons hed res)
+		 (loop (car tal)(cdr tal)(cons hed res))))
+                (if (null? tal)
+                     res
+                   (loop (car tal)(cdr tal) res)))))))
+
+(define (sretrieve:shell-ls-cmd base-path-list ext-path top-areas configfile)
+  (if (and (null? base-path-list) (equal? ext-path "") )
+      (print (string-intersperse top-areas " "))
+  (let* ((resolved-path (sretrieve:resolve-path ext-path base-path-list top-areas )))
+           (if (not (equal? resolved-path #f))
+           (if (null? resolved-path) 
+             (print (string-intersperse top-areas " "))
+           (let* (
+                    ;(sheet (car resolved-path))
+        	   ;(base-path (lookup configfile sheet (current-user-name) "base path")) 
+           	   ;(target-path (conc base-path "/" (string-join (cdr resolved-path) "/")))
+                    (target-path (sretrieve:get-target-path  base-path-list  ext-path top-areas configfile)))
+                (print "Resolved path: " target-path)   
+                (sretrieve:do-as-calling-user
+                (lambda ()
+	            (system (conc "ls " target-path))))))))))
+
+(define (sretrieve:shell-cat-cmd base-path-list ext-path top-areas configfile)
+  (let* ((resolved-path (sretrieve:resolve-path ext-path base-path-list top-areas ))
+          (data "") )
+         (if (not (equal? resolved-path #f))
+           (if (null? resolved-path) 
+             data
+           (let* (
+;(sheet (car resolved-path))
+ ;       	   (base-path (lookup configfile sheet (current-user-name) "base path"))
+                   (target-path (sretrieve:get-target-path  base-path-list  ext-path top-areas configfile)))
+           	   
+                
+                (sretrieve:do-as-calling-user
+                (lambda ()
+                     (if (or (not (file-exists? target-path)) (directory? target-path))
+                         (begin
+                            (print "Target path does not exist or is a directory!") 
+                          data)  
+                        (set! data (with-input-from-pipe (conc "cat " target-path) (lambda () (read-all)))))))
+                    data))
+             data)))
+
+(define (sretrieve:get-target-path base-path-list ext-path top-areas configfile)
+  (let* ((resolved-path (sretrieve:resolve-path ext-path base-path-list top-areas ))
+          (usr (current-user-name) ) )
+         ;;(print resolved-path)  
+         (if (not (equal? resolved-path #f))
+           (if (null? resolved-path) 
+             #f
+           (let* ((sheet (car resolved-path))
+                   (fname  (conc  configfile "/" sheet ".dat"))
+                   (config-data (sretrieve:load-shell-config fname))  
+        	   (base-path (configf:lookup config-data "basepath" usr))
+           	   (target-path (conc base-path "/" (string-join (cdr resolved-path) "/"))))
+                      
+                                        target-path))
+             #f)))
+
+(define (sretrieve:load-shell-config fname)
+          (if (file-exists? fname)
+	(read-config fname #f #f)
+	))
+
+
+(define (is_directory target-path) 
+  (let* ((retval #f))
+  (sretrieve:do-as-calling-user
+    	(lambda ()
+          (if (directory? target-path)
+               (set! retval  #t))))
+     retval)) 
+
+
+(define (sretrieve:get-shell-cmd target-path )
+     (use scsh-process)
+      (if (is_directory target-path) 
+        (begin
+           (let* ((parent-dir target-path)
+                   (start-dir (current-directory))
+                   (files (filter (lambda (x)
+			(not (member x '("." ".."))))
+		      (glob "*" ".*"))))
+                          (change-directory parent-dir)  
+              (run (pipe
+      		   (tar  "chfv" "-" ".")
+          	   (begin(system (conc "cd " start-dir ";tar xf -"))))))) 
+        (begin
+           (let*((parent-dir (pathname-directory target-path))
+                  (start-dir (current-directory))
+                (filename (if  (pathname-extension target-path)  
+                                      (conc(pathname-file target-path) "." (pathname-extension target-path))
+                                      (pathname-file target-path))))
+               
+               (change-directory parent-dir)  
+               (run (pipe
+                 (tar "chfv" "-" ,filename)
+                 (begin (system (conc "cd " start-dir ";tar xf -")))))
+))))
+
+	
 (define (toplevel-command . args) #f)
 (define (sretrieve:shell)
   (use readline)
   (let* ((path      '())
 	 (prompt    "> ")
-	 (top-areas '("mrwellan" "pjhatwal" "bjbarcla" "ritikaag" "jmoon18"))
+	 ;(top-areas '("mrwellan" "pjhatwal" "bjbarcla" "ritikaag" "jmoon18"))
+         (args      (argv))
+	 (prog      (car args)) 
+         (exe-name  (pathname-file (car (argv))))
+	 (exe-dir   (or (pathname-directory prog)
+			(sretrieve:find exe-name (string-split (get-environment-variable "PATH") ":"))))
+         (config-file  (conc exe-dir "/sretrieve_configs"))  
+         (config-data  (configf:read-refdb config-file))
+         (sheets (list-sheets config-file)) 
+         (top-areas (sretrieve:get-accessable-projects sheets config-file))
+         (old-port (current-input-port)) 
+          (close-port     #f)     
 	 (iport     (make-readline-port prompt)))
-    (install-history-file) ;;  [homedir] [filename] [nlines])
-    (with-input-from-port iport
-      (lambda ()
-	(let loop ((inl (read-line)))
-	  (if (not (or (eof-object? inl)
-		       (equal? inl "exit")))
+  ;  (install-history-file) ;;  [homedir] [filename] [nlines])
+  ;  (with-input-from-port iport
+  ;    (lambda ()
+	(let loop ((inl (read-line iport)))
+	  (if (not (or (or (eof-object? inl)
+		       (equal? inl "exit")) (port-closed? iport)))
 	      (let* ((parts (string-split inl))
 		     (cmd   (if (null? parts) #f (car parts))))
-		(if (not cmd)
+		(if (and (not cmd) (not (port-closed? iport)))
 		    (loop (read-line))
 		    (case (string->symbol cmd)
 		      ((cd)
 		       (if (> (length parts) 1) ;; have a parameter
-			   (set! path (append path (string-split (cadr parts)))) ;; not correct for relative paths
-			   (set! path '())))
+                           (begin
+                             (let*((arg (cadr parts))
+                                   (resolved-path (sretrieve:resolve-path  arg path top-areas)))
+                                  
+                                 (if (not (equal? resolved-path #f))    
+			         (set! path resolved-path))))  
+   			   (set! path '())))
+                      ((pwd)
+                         (if (null? path)
+                           (print "/")  
+                           (print "/" (string-join path "/")))) 
 		      ((ls)
 		       (let* ((thepath (if (> (length parts) 1) ;; have a parameter
 					   (cdr parts)
-					   path))
+					   `()))
 			      (plen    (length thepath)))
 			 (cond
 			  ((null? thepath)
-			   (print (string-intersperse top-areas " ")))
-			  ((and (< plen 2)
-				(member (car thepath) top-areas))
-			   (system (conc "ls /p/fdk/gwa/" (car thepath))))
-			  (else ;; have a long path
-			   ;; check for access rights here
-			   (system (conc "ls /p/fdk/gwa/" (string-intersperse thepath "/")))))))
+                           (sretrieve:shell-ls-cmd path "" top-areas config-file))
+			  ((< plen 2)
+                           (sretrieve:shell-ls-cmd path  (car thepath) top-areas config-file)))))
+                       ((cat)
+		       (let* ((thepath (if (> (length parts) 1) ;; have a parameter
+					   (cdr parts)
+					   `()))
+			      (plen    (length thepath)))
+			 (cond
+			  ((null? thepath)
+                          (print "Error: Missing argument to cat"))
+			  ((< plen 2)
+                           (let* ((data (sretrieve:shell-cat-cmd path  (car thepath) top-areas config-file)))
+                           (print data)))
+			  (else
+                            (let* ((data (sretrieve:shell-cat-cmd path  (car thepath) top-areas config-file)))
+                             (system (conc "echo '" data "' " (string-join (cdr thepath)))))))))
+                      ((get)
+                         (let* ((thepath (if (> (length parts) 1) ;; have a parameter
+					   (cdr parts)
+					   `()))
+			      (plen    (length thepath)))
+			 (cond
+			  ((null? thepath)
+                          (print "Error: Missing argument <path> to get"))
+			  ((< plen 2)
+                           (let* ((target-path (sretrieve:get-target-path path  (car thepath) top-areas config-file)))
+                                    
+                                  (sretrieve:get-shell-cmd target-path )
+                                  ;;(print path)
+                           ))
+			  (else
+                            (print "Error: get cmd takes only one argument ")))))    
 		      (else 
-		       (print "Got command: " inl))))
-		(loop (read-line)))))))))
+		       (print "Got command: " inl)
+                       )))
+                 (loop (read-line iport))
+                )))))
+;;))
     
 
 ;;======================================================================
@@ -475,6 +598,7 @@ Version: " megatest-fossil-hash)) ;; "
 
 ;; package-type is "megatest", "builds", "kits" etc.
 ;;
+
 (define (sretrieve:load-packages configdat exe-dir package-type)
   (push-directory exe-dir)
   (let* ((packages-metadir  (configf:lookup configdat "settings" "packages-metadir"))
@@ -489,16 +613,14 @@ Version: " megatest-fossil-hash)) ;; "
 		(> (file-modification-time upstream-file)(file-modification-time package-config)))
 	    (handle-exceptions
 	     exn
-	     (debug:print-error 0 *default-log-port* "failed to run script " conversion-script " with params " upstream-file " " package-config)
+	     (debug:print 0 "ERROR: failed to run script " conversion-script " with params " upstream-file " " package-config)
 	     (let ((pid (process-run conversion-script (list upstream-file package-config))))
 	       (process-wait pid)))
-	    (debug:print 0 *default-log-port* "Skipping update of " package-config " from " upstream-file))
-	(debug:print 0 *default-log-port* "Skipping update of " package-config " as " upstream-file " not found"))
-    ;; (ini:property-separator-patt " *  *")
-    ;; (ini:property-separator #\space)
-    (let ((res (if (file-exists? package-config)
+	    (debug:print 0 "Skipping update of " package-config " from " upstream-file))
+	(debug:print 0 "Skipping update of " package-config " as " upstream-file " not found"))
+       (let ((res (if (file-exists? package-config)
 		   (begin
-		     (debug:print 0 *default-log-port* "Reading package config " package-config)
+		     (debug:print 0 "Reading package config " package-config)
 		     (read-config package-config #f #t))
 		   (make-hash-table))))
       (pop-directory)
@@ -515,21 +637,21 @@ Version: " megatest-fossil-hash)) ;; "
     
     (if (not base-dir)
 	(begin
-	  (debug:print 0 *default-log-port* "[settings]\nbase-dir /some/path\n\n Is MISSING from the config file!")
+	  (debug:print 0 "[settings]\nbase-dir /some/path\n\n Is MISSING from the config file!")
 	  (exit)))
     (if (null? allowed-users)
 	(begin
-	  (debug:print 0 *default-log-port* "[setings]\nallowed-users user1 user2 ...\n\n Is MISSING from the config file!")
+	  (debug:print 0 "[setings]\nallowed-users user1 user2 ...\n\n Is MISSING from the config file!")
 	  (exit)))
     (if (not (member user allowed-users))
 	(begin
-	  (debug:print 0 *default-log-port* "User \"" (current-user-name) "\" does not have access. Exiting")
+	  (debug:print 0 "User \"" (current-user-name) "\" does not have access. Exiting")
 	  (exit 1)))
     (case (string->symbol action)
       ((get)
        (if (< (length args) 1)
 	   (begin 
-	     (debug:print-error 0 *default-log-port* "Missing arguments; " (string-intersperse args ", "))
+	     (debug:print 0 "ERROR: Missing arguments; " (string-intersperse args ", "))
 	     (exit 1)))
        (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
               (version     (car args))
@@ -539,32 +661,32 @@ Version: " megatest-fossil-hash)) ;; "
 	      (exe-dir     (configf:lookup configdat "exe-info" "exe-dir")))
 ;;	      (relconfig   (sretrieve:load-packages configdat exe-dir package-type)))
 
-	 (debug:print 0 *default-log-port* "retrieving " version " of " package-type " as tar data on stdout")
+	 (debug:print 0 "retrieving " version " of " package-type " as tar data on stdout")
 	 (sretrieve:get configdat user version msg)))
          ((cp)
             (if (< (length args) 1)
              (begin 
-	     (debug:print-error 0 *default-log-port* "Missing arguments; " (string-intersperse args ", "))
+	     (debug:print 0 "ERROR: Missing arguments; " (string-intersperse args ", "))
 	     (exit 1)))
           (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
               (file     (car args))
 	      (msg         (or (args:get-arg "-m") "")) )
 
-	 (debug:print 0 *default-log-port* "copinging " file " to current directory " )
+	 (debug:print 0 "copinging " file " to current directory " )
 	 (sretrieve:cp configdat user file msg)))
       ((ls)
             (if (< (length args) 1)
              (begin 
-	     (debug:print-error 0 *default-log-port* "Missing arguments; " (string-intersperse args ", "))
+	     (debug:print 0 "ERROR: Missing arguments; " (string-intersperse args ", "))
 	     (exit 1)))
           (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
               (dir     (car args))
 	      (msg         (or (args:get-arg "-m") "")) )
 
-	 (debug:print 0 *default-log-port* "Listing files in " )
+	 (debug:print 0 "Listing files in " )
 	 (sretrieve:ls configdat user dir msg)))
  
-      (else (debug:print 0 *default-log-port* "Unrecognised command " action)))))
+      (else (debug:print 0 "Unrecognised command " action)))))
   
 ;; ease debugging by loading ~/.dashboardrc - REMOVE FROM PRODUCTION!
 ;; (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.sretrieverc")))
@@ -614,6 +736,6 @@ Version: " megatest-fossil-hash)) ;; "
      ((null? rema)(print sretrieve:help))
      ((>= (length rema) 2)
       (apply sretrieve:process-action configdat (car rema)(cdr rema)))
-     (else (debug:print-error 0 *default-log-port* "Unrecognised command. Try \"sretrieve help\"")))))
+     (else (debug:print 0 "ERROR: Unrecognised command. Try \"sretrieve help\"")))))
 
 (main)
