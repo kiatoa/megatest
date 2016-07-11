@@ -358,65 +358,67 @@
 
     general-matrix))
 
-(define (dcommon:run-stats alldat)
+(define (dcommon:run-stats commondat tabdat)
   (let* ((stats-matrix (iup:matrix expand: "YES"))
 	 (changed      #f)
 	 (updater      (lambda ()
-			 (let* ((run-stats    (rmt:get-run-stats))
-				(indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
-				(row-indices  (car indices))
-				(col-indices  (cadr indices))
-				(max-row      (if (null? row-indices) 1 (apply max (map cadr row-indices))))
-				(max-col      (if (null? col-indices) 1 
-						  (apply max (map cadr col-indices))))
-				(max-visible  (max (- (dboard:tabdat-num-tests alldat) 15) 3))
-				(max-col-vis  (if (> max-col 10) 10 max-col))
-				(numrows      1)
-				(numcols      1))
-			   (iup:attribute-set! stats-matrix "CLEARVALUE" "CONTENTS")
-			   (iup:attribute-set! stats-matrix "NUMCOL" max-col )
-			   (iup:attribute-set! stats-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
-			   (iup:attribute-set! stats-matrix "NUMCOL_VISIBLE" max-col-vis)
-			   (iup:attribute-set! stats-matrix "NUMLIN_VISIBLE" (if (> max-row max-visible) max-visible max-row))
+			 (if (dashboard:database-changed? commondat tabdat)
+			     (let* ((run-stats    (rmt:get-run-stats))
+				    (indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
+				    (row-indices  (car indices))
+				    (col-indices  (cadr indices))
+				    (max-row      (if (null? row-indices) 1 (apply max (map cadr row-indices))))
+				    (max-col      (if (null? col-indices) 1 
+						      (apply max (map cadr col-indices))))
+				    (max-visible  (max (- (dboard:tabdat-num-tests tabdat) 15) 3))
+				    (max-col-vis  (if (> max-col 10) 10 max-col))
+				    (numrows      1)
+				    (numcols      1))
+			       (iup:attribute-set! stats-matrix "CLEARVALUE" "CONTENTS")
+			       (iup:attribute-set! stats-matrix "NUMCOL" max-col )
+			       (iup:attribute-set! stats-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
+			       (iup:attribute-set! stats-matrix "NUMCOL_VISIBLE" max-col-vis)
+			       (iup:attribute-set! stats-matrix "NUMLIN_VISIBLE" (if (> max-row max-visible) max-visible max-row))
 
-			   ;; Row labels
-			   (for-each (lambda (ind)
-				       (let* ((name (car ind))
-					      (num  (cadr ind))
-					      (key  (conc num ":0")))
-					 (if (not (equal? (iup:attribute stats-matrix key) name))
-					     (begin
-					       (set! changed #t)
-					       (iup:attribute-set! stats-matrix key name)))))
-				     row-indices)
+			       ;; Row labels
+			       (for-each (lambda (ind)
+					   (let* ((name (car ind))
+						  (num  (cadr ind))
+						  (key  (conc num ":0")))
+					     (if (not (equal? (iup:attribute stats-matrix key) name))
+						 (begin
+						   (set! changed #t)
+						   (iup:attribute-set! stats-matrix key name)))))
+					 row-indices)
 
-			   ;; Col labels
-			   (for-each (lambda (ind)
-				       (let* ((name (car ind))
-					      (num  (cadr ind))
-					      (key  (conc "0:" num)))
-					 (if (not (equal? (iup:attribute stats-matrix key) name))
-					     (begin
-					       (set! changed #t)
-					       (iup:attribute-set! stats-matrix key name)))))
-				     col-indices)
+			       ;; Col labels
+			       (for-each (lambda (ind)
+					   (let* ((name (car ind))
+						  (num  (cadr ind))
+						  (key  (conc "0:" num)))
+					     (if (not (equal? (iup:attribute stats-matrix key) name))
+						 (begin
+						   (set! changed #t)
+						   (iup:attribute-set! stats-matrix key name)))))
+					 col-indices)
 
-			   ;; Cell contents
-			   (for-each (lambda (entry)
-				       (let* ((row-name (car entry))
-					      (col-name (cadr entry))
-					      (value    (caddr entry))
-					      (row-num  (cadr (assoc row-name row-indices)))
-					      (col-num  (cadr (assoc col-name col-indices)))
-					      (key      (conc row-num ":" col-num)))
-					 (if (not (equal? (iup:attribute stats-matrix key) value))
-					     (begin
-					       (set! changed #t)
-					       (iup:attribute-set! stats-matrix key value)))))
-				     run-stats)
-			   (if changed (iup:attribute-set! stats-matrix "REDRAW" "ALL"))))))
+			       ;; Cell contents
+			       (for-each (lambda (entry)
+					   (let* ((row-name (car entry))
+						  (col-name (cadr entry))
+						  (value    (caddr entry))
+						  (row-num  (cadr (assoc row-name row-indices)))
+						  (col-num  (cadr (assoc col-name col-indices)))
+						  (key      (conc row-num ":" col-num)))
+					     (if (not (equal? (iup:attribute stats-matrix key) value))
+						 (begin
+						   (set! changed #t)
+						   (iup:attribute-set! stats-matrix key value)))))
+					 run-stats)
+			       (if changed (iup:attribute-set! stats-matrix "REDRAW" "ALL")))))))
     (updater)
-    (set! dashboard:update-summary-tab updater)
+    (dboard:commondat-add-updater commondat updater)
+    ;; (set! dashboard:update-summary-tab updater)
     (iup:attribute-set! stats-matrix "WIDTHDEF" "40")
     (iup:vbox
      ;; (iup:label "Run statistics"  #:expand "HORIZONTAL")
@@ -478,36 +480,37 @@
 		(iup:attribute-set! servers-matrix "FITTOTEXT" (conc "C" colnum))
 		(set! colnum (+ colnum 1)))
 	      colnames)
-    (set! dashboard:update-servers-table updater) 
+    ;; (set! dashboard:update-servers-table updater) 
+    (dboard:commondat-add-updater commondat updater)
     ;; (iup:attribute-set! servers-matrix "WIDTHDEF" "40")
-   ;;  (iup:hbox
-   ;;   (iup:vbox
-   ;;    (iup:button "Start"
-   ;;      	  ;; #:size "50x"
-   ;;      	  #:expand "YES"
-   ;;      	  #:action (lambda (obj)
-   ;;      		     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
-   ;;      				      "megatest -server - &")))
-   ;;      				      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-   ;;      		       (system cmd))))
-   ;;    (iup:button "Stop"
-   ;;      	  #:expand "YES"
-   ;;      	  ;; #:size "50x"
-   ;;      	  #:action (lambda (obj)
-   ;;      		     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
-   ;;      				      "megatest -stop-server 0 &")))
-   ;;      				      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-   ;;      		       (system cmd))))
-   ;;    (iup:button "Restart"
-   ;;      	  #:expand "YES"
-   ;;      	  ;; #:size "50x"
-   ;;      	  #:action (lambda (obj)
-   ;;      		     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
-   ;;      				      "megatest -stop-server 0;megatest -server - &")))
-   ;;      				      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-   ;;      		       (system cmd)))))
-   ;;    servers-matrix
-   ;;   )))
+    ;;  (iup:hbox
+    ;;   (iup:vbox
+    ;;    (iup:button "Start"
+    ;;      	  ;; #:size "50x"
+    ;;      	  #:expand "YES"
+    ;;      	  #:action (lambda (obj)
+    ;;      		     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
+    ;;      				      "megatest -server - &")))
+    ;;      				      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+    ;;      		       (system cmd))))
+    ;;    (iup:button "Stop"
+    ;;      	  #:expand "YES"
+    ;;      	  ;; #:size "50x"
+    ;;      	  #:action (lambda (obj)
+    ;;      		     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
+    ;;      				      "megatest -stop-server 0 &")))
+    ;;      				      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+    ;;      		       (system cmd))))
+    ;;    (iup:button "Restart"
+    ;;      	  #:expand "YES"
+    ;;      	  ;; #:size "50x"
+    ;;      	  #:action (lambda (obj)
+    ;;      		     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
+    ;;      				      "megatest -stop-server 0;megatest -server - &")))
+    ;;      				      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+    ;;      		       (system cmd)))))
+    ;;    servers-matrix
+    ;;   )))
     servers-matrix
     ))
 
@@ -919,7 +922,7 @@
      #:title "Test patterns (one per line)"
      (let ((tb (iup:textbox #:action (lambda (val a b)
 				       (dboard:tabdat-test-patts-set!-use
-					data
+					tabdat
 					(dboard:lines->test-patt b))
 				       (dashboard:update-run-command tabdat))
 			    #:value (dboard:test-patt->lines
