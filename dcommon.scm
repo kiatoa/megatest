@@ -358,10 +358,10 @@
 
     general-matrix))
 
-(define (dcommon:run-stats commondat tabdat)
+(define (dcommon:run-stats commondat tabdat #!key (tab-num #f))
   (let* ((stats-matrix (iup:matrix expand: "YES"))
 	 (changed      #f)
-	 (updater      (lambda ()
+	 (stats-updater (lambda ()
 			 (if (dashboard:database-changed? commondat tabdat)
 			     (let* ((run-stats    (rmt:get-run-stats))
 				    (indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
@@ -416,8 +416,8 @@
 						   (iup:attribute-set! stats-matrix key value)))))
 					 run-stats)
 			       (if changed (iup:attribute-set! stats-matrix "REDRAW" "ALL")))))))
-    (updater)
-    (dboard:commondat-add-updater commondat updater)
+    (stats-updater)
+    (dboard:commondat-add-updater commondat stats-updater tab-num: tab-num)
     ;; (set! dashboard:update-summary-tab updater)
     (iup:attribute-set! stats-matrix "WIDTHDEF" "40")
     (iup:vbox
@@ -859,7 +859,7 @@
 					    ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
 			     (system cmd)))))))
 
-(define (dcommon:command-action-selector commondat tabdat)
+(define (dcommon:command-action-selector commondat tabdat #!key (tab-num #f))
   (iup:frame
    #:title "Set the action to take"
    (iup:hbox
@@ -876,7 +876,7 @@
       (dboard:tabdat-command-set! tabdat default-cmd)
       lb))))
 
-(define (dcommon:command-runname-selector commondat tabdat) ;; alldat data)
+(define (dcommon:command-runname-selector commondat tabdat #!key (tab-num #f)) ;; alldat data)
   (iup:frame
    #:title "Runname"
    (let* ((default-run-name (seconds->work-week/day (current-seconds)))
@@ -895,18 +895,19 @@
 					    (dboard:tabdat-run-name-set! tabdat val)
 					    (dashboard:update-run-command tabdat))))))
 	  (refresh-runs-list (lambda ()
-			       (let* ((target        (dboard:tabdat-target-string tabdat))
-				      (runs-for-targ (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" target #f #f #f))
-				      (runs-header   (vector-ref runs-for-targ 0))
-				      (runs-dat      (vector-ref runs-for-targ 1))
-				      (run-names     (cons default-run-name 
-							   (map (lambda (x)
-								  (db:get-value-by-header x runs-header "runname"))
-								runs-dat))))
-				 ;; (iup:attribute-set! lb "REMOVEITEM" "ALL")
-				 (iuplistbox-fill-list lb run-names selected-item: default-run-name)))))
+			       (if (dashboard:database-changed? commondat tabdat)
+				   (let* ((target        (dboard:tabdat-target-string tabdat))
+					  (runs-for-targ (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" target #f #f #f))
+					  (runs-header   (vector-ref runs-for-targ 0))
+					  (runs-dat      (vector-ref runs-for-targ 1))
+					  (run-names     (cons default-run-name 
+							       (map (lambda (x)
+								      (db:get-value-by-header x runs-header "runname"))
+								    runs-dat))))
+				     ;; (iup:attribute-set! lb "REMOVEITEM" "ALL")
+				     (iuplistbox-fill-list lb run-names selected-item: default-run-name))))))
      ;; (dboard:tabdat-updater-for-runs-set! tabdat refresh-runs-list)
-     (dboard:commondat-add-updater commondat refresh-runs-list)
+     (dboard:commondat-add-updater commondat refresh-runs-list tab-num: tab-num)
      (refresh-runs-list)
      (dboard:tabdat-run-name-set! tabdat default-run-name)
      (iup:hbox
