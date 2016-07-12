@@ -1871,8 +1871,10 @@ Misc
   (let ((tabdat (dboard:common-get-tabdat commondat tab-num: tab-num)))
     (if tabdat
 	(begin
-	  (update-rundat tabdat (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") (dboard:tabdat-numruns tabdat)
-			 (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
+	  (update-rundat tabdat
+			 "%" ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") 
+			 100  ;; (dboard:tabdat-numruns tabdat)
+			 "%" ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
 			 ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
 			 (let ((res '()))
 			   (for-each (lambda (key)
