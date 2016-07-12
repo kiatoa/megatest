@@ -13,7 +13,8 @@
 (use defstruct)
 
 (declare (unit vg))
-
+(use canvas-draw iup)
+(import canvas-draw-iup)
 ;; structs
 ;;
 (defstruct vg:lib     comps)

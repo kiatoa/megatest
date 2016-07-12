@@ -32,6 +32,7 @@
 (declare (uses dashboard-guimonitor))
 (declare (uses tree))
 (declare (uses dcommon))
+(declare (uses vg))
 
 ;; (declare (uses dashboard-main))
 (declare (uses megatest-version))
@@ -159,6 +160,8 @@ Misc
   allruns 
   allruns-by-id
   buttondat 
+  cnv
+  cnv-obj
   command
   command-tb 
   curr-run-id 
@@ -167,6 +170,7 @@ Misc
   dbdir
   dbfpath
   dbkeys 
+  drawing
   filters-changed
   header      
   hide-empty-runs
@@ -408,6 +412,8 @@ Misc
 
 ;; This is roughly the same as dboard:get-tests-dat, should merge them if possible
 ;;
+;;    NOTE: Yes, this is used
+;;
 (define (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)
   (let* ((states      (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
 	 (statuses    (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)))
@@ -426,25 +432,31 @@ Misc
 					     (dboard:tabdat-hide-not-hide tabdat) ;; no-in
 					     sort-by                              ;; sort-by
 					     sort-order                           ;; sort-order
-					     'shortlist                           ;; qrytype
+					     #f ;; 'shortlist                           ;; qrytype
 					     (if (dboard:tabdat-filters-changed tabdat) 
 						 0
 						 last-update) ;; last-update
 					     *dashboard-mode*)) ;; use dashboard mode
-	 (tests       (let ((newdat (filter
-				     (lambda (x)
-				       (not (equal? (db:test-get-state x) "DELETED"))) ;; remove deleted tests but do it after merging
-				     (delete-duplicates (if (dboard:tabdat-filters-changed tabdat)
-							    tmptests
-							    (append tmptests prev-tests))
-							(lambda (a b)
-							  (eq? (db:test-get-id a)(db:test-get-id b)))))))
-			(if (eq? *tests-sort-reverse* 3) ;; +event_time
-			    (sort newdat dboard:compare-tests)
-			    newdat))))
+	 (tests      (dashboard:merge-changed-tests prev-tests tmptests  (dboard:tabdat-hide-not-hide tabdat))))
     (vector-set! prev-dat 3 (- (current-seconds) 2)) ;; go back two seconds in time to ensure all changes are captured.
     ;; (debug:print 0 *default-log-port* "(dboard:get-tests-for-run-duplicate: filters-changed=" (dboard:tabdat-filters-changed tabdat) " last-update=" last-update " got " (length tmptests) " test records for run " run-id)
     tests))
+
+;; tmptests   - new tests data
+;; prev-tests - old tests data
+;;
+(define (dashboard:merge-changed-tests tests tmptests use-new) 
+  (let ((newdat (filter
+		 (lambda (x)
+		   (not (equal? (db:test-get-state x) "DELETED"))) ;; remove deleted tests but do it after merging
+		 (delete-duplicates (if use-new ;; (dboard:tabdat-filters-changed tabdat)
+					tmptests
+					(append tmptests prev-tests))
+				    (lambda (a b)
+				      (eq? (db:test-get-id a)(db:test-get-id b)))))))
+    (if (eq? *tests-sort-reverse* 3) ;; +event_time
+	(sort newdat dboard:compare-tests)
+	newdat)))
 
 ;; create a virtual table of all the tests
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
@@ -648,6 +660,7 @@ Misc
 			   testnames)))))
      runs)
 
+    ;; need alltestnames to enable lining up all tests from all runs
     (set! *alltestnamelst* (collapse-rows tabdat *alltestnamelst*)) ;;; argh. please clean up this sillyness
     (set! *alltestnamelst* (let ((xl (if (> (length *alltestnamelst*) (dboard:tabdat-start-test-offset tabdat))
 					 (drop *alltestnamelst* (dboard:tabdat-start-test-offset tabdat))
@@ -1001,61 +1014,25 @@ Misc
 ;; A gui for launching tests
 ;;
 (define (dashboard:run-times commondat tabdat #!key (tab-num #f))
-  (let* ((tabdat          tabdat) ;; (dboard:tabdat-make-data)) ;; (make-vector 25 #f))
-	 (targets       (make-hash-table))
-	 (test-records  (make-hash-table))
-	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests *toppath* '()))
-	 (test-names    (hash-table-keys all-tests-registry))
-	 (sorted-testnames #f)
-	 (action        "-run")
-	 (cmdln         "")
-	 (runlogs       (make-hash-table))
-	 (key-listboxes #f)
-	 ;; (updater-for-runs (dboard:tabdat-updater-for-runs tabdat))
-	 (update-keyvals (lambda ()
-			   (let ((targ (map (lambda (x)
-					      (iup:attribute x "VALUE"))
-					    (car (dashboard:update-target-selector key-listboxes))))
-				 (curr-runname (dboard:tabdat-run-name tabdat)))
-			     (dboard:tabdat-target-set! tabdat targ)
-			     ;; (if updater-for-runs (updater-for-runs))
-			     (if (or (not (equal? curr-runname (dboard:tabdat-run-name tabdat)))
-				     (equal? (dboard:tabdat-run-name tabdat) ""))
-				 (dboard:tabdat-run-name-set! tabdat curr-runname))
-			     (dashboard:update-run-command tabdat))))
-	 (tests-draw-state (make-hash-table)) ;; use for keeping state of the test canvas
-	 (test-patterns-textbox  #f))
-    (hash-table-set! tests-draw-state 'first-time #t)
-    ;; (hash-table-set! tests-draw-state 'scalef 1)
-    (tests:get-full-data test-names test-records '() all-tests-registry)
-    (set! sorted-testnames (tests:sort-by-priority-and-waiton test-records))
-    
-    ;; refer to (dboard:tabdat-keys tabdat), (dboard:tabdat-dbkeys tabdat) for keys
+  ;; (dashboard:run-times-tab-updater commondat tab-num)
+  (let ((drawing (vg:drawing-new))
+	(lib1    (vg:lib-new))
+	(run-times-tab-updater (lambda ()
+				 (dashboard:run-times-tab-updater commondat tab-num))))
+    (dboard:tabdat-drawing-set! tabdat drawing)
+    (dboard:commondat-add-updater commondat run-times-tab-updater tab-num: tab-num)
     (iup:vbox
-     (dcommon:command-execution-control tabdat)
-     (iup:split
-      #:orientation "VERTICAL" ;; "HORIZONTAL"
-      #:value 200
-      ;; (iup:split
-      ;;  #:value 300
-
-       ;; Target, testpatt, state and status input boxes
-       ;;
-       (iup:vbox
-	;; Command to run, placed over the top of the canvas
-	(dcommon:command-action-selector commondat tabdat tab-num: tab-num)
-	(dcommon:command-runname-selector commondat tabdat tab-num: tab-num)
-	(dcommon:command-testname-selector tabdat tabdat update-keyvals key-listboxes))
-       
-       (dcommon:command-tests-tasks-canvas tabdat test-records sorted-testnames tests-draw-state))
-       
-;; (iup:frame
-;;  #:title "Logs" ;; To be replaced with tabs
-;;  (let ((logs-tb (iup:textbox #:expand "YES"
-;; 				   #:multiline "YES")))
-;; 	 (dboard:tabdat-logs-textbox-set! tabdat logs-tb)
-;; 	 logs-tb))
-      )))
+     (let* ((cnv-obj (iup:canvas 
+		     #:size "500x400"
+		     #:expand "YES"
+		     #:scrollbar "YES"
+		     #:posx "0.5"
+		     #:posy "0.5"
+		     #:action (make-canvas-action
+			       (lambda (c xadj yadj)
+				 (if (not (dboard:tabdat-cnv tabdat))
+				     (dboard:tabdat-cnv-set! tabdat c)))))))
+       cnv-obj))))
 
 ;;======================================================================
 ;; S U M M A R Y 
@@ -1116,7 +1093,7 @@ Misc
 					     #f #f                                                       ;; offset limit
 					     (dboard:tabdat-hide-not-hide tabdat)                        ;; not-in
 					     #f #f                                                       ;; sort-by sort-order
-					     "id,testname,item_path,state,status"                        ;; qryval
+					     #f ;; get all? "id,testname,item_path,state,status,event_time,run_duration"                        ;; qryval
 					     (if (dboard:tabdat-filters-changed tabdat)
 						 0
 						 last-update)
@@ -1890,10 +1867,53 @@ Misc
      (dboard:commondat-please-update-set! commondat #f)
      recalc))
 
-;; (if dashboard:update-servers-table (dashboard:update-servers-table))))
-
-;; (define (dashboard:summary-tab-updater commondat tab-num)
-;;   (if dashboard:update-summary-tab (dashboard:update-summary-tab)))
+(define (dashboard:run-times-tab-updater commondat tab-num)
+  (let ((tabdat (dboard:common-get-tabdat commondat tab-num: tab-num)))
+    (if tabdat
+	(begin
+	  (update-rundat tabdat (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") (dboard:tabdat-numruns tabdat)
+			 (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
+			 ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
+			 (let ((res '()))
+			   (for-each (lambda (key)
+				       (if (not (equal? key "runname"))
+					   (let ((val (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) key #f)))
+					     (if val (set! res (cons (list key val) res))))))
+				     (dboard:tabdat-dbkeys tabdat))
+			   res))
+	  (let ((allruns (dboard:tabdat-allruns tabdat)))
+	    (print "allruns: " allruns)
+	    (for-each
+	     (lambda (rundat)
+	       (if (vector? rundat)
+		   (let* ((run      (vector-ref rundat 0))
+			  (testsdat  (sort (vector-ref rundat 1)
+					   (lambda (a b)
+					     (< (db:test-get-event_time a)
+						(db:test-get-event_time b)))))
+			  (key-val-dat (vector-ref rundat 2))
+			  (run-id   (db:get-value-by-header run (dboard:tabdat-header tabdat) "id"))
+			  (key-vals (append key-val-dat
+					    (list (let ((x (db:get-value-by-header run (dboard:tabdat-header tabdat) "runname")))
+						    (if x x "")))))
+			  (run-key  (string-intersperse key-vals "\n"))
+			  (runcomp  (vg:comp-new));; new component for this run
+			  (rows-used (make-hash-table)) ;; keep track of what parts of the rows are used here row1 = (obj1 obj2 ...)
+			  (row-height 4))
+		     ;; get tests in list sorted by event time ascending
+		     (for-each 
+		      (lambda (testdat)
+			(let ((event-time   (db:test-get-event_time   testdat))
+			      (run-duration (db:test-get-run_duration testdat))
+			      (test-name    (db:test-get-testname     testdat)))
+			  (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)))
+		      testsdat))))
+	     allruns)
+       (vg:drawing-cnv-set! (dboard:tabdat-drawing tabdat)(dboard:tabdat-cnv tabdat)) ;; cnv-obj)
+       (canvas-clear! (dboard:tabdat-cnv tabdat)) ;; -obj)
+       (vg:draw (dboard:tabdat-drawing tabdat))
+       ))
+	(print "no tabdat for run-times-tab-updater"))))
 
 (define (dashboard:runs-tab-updater commondat tab-num)
   (let ((tabdat (dboard:common-get-tabdat commondat tab-num: tab-num)))
