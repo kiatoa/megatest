@@ -39,10 +39,29 @@
 (define (vg:make-rect x1 y1 x2 y2 #!key (line-color #f)(fill-color #f))
   (make-vg:obj type: 'r pts: (list x1 y1 x2 y2) text: #f line-color: line-color fill-color: fill-color))
 
+;; get extents, use knowledge of type ...
+;;
+(define (vg:obj-get-extents obj)
+  (let ((type (vg:obj-type obj)))
+    (case type
+      ((r)(vg:rect-get-extents obj)))))
+
+(define (vg:rect-get-extents obj)
+  (vg:obj-pts obj)) ;; extents are just the points for a rectangle
+
+;;======================================================================
+;; components
+;;======================================================================
+
 ;; add obj to comp
 ;;
 (define (vg:add-objs-to-comp comp . objs)
   (vg:comp-objs-set! comp (append (vg:comp-objs comp) objs)))
+
+;; use the struct. leave this here to remind of this!
+;;
+;; (define (vg:comp-get-objs comp)
+;;   (vg:comp-objs comp))
 
 ;; add comp to lib
 ;;
@@ -61,10 +80,47 @@
 	 (inst (hash-table-ref (vg:lib-comps lib) compname)))
     inst))
 
+(define (vg:component-get-extents comp)
+  (let ((llx #f)
+	(lly #f)
+	(ulx #f)
+	(uly #f)
+	(objs (vg:comp-objs comp)))
+    (for-each
+     (lambda (obj)
+       (let* ((extents (vg:get-extents obj))
+	      (ollx    (list-ref extents 0))
+	      (olly    (list-ref extents 1))
+	      (oulx    (list-ref extents 2))
+	      (ouly    (list-ref extents 3)))
+	 (if (or (not llx)(< ollx llx))(set! llx ollx))
+	 (if (or (not lly)(< olly llx))(set! llx ollx))
+	 (if (or (not ulx)(< ollx llx))(set! llx ollx))
+	 (if (or (not uly)(< ollx llx))(set! llx ollx))))
+     objs)
+    (list llx lly ulx uly)))
+
+
+;;======================================================================
+;; libraries
+;;======================================================================
+
 ;; register lib with drawing
+
 ;;
 (define (vg:add-lib drawing libname lib)
   (hash-table-set! (vg:drawing-libs drawing) libname lib))
+
+(define (vg:get-lib drawing libname)
+  (hash-table-ref/default (vg:drawing-libs drawing) libname #f))
+
+(define (vg:get/create-lib drawing libname)
+  (let ((lib (vg:get-lib drawing libname)))
+    (if lib
+	lib
+	(let ((newlib (vg:lib-new)))
+	  (vg:add-lib drawing libname newlib)
+	  newlib))))
 
 ;;======================================================================
 ;; map objects given offset, scale and mirror

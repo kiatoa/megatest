@@ -1015,8 +1015,7 @@ Misc
 ;;
 (define (dashboard:run-times commondat tabdat #!key (tab-num #f))
   ;; (dashboard:run-times-tab-updater commondat tab-num)
-  (let ((drawing (vg:drawing-new))
-	(lib1    (vg:lib-new))
+  (let ((drawing               (vg:drawing-new))
 	(run-times-tab-updater (lambda ()
 				 (dashboard:run-times-tab-updater commondat tab-num))))
     (dboard:tabdat-drawing-set! tabdat drawing)
@@ -1867,10 +1866,42 @@ Misc
      (dboard:commondat-please-update-set! commondat #f)
      recalc))
 
+;; point inside line
+;;
+(define-inline (dashboard:px-between px lx1 lx2)
+  (and (< lx1 px)(> lx2 px)))
+
+;; can a bar be placed in row "rownum" covering x1 to x2 without overlapping with existing 
+;; bars?
+;;
+(define (dashboard:row-collision rowhash rownum x1 x2)
+  (let ((rowdat    (hash-table-ref/default rowhash rownum '()))
+	(collision #f))
+    (for-each
+     (lambda (bar)
+       (let ((bx1 (car bar))
+	     (bx2 (cdr bar)))
+	 (cond
+	  ;; newbar x1 inside bar
+	  ((dashboard:px-between x1 bx1 bx2)(set! collision #t))
+	  ((dashboard:px-between x2 bx1 bx2)(set! collision #t))
+	  ((and (<= x1 bx1)(>= x2 bx2))(set! collision #t)))))
+     rowdat)
+    collision))
+
+(define-inline (dashboard:add-bar rowhash rownum x1 x2)
+  (hash-table-set! rowhash rownum (cons (cons x1 x2) 
+					(hash-table-ref/default rowhash rownum '()))))
+
 (define (dashboard:run-times-tab-updater commondat tab-num)
+  ;; each test is an object in the run component
+  ;; each run is a component
+  ;; all runs stored in runslib library
   (let ((tabdat (dboard:common-get-tabdat commondat tab-num: tab-num)))
     (if tabdat
-	(begin
+	(let* ((row-height 10)
+	       (drawing    (dboard:tabdat-drawing tabdat))
+	       (runslib    (vg:get/create-lib drawing "runslib")))
 	  (update-rundat tabdat
 			 "%" ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") 
 			 100  ;; (dboard:tabdat-numruns tabdat)
@@ -1883,7 +1914,8 @@ Misc
 					     (if val (set! res (cons (list key val) res))))))
 				     (dboard:tabdat-dbkeys tabdat))
 			   res))
-	  (let ((allruns (dboard:tabdat-allruns tabdat)))
+	  (let ((allruns (dboard:tabdat-allruns tabdat))
+		(rowhash (make-hash-table))) ;; store me in tabdat
 	    (print "allruns: " allruns)
 	    (for-each
 	     (lambda (rundat)
@@ -1899,16 +1931,28 @@ Misc
 					    (list (let ((x (db:get-value-by-header run (dboard:tabdat-header tabdat) "runname")))
 						    (if x x "")))))
 			  (run-key  (string-intersperse key-vals "\n"))
+			  (run-full-name (string-intersperse key-vals "/"))
 			  (runcomp  (vg:comp-new));; new component for this run
 			  (rows-used (make-hash-table)) ;; keep track of what parts of the rows are used here row1 = (obj1 obj2 ...)
 			  (row-height 4))
+		     (vg:add-comp-to-lib runslib run-full-name runcomp)
 		     ;; get tests in list sorted by event time ascending
 		     (for-each 
 		      (lambda (testdat)
-			(let ((event-time   (db:test-get-event_time   testdat))
-			      (run-duration (db:test-get-run_duration testdat))
-			      (test-name    (db:test-get-testname     testdat)))
-			  (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)))
+			(let* ((event-time   (/ (db:test-get-event_time   testdat) 60))
+			       (run-duration (/ (db:test-get-run_duration testdat) 60))
+			       (end-time     (+ event-time run-duration))
+			       (test-name    (db:test-get-testname     testdat))
+			       (item-path    (db:test-get-item_path    testdat)))
+			  (let loop ((rownum 0))
+			    (if (dashboard:row-collision rowhash rownum event-time end-time)
+				(loop (+ rownum 1))
+				(let* ((lly (* rownum row-height))
+				       (uly (+ lly row-height)))
+				  (dashboard:add-bar rowhash rownum event-time end-time)
+				  (vg:add-objs-to-comp runcomp (vg:make-rect event_time lly end-time uly)))))
+			  ;; (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)
+			  ))
 		      testsdat))))
 	     allruns)
        (vg:drawing-cnv-set! (dboard:tabdat-drawing tabdat)(dboard:tabdat-cnv tabdat)) ;; cnv-obj)
