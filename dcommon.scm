@@ -67,6 +67,17 @@
 (hash-table-set! *cachedata* "runid-to-col"    (make-hash-table))
 (hash-table-set! *cachedata* "testname-to-row" (make-hash-table))
 
+;; modify a cell if the data is changed, return #t or-ed with previous if modified, #f elsewise
+;;
+(define (dcommon:modifiy-if-different mtrx cell-name new-val prev-changed)
+  (let ((curr-val (iup:attribute mtrx cell-name)))
+    (if (not (equal? curr-val new-val)) 
+	(begin
+	  (iup:attribute-set! mtrx cell-name col-name)
+	  #t) ;; need a re-draw
+	prev-changed)))
+
+
 ;; TO-DO
 ;;  1. Make "data" hash-table hierarchial store of all displayed data
 ;;  2. Update synchash to understand "get-runs", "get-tests" etc.
@@ -76,6 +87,7 @@
 (define (dcommon:run-update keys data runname keypatts testpatt states statuses mode window-id)
   (let* (;; count and offset => #f so not used
 	 ;; the synchash calls modify the "data" hash
+	 (changed         #f)
 	 (get-runs-sig    (conc (client:get-signature) " get-runs"))
 	 (get-tests-sig   (conc (client:get-signature) " get-tests"))
 	 (get-details-sig (conc (client:get-signature) " get-test-details"))
@@ -111,7 +123,8 @@
 	 (runid-to-col    (hash-table-ref *cachedata* "runid-to-col"))
 	 (testname-to-row (hash-table-ref *cachedata* "testname-to-row")) 
 	 (colnum       1)
-	 (rownum       0)) ;; rownum = 0 is the header
+	 (rownum       0)
+	 (cellname (conc rownum ":" colnum))) ;; rownum = 0 is the header
 ;; (debug:print 0 *default-log-port* "test-ids " test-ids ", tests-detail-changes " tests-detail-changes)
     
 	 ;; tests related stuff
@@ -130,8 +143,8 @@
 		       (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
 		       (run-path   (append key-vals (list run-name))))
 		  (hash-table-set! (dboard:tabdat-run-keys data) run-id run-path)
-		  (iup:attribute-set! (dboard:tabdat-runs-matrix data)
-				      (conc rownum ":" colnum) col-name)
+		  ;; modify cell - but only if changed
+		  (set! changed (dcommon:modifiy-if-different (dboard:tabdat-runs-matrix data) cellname col-name changed))
 		  (hash-table-set! runid-to-col run-id (list colnum run-record))
 		  ;; Here we update the tests treebox and tree keys
 		  (tree:add-node (dboard:tabdat-tests-tree data) "Runs" (append key-vals (list run-name))
@@ -189,7 +202,14 @@
 				(let ((node-num (tree:find-node tb (cons "Runs" test-path)))
 				      (color    (car (gutils:get-color-for-state-status state status))))
 				  (debug:print 0 *default-log-port* "node-num: " node-num ", color: " color)
-				  (iup:attribute-set! tb (conc "COLOR" node-num) color))
+
+				  (set! changed (dcommon:modifiy-if-different 
+						 tb
+						 (conc "COLOR" node-num)
+						 color changed))
+
+				  ;; (iup:attribute-set! tb (conc "COLOR" node-num) color)
+				  )
 				(hash-table-set! (dboard:tabdat-path-test-ids data) test-path test-id)
 				(if (not rownum)
 				    (let ((rownums (hash-table-values testname-to-row)))
@@ -198,19 +218,36 @@
 						       (+ 1 (apply max rownums))))
 				      (hash-table-set! testname-to-row fullname rownum)
 				      ;; create the label
-				      (iup:attribute-set! (dboard:tabdat-runs-matrix data)
-							  (conc rownum ":" 0) dispname)
+				      (set! changed (dcommon:modifiy-if-different 
+						     (dboard:tabdat-runs-matrix data)
+						     (conc rownum ":" 0)
+						     dispname
+						     changed))
+				      ;; (iup:attribute-set! (dboard:tabdat-runs-matrix data)
+				      ;;   		  (conc rownum ":" 0) dispname)
 				      ))
 				;; set the cell text and color
 				;; (debug:print 2 *default-log-port* "rownum:colnum=" rownum ":" colnum ", state=" status)
-				(iup:attribute-set! (dboard:tabdat-runs-matrix data)
-						    (conc rownum ":" colnum)
-						    (if (member state '("ARCHIVED" "COMPLETED"))
-							status
-							state))
-				(iup:attribute-set! (dboard:tabdat-runs-matrix data)
-						    (conc "BGCOLOR" rownum ":" colnum)
-						    (car (gutils:get-color-for-state-status state status)))
+				(set! changed (dcommon:modifiy-if-different 
+						     (dboard:tabdat-runs-matrix data)
+						     (conc rownum ":" colnum)
+						     (if (member state '("ARCHIVED" "COMPLETED"))
+							 status
+							 state)
+						     changed))
+				;; (iup:attribute-set! (dboard:tabdat-runs-matrix data)
+				;; 		    (conc rownum ":" colnum)
+				;; 		    (if (member state '("ARCHIVED" "COMPLETED"))
+				;; 			status
+				;; 			state))
+				(set! changed (dcommon:modifiy-if-different 
+					       (dboard:tabdat-runs-matrix data)
+					       (conc "BGCOLOR" rownum ":" colnum)
+					       (car (gutils:get-color-for-state-status state status))
+					       changed))
+				;; (iup:attribute-set! (dboard:tabdat-runs-matrix data)
+				;; 		    (conc "BGCOLOR" rownum ":" colnum)
+				;; 		    (car (gutils:get-color-for-state-status state status)))
 				))
 			    tests)))
 	      run-ids)
@@ -218,7 +255,7 @@
     (let ((updater (hash-table-ref/default  (dboard:commondat-updaters commondat) window-id #f)))
       (if updater (updater (hash-table-ref/default data get-details-sig #f))))
 
-    (iup:attribute-set! (dboard:tabdat-runs-matrix data) "REDRAW" "ALL")
+    (if changed (iup:attribute-set! (dboard:tabdat-runs-matrix data) "REDRAW" "ALL"))
     ;; (debug:print 2 *default-log-port* "run-changes: " run-changes)
     ;; (debug:print 2 *default-log-port* "test-changes: " test-changes)
     (list run-changes all-test-changes)))
