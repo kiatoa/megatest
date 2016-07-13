@@ -1939,21 +1939,39 @@ Misc
 		     ;; get tests in list sorted by event time ascending
 		     (for-each 
 		      (lambda (testdat)
-			(let* ((event-time   (/ (db:test-get-event_time   testdat) 60))
-			       (run-duration (/ (db:test-get-run_duration testdat) 60))
+			(let* ((event-time   (/ (db:test-get-event_time   testdat) 60.0))
+			       (run-duration (/ (db:test-get-run_duration testdat) 60.0))
 			       (end-time     (+ event-time run-duration))
 			       (test-name    (db:test-get-testname     testdat))
-			       (item-path    (db:test-get-item_path    testdat)))
+			       (item-path    (db:test-get-item-path    testdat)))
 			  (let loop ((rownum 0))
 			    (if (dashboard:row-collision rowhash rownum event-time end-time)
 				(loop (+ rownum 1))
 				(let* ((lly (* rownum row-height))
 				       (uly (+ lly row-height)))
 				  (dashboard:add-bar rowhash rownum event-time end-time)
-				  (vg:add-objs-to-comp runcomp (vg:make-rect event_time lly end-time uly)))))
+				  (vg:add-objs-to-comp runcomp (vg:make-rect event-time lly end-time uly)))))
 			  ;; (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)
 			  ))
-		      testsdat))))
+		      testsdat)))
+	       ;; instantiate the component 
+	       (let-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
+			    ((originx originy)             (canvas-origin cnv)))
+		 (let* ((extents (vg:component-get-extents runcomp))
+			(llx     (list-ref extents 0))
+			(lly     (list-ref extents 1))
+			(ulx     (list-ref extents 2))
+			(uly     (list-ref extents 3))
+			;; move the following into mapping functions in vg.scm
+			(deltax  (- llx ulx))
+			(scalex  (/ sizex deltax))
+			(sllx    (* scalex llx))
+			(offx    (- sllx originx))
+		   
+		 
+		 
+	       
+	       )
 	     allruns)
        (vg:drawing-cnv-set! (dboard:tabdat-drawing tabdat)(dboard:tabdat-cnv tabdat)) ;; cnv-obj)
        (canvas-clear! (dboard:tabdat-cnv tabdat)) ;; -obj)
