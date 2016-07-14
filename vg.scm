@@ -20,8 +20,8 @@
 (defstruct vg:lib     comps)
 (defstruct vg:comp    objs name file)
 (defstruct vg:obj     type pts fill-color text line-color call-back font)
-(defstruct vg:inst    libname compname theta xoff yoff scalex scaley mirrx mirry call-back)
-(defstruct vg:drawing libs insts scalex scaley xoff yoff cnv) ;; libs: hash of name->lib, insts: hash of instname->inst
+(defstruct vg:inst    libname compname theta xoff yoff scalex scaley mirrx mirry call-back cache)
+(defstruct vg:drawing libs insts scalex scaley xoff yoff cnv cache) ;; libs: hash of name->lib, insts: hash of instname->inst
 
 ;; inits
 ;;
@@ -32,7 +32,13 @@
   (make-vg:lib comps: (make-hash-table)))
 
 (define (vg:drawing-new)
-  (make-vg:drawing scalex: 1 scaley: 1 xoff: 0 yoff: 0 libs: (make-hash-table) insts: (make-hash-table)))
+  (make-vg:drawing scalex: 1 
+		   scaley: 1 
+		   xoff: 0 
+		   yoff: 0 
+		   libs: (make-hash-table) 
+		   insts: (make-hash-table)
+		   cache: '()))
 
 ;;======================================================================
 ;; scaling and offsets
@@ -40,6 +46,7 @@
 
 (define-inline (vg:scale-offset val s o)
   (+ o (* val s)))
+  ;; (* (+ o val) s))
 
 ;; apply scale and offset to a list of x y values
 ;;
@@ -80,9 +87,13 @@
 ;; apply both drawing and instance scaling to a list of xy points
 ;; 
 (define (vg:drawing-inst-apply-scale-offset drawing inst lstxy)
-  (vg:inst-apply-scale 
-   inst
-   (vg:drawing-apply-scale drawing lstxy)))
+  (vg:drawing-apply-scale 
+   drawing
+   (vg:inst-apply-scale inst lstxy)))
+
+;;   (vg:inst-apply-scale 
+;;    inst
+;;    (vg:drawing-apply-scale drawing lstxy)))
 
 ;; make a rectangle obj
 ;;
@@ -120,8 +131,8 @@
 
 ;; instanciate component in drawing
 ;;
-(define (vg:instantiate drawing libname compname instname xoff yoff t #!key (scalex 1)(scaley 1)(mirrx #f)(mirry #f))
-  (let ((inst (make-vg:inst libname: libname compname: compname xoff: xoff yoff: yoff theta: t scalex: scalex scaley: scaley mirrx: mirrx mirry: mirry)) )
+(define (vg:instantiate drawing libname compname instname xoff yoff #!key (theta 0)(scalex 1)(scaley 1)(mirrx #f)(mirry #f))
+  (let ((inst (make-vg:inst libname: libname compname: compname xoff: xoff yoff: yoff theta: theta scalex: scalex scaley: scaley mirrx: mirrx mirry: mirry)) )
     (hash-table-set! (vg:drawing-insts drawing) instname inst)))
 
 ;; get component from drawing (look in apropriate lib) given libname and compname
@@ -193,6 +204,7 @@
 			  font:       (vg:obj-font       obj)))
 	(pts (vg:obj-pts obj)))
     (vg:obj-pts-set! res (vg:drawing-inst-apply-scale-offset drawing inst pts))
+    (vg:drawing-cache-set! drawing (cons res (vg:drawing-cache drawing) ))
     res))
 
 ;;======================================================================
@@ -204,10 +216,18 @@
   (case (vg:obj-type obj)
     ((r)(vg:draw-rect drawing obj))))
 
+;; given a rect obj draw it on the canvas applying first the drawing
+;; scale and offset
+;;
 (define (vg:draw-rect drawing obj)
   (let* ((cnv (vg:drawing-cnv drawing))
-	 (pts (vg:drawing-apply-scale drawing (vg:obj-pts obj))))
-    (apply canvas-rectangle! cnv pts)))
+	 (pts (vg:drawing-apply-scale drawing (vg:obj-pts obj)))
+	 (llx (car pts))
+	 (lly (cadr pts))
+	 (ulx (caddr pts))
+	 (uly (cadddr pts)))
+    (print "pts: " pts)
+    (canvas-rectangle! cnv llx ulx lly uly)))
 
 (define (vg:draw drawing)
   (let ((insts (vg:drawing-insts drawing)))
@@ -219,7 +239,9 @@
 	 (print "comp: " comp)
 	 (for-each
 	  (lambda (obj)
-	    (print "obj: " obj)
-	    (vg:draw-obj drawing (vg:map-obj drawing inst obj)))
+	    (print "obj: " (vg:obj-pts obj))
+	    (let ((obj-xfrmd (vg:map-obj drawing inst obj)))
+	      (print "obj-xfrmd: " (vg:obj-pts obj-xfrmd))
+	      (vg:draw-obj drawing obj-xfrmd))) ;;
 	  (vg:comp-objs comp))))
     (hash-table-values insts))))
