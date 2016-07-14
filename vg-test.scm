@@ -6,8 +6,8 @@
 (define d1 (vg:drawing-new))
 (define l1 (vg:lib-new))
 (define c1 (vg:comp-new))
-(let ((r1 (vg:make-rect 10 10 100 80))
-      (r2 (vg:make-rect 100 80 190 150)))
+(let ((r1 (vg:make-rect 20 20 40 40))
+      (r2 (vg:make-rect 40 40 80 80)))
   (vg:add-objs-to-comp c1 r1 r2))
 
 ;; add the c1 component to lib l1 with name firstcomp
@@ -17,8 +17,9 @@
 (vg:add-lib d1 "firstlib" l1)
 
 ;; instantiate firstlib/firstcomp as inst1 in drawing d1 at 0,0
-(vg:instantiate d1 "firstlib" "firstcomp" "inst1" 0 0 0)
-(vg:instantiate d1 "firstlib" "firstcomp" "inst2" 200 200 0)
+(vg:instantiate d1 "firstlib" "firstcomp" "inst1" 0 0)
+(vg:instantiate d1 "firstlib" "firstcomp" "inst2" 200 200)
+;; (vg:drawing-scalex-set! d1 2)
 
 (define cnv #f)
 (define the-cnv (canvas 
