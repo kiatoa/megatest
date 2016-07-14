@@ -110,6 +110,13 @@
 (define (vg:rect-get-extents obj)
   (vg:obj-pts obj)) ;; extents are just the points for a rectangle
 
+(define (vg:grow-rect borderx bordery x1 y1 x2 y2)
+  (list
+   (- x1 borderx)
+   (- y1 bordery)
+   (+ x2 borderx)
+   (+ y2 bordery)))
+
 ;;======================================================================
 ;; components
 ;;======================================================================
@@ -141,26 +148,28 @@
 	 (inst (hash-table-ref (vg:lib-comps lib) compname)))
     inst))
 
-(define (vg:component-get-extents comp)
+(define (vg:components-get-extents . comps)
   (let ((llx #f)
 	(lly #f)
 	(ulx #f)
-	(uly #f)
-	(objs (vg:comp-objs comp)))
+	(uly #f))
     (for-each
-     (lambda (obj)
-       (let* ((extents (vg:get-extents obj))
-	      (ollx    (list-ref extents 0))
-	      (olly    (list-ref extents 1))
-	      (oulx    (list-ref extents 2))
-	      (ouly    (list-ref extents 3)))
-	 (if (or (not llx)(< ollx llx))(set! llx ollx))
-	 (if (or (not lly)(< olly llx))(set! llx ollx))
-	 (if (or (not ulx)(< ollx llx))(set! llx ollx))
-	 (if (or (not uly)(< ollx llx))(set! llx ollx))))
-     objs)
+     (lambda (comp)
+       (let ((objs (vg:comp-objs comp)))
+	 (for-each
+	  (lambda (obj)
+	    (let* ((extents (vg:obj-get-extents obj))
+		   (ollx    (list-ref extents 0))
+		   (olly    (list-ref extents 1))
+		   (oulx    (list-ref extents 2))
+		   (ouly    (list-ref extents 3)))
+	      (if (or (not llx)(< ollx llx))(set! llx ollx))
+	      (if (or (not lly)(< olly lly))(set! lly olly))
+	      (if (or (not ulx)(> oulx ulx))(set! ulx oulx))
+	      (if (or (not uly)(> ouly uly))(set! uly ouly))))
+	  objs)))
+     comps)
     (list llx lly ulx uly)))
-
 
 ;;======================================================================
 ;; libraries

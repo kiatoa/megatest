@@ -19,7 +19,15 @@
 ;; instantiate firstlib/firstcomp as inst1 in drawing d1 at 0,0
 (vg:instantiate d1 "firstlib" "firstcomp" "inst1" 0 0)
 (vg:instantiate d1 "firstlib" "firstcomp" "inst2" 200 200)
-;; (vg:drawing-scalex-set! d1 2)
+(vg:drawing-scalex-set! d1 1.1)
+(vg:drawing-scaley-set! d1 0.5)
+
+;; (define xtnts (vg:scale-offset-xy 
+;; 	       (vg:component-get-extents c1)
+;; 	       1.1 1.1 -2 -2))
+
+(define xtnts (apply vg:grow-rect 10 10 (vg:components-get-extents c1)))
+(vg:add-objs-to-comp c1 (apply vg:make-rect xtnts))
 
 (define cnv #f)
 (define the-cnv (canvas 
