@@ -248,7 +248,7 @@
 ;; with draw = #f don't actually draw the object
 ;;
 (define (vg:draw-obj drawing obj #!key (draw #t))
-  (print "obj type: " (vg:obj-type obj))
+  ;; (print "obj type: " (vg:obj-type obj))
   (case (vg:obj-type obj)
     ((r)(vg:draw-rect drawing obj draw: draw))))
 
@@ -274,12 +274,12 @@
 	      (libname  (vg:inst-libname inst))
 	      (compname (vg:inst-compname inst))
 	      (comp     (vg:get-component drawing libname compname)))
-	 (print "comp: " comp)
+	 ;; (print "comp: " comp)
 	 (for-each
 	  (lambda (obj)
-	    (print "obj: " (vg:obj-pts obj))
+	    ;; (print "obj: " (vg:obj-pts obj))
 	    (let ((obj-xfrmd (vg:map-obj drawing inst obj)))
-	      (print "obj-xfrmd: " (vg:obj-pts obj-xfrmd))
+	      ;; (print "obj-xfrmd: " (vg:obj-pts obj-xfrmd))
 	      (set! res (cons (vg:draw-obj drawing obj-xfrmd draw: draw-mode) res)))) ;;
 	  (vg:comp-objs comp))))
      (if (null? instnames)
