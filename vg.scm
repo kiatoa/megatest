@@ -10,7 +10,7 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
-(use defstruct)
+(use defstruct srfi-1)
 
 (declare (unit vg))
 (use canvas-draw iup)
@@ -217,32 +217,61 @@
     res))
 
 ;;======================================================================
+;; instances
+;;======================================================================
+
+(define (vg:instances-get-extents drawing . instance-names)
+  (let ((xtnt-lst (vg:draw drawing #f))
+	(llx   #f)
+	(lly   #f)
+	(ulx   #f)
+	(uly   #f))
+    (for-each
+     (lambda (extents)
+       (let* ((ollx      (list-ref extents 0))
+	      (olly      (list-ref extents 1))
+	      (oulx      (list-ref extents 2))
+	      (ouly      (list-ref extents 3)))
+	 (if (or (not llx)(< ollx llx))(set! llx ollx))
+	 (if (or (not lly)(< olly lly))(set! lly olly))
+	 (if (or (not ulx)(> oulx ulx))(set! ulx oulx))
+	 (if (or (not uly)(> ouly uly))(set! uly ouly))))
+     xtnt-lst)
+    (list llx lly ulx uly)))
+
+
+;;======================================================================
 ;; Unravel and draw the objects
 ;;======================================================================
 
-(define (vg:draw-obj drawing obj)
+;; with get-extents = #t return the extents
+;; with draw = #f don't actually draw the object
+;;
+(define (vg:draw-obj drawing obj #!key (draw #t))
   (print "obj type: " (vg:obj-type obj))
   (case (vg:obj-type obj)
-    ((r)(vg:draw-rect drawing obj))))
+    ((r)(vg:draw-rect drawing obj draw: draw))))
 
 ;; given a rect obj draw it on the canvas applying first the drawing
 ;; scale and offset
 ;;
-(define (vg:draw-rect drawing obj)
+(define (vg:draw-rect drawing obj #!key (draw #t))
   (let* ((cnv (vg:drawing-cnv drawing))
 	 (pts (vg:drawing-apply-scale drawing (vg:obj-pts obj)))
 	 (llx (car pts))
 	 (lly (cadr pts))
 	 (ulx (caddr pts))
 	 (uly (cadddr pts)))
-    (print "pts: " pts)
-    (canvas-rectangle! cnv llx ulx lly uly)))
+    (if draw (canvas-rectangle! cnv llx ulx lly uly))
+    pts)) ;; return extents
 
-(define (vg:draw drawing)
-  (let ((insts (vg:drawing-insts drawing)))
+(define (vg:draw drawing draw-mode . instnames)
+  (let ((insts (vg:drawing-insts drawing))
+	(res   '()))
     (for-each 
-     (lambda (inst)
-       (let* ((libname  (vg:inst-libname inst))
+     (lambda (instname)
+       (let* ((inst     (hash-table-ref insts instname))
+	      (libname  (vg:inst-libname inst))
 	      (compname (vg:inst-compname inst))
 	      (comp     (vg:get-component drawing libname compname)))
 	 (print "comp: " comp)
@@ -251,6 +280,9 @@
 	    (print "obj: " (vg:obj-pts obj))
 	    (let ((obj-xfrmd (vg:map-obj drawing inst obj)))
 	      (print "obj-xfrmd: " (vg:obj-pts obj-xfrmd))
-	      (vg:draw-obj drawing obj-xfrmd))) ;;
+	      (set! res (cons (vg:draw-obj drawing obj-xfrmd draw: draw-mode) res)))) ;;
 	  (vg:comp-objs comp))))
-    (hash-table-values insts))))
+     (if (null? instnames)
+	 (hash-table-keys insts)
+	 instnames))
+    res)) ;;  (hash-table-values insts))))
