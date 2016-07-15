@@ -42,8 +42,8 @@
 (vg:add-objs-to-comp c2 (apply vg:make-rect big-xtnts))
 (vg:instantiate d1 "firstlib" "secondcomp" "inst3" 0 0)
 
-(vg:drawing-scalex-set! d1 1.8)
-(vg:drawing-scaley-set! d1 1.1)
+(vg:drawing-scalex-set! d1 1.5)
+(vg:drawing-scaley-set! d1 1.5)
 
 (define cnv #f)
 (define the-cnv (canvas 

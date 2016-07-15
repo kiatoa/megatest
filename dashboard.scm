@@ -1901,7 +1901,7 @@ Misc
     (if tabdat
 	(let* ((row-height 10)
 	       (drawing    (dboard:tabdat-drawing tabdat))
-	       (runslib    (vg:get/create-lib drawing "runslib")))
+	       (runslib    (vg:get/create-lib drawing "runslib"))) ;; creates and adds lib
 	  (update-rundat tabdat
 			 "%" ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") 
 			 100  ;; (dboard:tabdat-numruns tabdat)
@@ -1915,7 +1915,8 @@ Misc
 				     (dboard:tabdat-dbkeys tabdat))
 			   res))
 	  (let ((allruns (dboard:tabdat-allruns tabdat))
-		(rowhash (make-hash-table))) ;; store me in tabdat
+		(rowhash (make-hash-table)) ;; store me in tabdat
+		(cnv     (dboard:tabdat-cnv tabdat)))
 	    (print "allruns: " allruns)
 	    (for-each
 	     (lambda (rundat)
@@ -1943,7 +1944,8 @@ Misc
 			       (run-duration (/ (db:test-get-run_duration testdat) 60.0))
 			       (end-time     (+ event-time run-duration))
 			       (test-name    (db:test-get-testname     testdat))
-			       (item-path    (db:test-get-item-path    testdat)))
+			       (item-path    (db:test-get-item-path    testdat))
+			       (test-fullname (conc test-name "/" item-path)))
 			  (let loop ((rownum 0))
 			    (if (dashboard:row-collision rowhash rownum event-time end-time)
 				(loop (+ rownum 1))
@@ -1953,30 +1955,28 @@ Misc
 				  (vg:add-objs-to-comp runcomp (vg:make-rect event-time lly end-time uly)))))
 			  ;; (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)
 			  ))
-		      testsdat)))
-	       ;; instantiate the component 
-	       (let-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
-			    ((originx originy)             (canvas-origin cnv)))
-		 (let* ((extents (vg:component-get-extents runcomp))
-			(llx     (list-ref extents 0))
-			(lly     (list-ref extents 1))
-			(ulx     (list-ref extents 2))
-			(uly     (list-ref extents 3))
-			;; move the following into mapping functions in vg.scm
-			(deltax  (- llx ulx))
-			(scalex  (/ sizex deltax))
-			(sllx    (* scalex llx))
-			(offx    (- sllx originx))
-		   
-		 
-		 
-	       
-	       )
+		      testsdat)
+		     ;; instantiate the component 
+		     (let-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
+				  ((originx originy)             (canvas-origin cnv)))
+		       (let* ((extents (vg:components-get-extents runcomp))
+			      (llx     (list-ref extents 0))
+			      (lly     (list-ref extents 1))
+			      (ulx     (list-ref extents 2))
+			      (uly     (list-ref extents 3))
+			      ;; move the following into mapping functions in vg.scm
+			      (deltax  (- llx ulx))
+			      (scalex  (/ sizex deltax))
+			      (sllx    (* scalex llx))
+			      (offx    (- sllx originx)))
+			 (print "llx: " llx " lly: " lly "ulx: " ulx " uly: " uly " deltax: " deltax " scalex: " scalex " sllx: " sllx " offx: " offx)
+			 (print " run-full-name: " run-full-name)
+			 (vg:instantiate drawing "runslib" run-full-name "wrongname" offx 0 scalex: scalex scaley: 1))))))
 	     allruns)
-       (vg:drawing-cnv-set! (dboard:tabdat-drawing tabdat)(dboard:tabdat-cnv tabdat)) ;; cnv-obj)
-       (canvas-clear! (dboard:tabdat-cnv tabdat)) ;; -obj)
-       (vg:draw (dboard:tabdat-drawing tabdat))
-       ))
+	    (vg:drawing-cnv-set! (dboard:tabdat-drawing tabdat)(dboard:tabdat-cnv tabdat)) ;; cnv-obj)
+	    (canvas-clear! (dboard:tabdat-cnv tabdat)) ;; -obj)
+	    (vg:draw (dboard:tabdat-drawing tabdat) #t)
+	    ))
 	(print "no tabdat for run-times-tab-updater"))))
 
 (define (dashboard:runs-tab-updater commondat tab-num)
