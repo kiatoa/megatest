@@ -1901,7 +1901,7 @@ Misc
 	(canvas-margin 20)
 	(start-row     0)) ;; each run starts in this row
     (if tabdat
-	(let* ((row-height 10)
+	(let* ((row-height 20)
 	       (drawing    (dboard:tabdat-drawing tabdat))
 	       (runslib    (vg:get/create-lib drawing "runslib"))) ;; creates and adds lib
 	  (update-rundat tabdat
@@ -1955,7 +1955,10 @@ Misc
 				 (end-time     (+ event-time run-duration))
 				 (test-name    (db:test-get-testname     testdat))
 				 (item-path    (db:test-get-item-path    testdat))
-				 (test-fullname (conc test-name "/" item-path)))
+				 (state         (db:test-get-state       testdat))
+				 (status        (db:test-get-status      testdat))
+				 (test-fullname (conc test-name "/" item-path))
+				 (name-color    (gutils:get-color-for-state-status state status)))
 			    (print "event_time: " (db:test-get-event_time   testdat) " mapped event_time: " event-time)
 			    (print "run-duration: "  (db:test-get-run_duration testdat) " mapped run_duration: " run-duration)
 			    (let loop ((rownum start-row)) ;; (+ start-row 1)))
@@ -1965,7 +1968,10 @@ Misc
 				  (let* ((lly (- sizey (* rownum row-height)))
 					 (uly (+ lly row-height)))
 				    (dashboard:add-bar rowhash rownum event-time end-time)
-				    (vg:add-objs-to-comp runcomp (vg:make-rect event-time lly end-time uly)))))
+				    (vg:add-objs-to-comp runcomp (vg:make-rect event-time lly end-time uly
+									       fill-color: 
+									       ;; (string->number (string-substitute " " "" (car name-color))))))))
+									       (vg:iup-color->number (car name-color)))))))
 			    ;; (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)
 			    ))
 			testsdat)

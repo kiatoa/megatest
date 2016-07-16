@@ -239,6 +239,15 @@
      xtnt-lst)
     (list llx lly ulx uly)))
 
+;;======================================================================
+;; color
+;;======================================================================
+
+(define (vg:rgb->number r g b #!key (a 0))
+   (u32vector-ref (blob->u32vector (u8vector->blob (list->u8vector (list a r g b)))) 0))
+
+(define (vg:iup-color->number iup-color)
+  (apply vg:rgb->number (map string->number (string-split iup-color))))
 
 ;;======================================================================
 ;; Unravel and draw the objects
@@ -258,12 +267,26 @@
 (define (vg:draw-rect drawing obj #!key (draw #t))
   (let* ((cnv (vg:drawing-cnv drawing))
 	 (pts (vg:drawing-apply-scale drawing (vg:obj-pts obj)))
+	 (fill-color (vg:obj-fill-color obj))
+	 (line-color (vg:obj-line-color obj))
 	 (llx (car pts))
 	 (lly (cadr pts))
 	 (ulx (caddr pts))
-	 (uly (cadddr pts)))
-    (if draw (canvas-rectangle! cnv llx ulx lly uly))
-    pts)) ;; return extents
+	 (uly (cadddr pts))
+	 (w   (- ulx llx))
+	 (h   (- uly lly)))
+    (if draw 
+	(let ((prev-background-color (canvas-background cnv))
+	      (prev-foreground-color (canvas-foreground cnv)))
+	  (if fill-color (canvas-foreground-set! cnv fill-color))
+	  (canvas-box! cnv llx ulx lly uly) ;; docs are all over the place on this one.;; w h)
+	  (if line-color
+	      (canvas-foreground-set! cnv line-color)
+	      (if fill-color
+		  (canvas-foreground-set! cnv prev-background-color)))
+	  (canvas-rectangle! cnv llx ulx lly uly)
+	  (canvas-foreground-set! cnv prev-background-color)))
+    pts)) ;; return extents 
 
 (define (vg:draw drawing draw-mode . instnames)
   (let ((insts (vg:drawing-insts drawing))
