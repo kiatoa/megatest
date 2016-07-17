@@ -4,14 +4,19 @@
 (load "vg.scm")
 
 (use trace)
-(trace vg:draw-rect)
+(trace 
+ vg:draw-rect
+ vg:grow-rect
+ vg:components-get-extents)
+
 (define d1 (vg:drawing-new))
 (define l1 (vg:lib-new))
 (define c1 (vg:comp-new))
 (define c2 (vg:comp-new))
 (let ((r1 (vg:make-rect 20 20 40 40))
-      (r2 (vg:make-rect 40 40 80 80)))
-  (vg:add-objs-to-comp c1 r1 r2))
+      (r2 (vg:make-rect 40 40 80 80))
+      (t1 (vg:make-text 40 40 "The middle" font: "Helvetica, -10")))
+  (vg:add-objs-to-comp c1 r1 r2 t1))
 
 ;; add the c1 component to lib l1 with name firstcomp
 (vg:add-comp-to-lib l1 "firstcomp" c1)
@@ -33,7 +38,7 @@
 
 ;; get extents of c1 and put a rectange around it
 ;;
-(define xtnts (apply vg:grow-rect 10 10 (vg:components-get-extents c1)))
+(define xtnts (apply vg:grow-rect 10 10 (vg:components-get-extents d1 c1)))
 (vg:add-objs-to-comp c1 (apply vg:make-rect xtnts))
 
 ;; get extents of all objects and put rectangle around it

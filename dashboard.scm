@@ -1030,7 +1030,10 @@ Misc
 		     #:action (make-canvas-action
 			       (lambda (c xadj yadj)
 				 (if (not (dboard:tabdat-cnv tabdat))
-				     (dboard:tabdat-cnv-set! tabdat c))))
+				     (dboard:tabdat-cnv-set! tabdat c))
+				 (let ((drawing (dboard:tabdat-drawing tabdat)))
+				   #f ;; finish me!!
+				   )))
 		     #:wheel-cb (lambda (obj step x y dir) ;; dir is 4 for up and 5 for down. I think.
 				  (let* ((drawing (dboard:tabdat-drawing tabdat))
 					 (scalex  (vg:drawing-scalex drawing)))
@@ -1960,6 +1963,11 @@ Misc
 			    (maptime    (lambda (tsecs)(* timescale (+ tsecs timeoffset)))))
 		       ;; (print "timescale: " timescale " timeoffset: " timeoffset " sizex: " sizex " originx: " originx)
 		       (vg:add-comp-to-lib runslib run-full-name runcomp)
+		       (vg:add-objs-to-comp runcomp (vg:make-text 
+						     10
+						     (- sizey (* start-row row-height))
+						     run-full-name
+						     font: "Helvetica -10"))
 		       ;; get tests in list sorted by event time ascending
 		       (for-each 
 			(lambda (testdat)
@@ -1989,7 +1997,7 @@ Misc
 			    ))
 			testsdat)
 		       ;; instantiate the component 
-		       (let* ((extents (vg:components-get-extents runcomp))
+		       (let* ((extents (vg:components-get-extents drawing runcomp))
 			      (llx     (list-ref extents 0))
 			      (lly     (list-ref extents 1))
 			      (ulx     (list-ref extents 2))

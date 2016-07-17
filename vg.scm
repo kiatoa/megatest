@@ -19,7 +19,7 @@
 ;;
 (defstruct vg:lib     comps)
 (defstruct vg:comp    objs name file)
-(defstruct vg:obj     type pts fill-color text line-color call-back font)
+(defstruct vg:obj     type pts fill-color text line-color call-back angle font attrib)
 (defstruct vg:inst    libname compname theta xoff yoff scalex scaley mirrx mirry call-back cache)
 (defstruct vg:drawing libs insts scalex scaley xoff yoff cnv cache) ;; libs: hash of name->lib, insts: hash of instname->inst
 
@@ -91,6 +91,10 @@
    drawing
    (vg:inst-apply-scale inst lstxy)))
 
+;;======================================================================
+;; objects
+;;======================================================================
+
 ;;   (vg:inst-apply-scale 
 ;;    inst
 ;;    (vg:drawing-apply-scale drawing lstxy)))
@@ -100,12 +104,28 @@
 (define (vg:make-rect x1 y1 x2 y2 #!key (line-color #f)(fill-color #f))
   (make-vg:obj type: 'r pts: (list x1 y1 x2 y2) text: #f line-color: line-color fill-color: fill-color))
 
+;; make a text obj
+;;
+(define (vg:make-text x1 y1 text #!key (line-color #f)(fill-color #f)
+		      (angle #f)(scale-with-zoom #f)(font #f)
+		      (font-size #f))
+  (make-vg:obj type: 't pts: (list x1 y1) text: text 
+	       line-color: line-color fill-color: fill-color
+	       angle: angle font: font
+	       attributes: (vg:make-attrib 'font-size font-size)))
+
+;;======================================================================
+;; obj modifiers and queries
+;;======================================================================
+
 ;; get extents, use knowledge of type ...
 ;;
-(define (vg:obj-get-extents obj)
+(define (vg:obj-get-extents drawing obj)
   (let ((type (vg:obj-type obj)))
     (case type
-      ((r)(vg:rect-get-extents obj)))))
+      ((r)(vg:rect-get-extents obj))
+      ((t)(vg:draw-text drawing obj draw: #f))
+      (else #f))))
 
 (define (vg:rect-get-extents obj)
   (vg:obj-pts obj)) ;; extents are just the points for a rectangle
@@ -116,6 +136,9 @@
    (- y1 bordery)
    (+ x2 borderx)
    (+ y2 bordery)))
+
+(define (vg:make-attrib . attrib-list)
+  #f)
 
 ;;======================================================================
 ;; components
@@ -148,7 +171,7 @@
 	 (inst (hash-table-ref (vg:lib-comps lib) compname)))
     inst))
 
-(define (vg:components-get-extents . comps)
+(define (vg:components-get-extents drawing . comps)
   (let ((llx #f)
 	(lly #f)
 	(ulx #f)
@@ -158,7 +181,7 @@
        (let ((objs (vg:comp-objs comp)))
 	 (for-each
 	  (lambda (obj)
-	    (let* ((extents (vg:obj-get-extents obj))
+	    (let* ((extents (vg:obj-get-extents drawing obj))
 		   (ollx    (list-ref extents 0))
 		   (olly    (list-ref extents 1))
 		   (oulx    (list-ref extents 2))
@@ -201,6 +224,7 @@
 (define (vg:map-obj drawing inst obj)
   (case (vg:obj-type obj)
     ((r)(vg:map-rect drawing inst obj))
+    ((t)(vg:map-text drawing inst obj))
     (else #f)))
 
 ;; given a drawing and a inst map a rectangle to it screen coordinates
@@ -214,6 +238,21 @@
 	(pts (vg:obj-pts obj)))
     (vg:obj-pts-set! res (vg:drawing-inst-apply-scale-offset drawing inst pts))
     (vg:drawing-cache-set! drawing (cons res (vg:drawing-cache drawing) ))
+    res))
+
+;; given a drawing and a inst map a text to it screen coordinates
+;;
+(define (vg:map-text drawing inst obj)
+  (let ((res (make-vg:obj type:       't
+			  fill-color: (vg:obj-fill-color obj)
+			  text:       (vg:obj-text       obj)
+			  line-color: (vg:obj-line-color obj)
+			  font:       (vg:obj-font       obj)
+			  angle:      (vg:obj-angle      obj)
+			  attrib:     (vg:obj-attrib     obj)))
+	(pts (vg:obj-pts obj)))
+    (vg:obj-pts-set! res (vg:drawing-inst-apply-scale-offset drawing inst pts))
+    (vg:drawing-cache-set! drawing (cons res (vg:drawing-cache drawing)))
     res))
 
 ;;======================================================================
@@ -263,7 +302,8 @@
 (define (vg:draw-obj drawing obj #!key (draw #t))
   ;; (print "obj type: " (vg:obj-type obj))
   (case (vg:obj-type obj)
-    ((r)(vg:draw-rect drawing obj draw: draw))))
+    ((r)(vg:draw-rect drawing obj draw: draw))
+    ((t)(vg:draw-text drawing obj draw: draw))))
 
 ;; given a rect obj draw it on the canvas applying first the drawing
 ;; scale and offset
@@ -282,15 +322,47 @@
     (if draw 
 	(let ((prev-background-color (canvas-background cnv))
 	      (prev-foreground-color (canvas-foreground cnv)))
-	  (if fill-color (canvas-foreground-set! cnv fill-color))
-	  (canvas-box! cnv llx ulx lly uly) ;; docs are all over the place on this one.;; w h)
+	  (if fill-color
+	      (begin
+		(canvas-foreground-set! cnv fill-color)
+		(canvas-box! cnv llx ulx lly uly))) ;; docs are all over the place on this one.;; w h)
 	  (if line-color
 	      (canvas-foreground-set! cnv line-color)
 	      (if fill-color
-		  (canvas-foreground-set! cnv prev-background-color)))
+		  (canvas-foreground-set! cnv prev-foreground-color)))
 	  (canvas-rectangle! cnv llx ulx lly uly)
-	  (canvas-foreground-set! cnv prev-background-color)))
+	  (canvas-foreground-set! cnv prev-foreground-color)))
     pts)) ;; return extents 
+
+;; given a rect obj draw it on the canvas applying first the drawing
+;; scale and offset
+;;
+(define (vg:draw-text drawing obj #!key (draw #t))
+  (let* ((cnv        (vg:drawing-cnv drawing))
+	 (pts        (vg:drawing-apply-scale drawing (vg:obj-pts obj)))
+	 (text       (vg:obj-text obj))
+	 (font       (vg:obj-font obj))
+	 (fill-color (vg:obj-fill-color obj))
+	 (line-color (vg:obj-line-color obj))
+	 (llx        (car pts)) 
+	 (lly        (cadr pts)))
+    (if draw 
+	(let* ((prev-background-color (canvas-background cnv))
+	       (prev-foreground-color (canvas-foreground cnv))
+	       (prev-font             (canvas-font       cnv))
+	       (font-changed    (and font (not (equal? font prev-font)))))
+	  (if line-color
+	      (canvas-foreground-set! cnv line-color)
+	      (if fill-color
+		  (canvas-foreground-set! cnv prev-foreground-color)))
+	  (if font-changed (canvas-font-set! cnv font))
+	  (canvas-text! cnv llx lly text)
+	  ;; NOTE: we do not set the font back!!
+	  (canvas-foreground-set! cnv prev-foreground-color)))
+    (if cnv
+	(let-values (((xmax ymax)(canvas-text-size cnv text)))
+	  (append pts (list (+ llx xmax)(+ lly ymax)))) ;; will be wrong if text is rotated?
+	(append pts pts))))
 
 (define (vg:draw drawing draw-mode . instnames)
   (let ((insts (vg:drawing-insts drawing))
