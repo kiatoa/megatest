@@ -1022,7 +1022,7 @@ Misc
     (dboard:commondat-add-updater commondat run-times-tab-updater tab-num: tab-num)
     (iup:vbox
      (let* ((cnv-obj (iup:canvas 
-		     #:size "500x400"
+		     ;; #:size "500x400"
 		     #:expand "YES"
 		     #:scrollbar "YES"
 		     #:posx "0.5"
@@ -1030,7 +1030,16 @@ Misc
 		     #:action (make-canvas-action
 			       (lambda (c xadj yadj)
 				 (if (not (dboard:tabdat-cnv tabdat))
-				     (dboard:tabdat-cnv-set! tabdat c)))))))
+				     (dboard:tabdat-cnv-set! tabdat c))))
+		     #:wheel-cb (lambda (obj step x y dir) ;; dir is 4 for up and 5 for down. I think.
+				  (let* ((drawing (dboard:tabdat-drawing tabdat))
+					 (scalex  (vg:drawing-scalex drawing)))
+				    (vg:drawing-scalex-set! drawing
+							    (+ scalex
+							       (if (> step 0)
+								   (* scalex 0.01)
+								   (* scalex -0.01))))))
+		     )))
        cnv-obj))))
 
 ;;======================================================================
@@ -1640,8 +1649,8 @@ Misc
 							   (iup:label x #:size "x15" #:fontsize "10" #:expand "HORIZONTAL")
 							   (iup:textbox #:size "x15" #:fontsize "10" #:value "%" #:expand "HORIZONTAL"
 									#:action (lambda (obj unk val)
-										   (mark-for-update tabdat)
-										   (update-search commondat tabdat x val))))))
+										   (mark-for-update runs-dat)
+										   (update-search commondat runs-dat x val))))))
 					(set! i (+ i 1))
 					res))
 				    keynames)))))
@@ -1898,7 +1907,7 @@ Misc
   ;; each run is a component
   ;; all runs stored in runslib library
   (let ((tabdat        (dboard:common-get-tabdat commondat tab-num: tab-num))
-	(canvas-margin 20)
+	(canvas-margin 10)
 	(start-row     0)) ;; each run starts in this row
     (if tabdat
 	(let* ((row-height 20)
