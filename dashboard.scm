@@ -437,7 +437,7 @@ Misc
 						 0
 						 last-update) ;; last-update
 					     *dashboard-mode*)) ;; use dashboard mode
-	 (tests      (dashboard:merge-changed-tests prev-tests tmptests  (dboard:tabdat-hide-not-hide tabdat))))
+	 (tests      (dashboard:merge-changed-tests prev-tests tmptests  (dboard:tabdat-hide-not-hide tabdat) prev-tests)))
     (vector-set! prev-dat 3 (- (current-seconds) 2)) ;; go back two seconds in time to ensure all changes are captured.
     ;; (debug:print 0 *default-log-port* "(dboard:get-tests-for-run-duplicate: filters-changed=" (dboard:tabdat-filters-changed tabdat) " last-update=" last-update " got " (length tmptests) " test records for run " run-id)
     tests))
@@ -445,7 +445,7 @@ Misc
 ;; tmptests   - new tests data
 ;; prev-tests - old tests data
 ;;
-(define (dashboard:merge-changed-tests tests tmptests use-new) 
+(define (dashboard:merge-changed-tests tests tmptests use-new prev-tests) 
   (let ((newdat (filter
 		 (lambda (x)
 		   (not (equal? (db:test-get-state x) "DELETED"))) ;; remove deleted tests but do it after merging
@@ -1943,9 +1943,13 @@ Misc
 			    (run-start  (apply min (map db:test-get-event_time testsdat)))
 			    (run-end    (apply max (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat)))
 			    (timeoffset (- (+ originx canvas-margin) run-start))
-			    (timescale  (/ (- sizex (* 2 canvas-margin)) (- run-end run-start)))
+			    (run-duration (- run-end run-start))
+			    (timescale  (/ (- sizex (* 2 canvas-margin))
+					   (if (> run-duration 0)
+					       run-duration
+					       (current-seconds)))) ;; a least lously guess
 			    (maptime    (lambda (tsecs)(* timescale (+ tsecs timeoffset)))))
-		       (print "timescale: " timescale " timeoffset: " timeoffset " sizex: " sizex " originx: " originx)
+		       ;; (print "timescale: " timescale " timeoffset: " timeoffset " sizex: " sizex " originx: " originx)
 		       (vg:add-comp-to-lib runslib run-full-name runcomp)
 		       ;; get tests in list sorted by event time ascending
 		       (for-each 
@@ -1959,8 +1963,8 @@ Misc
 				 (status        (db:test-get-status      testdat))
 				 (test-fullname (conc test-name "/" item-path))
 				 (name-color    (gutils:get-color-for-state-status state status)))
-			    (print "event_time: " (db:test-get-event_time   testdat) " mapped event_time: " event-time)
-			    (print "run-duration: "  (db:test-get-run_duration testdat) " mapped run_duration: " run-duration)
+			    ;; (print "event_time: " (db:test-get-event_time   testdat) " mapped event_time: " event-time)
+			    ;; (print "run-duration: "  (db:test-get-run_duration testdat) " mapped run_duration: " run-duration)
 			    (let loop ((rownum start-row)) ;; (+ start-row 1)))
 			      (set! start-row (max rownum start-row)) ;; track the max row used
 			      (if (dashboard:row-collision rowhash rownum event-time end-time)
@@ -1983,13 +1987,13 @@ Misc
 			      (uly     (list-ref extents 3))
 			      ;; move the following into mapping functions in vg.scm
 			      (deltax  (- llx ulx))
-			      (scalex  (/ sizex deltax))
+			      (scalex  (if (> deltax 0)(/ sizex deltax) 1))
 			      (sllx    (* scalex llx))
 			      (offx    (- sllx originx)))
 			 (print "llx: " llx " lly: " lly "ulx: " ulx " uly: " uly " deltax: " deltax " scalex: " scalex " sllx: " sllx " offx: " offx)
 			 (print " run-full-name: " run-full-name)
 			 ;; (vg:instantiate drawing "runslib" run-full-name "wrongname" offx 0))))) 
-			 (vg:instantiate drawing "runslib" run-full-name "wrongname" 0 0))))) 
+			 (vg:instantiate drawing "runslib" run-full-name run-full-name 0 0))))) 
 			;;		 scalex: scalex scaley: 1)))))
 	       allruns)
 	      (vg:drawing-cnv-set! (dboard:tabdat-drawing tabdat)(dboard:tabdat-cnv tabdat)) ;; cnv-obj)

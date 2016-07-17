@@ -244,7 +244,11 @@
 ;;======================================================================
 
 (define (vg:rgb->number r g b #!key (a 0))
-   (u32vector-ref (blob->u32vector (u8vector->blob (list->u8vector (list a r g b)))) 0))
+  (bitwise-ior
+    (arithmetic-shift a 24)
+    (arithmetic-shift r 16)
+    (arithmetic-shift g 8)
+    b))
 
 (define (vg:iup-color->number iup-color)
   (apply vg:rgb->number (map string->number (string-split iup-color))))
