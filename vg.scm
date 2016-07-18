@@ -101,8 +101,8 @@
 
 ;; make a rectangle obj
 ;;
-(define (vg:make-rect x1 y1 x2 y2 #!key (line-color #f)(fill-color #f))
-  (make-vg:obj type: 'r pts: (list x1 y1 x2 y2) text: #f line-color: line-color fill-color: fill-color))
+(define (vg:make-rect x1 y1 x2 y2 #!key (line-color #f)(fill-color #f)(text #f)(font #f))
+  (make-vg:obj type: 'r pts: (list x1 y1 x2 y2) text: text font: font line-color: line-color fill-color: fill-color))
 
 ;; make a text obj
 ;;
@@ -230,7 +230,7 @@
 ;; given a drawing and a inst map a rectangle to it screen coordinates
 ;;
 (define (vg:map-rect drawing inst obj)
-  (let ((res (make-vg:obj type:       'r
+  (let ((res (make-vg:obj type:       'r ;; is there a defstruct copy?
 			  fill-color: (vg:obj-fill-color obj)
 			  text:       (vg:obj-text       obj)
 			  line-color: (vg:obj-line-color obj)
@@ -313,12 +313,14 @@
 	 (pts (vg:drawing-apply-scale drawing (vg:obj-pts obj)))
 	 (fill-color (vg:obj-fill-color obj))
 	 (line-color (vg:obj-line-color obj))
-	 (llx (car pts))
-	 (lly (cadr pts))
-	 (ulx (caddr pts))
-	 (uly (cadddr pts))
-	 (w   (- ulx llx))
-	 (h   (- uly lly)))
+	 (text       (vg:obj-text obj))
+	 (font       (vg:obj-font obj))
+	 (llx        (car pts))
+	 (lly        (cadr pts))
+	 (ulx        (caddr pts))
+	 (uly        (cadddr pts))
+	 (w          (- ulx llx))
+	 (h          (- uly lly)))
     (if draw 
 	(let ((prev-background-color (canvas-background cnv))
 	      (prev-foreground-color (canvas-foreground cnv)))
@@ -331,7 +333,13 @@
 	      (if fill-color
 		  (canvas-foreground-set! cnv prev-foreground-color)))
 	  (canvas-rectangle! cnv llx ulx lly uly)
-	  (canvas-foreground-set! cnv prev-foreground-color)))
+	  (canvas-foreground-set! cnv prev-foreground-color)
+	  (if text 
+	      (let* ((prev-font    (canvas-font cnv))
+		     (font-changed (and font (not (equal? font prev-font)))))
+		(if font-changed (canvas-font-set! cnv font))
+		(canvas-text! cnv (+ 2 llx)(+ 2 lly) text)
+		(if font-changed (canvas-font-set! cnv prev-font))))))
     pts)) ;; return extents 
 
 ;; given a rect obj draw it on the canvas applying first the drawing
