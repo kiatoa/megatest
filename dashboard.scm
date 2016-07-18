@@ -202,7 +202,10 @@ Misc
   test-patts
   tests
   tests-tree
-  tot-runs   
+  tot-runs
+  view-changed
+  xadj
+  yadj
   )
 
 (define (dboard:tabdat-target-string vec)
@@ -240,6 +243,9 @@ Misc
 	      start-test-offset:    0
 	      state-ignore-hash:    (make-hash-table)
 	      status-ignore-hash:   (make-hash-table)
+	      xadj:                 0
+	      yadj:                 0
+	      view-changed:         #t
 	      )))
     (dboard:setup-tabdat dat)
     (dboard:setup-num-rows dat)
@@ -1031,17 +1037,26 @@ Misc
 			       (lambda (c xadj yadj)
 				 (if (not (dboard:tabdat-cnv tabdat))
 				     (dboard:tabdat-cnv-set! tabdat c))
-				 (let ((drawing (dboard:tabdat-drawing tabdat)))
-				   #f ;; finish me!!
-				   )))
+				 (let ((drawing (dboard:tabdat-drawing tabdat))
+				       (old-xadj (dboard:tabdat-xadj   tabdat))
+				       (old-yadj (dboard:tabdat-yadj   tabdat)))
+				   (if (not (and (eq? xadj old-xadj)(eq? yadj old-yadj)))
+				       (begin
+					 (print  "xadj: " xadj " yadj: " yadj "changed: "(eq? xadj old-xadj) " " (eq? yadj old-yadj))
+					 (dboard:tabdat-view-changed-set! tabdat #t)
+					 (dboard:tabdat-xadj-set! tabdat (* -500 (- xadj 0.5)))
+					 (dboard:tabdat-yadj-set! tabdat (*  500 (- yadj 0.5)))
+					 )))))
 		     #:wheel-cb (lambda (obj step x y dir) ;; dir is 4 for up and 5 for down. I think.
 				  (let* ((drawing (dboard:tabdat-drawing tabdat))
 					 (scalex  (vg:drawing-scalex drawing)))
+				    (dboard:tabdat-view-changed-set! tabdat #t)
+				    (print "step: " step " x: " x " y: " y " dir: " dir " scalex: " scalex)
 				    (vg:drawing-scalex-set! drawing
 							    (+ scalex
 							       (if (> step 0)
-								   (* scalex 0.01)
-								   (* scalex -0.01))))))
+								   (* scalex  0.02)
+								   (* scalex -0.02))))))
 		     )))
        cnv-obj))))
 
@@ -1911,11 +1926,14 @@ Misc
   ;; all runs stored in runslib library
   (let ((tabdat        (dboard:common-get-tabdat commondat tab-num: tab-num))
 	(canvas-margin 10)
-	(start-row     0)) ;; each run starts in this row
-    (if tabdat
-	(let* ((row-height 20)
-	       (drawing    (dboard:tabdat-drawing tabdat))
+	(start-row     0) ;; each run starts in this row
+	(row-height    10))
+    (if (and tabdat
+	     (dboard:tabdat-view-changed tabdat))
+	(let* ((drawing    (dboard:tabdat-drawing tabdat))
 	       (runslib    (vg:get/create-lib drawing "runslib"))) ;; creates and adds lib
+	  (vg:drawing-xoff-set! drawing (dboard:tabdat-xadj tabdat))
+	  (vg:drawing-yoff-set! drawing (dboard:tabdat-yadj tabdat))
 	  (update-rundat tabdat
 			 "%" ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") 
 			 100  ;; (dboard:tabdat-numruns tabdat)
@@ -1933,7 +1951,7 @@ Misc
 		(cnv     (dboard:tabdat-cnv tabdat)))
 	    (let-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
 			 ((originx originy)             (canvas-origin cnv)))
-	      (print "allruns: " allruns)
+	      ;; (print "allruns: " allruns)
 	      (for-each
 	       (lambda (rundat)
 		 (if (vector? rundat)
@@ -1951,7 +1969,7 @@ Misc
 			    (run-full-name (string-intersperse key-vals "/"))
 			    (runcomp  (vg:comp-new));; new component for this run
 			    (rows-used (make-hash-table)) ;; keep track of what parts of the rows are used here row1 = (obj1 obj2 ...)
-			    (row-height 4)
+			    ;; (row-height 4)
 			    (run-start  (apply min (map db:test-get-event_time testsdat)))
 			    (run-end    (apply max (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat)))
 			    (timeoffset (- (+ originx canvas-margin) run-start))
@@ -1963,11 +1981,12 @@ Misc
 			    (maptime    (lambda (tsecs)(* timescale (+ tsecs timeoffset)))))
 		       ;; (print "timescale: " timescale " timeoffset: " timeoffset " sizex: " sizex " originx: " originx)
 		       (vg:add-comp-to-lib runslib run-full-name runcomp)
-		       (vg:add-objs-to-comp runcomp (vg:make-text 
-						     10
-						     (- sizey (* start-row row-height))
-						     run-full-name
-						     font: "Helvetica -10"))
+		       (set! start-row (+ start-row 1))
+		       (let ((x 10)
+			     (y (- sizey (* start-row row-height))))
+			 (vg:add-objs-to-comp runcomp (vg:make-text x y run-full-name font: "Helvetica -10"))
+			 (dashboard:add-bar rowhash start-row x (+ x 100)))
+		       (set! start-row (+ start-row 1))
 		       ;; get tests in list sorted by event time ascending
 		       (for-each 
 			(lambda (testdat)
@@ -1989,10 +2008,16 @@ Misc
 				  (let* ((lly (- sizey (* rownum row-height)))
 					 (uly (+ lly row-height)))
 				    (dashboard:add-bar rowhash rownum event-time end-time)
-				    (vg:add-objs-to-comp runcomp (vg:make-rect event-time lly end-time uly
-									       fill-color: 
-									       ;; (string->number (string-substitute " " "" (car name-color))))))))
-									       (vg:iup-color->number (car name-color)))))))
+				    (vg:add-objs-to-comp runcomp
+							 (vg:make-rect event-time lly end-time uly
+								       fill-color: (vg:iup-color->number (car name-color))
+								       text: (conc test-name "/" item-path)
+								       font: "Helvetica -10")
+							 ;; (vg:make-text (+ event-time 2)
+							 ;;               (+ lly 2)
+							 ;;               (conc test-name "/" item-path)
+							 ;;               font: "Helvetica -10")
+							 ))))
 			    ;; (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)
 			    ))
 			testsdat)
@@ -2015,7 +2040,8 @@ Misc
 	       allruns)
 	      (vg:drawing-cnv-set! (dboard:tabdat-drawing tabdat)(dboard:tabdat-cnv tabdat)) ;; cnv-obj)
 	      (canvas-clear! (dboard:tabdat-cnv tabdat)) ;; -obj)
-	      (print "All objs: " (vg:draw (dboard:tabdat-drawing tabdat) #t))
+	      (print "Number of objs: " (length (vg:draw (dboard:tabdat-drawing tabdat) #t)))
+	      (dboard:tabdat-view-changed-set! tabdat #f)
 	      )))
 	(print "no tabdat for run-times-tab-updater"))))
 
