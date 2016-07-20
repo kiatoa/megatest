@@ -19,7 +19,10 @@
 ;;
 (defstruct vg:lib     comps)
 (defstruct vg:comp    objs name file)
-(defstruct vg:obj     type pts fill-color text line-color call-back angle font attrib extents)
+;; extents caches extents calculated on draw
+;; proc is called on draw and takes the obj itself as a parameter
+;; attrib is an alist of parameters
+(defstruct vg:obj     type pts fill-color text line-color call-back angle font attrib extents proc)
 (defstruct vg:inst    libname compname theta xoff yoff scalex scaley mirrx mirry call-back cache)
 (defstruct vg:drawing libs insts scalex scaley xoff yoff cnv cache) ;; libs: hash of name->lib, insts: hash of instname->inst
 
@@ -101,18 +104,28 @@
 
 ;; make a rectangle obj
 ;;
-(define (vg:make-rect x1 y1 x2 y2 #!key (line-color #f)(fill-color #f)(text #f)(font #f))
+(define (vg:make-rect-obj x1 y1 x2 y2 #!key (line-color #f)(fill-color #f)(text #f)(font #f))
   (make-vg:obj type: 'r pts: (list x1 y1 x2 y2) text: text font: font line-color: line-color fill-color: fill-color extents: #f))
+
+;; make a rectangle obj
+;;
+(define (vg:make-line-obj x1 y1 x2 y2 #!key (line-color #f)(fill-color #f)(text #f)(font #f))
+  (make-vg:obj type: 'r pts: (list x1 y1 x2 y2) text: text font: font line-color: line-color extents: #f))
 
 ;; make a text obj
 ;;
-(define (vg:make-text x1 y1 text #!key (line-color #f)(fill-color #f)
+(define (vg:make-text-obj x1 y1 text #!key (line-color #f)(fill-color #f)
 		      (angle #f)(scale-with-zoom #f)(font #f)
 		      (font-size #f))
   (make-vg:obj type: 't pts: (list x1 y1) text: text 
 	       line-color: line-color fill-color: fill-color
 	       angle: angle font: font
 	       attributes: (vg:make-attrib 'font-size font-size)))
+
+;; proc takes startnum and endnum and yields scalef, per-grad and unitname
+;;
+(define (vg:make-xaxis-obj x1 y1 x2 y2 #!key (line-color #f)(fill-color #f)(text #f)(font #f)(proc #f))
+  (make-vg:obj type: 'x pts: (list x1 y1 x2 y2) text: text font: font line-color: line-color fill-color: fill-color extents: #f proc: proc))
 
 ;;======================================================================
 ;; obj modifiers and queries
@@ -235,8 +248,10 @@
 ;;
 (define (vg:map-obj drawing inst obj)
   (case (vg:obj-type obj)
-    ((r)(vg:map-rect drawing inst obj))
-    ((t)(vg:map-text drawing inst obj))
+    ((l)(vg:map-line   drawing inst obj))
+    ((r)(vg:map-rect   drawing inst obj))
+    ((t)(vg:map-text   drawing inst obj))
+    ((x)(vg:map-xaxis  drawing inst obj))
     (else #f)))
 
 ;; given a drawing and a inst map a rectangle to it screen coordinates
@@ -245,6 +260,17 @@
   (let ((res (make-vg:obj type:       'r ;; is there a defstruct copy?
 			  fill-color: (vg:obj-fill-color obj)
 			  text:       (vg:obj-text       obj)
+			  line-color: (vg:obj-line-color obj)
+			  font:       (vg:obj-font       obj)))
+	(pts (vg:obj-pts obj)))
+    (vg:obj-pts-set! res (vg:drawing-inst-apply-scale-offset drawing inst pts))
+    (vg:drawing-cache-set! drawing (cons res (vg:drawing-cache drawing) ))
+    res))
+
+;; given a drawing and a inst map a line to it screen coordinates
+;;
+(define (vg:map-line drawing inst obj)
+  (let ((res (make-vg:obj type:       'l ;; is there a defstruct copy?
 			  line-color: (vg:obj-line-color obj)
 			  font:       (vg:obj-font       obj)))
 	(pts (vg:obj-pts obj)))
@@ -265,6 +291,17 @@
 	(pts (vg:obj-pts obj)))
     (vg:obj-pts-set! res (vg:drawing-inst-apply-scale-offset drawing inst pts))
     (vg:drawing-cache-set! drawing (cons res (vg:drawing-cache drawing)))
+    res))
+
+;; given a drawing and a inst map a line to it screen coordinates
+;;
+(define (vg:map-xaxis drawing inst obj)
+  (let ((res (make-vg:obj type:      'x ;; is there a defstruct copy?
+			  line-color: (vg:obj-line-color obj)
+			  font:       (vg:obj-font       obj)))
+	(pts (vg:obj-pts obj)))
+    (vg:obj-pts-set! res (vg:drawing-inst-apply-scale-offset drawing inst pts))
+    (vg:drawing-cache-set! drawing (cons res (vg:drawing-cache drawing) ))
     res))
 
 ;;======================================================================
@@ -303,6 +340,14 @@
 
 (define (vg:iup-color->number iup-color)
   (apply vg:rgb->number (map string->number (string-split iup-color))))
+
+;;======================================================================
+;; graphing
+;;======================================================================
+
+(define (vg:make-xaxis drawing component x1 y1 x2 y2 startnum endnum scaleproc)
+  (let ((obj (vg:make-xaxis-obj x1 y1 x2 y2)))
+    #f))
 
 ;;======================================================================
 ;; Unravel and draw the objects
@@ -347,6 +392,124 @@
 	      (if fill-color
 		  (canvas-foreground-set! cnv prev-foreground-color)))
 	  (canvas-rectangle! cnv llx ulx lly uly)
+	  (canvas-foreground-set! cnv prev-foreground-color)
+	  (if text 
+	      (let* ((prev-font    (canvas-font cnv))
+		     (font-changed (and font (not (equal? font prev-font)))))
+		(if font-changed (canvas-font-set! cnv font))
+		(canvas-text! cnv (+ 2 llx)(+ 2 lly) text)
+		(let-values (((xmax ymax)(canvas-text-size cnv text)))
+		  (set! text-xmax xmax)(set! text-ymax ymax))
+		(if font-changed (canvas-font-set! cnv prev-font))))))
+    (print "text-xmax: " text-xmax " text-ymax: " text-ymax)
+    (if (vg:obj-extents obj)
+	(vg:obj-extents obj)
+	(if (not text)
+	    pts
+	    (if (and text-xmax text-ymax)
+		(let ((xt (list llx lly
+				(max ulx (+ llx text-xmax))
+				(max uly (+ lly text-ymax)))))
+		  (vg:obj-extents-set! obj xt)
+		  xt)
+		(if cnv
+		    (let-values (((xmax ymax)(canvas-text-size cnv text)))
+		      (let ((xt (list llx lly
+				      (max ulx (+ llx xmax))
+				      (max uly (+ lly ymax)))))
+			(vg:obj-extents-set! obj xt)
+			xt))
+		    pts)))))) ;; return extents 
+
+;; given a rect obj draw it on the canvas applying first the drawing
+;; scale and offset
+;;
+(define (vg:draw-line drawing obj #!key (draw #t))
+  (let* ((cnv (vg:drawing-cnv drawing))
+	 (pts (vg:drawing-apply-scale drawing (vg:obj-pts obj)))
+	 ;; (fill-color (vg:obj-fill-color obj))
+	 (line-color (vg:obj-line-color obj))
+	 (text       (vg:obj-text obj))
+	 (font       (vg:obj-font obj))
+	 (llx        (car pts))
+	 (lly        (cadr pts))
+	 (ulx        (caddr pts))
+	 (uly        (cadddr pts))
+	 (w          (- ulx llx))
+	 (h          (- uly lly))
+	 (text-xmax  #f)
+	 (text-ymax  #f))
+    (if draw 
+	(let ((prev-background-color (canvas-background cnv))
+	      (prev-foreground-color (canvas-foreground cnv)))
+	;; (if fill-color
+	;;     (begin
+	;; 	(canvas-foreground-set! cnv fill-color)
+	;; 	(canvas-box! cnv llx ulx lly uly))) ;; docs are all over the place on this one.;; w h)
+	  (if line-color
+	      (canvas-foreground-set! cnv line-color)
+	      (if fill-color
+		  (canvas-foreground-set! cnv prev-foreground-color)))
+	  (canvas-line! cnv llx ulx lly uly)
+	  (canvas-foreground-set! cnv prev-foreground-color)
+	  (if text 
+	      (let* ((prev-font    (canvas-font cnv))
+		     (font-changed (and font (not (equal? font prev-font)))))
+		(if font-changed (canvas-font-set! cnv font))
+		(canvas-text! cnv (+ 2 llx)(+ 2 lly) text)
+		(let-values (((xmax ymax)(canvas-text-size cnv text)))
+		  (set! text-xmax xmax)(set! text-ymax ymax))
+		(if font-changed (canvas-font-set! cnv prev-font))))))
+    (print "text-xmax: " text-xmax " text-ymax: " text-ymax)
+    (if (vg:obj-extents obj)
+	(vg:obj-extents obj)
+	(if (not text)
+	    pts
+	    (if (and text-xmax text-ymax)
+		(let ((xt (list llx lly
+				(max ulx (+ llx text-xmax))
+				(max uly (+ lly text-ymax)))))
+		  (vg:obj-extents-set! obj xt)
+		  xt)
+		(if cnv
+		    (let-values (((xmax ymax)(canvas-text-size cnv text)))
+		      (let ((xt (list llx lly
+				      (max ulx (+ llx xmax))
+				      (max uly (+ lly ymax)))))
+			(vg:obj-extents-set! obj xt)
+			xt))
+		    pts)))))) ;; return extents 
+
+;; given a rect obj draw it on the canvas applying first the drawing
+;; scale and offset
+;;
+(define (vg:draw-xaxis drawing obj #!key (draw #t))
+  (let* ((cnv (vg:drawing-cnv drawing))
+	 (pts (vg:drawing-apply-scale drawing (vg:obj-pts obj)))
+	 ;; (fill-color (vg:obj-fill-color obj))
+	 (line-color (vg:obj-line-color obj))
+	 (text       (vg:obj-text obj))
+	 (font       (vg:obj-font obj))
+	 (llx        (car pts))
+	 (lly        (cadr pts))
+	 (ulx        (caddr pts))
+	 (uly        (cadddr pts))
+	 (w          (- ulx llx))
+	 (h          (- uly lly))
+	 (text-xmax  #f)
+	 (text-ymax  #f))
+    (if draw 
+	(let ((prev-background-color (canvas-background cnv))
+	      (prev-foreground-color (canvas-foreground cnv)))
+	;; (if fill-color
+	;;     (begin
+	;; 	(canvas-foreground-set! cnv fill-color)
+	;; 	(canvas-box! cnv llx ulx lly uly))) ;; docs are all over the place on this one.;; w h)
+	  (if line-color
+	      (canvas-foreground-set! cnv line-color)
+	      (if fill-color
+		  (canvas-foreground-set! cnv prev-foreground-color)))
+	  (canvas-line! cnv llx ulx lly uly)
 	  (canvas-foreground-set! cnv prev-foreground-color)
 	  (if text 
 	      (let* ((prev-font    (canvas-font cnv))
