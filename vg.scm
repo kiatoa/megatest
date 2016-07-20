@@ -171,28 +171,40 @@
 	 (inst (hash-table-ref (vg:lib-comps lib) compname)))
     inst))
 
+(define (vg:get-extents-for-objs drawing objs)
+  (let ((extents #f))
+    (for-each
+     (lambda (obj)
+       (set! extents
+	 (vg:get-extents-for-two-rects
+	  extents
+	  (vg:obj-get-extents drawing obj))))
+     objs)
+    extents))
+
+;; given rectangles r1 and r2, return the box that bounds both
+;;
+(define (vg:get-extents-for-two-rects r1 r2)
+  (if (not r1)
+      r2
+      (if (not r2)
+	  #f ;; no extents from #f #f
+	  (list (min (car r1)(car r2))           ;; llx
+		(min (cadr r1)(cadr r2))         ;; lly
+		(max (caddr r1)(caddr r2))       ;; ulx
+		(max (cadddr r1)(cadddr r2)))))) ;; uly
+
 (define (vg:components-get-extents drawing . comps)
-  (let ((llx #f)
-	(lly #f)
-	(ulx #f)
-	(uly #f))
+  (let ((extents #f))
     (for-each
      (lambda (comp)
-       (let ((objs (vg:comp-objs comp)))
-	 (for-each
-	  (lambda (obj)
-	    (let* ((extents (vg:obj-get-extents drawing obj))
-		   (ollx    (list-ref extents 0))
-		   (olly    (list-ref extents 1))
-		   (oulx    (list-ref extents 2))
-		   (ouly    (list-ref extents 3)))
-	      (if (or (not llx)(< ollx llx))(set! llx ollx))
-	      (if (or (not lly)(< olly lly))(set! lly olly))
-	      (if (or (not ulx)(> oulx ulx))(set! ulx oulx))
-	      (if (or (not uly)(> ouly uly))(set! uly ouly))))
-	  objs)))
+       (let* ((objs  (vg:comp-objs comp)))
+	 (set! extents 
+	   (vg:get-extents-for-two-rects
+	    extents
+	    (vg:get-extents-for-objs drawing objs)))))
      comps)
-    (list llx lly ulx uly)))
+    extents))
 
 ;;======================================================================
 ;; libraries
@@ -340,7 +352,14 @@
 		(if font-changed (canvas-font-set! cnv font))
 		(canvas-text! cnv (+ 2 llx)(+ 2 lly) text)
 		(if font-changed (canvas-font-set! cnv prev-font))))))
-    pts)) ;; return extents 
+    (if (not text)
+	pts
+	(if cnv
+	    (let-values (((xmax ymax)(canvas-text-size cnv text)))
+	      (list llx lly
+		    (max ulx (+ llx xmax))
+		    (max uly (+ lly ymax))))
+	    pts)))) ;; return extents 
 
 ;; given a rect obj draw it on the canvas applying first the drawing
 ;; scale and offset

@@ -2206,26 +2206,36 @@ Misc
   (and (< lx1 px)(> lx2 px)))
 
 ;; can a bar be placed in row "rownum" covering x1 to x2 without overlapping with existing 
-;; bars?
+;; bars? Use num-rows to check that a block will fit from rownum to (+ rownum num-rows)
 ;;
-(define (dashboard:row-collision rowhash rownum x1 x2)
-  (let ((rowdat    (hash-table-ref/default rowhash rownum '()))
-	(collision #f))
-    (for-each
-     (lambda (bar)
-       (let ((bx1 (car bar))
-	     (bx2 (cdr bar)))
-	 (cond
-	  ;; newbar x1 inside bar
-	  ((dashboard:px-between x1 bx1 bx2)(set! collision #t))
-	  ((dashboard:px-between x2 bx1 bx2)(set! collision #t))
-	  ((and (<= x1 bx1)(>= x2 bx2))(set! collision #t)))))
-     rowdat)
+(define (dashboard:row-collision rowhash rownum x1 x2 #!key (num-rows #f))
+  (let ((collision #f)
+	(lastrow   (if num-rows (+ rownum num-rows) rownum)))
+    (let loop ((i      0)
+	       (rowdat (hash-table-ref/default rowhash rownum '())))
+      (for-each
+       (lambda (bar)
+	 (let ((bx1 (car bar))
+	       (bx2 (cdr bar)))
+	   (cond
+	    ;; newbar x1 inside bar
+	    ((dashboard:px-between x1 bx1 bx2)(set! collision #t))
+	    ((dashboard:px-between x2 bx1 bx2)(set! collision #t))
+	    ((and (<= x1 bx1)(>= x2 bx2))(set! collision #t)))))
+       rowdat)
+      (if (< i lastrow)
+	  (loop (+ i 1)
+		(hash-table-ref/default rowhash (+ rownum i) '()))))
     collision))
 
-(define-inline (dashboard:add-bar rowhash rownum x1 x2)
-  (hash-table-set! rowhash rownum (cons (cons x1 x2) 
-					(hash-table-ref/default rowhash rownum '()))))
+(define (dashboard:add-bar rowhash rownum x1 x2 #!key (num-rows 0))
+  (let loop ((i 0))
+    (hash-table-set! rowhash 
+		     (+ i rownum)
+		     (cons (cons x1 x2) 
+			   (hash-table-ref/default rowhash (+ i rownum) '())))
+    (if (< i num-rows)
+	(loop (+ i 1)))))
 
 ;; get min or max, use > for max and < for min, this works around the limits on apply
 ;;
@@ -2247,33 +2257,35 @@ Misc
 ;; finally sort by first item time
 ;;
 (define (dboard:tests-sort-by-time-group-by-item testsdat)
-  (let* ((tests (let ((ht (make-hash-table)))
-		  (for-each
-		   (lambda (tdat)
-		     (let ((testname (db:test-get-testname tdat)))
-		       (hash-table-set! 
-			ht 
-			testname
-			(cons tdat (hash-table-ref/default ht testname '())))))
-		   testsdat)
-		   ht)))
-    ;; remove toplevel tests from iterated tests, sort tests in the list by event time
-    (for-each 
-     (lambda (testname)
-       (let ((testslst (hash-table-ref tests testname)))
-	 (if (> (length testslst) 1) ;; must be iterated
-	     (hash-table-set! tests 
-			      testname 
-			      (dboard:sort-testsdat-by-event-time 
-			       (filter (lambda (tdat)
-					 (equal? (db:test-get-item-path tdat) ""))
-				       testslst)))
-	     )))
-     (hash-table-keys tests))
-    (sort (hash-table-values tests)
-	  (lambda (a b)
-	    (< (db:test-get-event_time (car a))
-	       (db:test-get-event_time (car b)))))))
+  (if (null? testsdat)
+      testsdat
+      (let* ((tests (let ((ht (make-hash-table)))
+		      (for-each
+		       (lambda (tdat)
+			 (let ((testname (db:test-get-testname tdat)))
+			   (hash-table-set! 
+			    ht 
+			    testname
+			    (cons tdat (hash-table-ref/default ht testname '())))))
+		       testsdat)
+		      ht)))
+	;; remove toplevel tests from iterated tests, sort tests in the list by event time
+	(for-each 
+	 (lambda (testname)
+	   (let ((testslst (hash-table-ref tests testname)))
+	     (if (> (length testslst) 1) ;; must be iterated
+		 (let ((item-tests (filter (lambda (tdat) ;; filter out toplevel tests
+					     (not (equal? (db:test-get-item-path tdat) "")))
+					   testslst)))
+		   (if (not (null? item-tests)) ;; resist bad data, generally should not fail this condition
+		       (hash-table-set! tests 
+					testname 
+					(dboard:sort-testsdat-by-event-time item-tests)))))))
+	 (hash-table-keys tests))
+	(sort (hash-table-values tests)
+	      (lambda (a b)
+		(< (db:test-get-event_time (car a))
+		   (db:test-get-event_time (car b))))))))
 
 (define (dashboard:run-times-tab-updater commondat tab-num)
   ;; each test is an object in the run component
@@ -2384,39 +2396,56 @@ Misc
 		       ;; get tests in list sorted by event time ascending
 		       (for-each 
 			(lambda (testdats)
-			  (for-each 
-			   (lambda (testdat)
-			     (let* ((event-time   (maptime (db:test-get-event_time   testdat)))
-				    (run-duration (* timescale (db:test-get-run_duration testdat)))
-				    (end-time     (+ event-time run-duration))
-				    (test-name    (db:test-get-testname     testdat))
-				    (item-path    (db:test-get-item-path    testdat))
-				    (state         (db:test-get-state       testdat))
-				    (status        (db:test-get-status      testdat))
-				    (test-fullname (conc test-name "/" item-path))
-				    (name-color    (gutils:get-color-for-state-status state status)))
-			       ;; (print "event_time: " (db:test-get-event_time   testdat) " mapped event_time: " event-time)
-			       ;; (print "run-duration: "  (db:test-get-run_duration testdat) " mapped run_duration: " run-duration)
-			       (let loop ((rownum run-start-row)) ;; (+ start-row 1)))
-				 (set! max-row (max rownum max-row)) ;; track the max row used
-				 (if (dashboard:row-collision rowhash rownum event-time end-time)
-				     (loop (+ rownum 1))
-				     (let* ((lly (- sizey (* rownum row-height)))
-					    (uly (+ lly row-height)))
-				       (dashboard:add-bar rowhash rownum event-time end-time)
-				       (vg:add-objs-to-comp runcomp
-							    (vg:make-rect event-time lly end-time uly
-									  fill-color: (vg:iup-color->number (car name-color))
-									  text: (conc test-name "/" item-path)
-									  font: "Helvetica -10")
-							    ;; (vg:make-text (+ event-time 2)
-							    ;;               (+ lly 2)
-							    ;;               (conc test-name "/" item-path)
-							    ;;               font: "Helvetica -10")
-							    ))))
-			       ;; (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)
-			       ))
-			   testdats))
+			  (let ((test-objs   '())
+				(iterated     (> (length testdats) 1))
+				(first-rownum #f)
+				(num-items    (length testdats)))
+			    (for-each 
+			     (lambda (testdat)
+			       (let* ((event-time   (maptime (db:test-get-event_time   testdat)))
+				      (run-duration (* timescale (db:test-get-run_duration testdat)))
+				      (end-time     (+ event-time run-duration))
+				      (test-name    (db:test-get-testname     testdat))
+				      (item-path    (db:test-get-item-path    testdat))
+				      (state         (db:test-get-state       testdat))
+				      (status        (db:test-get-status      testdat))
+				      (test-fullname (conc test-name "/" item-path))
+				      (name-color    (gutils:get-color-for-state-status state status)))
+				 ;; (print "event_time: " (db:test-get-event_time   testdat) " mapped event_time: " event-time)
+				 ;; (print "run-duration: "  (db:test-get-run_duration testdat) " mapped run_duration: " run-duration)
+				 (let loop ((rownum run-start-row)) ;; (+ start-row 1)))
+				   (set! max-row (max rownum max-row)) ;; track the max row used
+				   (if (dashboard:row-collision rowhash rownum event-time end-time)
+				       (loop (+ rownum 1))
+				       (let* ((lly (- sizey (* rownum row-height)))
+					      (uly (+ lly row-height))
+					      (obj (vg:make-rect event-time lly end-time uly
+									    fill-color: (vg:iup-color->number (car name-color))
+									    text: (if iterated item-path test-name)
+									    font: "Helvetica -10")))
+					 ;; (if iterated
+					 ;;     (dashboard:add-bar rowhash (- rownum 1) event-time end-time num-rows: (+ 1 num-items))
+					 (if (not first-rownum)
+					     (begin
+					       (dashboard:row-collision rowhash (- rownum 1) event-time end-time num-rows: num-items)
+					       (set! first-rownum rownum)))
+					 (dashboard:add-bar rowhash rownum event-time end-time)
+					 (vg:add-objs-to-comp runcomp obj)
+					 (set! test-objs (cons obj test-objs)))))
+				 ;; (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)
+				 ))
+			   testdats)
+			    ;; If it is an iterated test put box around it now.
+			    (if iterated
+				(let* ((xtents (vg:get-extents-for-objs drawing test-objs))
+				       (llx (- (car xtents)   5))
+				       (lly (- (cadr xtents) 10))
+				       (ulx (+ 5 (caddr xtents)))
+				       (uly (+ 0 (cadddr xtents))))
+				  (dashboard:add-bar rowhash first-rownum llx ulx num-rows:  num-items)
+				  (vg:add-objs-to-comp runcomp (vg:make-rect llx lly ulx uly
+									     text:  (db:test-get-testname (car testdats))
+									     font: "Helvetica -10"))))))
 			hierdat)
 		       ;; placeholder box
 		       (set! max-row (+ max-row 1))
