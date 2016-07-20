@@ -13,9 +13,9 @@
 (define l1 (vg:lib-new))
 (define c1 (vg:comp-new))
 (define c2 (vg:comp-new))
-(let ((r1 (vg:make-rect 20 20 40 40 text: "r1" font: "Helvetica, -20"))
-      (r2 (vg:make-rect 40 40 80 80 text: "r2" font: "Helvetica, -10"))
-      (t1 (vg:make-text 40 40 "The middle" font: "Helvetica, -10")))
+(let ((r1 (vg:make-rect 20 20 30 30 text: "r1" font: "Helvetica, -20"))
+      (r2 (vg:make-rect 30 30 60 60 text: "r2" font: "Helvetica, -10"))
+      (t1 (vg:make-text 60 60 "The middle" font: "Helvetica, -10")))
   (vg:add-objs-to-comp c1 r1 r2 t1))
 
 ;; add the c1 component to lib l1 with name firstcomp
