@@ -2419,7 +2419,7 @@ Misc
 				       (loop (+ rownum 1))
 				       (let* ((lly (- sizey (* rownum row-height)))
 					      (uly (+ lly row-height))
-					      (obj (vg:make-rect event-time lly end-time uly
+					      (obj (vg:make-rect-obj event-time lly end-time uly
 									    fill-color: (vg:iup-color->number (car name-color))
 									    text: (if iterated item-path test-name)
 									    font: "Helvetica -10")))
@@ -2443,14 +2443,14 @@ Misc
 				       (ulx (+ 5 (caddr xtents)))
 				       (uly (+ 0 (cadddr xtents))))
 				  (dashboard:add-bar rowhash first-rownum llx ulx num-rows:  num-items)
-				  (vg:add-objs-to-comp runcomp (vg:make-rect llx lly ulx uly
+				  (vg:add-objs-to-comp runcomp (vg:make-rect-obj llx lly ulx uly
 									     text:  (db:test-get-testname (car testdats))
 									     font: "Helvetica -10"))))))
 			hierdat)
 		       ;; placeholder box
 		       (set! max-row (+ max-row 1))
 		       (let ((y   (- sizey (* max-row row-height))))
-			 (vg:add-objs-to-comp runcomp (vg:make-rect 0 y 0 y)))
+			 (vg:add-objs-to-comp runcomp (vg:make-rect-obj 0 y 0 y)))
 		       ;; instantiate the component 
 		       (let* ((extents   (vg:components-get-extents drawing runcomp))
 			      ;; move the following into mapping functions in vg.scm
@@ -2464,7 +2464,7 @@ Misc
 			      (ulx       (list-ref new-xtnts 2))
 			      (uly       (list-ref new-xtnts 3))
 			      ) ;;  (vg:components-get-extents d1 c1)))
-			 (vg:add-objs-to-comp runcomp (vg:make-rect llx lly ulx uly text: run-full-name))
+			 (vg:add-objs-to-comp runcomp (vg:make-rect-obj llx lly ulx uly text: run-full-name))
 			 (vg:instantiate drawing "runslib" run-full-name run-full-name 0 0))
 		       (set! max-row (+ max-row 1)))))
 	       allruns)
