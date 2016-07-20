@@ -342,14 +342,6 @@
   (apply vg:rgb->number (map string->number (string-split iup-color))))
 
 ;;======================================================================
-;; graphing
-;;======================================================================
-
-(define (vg:make-xaxis drawing component x1 y1 x2 y2 startnum endnum scaleproc)
-  (let ((obj (vg:make-xaxis-obj x1 y1 x2 y2)))
-    #f))
-
-;;======================================================================
 ;; Unravel and draw the objects
 ;;======================================================================
 
@@ -488,7 +480,7 @@
 	 (pts (vg:drawing-apply-scale drawing (vg:obj-pts obj)))
 	 ;; (fill-color (vg:obj-fill-color obj))
 	 (line-color (vg:obj-line-color obj))
-	 (text       (vg:obj-text obj))
+	 (text       (vg:obj-text obj))  ;; use for units and label? e.g. Radius (m)
 	 (font       (vg:obj-font obj))
 	 (llx        (car pts))
 	 (lly        (cadr pts))
@@ -498,46 +490,47 @@
 	 (h          (- uly lly))
 	 (text-xmax  #f)
 	 (text-ymax  #f))
-    (if draw 
-	(let ((prev-background-color (canvas-background cnv))
-	      (prev-foreground-color (canvas-foreground cnv)))
-	;; (if fill-color
-	;;     (begin
-	;; 	(canvas-foreground-set! cnv fill-color)
-	;; 	(canvas-box! cnv llx ulx lly uly))) ;; docs are all over the place on this one.;; w h)
-	  (if line-color
-	      (canvas-foreground-set! cnv line-color)
-	      (if fill-color
-		  (canvas-foreground-set! cnv prev-foreground-color)))
-	  (canvas-line! cnv llx ulx lly uly)
-	  (canvas-foreground-set! cnv prev-foreground-color)
-	  (if text 
-	      (let* ((prev-font    (canvas-font cnv))
-		     (font-changed (and font (not (equal? font prev-font)))))
-		(if font-changed (canvas-font-set! cnv font))
-		(canvas-text! cnv (+ 2 llx)(+ 2 lly) text)
-		(let-values (((xmax ymax)(canvas-text-size cnv text)))
-		  (set! text-xmax xmax)(set! text-ymax ymax))
-		(if font-changed (canvas-font-set! cnv prev-font))))))
-    (print "text-xmax: " text-xmax " text-ymax: " text-ymax)
-    (if (vg:obj-extents obj)
-	(vg:obj-extents obj)
-	(if (not text)
-	    pts
-	    (if (and text-xmax text-ymax)
-		(let ((xt (list llx lly
-				(max ulx (+ llx text-xmax))
-				(max uly (+ lly text-ymax)))))
-		  (vg:obj-extents-set! obj xt)
-		  xt)
-		(if cnv
-		    (let-values (((xmax ymax)(canvas-text-size cnv text)))
-		      (let ((xt (list llx lly
-				      (max ulx (+ llx xmax))
-				      (max uly (+ lly ymax)))))
-			(vg:obj-extents-set! obj xt)
-			xt))
-		    pts)))))) ;; return extents 
+    (let-values (((scalef per-grad unitname)(proc w)))
+      (if draw 
+	  (let ((prev-background-color (canvas-background cnv))
+		(prev-foreground-color (canvas-foreground cnv)))
+	    ;; (if fill-color
+	    ;;     (begin
+	    ;; 	(canvas-foreground-set! cnv fill-color)
+	    ;; 	(canvas-box! cnv llx ulx lly uly))) ;; docs are all over the place on this one.;; w h)
+	    (if line-color
+		(canvas-foreground-set! cnv line-color)
+		(if fill-color
+		    (canvas-foreground-set! cnv prev-foreground-color)))
+	    (canvas-line! cnv llx ulx lly uly)
+	    (canvas-foreground-set! cnv prev-foreground-color)
+	    (if text 
+		(let* ((prev-font    (canvas-font cnv))
+		       (font-changed (and font (not (equal? font prev-font)))))
+		  (if font-changed (canvas-font-set! cnv font))
+		  (canvas-text! cnv (+ 2 llx)(+ 2 lly) text)
+		  (let-values (((xmax ymax)(canvas-text-size cnv text)))
+		    (set! text-xmax xmax)(set! text-ymax ymax))
+		  (if font-changed (canvas-font-set! cnv prev-font))))))
+      (print "text-xmax: " text-xmax " text-ymax: " text-ymax)
+      (if (vg:obj-extents obj)
+	  (vg:obj-extents obj)
+	  (if (not text)
+	      pts
+	      (if (and text-xmax text-ymax)
+		  (let ((xt (list llx lly
+				  (max ulx (+ llx text-xmax))
+				  (max uly (+ lly text-ymax)))))
+		    (vg:obj-extents-set! obj xt)
+		    xt)
+		  (if cnv
+		      (let-values (((xmax ymax)(canvas-text-size cnv text)))
+			(let ((xt (list llx lly
+					(max ulx (+ llx xmax))
+					(max uly (+ lly ymax)))))
+			  (vg:obj-extents-set! obj xt)
+			  xt))
+		      pts))))))) ;; return extents 
 
 ;; given a rect obj draw it on the canvas applying first the drawing
 ;; scale and offset
