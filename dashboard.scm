@@ -138,7 +138,7 @@ Misc
 	(debug:print 0 *default-log-port* "Found these updaters: " updaters " for tab-num: " tnum)
 	(for-each
 	 (lambda (updater)
-	   (debug:print 0 *default-log-port* "Running " updater)
+	   (debug:print 3 *default-log-port* "Running " updater)
 	   (updater)
 	   )
 
@@ -1068,8 +1068,8 @@ Misc
 					 (begin
 					   (print  "xadj: " xadj " yadj: " yadj "changed: "(eq? xadj old-xadj) " " (eq? yadj old-yadj))
 					   (dboard:tabdat-view-changed-set! tabdat #t)
-					   (dboard:tabdat-xadj-set! tabdat (* -500 (- xadj 0.5)))
-					   (dboard:tabdat-yadj-set! tabdat (*  500 (- yadj 0.5)))
+					   (dboard:tabdat-xadj-set! tabdat (* -1000 (- xadj 0.5)))
+					   (dboard:tabdat-yadj-set! tabdat (*  1000 (- yadj 0.5)))
 					   )))))
 		       #:wheel-cb (lambda (obj step x y dir) ;; dir is 4 for up and 5 for down. I think.
 				    (let* ((drawing (dboard:tabdat-drawing tabdat))
@@ -2227,6 +2227,54 @@ Misc
   (hash-table-set! rowhash rownum (cons (cons x1 x2) 
 					(hash-table-ref/default rowhash rownum '()))))
 
+;; get min or max, use > for max and < for min, this works around the limits on apply
+;;
+(define (dboard:min-max comp lst)
+  (if (null? lst)
+      #f ;; better than an exception for my needs
+      (fold (lambda (a b)
+	      (if (comp a b) a b))
+	    (car lst)
+	    lst)))
+
+(define-inline (dboard:sort-testsdat-by-event-time testsdat)
+  (sort testsdat
+	(lambda (a b)
+	  (< (db:test-get-event_time a)
+	     (db:test-get-event_time b)))))
+
+;; first group items into lists, then sort by time
+;; finally sort by first item time
+;;
+(define (dboard:tests-sort-by-time-group-by-item testsdat)
+  (let* ((tests (let ((ht (make-hash-table)))
+		  (for-each
+		   (lambda (tdat)
+		     (let ((testname (db:test-get-testname tdat)))
+		       (hash-table-set! 
+			ht 
+			testname
+			(cons tdat (hash-table-ref/default ht testname '())))))
+		   testsdat)
+		   ht)))
+    ;; remove toplevel tests from iterated tests, sort tests in the list by event time
+    (for-each 
+     (lambda (testname)
+       (let ((testslst (hash-table-ref tests testname)))
+	 (if (> (length testslst) 1) ;; must be iterated
+	     (hash-table-set! tests 
+			      testname 
+			      (dboard:sort-testsdat-by-event-time 
+			       (filter (lambda (tdat)
+					 (equal? (db:test-get-item-path tdat) ""))
+				       testslst)))
+	     )))
+     (hash-table-keys tests))
+    (sort (hash-table-values tests)
+	  (lambda (a b)
+	    (< (db:test-get-event_time (car a))
+	       (db:test-get-event_time (car b)))))))
+
 (define (dashboard:run-times-tab-updater commondat tab-num)
   ;; each test is an object in the run component
   ;; each run is a component
@@ -2301,11 +2349,9 @@ Misc
 	      (for-each
 	       (lambda (rundat)
 		 (if (vector? rundat)
-		     (let* ((run      (vector-ref rundat 0))
-			    (testsdat  (sort (vector-ref rundat 1)
-					     (lambda (a b)
-					       (< (db:test-get-event_time a)
-						  (db:test-get-event_time b)))))
+		     (let* ((run       (vector-ref rundat 0))
+			    (hierdat   (dboard:tests-sort-by-time-group-by-item (vector-ref rundat 1)))
+			    (testsdat  (apply append hierdat))
 			    (key-val-dat (vector-ref rundat 2))
 			    (run-id   (db:get-value-by-header run (dboard:tabdat-header tabdat) "id"))
 			    (key-vals (append key-val-dat
@@ -2316,8 +2362,8 @@ Misc
 			    (runcomp  (vg:comp-new));; new component for this run
 			    (rows-used (make-hash-table)) ;; keep track of what parts of the rows are used here row1 = (obj1 obj2 ...)
 			    ;; (row-height 4)
-			    (run-start  (apply min (map db:test-get-event_time testsdat)))
-			    (run-end    (apply max (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat)))
+			    (run-start  (dboard:min-max < (map db:test-get-event_time testsdat)))
+			    (run-end    (dboard:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat)))
 			    (timeoffset (- (+ originx canvas-margin) run-start))
 			    (run-duration (- run-end run-start))
 			    (timescale  (/ (- sizex (* 2 canvas-margin))
@@ -2395,7 +2441,7 @@ Misc
 	      (print "Number of objs: " (length (vg:draw (dboard:tabdat-drawing tabdat) #t)))
 	      (dboard:tabdat-view-changed-set! tabdat #f)
 	      )))
-	(print "no tabdat for run-times-tab-updater"))))
+	(debug:print 2 *default-log-port* "no tabdat for run-times-tab-updater"))))
 
 (define (dashboard:runs-tab-updater commondat tab-num)
   (let ((tabdat (dboard:common-get-tabdat commondat tab-num: tab-num)))
