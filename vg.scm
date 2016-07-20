@@ -19,7 +19,7 @@
 ;;
 (defstruct vg:lib     comps)
 (defstruct vg:comp    objs name file)
-(defstruct vg:obj     type pts fill-color text line-color call-back angle font attrib)
+(defstruct vg:obj     type pts fill-color text line-color call-back angle font attrib extents)
 (defstruct vg:inst    libname compname theta xoff yoff scalex scaley mirrx mirry call-back cache)
 (defstruct vg:drawing libs insts scalex scaley xoff yoff cnv cache) ;; libs: hash of name->lib, insts: hash of instname->inst
 
@@ -102,7 +102,7 @@
 ;; make a rectangle obj
 ;;
 (define (vg:make-rect x1 y1 x2 y2 #!key (line-color #f)(fill-color #f)(text #f)(font #f))
-  (make-vg:obj type: 'r pts: (list x1 y1 x2 y2) text: text font: font line-color: line-color fill-color: fill-color))
+  (make-vg:obj type: 'r pts: (list x1 y1 x2 y2) text: text font: font line-color: line-color fill-color: fill-color extents: #f))
 
 ;; make a text obj
 ;;
@@ -332,7 +332,9 @@
 	 (ulx        (caddr pts))
 	 (uly        (cadddr pts))
 	 (w          (- ulx llx))
-	 (h          (- uly lly)))
+	 (h          (- uly lly))
+	 (text-xmax  #f)
+	 (text-ymax  #f))
     (if draw 
 	(let ((prev-background-color (canvas-background cnv))
 	      (prev-foreground-color (canvas-foreground cnv)))
@@ -351,15 +353,28 @@
 		     (font-changed (and font (not (equal? font prev-font)))))
 		(if font-changed (canvas-font-set! cnv font))
 		(canvas-text! cnv (+ 2 llx)(+ 2 lly) text)
+		(let-values (((xmax ymax)(canvas-text-size cnv text)))
+		  (set! text-xmax xmax)(set! text-ymax ymax))
 		(if font-changed (canvas-font-set! cnv prev-font))))))
-    (if (not text)
-	pts
-	(if cnv
-	    (let-values (((xmax ymax)(canvas-text-size cnv text)))
-	      (list llx lly
-		    (max ulx (+ llx xmax))
-		    (max uly (+ lly ymax))))
-	    pts)))) ;; return extents 
+    (print "text-xmax: " text-xmax " text-ymax: " text-ymax)
+    (if (vg:obj-extents obj)
+	(vg:obj-extents obj)
+	(if (not text)
+	    pts
+	    (if (and text-xmax text-ymax)
+		(let ((xt (list llx lly
+				(max ulx (+ llx text-xmax))
+				(max uly (+ lly text-ymax)))))
+		  (vg:obj-extents-set! obj xt)
+		  xt)
+		(if cnv
+		    (let-values (((xmax ymax)(canvas-text-size cnv text)))
+		      (let ((xt (list llx lly
+				      (max ulx (+ llx xmax))
+				      (max uly (+ lly ymax)))))
+			(vg:obj-extents-set! obj xt)
+			xt))
+		    pts)))))) ;; return extents 
 
 ;; given a rect obj draw it on the canvas applying first the drawing
 ;; scale and offset
