@@ -1531,12 +1531,22 @@ Misc
       (conc "Rerun " testpatt)
       #:action
       (lambda (obj)
+        ;;(print "buttndat: " buttndat " run-id: " run-id " test-id: " test-id " target: " target " runname: " runname " test-name: " test-name " testpatt: " testpatt)
 	(common:run-a-command
 	 (conc "megatest -run -target " target
 	       " -runname " runname
 	       " -testpatt " testpatt
 	       " -preclean -clean-cache")
-	 )))))
+	 )))
+     (iup:menu-item
+      "Rerun Complete Run"
+      #:action
+      (lambda (obj)
+        (common:run-a-command
+         (conc "megatest -set-state-status NOT_STARTED,n/a -run -target " target
+               " -runname " runname
+               " -testpatt % "
+               " -preclean -clean-cache"))))))
    (iup:menu-item
     "Test"
     (iup:menu 
@@ -1545,10 +1555,27 @@ Misc
       #:action
       (lambda (obj)
 	(common:run-a-command
-	 (conc "megatest -run -target " target
-	       " -runname " runname
+	 (conc "megatest -set-state-status NOT_STARTED,n/a -run -target " target
+               " -runname " runname
 	       " -testpatt " test-name
 	       " -preclean -clean-cache"))))
+     (iup:menu-item
+      (conc "Kill " test-name)
+      #:action
+      (lambda (obj)
+	(common:run-a-command
+	 (conc "megatest -set-state-status KILLREQ,n/a -target " target
+               " -runname " runname
+	       " -testpatt " test-name
+	       " -state RUNNING"))))
+     (iup:menu-item
+      (conc "Clean " test-name)
+      #:action
+      (lambda (obj)
+	(common:run-a-command
+	 (conc "megatest -remove-runs -target " target
+               " -runname " runname
+	       " -testpatt " test-name))))
      (iup:menu-item
       "Start xterm"
       #:action
