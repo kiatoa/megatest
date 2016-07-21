@@ -38,7 +38,7 @@
 ;; SQLITE3 HELPERS
 ;;======================================================================
 
-(define (db:general-sqlite-error-dump exn stmt run-id params)
+(define (db:general-sqlite-error-dump exn stmt . params)
   (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
     ;; check for (exn sqlite3) ((condition-property-accessor 'exn 'message) exn)
     (print "err-status: " err-status)

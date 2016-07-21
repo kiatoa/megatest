@@ -531,7 +531,7 @@
 	  ;; if the db has been modified we'd best look at the task queue
 	  (let ((modtime (file-modification-time megatestdbpath )))
 	    (if (> modtime last-db-update)
-		(tasks:process-queue db mdb last-db-update megatestdb next-touch))
+		(tasks:process-queue db)) ;; BROKEN. mdb last-db-update megatestdb next-touch))
 	    ;; WARNING: Possible race conditon here!!
 	    ;; should this update be immediately after the task-get-action call above?
 	    (if (> (current-seconds) next-touch)

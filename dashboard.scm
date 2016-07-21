@@ -465,14 +465,16 @@ Misc
 ;; prev-tests - old tests data
 ;;
 (define (dashboard:merge-changed-tests tests tmptests use-new prev-tests) 
-  (let ((newdat (filter
-		 (lambda (x)
-		   (not (equal? (db:test-get-state x) "DELETED"))) ;; remove deleted tests but do it after merging
-		 (delete-duplicates (if use-new ;; (dboard:tabdat-filters-changed tabdat)
-					tmptests
-					(append tmptests prev-tests))
-				    (lambda (a b)
-				      (eq? (db:test-get-id a)(db:test-get-id b)))))))
+  (let ((start-time (current-seconds))
+	(newdat     (filter
+		     (lambda (x)
+		       (not (equal? (db:test-get-state x) "DELETED"))) ;; remove deleted tests but do it after merging
+		     (delete-duplicates (if use-new ;; (dboard:tabdat-filters-changed tabdat)
+					    tmptests
+					    (append tmptests prev-tests))
+					(lambda (a b)
+					  (eq? (db:test-get-id a)(db:test-get-id b)))))))
+    (print "Time took: " (- (current-seconds) start-time))
     (if (eq? *tests-sort-reverse* 3) ;; +event_time
 	(sort newdat dboard:compare-tests)
 	newdat)))
