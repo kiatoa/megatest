@@ -174,11 +174,12 @@ Misc
   filters-changed
   header      
   hide-empty-runs
-  hide-not-hide  ;; toggle for hide/not hide
+  hide-not-hide   ;; toggle for hide/not hide
   hide-not-hide-button
   item-test-names
   keys
-  last-db-update 
+  last-db-update  ;; last db file timestamp
+  last-update     ;; last time rmt:get-tests-for-run was used to get data
   logs-textbox
   monitor-db-path
   num-tests
@@ -222,7 +223,7 @@ Misc
 (define (dboard:tabdat-make-data)
   (let ((dat (make-dboard:tabdat
 	      allruns-by-id:        (make-hash-table)
-	      allruns:              '()
+	      allruns:              '() ;; list of run records (vectors)
 	      buttondat:            (make-hash-table)
 	      curr-test-ids:        (make-hash-table)
 	      dbdir:                #f
@@ -264,17 +265,27 @@ Misc
   (dboard:tabdat-tot-runs-set! tabdat (rmt:get-num-runs "%"))
   )
 
-;; data for runs, tests etc
+;; data for runs, tests etc. was used in run summary?
 ;;
-(defstruct dboard:rundat
+(defstruct dboard:runsdat
   ;; new system
   runs-index    ;; target/runname => colnum
   tests-index   ;; testname/itempath => rownum
   matrix-dat    ;; vector of vectors rows/cols
   )
 
-(define (dboard:rundat-make-init)
-  (make-dboard:rundat
+;; used to keep the rundata from rmt:get-tests-for-run
+;; in sync. 
+;;
+(defstruct dboard:rundat
+  run
+  tests 
+  key-vals
+  last-update
+  )
+
+(define (dboard:runsdat-make-init)
+  (make-dboard:runsdat
    runs-index: (make-hash-table)
    tests-index: (make-hash-table)
    matrix-dat: (make-sparse-array)))
@@ -285,8 +296,8 @@ Misc
   status   ;; test status
   )
 
-(define (dboard:rundat-get-col-num dat target runname force-set)
-  (let* ((runs-index (dboard:rundat-runs-index dat))
+(define (dboard:runsdat-get-col-num dat target runname force-set)
+  (let* ((runs-index (dboard:runsdat-runs-index dat))
 	 (col-name   (conc target "/" runname))
 	 (res        (hash-table-ref/default runs-index col-name #f)))
     (if res
@@ -296,8 +307,8 @@ Misc
 	      (hash-table-set! runs-index col-name max-col-num)
 	      max-col-num)))))
 
-(define (dboard:rundat-get-row-num dat testname itempath force-set)
-  (let* ((tests-index (dboard:rundat-runs-index dat))
+(define (dboard:runsdat-get-row-num dat testname itempath force-set)
+  (let* ((tests-index (dboard:runsdat-runs-index dat))
 	 (row-name    (conc testname "/" itempath))
 	 (res         (hash-table-ref/default runs-index row-name #f)))
     (if res
@@ -309,15 +320,15 @@ Misc
 
 ;; default is to NOT set the cell if the column and row names are not pre-existing
 ;;
-(define (dboard:rundat-set-test-cell dat target runname testname itempath test-id state status #!key (force-set #f))
-  (let* ((col-num  (dboard:rundat-get-col-num dat target runname force-set))
-	 (row-num  (dboard:rundat-get-row-num dat testname itempath force-set)))
+(define (dboard:runsdat-set-test-cell dat target runname testname itempath test-id state status #!key (force-set #f))
+  (let* ((col-num  (dboard:runsdat-get-col-num dat target runname force-set))
+	 (row-num  (dboard:runsdat-get-row-num dat testname itempath force-set)))
     (if (and row-num col-num)
 	(let ((tdat (dboard:testdat 
 		     id: test-id
 		     state: state
 		     status: status)))
-	  (sparse-array-set! (dboard:rundat-matrix-dat dat) col-num row-num tdat)
+	  (sparse-array-set! (dboard:runsdat-matrix-dat dat) col-num row-num tdat)
 	  tdat)
 	#f)))
 
@@ -418,6 +429,8 @@ Misc
 
 ;; This is roughly the same as dboard:get-tests-dat, should merge them if possible
 ;;
+;; gets all the tests for run-id that match testnamepatt and key-vals, merges them
+;;
 ;;    NOTE: Yes, this is used
 ;;
 (define (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)
@@ -430,9 +443,9 @@ Misc
 			  'testname
 			  'itempath))
 	 (prev-dat    (let ((rec (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f)))
-			(if rec rec (vector run '() key-vals -100)))) ;; -100 is before time began
-	 (prev-tests  (vector-ref prev-dat 1))
-	 (last-update (vector-ref prev-dat 3))
+			(if rec rec (make-dboard:rundat run: run tests: '() key-vals: key-vals last-update: -100)))) ;; -100 is before time began
+	 (prev-tests  (dboard:rundat-tests prev-dat)) ;; (vector-ref prev-dat 1))
+	 (last-update (dboard:tabdat-last-update tabdat)) ;; (vector-ref prev-dat 3))
 	 (tmptests    (rmt:get-tests-for-run run-id testnamepatt states statuses  ;; run-id testpatt states statuses
 					     #f #f                                ;; offset limit 
 					     (dboard:tabdat-hide-not-hide tabdat) ;; no-in
@@ -444,8 +457,8 @@ Misc
 						 last-update) ;; last-update
 					     *dashboard-mode*)) ;; use dashboard mode
 	 (tests      (dashboard:merge-changed-tests prev-tests tmptests  (dboard:tabdat-hide-not-hide tabdat) prev-tests)))
-    (vector-set! prev-dat 3 (- (current-seconds) 2)) ;; go back two seconds in time to ensure all changes are captured.
-    ;; (debug:print 0 *default-log-port* "(dboard:get-tests-for-run-duplicate: filters-changed=" (dboard:tabdat-filters-changed tabdat) " last-update=" last-update " got " (length tmptests) " test records for run " run-id)
+    (dboard:rundat-last-update-set! prev-dat (- (current-seconds) 10)) ;; go back two seconds in time to ensure all changes are captured.
+    (print "prev-tests: " (length prev-tests) " tests: " (length tests))
     tests))
 
 ;; tmptests   - new tests data
@@ -464,8 +477,11 @@ Misc
 	(sort newdat dboard:compare-tests)
 	newdat)))
 
+;; this calls dboard:get-tests-for-run-duplicate for each run
+;;
 ;; create a virtual table of all the tests
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
+;;
 (define (update-rundat tabdat runnamepatt numruns testnamepatt keypatts)
   (let* ((referenced-run-ids '())
 	 (allruns     (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
@@ -479,7 +495,8 @@ Misc
     (for-each (lambda (run)
 		(let* ((run-id      (db:get-value-by-header run header "id"))
 		       (key-vals    (rmt:get-key-vals run-id))
-		       (tests       (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)))
+		       (tests       (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
+		       (num-tests   (length tests)))
 		  ;; NOTE: bubble-up also sets the global (dboard:tabdat-item-test-names tabdat)
 		  ;; (tests       (bubble-up tmptests priority: bubble-type))
 		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
@@ -488,15 +505,15 @@ Misc
 		  (if (not (null? tests))
 		      (begin
 			(set! referenced-run-ids (cons run-id referenced-run-ids))
-			(if (> (length tests) maxtests)
-			    (set! maxtests (length tests)))
-			(if (or (not (dboard:tabdat-hide-empty-runs tabdat)) ;; this reduces the data burden when set
-				(not (null? tests)))
-			    (let ((dstruct (vector run tests key-vals (- (current-seconds) 10))))
-			      (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id dstruct)
-			      (set! result (cons dstruct result))))))))
+			(if (> num-tests maxtests)
+			    (set! maxtests num-tests))
+			;; (if (or (not (dboard:tabdat-hide-empty-runs tabdat)) ;; this reduces the data burden when set
+			;;	(not (null? tests)))
+			(let* ((last-update (- (current-seconds) 10))
+			       (run-struct  (make-dboard:rundat run: run tests: tests key-vals: key-vals last-update: last-update)))
+			  (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id run-struct)
+			  (set! result (cons run-struct result)))))))
 	      runs)
-
     (dboard:tabdat-header-set! tabdat header)
     (dboard:tabdat-allruns-set! tabdat result)
     (debug:print-info 6 *default-log-port* "(dboard:tabdat-allruns tabdat) has " (length (dboard:tabdat-allruns tabdat)) " runs")
@@ -642,6 +659,9 @@ Misc
 		  newres
 		  (loop (car tal)(cdr tal) newres))))))))
 
+;; optimized to get runs constrained by what is visible on the screen
+;;  - not appropriate for where all the runs are needed
+;;
 (define (update-buttons tabdat uidat numruns numtests)
   (let* ((runs        (if (> (length (dboard:tabdat-allruns tabdat)) numruns)
 			  (take-right (dboard:tabdat-allruns tabdat) numruns)
@@ -654,8 +674,8 @@ Misc
     ;; create a concise list of test names
     (for-each
      (lambda (rundat)
-       (if (vector? rundat)
-	   (let* ((testdat   (vector-ref rundat 1))
+       (if rundat
+	   (let* ((testdat   (dboard:rundat-tests rundat))
 		  (testnames (map test:test-get-fullname testdat)))
 	     (if (not (and (dboard:tabdat-hide-empty-runs tabdat)
 			   (null? testnames)))
@@ -677,10 +697,10 @@ Misc
      (lambda (rundat)
        (if (not rundat) ;; handle padded runs
 	   ;;           ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration
-	   (set! rundat (vector (make-vector 20 #f) '() (map (lambda (x) "") (dboard:tabdat-keys tabdat)))));; 3)))
-       (let* ((run      (vector-ref rundat 0))
-	      (testsdat (vector-ref rundat 1))
-	      (key-val-dat (vector-ref rundat 2))
+	   (set! rundat (make-dboard:rundat run: (make-vector 20 #f) tests: '() key-vals: (map (lambda (x) "")(dboard:tabdat-keys tabdat)) last-update: 0)))
+       (let* ((run      (dboard:rundat-run rundat))
+	      (testsdat (dboard:rundat-tests rundat))
+	      (key-val-dat (dboard:rundat-key-vals rundat))
 	      (run-id   (db:get-value-by-header run (dboard:tabdat-header tabdat) "id"))
 	      (key-vals (append key-val-dat
 				(list (let ((x (db:get-value-by-header run (dboard:tabdat-header tabdat) "runname")))
@@ -2355,16 +2375,17 @@ Misc
 	  (let ((allruns (dboard:tabdat-allruns tabdat))
 		(rowhash (make-hash-table)) ;; store me in tabdat
 		(cnv     (dboard:tabdat-cnv tabdat)))
+	    (print "allruns: " allruns)
 	    (let-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
 			 ((originx originy)             (canvas-origin cnv)))
 	      ;; (print "allruns: " allruns)
 	      (for-each
 	       (lambda (rundat)
-		 (if (vector? rundat)
-		     (let* ((run       (vector-ref rundat 0))
-			    (hierdat   (dboard:tests-sort-by-time-group-by-item (vector-ref rundat 1)))
+		 (if rundat
+		     (let* ((run       (dboard:rundat-run rundat))
+			    (hierdat   (dboard:tests-sort-by-time-group-by-item (dboard:rundat-tests rundat)))
 			    (testsdat  (apply append hierdat))
-			    (key-val-dat (vector-ref rundat 2))
+			    (key-val-dat (dboard:rundat-key-vals rundat))
 			    (run-id   (db:get-value-by-header run (dboard:tabdat-header tabdat) "id"))
 			    (key-vals (append key-val-dat
 					      (list (let ((x (db:get-value-by-header run (dboard:tabdat-header tabdat) "runname")))
