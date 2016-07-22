@@ -162,6 +162,9 @@
 (define (vg:add-objs-to-comp comp . objs)
   (vg:comp-objs-set! comp (append (vg:comp-objs comp) objs)))
 
+(define (vg:add-obj-to-comp comp obj)
+  (vg:comp-objs-set! comp (cons obj (vg:comp-objs comp))))
+
 ;; use the struct. leave this here to remind of this!
 ;;
 ;; (define (vg:comp-get-objs comp)
@@ -398,10 +401,11 @@
 		     (font-changed (and font (not (equal? font prev-font)))))
 		(if font-changed (canvas-font-set! cnv font))
 		(canvas-text! cnv (+ 2 llx)(+ 2 lly) text)
-		(let-values (((xmax ymax)(canvas-text-size cnv text)))
-		  (set! text-xmax xmax)(set! text-ymax ymax))
+		(if (eq? draw 'get-extents)
+		    (let-values (((xmax ymax)(canvas-text-size cnv text)))
+				(set! text-xmax xmax)(set! text-ymax ymax)))
 		(if font-changed (canvas-font-set! cnv prev-font))))))
-    (print "text-xmax: " text-xmax " text-ymax: " text-ymax)
+    ;; (print "text-xmax: " text-xmax " text-ymax: " text-ymax)
     (if (vg:obj-extents obj)
 	(vg:obj-extents obj)
 	(if (not text)
@@ -413,13 +417,14 @@
 		  (vg:obj-extents-set! obj xt)
 		  xt)
 		(if cnv
-		    (let-values (((xmax ymax)(canvas-text-size cnv text)))
-		      (let ((xt (list llx lly
-				      (max ulx (+ llx xmax))
-				      (max uly (+ lly ymax)))))
-			(vg:obj-extents-set! obj xt)
-			xt))
-		    pts)))))) ;; return extents 
+		    (if (eq? draw 'get-extents)
+			(let-values (((xmax ymax)(canvas-text-size cnv text)))
+				    (let ((xt (list llx lly
+						    (max ulx (+ llx xmax))
+						    (max uly (+ lly ymax)))))
+				      (vg:obj-extents-set! obj xt)
+				      xt))
+			pts))))))) ;; return extents 
 
 ;; given a rect obj draw it on the canvas applying first the drawing
 ;; scale and offset
@@ -565,8 +570,10 @@
 	  ;; NOTE: we do not set the font back!!
 	  (canvas-foreground-set! cnv prev-foreground-color)))
     (if cnv
-	(let-values (((xmax ymax)(canvas-text-size cnv text)))
-	  (append pts (list (+ llx xmax)(+ lly ymax)))) ;; will be wrong if text is rotated?
+	(if (eq? draw 'get-extents)
+	    (let-values (((xmax ymax)(canvas-text-size cnv text)))
+			(append pts (list (+ llx xmax)(+ lly ymax)))) ;; will be wrong if text is rotated?
+	    (append pts pts))
 	(append pts pts))))
 
 (define (vg:draw drawing draw-mode . instnames)

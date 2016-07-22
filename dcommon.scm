@@ -83,6 +83,8 @@
 ;;  2. Update synchash to understand "get-runs", "get-tests" etc.
 ;;  3. Add extraction of filters to synchash calls
 ;;
+;;    NOTE: Used in newdashboard
+;;
 ;; Mode is 'full or 'incremental for full refresh or incremental refresh
 (define (dcommon:run-update keys data runname keypatts testpatt states statuses mode window-id)
   (let* (;; count and offset => #f so not used

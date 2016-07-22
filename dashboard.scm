@@ -50,15 +50,17 @@
   license GPL, Copyright (C) Matt Welland 2012-2016
 
 Usage: dashboard [options]
-  -h                   : this help
-  -server host:port    : connect to host:port instead of db access
-  -test run-id,test-id : control test identified by testid
-  -xterm run-id,test-id : Start a new xterm with specified run-id and test-id
-  -guimonitor          : control panel for runs
+  -h                    : this help
+  -test run-id,test-id  : control test identified by testid
+  -skip-version-check   : skip the version check
 
 Misc
   -rows N         : set number of rows
 "))
+
+;;   -server host:port     : connect to host:port instead of db access
+;;   -xterm run-id,test-id : Start a new xterm with specified run-id and test-id
+;;   -guimonitor           : control panel for runs
 
 ;; process args
 (define remargs (args:get-args 
@@ -78,6 +80,7 @@ Misc
 			"-v"
 			"-q"
 			"-use-local"
+			"-skip-version-check"
 			)
 		 args:arg-hash
 		 0))
@@ -135,7 +138,7 @@ Misc
 	     (updaters (hash-table-ref/default (dboard:commondat-updaters commondat)
 					       tnum
 					       '())))
-	(debug:print 0 *default-log-port* "Found these updaters: " updaters " for tab-num: " tnum)
+	(debug:print 4 *default-log-port* "Found these updaters: " updaters " for tab-num: " tnum)
 	(for-each
 	 (lambda (updater)
 	   (debug:print 3 *default-log-port* "Running " updater)
@@ -157,33 +160,46 @@ Misc
 ;; data for each specific tab goes here
 ;;
 (defstruct dboard:tabdat 
-  allruns 
-  allruns-by-id
+  ;; runs
+  allruns          ;; list of dboard:rundat records
+  allruns-by-id    ;; hash of run-id -> dboard:rundat records
+  header           ;; header for decoding the run records
+  keys             ;; keys for this run (i.e. target components)
+  numruns
+
+  ;; Runs view
   buttondat 
+  item-test-names
+
+  ;; Canvas and drawing data
   cnv
   cnv-obj
+  drawing
+  draw-cache     ;; 
+
+  ;; Controls used to launch runs etc.
   command
   command-tb 
-  curr-run-id 
-  curr-test-ids 
-  db
+
+  ;; Selector variables
+  curr-run-id      ;; current row to display in Run summary view
+  curr-test-ids    ;; used only in dcommon:run-update which is used in newdashboard
+  filters-changed  ;; to to indicate that the user changed filters for this tab
+  hide-empty-runs
+  hide-not-hide    ;; toggle for hide/not hide empty runs
+  hide-not-hide-button
+
+  ;; db info to file the .db files for the area
   dbdir
   dbfpath
   dbkeys 
-  drawing
-  filters-changed
-  header      
-  hide-empty-runs
-  hide-not-hide   ;; toggle for hide/not hide
-  hide-not-hide-button
-  item-test-names
-  keys
   last-db-update  ;; last db file timestamp
-  last-update     ;; last time rmt:get-tests-for-run was used to get data
-  logs-textbox
-  monitor-db-path
+  monitor-db-path ;; where to find monitor.db
+
+  ;; tests data
+  last-update      ;; last time rmt:get-tests-for-run was used to get data
   num-tests
-  numruns
+
   path-run-ids
   ro
   run-keys
@@ -279,7 +295,8 @@ Misc
 ;;
 (defstruct dboard:rundat
   run
-  tests 
+  tests-drawn
+  tests  
   key-vals
   last-update
   )
@@ -1060,6 +1077,16 @@ Misc
 		      (lambda (obj id state)
 			;; (print "obj: " obj ", id: " id ", state: " state)
 			(let* ((run-path (tree:node->path obj id))
+
+
+
+
+			       ;; change this to store run-path appropriately as selector
+
+
+
+
+
 			       (run-id   (tree-path->run-id tabdat (cdr run-path))))
 			  (print "run-path: " run-path)
 			  (if (number? run-id)
@@ -2333,7 +2360,10 @@ Misc
 				       (time-a   (db:get-value-by-header record-a runs-header "event_time"))
 				       (time-b   (db:get-value-by-header record-b runs-header "event_time")))
 				  (< time-a time-b)))))
-	 (tb            (dboard:tabdat-runs-tree tabdat)))
+	 (tb            (dboard:tabdat-runs-tree tabdat))
+	 (num-runs      (length (hash-table-keys runs-hash)))
+	 (run-num       0)
+	 (update-start-time (current-seconds)))
     ;; fill in the tree
     (if tb (for-each (lambda (run-id)
 		       (let* ((run-record (hash-table-ref/default runs-hash run-id #f))
@@ -2356,13 +2386,16 @@ Misc
 			       ;; (set! colnum (+ colnum 1))
 			       ))))
 		     run-ids))
+    ;;
     (if (and tabdat
 	     (dboard:tabdat-view-changed tabdat))
 	(let* ((drawing    (dboard:tabdat-drawing tabdat))
-	       (runslib    (vg:get/create-lib drawing "runslib"))) ;; creates and adds lib
+	       (runslib    (vg:get/create-lib drawing "runslib")) ;; creates and adds lib
+	       (compute-start (current-seconds)))
 	  (vg:drawing-xoff-set! drawing (dboard:tabdat-xadj tabdat))
 	  (vg:drawing-yoff-set! drawing (dboard:tabdat-yadj tabdat))
-	  (update-rundat tabdat
+	  (print "Updating rundat")
+	  (time (update-rundat tabdat
 			 "%" ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") 
 			 100  ;; (dboard:tabdat-numruns tabdat)
 			 "%" ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
@@ -2373,7 +2406,7 @@ Misc
 					   (let ((val (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) key #f)))
 					     (if val (set! res (cons (list key val) res))))))
 				     (dboard:tabdat-dbkeys tabdat))
-			   res))
+			   res)))
 	  (let ((allruns (dboard:tabdat-allruns tabdat))
 		(rowhash (make-hash-table)) ;; store me in tabdat
 		(cnv     (dboard:tabdat-cnv tabdat)))
@@ -2405,7 +2438,11 @@ Misc
 					   (if (> run-duration 0)
 					       run-duration
 					       (current-seconds)))) ;; a least lously guess
-			    (maptime    (lambda (tsecs)(* timescale (+ tsecs timeoffset)))))
+			    (maptime    (lambda (tsecs)(* timescale (+ tsecs timeoffset))))
+			    (num-tests  (length hierdat))
+			    (test-num   0)
+			    (tot-tests  (length testsdat)))
+		       (set! run-num (+ run-num 1))
 		       ;; (print "timescale: " timescale " timeoffset: " timeoffset " sizex: " sizex " originx: " originx)
 		       (vg:add-comp-to-lib runslib run-full-name runcomp)
 		       (set! run-start-row (+ max-row 2))
@@ -2422,7 +2459,9 @@ Misc
 			  (let ((test-objs   '())
 				(iterated     (> (length testdats) 1))
 				(first-rownum #f)
-				(num-items    (length testdats)))
+				(num-items    (length testdats))
+				(item-num     0))
+			    (set! test-num (+ test-num 1))
 			    (for-each 
 			     (lambda (testdat)
 			       (let* ((event-time   (maptime (db:test-get-event_time   testdat)))
@@ -2434,11 +2473,16 @@ Misc
 				      (status        (db:test-get-status      testdat))
 				      (test-fullname (conc test-name "/" item-path))
 				      (name-color    (gutils:get-color-for-state-status state status)))
+				 (set! item-num (+ item-num 1))
 				 ;; (print "event_time: " (db:test-get-event_time   testdat) " mapped event_time: " event-time)
 				 ;; (print "run-duration: "  (db:test-get-run_duration testdat) " mapped run_duration: " run-duration)
+				 (if (> item-num 50)
+				     (if (eq? 0 (modulo item-num 50))
+					 (print "processing " run-num " of " num-runs " runs " item-num " of " num-items " of test " test-name ", " test-num " of " num-tests " tests")))
 				 (let loop ((rownum run-start-row)) ;; (+ start-row 1)))
 				   (set! max-row (max rownum max-row)) ;; track the max row used
-				   (if (dashboard:row-collision rowhash rownum event-time end-time)
+				   (print "Allocating test")
+				   (time (if (dashboard:row-collision rowhash rownum event-time end-time)
 				       (loop (+ rownum 1))
 				       (let* ((lly (- sizey (* rownum row-height)))
 					      (uly (+ lly row-height))
@@ -2453,8 +2497,8 @@ Misc
 					       (dashboard:row-collision rowhash (- rownum 1) event-time end-time num-rows: num-items)
 					       (set! first-rownum rownum)))
 					 (dashboard:add-bar rowhash rownum event-time end-time)
-					 (vg:add-objs-to-comp runcomp obj)
-					 (set! test-objs (cons obj test-objs)))))
+					 (vg:add-obj-to-comp runcomp obj)
+					 (set! test-objs (cons obj test-objs))))))
 				 ;; (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)
 				 ))
 			   testdats)
@@ -2466,14 +2510,14 @@ Misc
 				       (ulx (+ 5 (caddr xtents)))
 				       (uly (+ 0 (cadddr xtents))))
 				  (dashboard:add-bar rowhash first-rownum llx ulx num-rows:  num-items)
-				  (vg:add-objs-to-comp runcomp (vg:make-rect-obj llx lly ulx uly
+				  (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly
 									     text:  (db:test-get-testname (car testdats))
 									     font: "Helvetica -10"))))))
 			hierdat)
 		       ;; placeholder box
 		       (set! max-row (+ max-row 1))
 		       (let ((y   (- sizey (* max-row row-height))))
-			 (vg:add-objs-to-comp runcomp (vg:make-rect-obj 0 y 0 y)))
+			 (vg:add-obj-to-comp runcomp (vg:make-rect-obj 0 y 0 y)))
 		       ;; instantiate the component 
 		       (let* ((extents   (vg:components-get-extents drawing runcomp))
 			      ;; move the following into mapping functions in vg.scm
@@ -2487,7 +2531,7 @@ Misc
 			      (ulx       (list-ref new-xtnts 2))
 			      (uly       (list-ref new-xtnts 3))
 			      ) ;;  (vg:components-get-extents d1 c1)))
-			 (vg:add-objs-to-comp runcomp (vg:make-rect-obj llx lly ulx uly text: run-full-name))
+			 (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly text: run-full-name))
 			 (vg:instantiate drawing "runslib" run-full-name run-full-name 0 0))
 		       (set! max-row (+ max-row 1)))))
 	       allruns)
@@ -2532,7 +2576,7 @@ Misc
       (load debugcontrolf)))
 
 (define (main)
-  (common:exit-on-version-changed)
+  (if (not (args:get-arg "-skip-version-check"))(common:exit-on-version-changed))
   (let* ((commondat       (dboard:commondat-make)))
     ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
     (cond 
