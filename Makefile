@@ -3,20 +3,20 @@ PREFIX=$(PWD)
 CSCOPTS= 
 INSTALL=install
 SRCFILES = common.scm items.scm launch.scm \
-           ods.scm runconfig.scm server.scm configf.scm \
-           db.scm keys.scm margs.scm megatest-version.scm \
-           process.scm runs.scm tasks.scm tests.scm genexample.scm \
-	   http-transport.scm nmsg-transport.scm filedb.scm \
-           client.scm gutils.scm synchash.scm daemon.scm mt.scm dcommon.scm \
-	   tree.scm ezsteps.scm lock-queue.scm sdb.scm \
-	   rmt.scm api.scm tdb.scm rpc-transport.scm \
-	   portlogger.scm archive.scm env.scm vg.scm
+   ods.scm runconfig.scm server.scm configf.scm \
+   db.scm keys.scm margs.scm megatest-version.scm \
+   process.scm runs.scm tasks.scm tests.scm genexample.scm \
+   http-transport.scm nmsg-transport.scm filedb.scm \
+   client.scm gutils.scm synchash.scm daemon.scm mt.scm dcommon.scm \
+   tree.scm ezsteps.scm lock-queue.scm sdb.scm \
+   rmt.scm api.scm tdb.scm rpc-transport.scm \
+   portlogger.scm archive.scm env.scm vg.scm
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
-     dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
-     json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
-     spiffy-directory-listing ssax sxml-serializer sxml-modifications iup canvas-draw sqlite3
+dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
+json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
+spiffy-directory-listing ssax sxml-serializer sxml-modifications iup canvas-draw sqlite3
 
 GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm 
 
@@ -42,13 +42,13 @@ mtest: $(OFILES) readline-fix.scm megatest.o
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
 
 dboard : $(OFILES) $(GOFILES) dashboard.scm
-	csc $(OFILES) dashboard.scm $(GOFILES) -o dboard
+	csc $(CSCOPTS) $(OFILES) dashboard.scm $(GOFILES) -o dboard
 
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
-	csc $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
+	csc $(CSCOPTS) $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
 
 multi-dboard : multi-dboard.scm $(OFILES) $(GOFILES)
-	csc $(OFILES) $(GOFILES) multi-dboard.scm -o multi-dboard
+	csc $(CSCOPTS) $(OFILES) $(GOFILES) multi-dboard.scm -o multi-dboard
 
 # 
 # $(PREFIX)/bin/revtagfsl : utils/revtagfsl.scm
@@ -56,7 +56,7 @@ multi-dboard : multi-dboard.scm $(OFILES) $(GOFILES)
 
 # Special dependencies for the includes
 tests.o db.o launch.o runs.o dashboard-tests.o dashboard-guimonitor.o dashboard-main.o monitor.o dashboard.o  \
-  archive.o megatest.o : db_records.scm
+archive.o megatest.o : db_records.scm
 tests.o runs.o dashboard.o dashboard-tests.o dashboard-main.o  : run_records.scm
 db.o ezsteps.o keys.o launch.o megatest.o monitor.o runs-for-ref.o runs.o tests.o : key_records.scm
 tests.o tasks.o dashboard-tasks.o : task_records.scm
@@ -204,10 +204,10 @@ deploytarg/dboard :  $(OFILES) $(GOFILES) dashboard.scm deploytarg/apropos.so
 # DATASHAREO=configf.o common.o process.o tree.o dcommon.o margs.o launch.o gutils.o db.o synchash.o server.o \
 #            megatest-version.o tdb.o ods.o mt.o keys.o
 datashare-testing/sd : datashare.scm $(OFILES)
-	csc datashare.scm $(OFILES) -o datashare-testing/sd
+	csc $(CSCOPTS) datashare.scm $(OFILES) -o datashare-testing/sd
 
 datashare-testing/sdat: sharedat.scm $(OFILES)
-	csc sharedat.scm $(OFILES) -o datashare-testing/sdat
+	csc $(CSCOPTS) sharedat.scm $(OFILES) -o datashare-testing/sdat
 
 sd : datashare-testing/sd
 	mkdir -p /tmp/$(USER)/datashare/disk1 /tmp/$(USER)/basepath
@@ -216,13 +216,13 @@ xterm : sd
 	(export BASEPATH=/tmp/$(USER)/basepath ; export PATH="$(PWD)/datashare-testing:$(PATH)" ; xterm &)
 
 datashare-testing/spublish : spublish.scm $(OFILES)
-	csc spublish.scm $(OFILES) -o datashare-testing/spublish
+	csc $(CSCOPTS) spublish.scm $(OFILES) -o datashare-testing/spublish
 
 datashare-testing/sretrieve : sretrieve.scm megatest-version.o margs.o configf.o process.o 
-	csc sretrieve.scm megatest-version.o margs.o configf.o process.o -o datashare-testing/sretrieve
+	csc $(CSCOPTS) sretrieve.scm megatest-version.o margs.o configf.o process.o -o datashare-testing/sretrieve
 
 sretrieve/sretrieve : datashare-testing/sretrieve
-	csc -deploy -deployed sretrieve.scm megatest-version.o margs.o configf.o
+	csc $(CSCOPTS) -deploy -deployed sretrieve.scm megatest-version.o margs.o configf.o
 	chicken-install -keep-installed $(PROXY) -deploy -prefix sretrieve defstruct srfi-18 format sql-de-lite \
              srfi-1 posix regex regex-case srfi-69
 
@@ -250,4 +250,4 @@ altdb.scm :
 	fi
 
 portlogger-example : portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o nmsg-transport.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
-	csc portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o nmsg-transport.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
+	csc $(CSCOPTS) portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o nmsg-transport.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o

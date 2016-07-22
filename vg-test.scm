@@ -3,11 +3,15 @@
 
 (load "vg.scm")
 
-(use trace)
-(trace 
- vg:draw-rect
- vg:grow-rect
- vg:components-get-extents)
+(define numtorun (if (> (length (argv)) 1)
+		     (string->number (cadr (argv)))
+		     1000))
+
+;; (use trace)
+;; (trace 
+;;  vg:draw-rect
+;;  vg:grow-rect
+;;  vg:components-get-extents)
 
 (define d1 (vg:drawing-new))
 (define l1 (vg:lib-new))
@@ -19,6 +23,12 @@
       (r2 (vg:make-rect-obj 30 30 60 60 text: "r2" font: "Helvetica, -10"))
       (t1 (vg:make-text-obj 60 60 "The middle" font: "Helvetica, -10")))
   (vg:add-objs-to-comp c1 r1 r2 t1 bt1))
+
+(let ((start (current-seconds)))
+  (let loop ((i 0))
+    (vg:add-obj-to-comp c1 (vg:make-rect-obj 0 0 100 100))
+    (if (< i numtorun)(loop (+ i 1))))
+  (print "Run time: " (- (current-seconds) start)))
 
 ;; add the c1 component to lib l1 with name firstcomp
 (vg:add-comp-to-lib l1 "firstcomp" c1)
