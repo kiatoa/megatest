@@ -163,8 +163,8 @@ Misc
   ;; runs
   allruns          ;; list of dboard:rundat records
   allruns-by-id    ;; hash of run-id -> dboard:rundat records
-  done-run-ids     ;; list of run-ids already drawn
-  not-done-run-ids ;; list of run-ids not yet drawn
+  done-runs        ;; list of runs already drawn
+  not-done-runs    ;; list of runs not yet drawn
   header           ;; header for decoding the run records
   keys             ;; keys for this run (i.e. target components)
   numruns
@@ -253,6 +253,8 @@ Misc
 	      hide-not-hide:        #t
 	      item-test-names:      '()
 	      last-db-update:       0
+	      not-done-runs:        '()
+	      done-runs:            '()
 	      num-tests:            15
 	      numruns:              16
 	      path-run-ids:         (make-hash-table)
@@ -2481,136 +2483,150 @@ Misc
 					     (if val (set! res (cons (list key val) res))))))
 				     (dboard:tabdat-dbkeys tabdat))
 			   res))
-	  (let ((allruns (dboard:tabdat-allruns tabdat))
+	  (let ((allruns (if (null? (dboard:tabdat-not-done-runs tabdat))
+			     (dboard:tabdat-allruns tabdat)
+			     (dboard:tabdat-not-done-runs tabdat)))
 		(rowhash (make-hash-table)) ;; store me in tabdat
 		(cnv     (dboard:tabdat-cnv tabdat)))
 	    (print "allruns: " allruns)
 	    (let-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
 			 ((originx originy)             (canvas-origin cnv)))
 	      ;; (print "allruns: " allruns)
-	      (for-each
-	       (lambda (rundat)
-		 (if rundat
-		     (let* ((run       (dboard:rundat-run rundat))
-			    (hierdat   (dboard:tests-sort-by-time-group-by-item (dboard:rundat-tests rundat))) ;; hierarchial list of ids
-			    (tests-ht  (dboard:rundat-tests rundat))
-			    (all-tids  (hash-table-keys   tests-ht)) ;; (apply append hierdat)) ;; was testsdat
-			    (testsdat  (hash-table-values tests-ht))
-			    (key-val-dat (dboard:rundat-key-vals rundat))
-			    (run-id   (db:get-value-by-header run (dboard:tabdat-header tabdat) "id"))
-			    (key-vals (append key-val-dat
-					      (list (let ((x (db:get-value-by-header run (dboard:tabdat-header tabdat) "runname")))
-						      (if x x "")))))
-			    (run-key  (string-intersperse key-vals "\n"))
-			    (run-full-name (string-intersperse key-vals "/"))
-			    (runcomp  (vg:comp-new));; new component for this run
-			    (rows-used (make-hash-table)) ;; keep track of what parts of the rows are used here row1 = (obj1 obj2 ...)
-			    ;; (row-height 4)
-			    (run-start  (dboard:min-max < (map db:test-get-event_time testsdat)))
-			    (run-end    (dboard:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat)))
-			    (timeoffset (- (+ originx canvas-margin) run-start))
-			    (run-duration (- run-end run-start))
-			    (timescale  (/ (- sizex (* 2 canvas-margin))
-					   (if (> run-duration 0)
-					       run-duration
-					       (current-seconds)))) ;; a least lously guess
-			    (maptime    (lambda (tsecs)(* timescale (+ tsecs timeoffset))))
-			    (num-tests  (length hierdat))
-			    (test-num   0)
-			    (tot-tests  (length testsdat)))
-		       (set! run-num (+ run-num 1))
-		       ;; (print "timescale: " timescale " timeoffset: " timeoffset " sizex: " sizex " originx: " originx)
-		       (vg:add-comp-to-lib runslib run-full-name runcomp)
-		       (set! run-start-row (+ max-row 2))
-		       (set! start-row run-start-row)
-		       ;; this is the run title. move this into the box
-		;; (let ((x 10)
-		;; 	     (y (- sizey (* start-row row-height))))
-		;; 	 (vg:add-objs-to-comp runcomp (vg:make-text x y run-full-name font: "Helvetica -10"))
-		;; 	 (dashboard:add-bar rowhash start-row x (+ x 100)))
-		       (set! start-row (+ start-row 1))
-		       ;; get tests in list sorted by event time ascending
+	      (let runloop ((rundat   (car allruns))
+			    (runtal   (cdr allruns))
+			    (doneruns '()))
+		(let* ((run       (dboard:rundat-run rundat))
+		       (hierdat   (dboard:tests-sort-by-time-group-by-item (dboard:rundat-tests rundat))) ;; hierarchial list of ids
+		       (tests-ht  (dboard:rundat-tests rundat))
+		       (all-tids  (hash-table-keys   tests-ht)) ;; (apply append hierdat)) ;; was testsdat
+		       (testsdat  (hash-table-values tests-ht))
+		       (key-val-dat (dboard:rundat-key-vals rundat))
+		       (run-id   (db:get-value-by-header run (dboard:tabdat-header tabdat) "id"))
+		       (key-vals (append key-val-dat
+					 (list (let ((x (db:get-value-by-header run (dboard:tabdat-header tabdat) "runname")))
+						 (if x x "")))))
+		       (run-key  (string-intersperse key-vals "\n"))
+		       (run-full-name (string-intersperse key-vals "/"))
+		       (runcomp  (vg:comp-new));; new component for this run
+		       (rows-used (make-hash-table)) ;; keep track of what parts of the rows are used here row1 = (obj1 obj2 ...)
+		       ;; (row-height 4)
+		       (run-start  (dboard:min-max < (map db:test-get-event_time testsdat)))
+		       (run-end    (dboard:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat)))
+		       (timeoffset (- (+ originx canvas-margin) run-start))
+		       (run-duration (- run-end run-start))
+		       (timescale  (/ (- sizex (* 2 canvas-margin))
+				      (if (> run-duration 0)
+					  run-duration
+					  (current-seconds)))) ;; a least lously guess
+		       (maptime    (lambda (tsecs)(* timescale (+ tsecs timeoffset))))
+		       (num-tests  (length hierdat))
+		       (test-num   0)
+		       (tot-tests  (length testsdat)))
+		  (set! run-num (+ run-num 1))
+		  ;; (print "timescale: " timescale " timeoffset: " timeoffset " sizex: " sizex " originx: " originx)
+		  (vg:add-comp-to-lib runslib run-full-name runcomp)
+		  (set! run-start-row (+ max-row 2))
+		  (set! start-row run-start-row)
+		  ;; this is the run title. move this into the box
+		  ;; (let ((x 10)
+		  ;; 	     (y (- sizey (* start-row row-height))))
+		  ;; 	 (vg:add-objs-to-comp runcomp (vg:make-text x y run-full-name font: "Helvetica -10"))
+		  ;; 	 (dashboard:add-bar rowhash start-row x (+ x 100)))
+		  (set! start-row (+ start-row 1))
+		  ;; get tests in list sorted by event time ascending
+		  (for-each 
+		   (lambda (test-ids)
+		     (let ((test-objs   '())
+			   (iterated     (> (length test-ids) 1))
+			   (first-rownum #f)
+			   (num-items    (length test-ids))
+			   (item-num     0))
+		       (set! test-num (+ test-num 1))
 		       (for-each 
-			(lambda (test-ids)
-			  (let ((test-objs   '())
-				(iterated     (> (length test-ids) 1))
-				(first-rownum #f)
-				(num-items    (length test-ids))
-				(item-num     0))
-			    (set! test-num (+ test-num 1))
-			    (for-each 
-			     (lambda (test-id)
-			       (let* ((testdat      (hash-table-ref tests-ht test-id))
-				      (event-time   (maptime (db:test-get-event_time   testdat)))
-				      (run-duration (* timescale (db:test-get-run_duration testdat)))
-				      (end-time     (+ event-time run-duration))
-				      (test-name    (db:test-get-testname     testdat))
-				      (item-path    (db:test-get-item-path    testdat))
-				      (state         (db:test-get-state       testdat))
-				      (status        (db:test-get-status      testdat))
-				      (test-fullname (conc test-name "/" item-path))
-				      (name-color    (gutils:get-color-for-state-status state status)))
-				 (set! item-num (+ item-num 1))
-				 ;; (print "event_time: " (db:test-get-event_time   testdat) " mapped event_time: " event-time)
-				 ;; (print "run-duration: "  (db:test-get-run_duration testdat) " mapped run_duration: " run-duration)
-				 (if (> item-num 50)
-				     (if (eq? 0 (modulo item-num 50))
-					 (print "processing " run-num " of " num-runs " runs " item-num " of " num-items " of test " test-name ", " test-num " of " num-tests " tests")))
-				 (let loop ((rownum run-start-row)) ;; (+ start-row 1)))
-				   (set! max-row (max rownum max-row)) ;; track the max row used
-				   (if (dashboard:row-collision rowhash rownum event-time end-time)
-				       (loop (+ rownum 1))
-				       (let* ((lly (- sizey (* rownum row-height)))
-					      (uly (+ lly row-height))
-					      (obj (vg:make-rect-obj event-time lly end-time uly
-									    fill-color: (vg:iup-color->number (car name-color))
-									    text: (if iterated item-path test-name)
-									    font: "Helvetica -10")))
-					 ;; (if iterated
-					 ;;     (dashboard:add-bar rowhash (- rownum 1) event-time end-time num-rows: (+ 1 num-items))
-					 (if (not first-rownum)
-					     (begin
-					       (dashboard:row-collision rowhash (- rownum 1) event-time end-time num-rows: num-items)
-					       (set! first-rownum rownum)))
-					 (dashboard:add-bar rowhash rownum event-time end-time)
-					 (vg:add-obj-to-comp runcomp obj)
-					 (set! test-objs (cons obj test-objs)))))
-				 ;; (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)
-				 ))
-			   test-ids)
-			    ;; If it is an iterated test put box around it now.
-			    (if iterated
-				(let* ((xtents (vg:get-extents-for-objs drawing test-objs))
-				       (llx (- (car xtents)   5))
-				       (lly (- (cadr xtents) 10))
-				       (ulx (+ 5 (caddr xtents)))
-				       (uly (+ 0 (cadddr xtents))))
-				  (dashboard:add-bar rowhash first-rownum llx ulx num-rows:  num-items)
-				  (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly
-									     text:  (db:test-get-testname (hash-table-ref tests-ht (car test-ids)))
-									     font: "Helvetica -10"))))))
-			hierdat)
-		       ;; placeholder box
-		       (set! max-row (+ max-row 1))
-		       (let ((y   (- sizey (* max-row row-height))))
-			 (vg:add-obj-to-comp runcomp (vg:make-rect-obj 0 y 0 y)))
-		       ;; instantiate the component 
-		       (let* ((extents   (vg:components-get-extents drawing runcomp))
-			      ;; move the following into mapping functions in vg.scm
-			     ;; (deltax    (- llx ulx))
-			     ;; (scalex    (if (> deltax 0)(/ sizex deltax) 1))
-			     ;; (sllx      (* scalex llx))
-			     ;; (offx      (- sllx originx))
-			      (new-xtnts (apply vg:grow-rect 5 5 extents))
-			      (llx       (list-ref new-xtnts 0))
-			      (lly       (list-ref new-xtnts 1))
-			      (ulx       (list-ref new-xtnts 2))
-			      (uly       (list-ref new-xtnts 3))
-			      ) ;;  (vg:components-get-extents d1 c1)))
-			 (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly text: run-full-name))
-			 (vg:instantiate drawing "runslib" run-full-name run-full-name 0 0))
-		       (set! max-row (+ max-row 1)))))
-	       allruns)
+			(lambda (test-id)
+			  (let* ((testdat      (hash-table-ref tests-ht test-id))
+				 (event-time   (maptime (db:test-get-event_time   testdat)))
+				 (run-duration (* timescale (db:test-get-run_duration testdat)))
+				 (end-time     (+ event-time run-duration))
+				 (test-name    (db:test-get-testname     testdat))
+				 (item-path    (db:test-get-item-path    testdat))
+				 (state         (db:test-get-state       testdat))
+				 (status        (db:test-get-status      testdat))
+				 (test-fullname (conc test-name "/" item-path))
+				 (name-color    (gutils:get-color-for-state-status state status)))
+			    (set! item-num (+ item-num 1))
+			    ;; (print "event_time: " (db:test-get-event_time   testdat) " mapped event_time: " event-time)
+			    ;; (print "run-duration: "  (db:test-get-run_duration testdat) " mapped run_duration: " run-duration)
+			    (if (> item-num 50)
+				(if (eq? 0 (modulo item-num 50))
+				    (print "processing " run-num " of " num-runs " runs " item-num " of " num-items " of test " test-name ", " test-num " of " num-tests " tests")))
+			    (let loop ((rownum run-start-row)) ;; (+ start-row 1)))
+			      (set! max-row (max rownum max-row)) ;; track the max row used
+			      (if (dashboard:row-collision rowhash rownum event-time end-time)
+				  (loop (+ rownum 1))
+				  (let* ((lly (- sizey (* rownum row-height)))
+					 (uly (+ lly row-height))
+					 (obj (vg:make-rect-obj event-time lly end-time uly
+								fill-color: (vg:iup-color->number (car name-color))
+								text: (if iterated item-path test-name)
+								font: "Helvetica -10")))
+				    ;; (if iterated
+				    ;;     (dashboard:add-bar rowhash (- rownum 1) event-time end-time num-rows: (+ 1 num-items))
+				    (if (not first-rownum)
+					(begin
+					  (dashboard:row-collision rowhash (- rownum 1) event-time end-time num-rows: num-items)
+					  (set! first-rownum rownum)))
+				    (dashboard:add-bar rowhash rownum event-time end-time)
+				    (vg:add-obj-to-comp runcomp obj)
+				    (set! test-objs (cons obj test-objs)))))
+			    ;; (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)
+			    ))
+			test-ids)
+		       ;; If it is an iterated test put box around it now.
+		       (if iterated
+			   (let* ((xtents (vg:get-extents-for-objs drawing test-objs))
+				  (llx (- (car xtents)   5))
+				  (lly (- (cadr xtents) 10))
+				  (ulx (+ 5 (caddr xtents)))
+				  (uly (+ 0 (cadddr xtents))))
+			     (dashboard:add-bar rowhash first-rownum llx ulx num-rows:  num-items)
+			     (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly
+									   text:  (db:test-get-testname (hash-table-ref tests-ht (car test-ids)))
+									   font: "Helvetica -10"))))))
+		   hierdat)
+		  ;; placeholder box
+		  (set! max-row (+ max-row 1))
+		  (let ((y   (- sizey (* max-row row-height))))
+		    (vg:add-obj-to-comp runcomp (vg:make-rect-obj 0 y 0 y)))
+		  ;; instantiate the component 
+		  (let* ((extents   (vg:components-get-extents drawing runcomp))
+			 ;; move the following into mapping functions in vg.scm
+			 ;; (deltax    (- llx ulx))
+			 ;; (scalex    (if (> deltax 0)(/ sizex deltax) 1))
+			 ;; (sllx      (* scalex llx))
+			 ;; (offx      (- sllx originx))
+			 (new-xtnts (apply vg:grow-rect 5 5 extents))
+			 (llx       (list-ref new-xtnts 0))
+			 (lly       (list-ref new-xtnts 1))
+			 (ulx       (list-ref new-xtnts 2))
+			 (uly       (list-ref new-xtnts 3))
+			 ) ;;  (vg:components-get-extents d1 c1)))
+		    (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly text: run-full-name))
+		    (vg:instantiate drawing "runslib" run-full-name run-full-name 0 0))
+		  (set! max-row (+ max-row 1)))
+		;; end of the run handling loop 
+		(let ((newdoneruns (cons rundat doneruns)))
+		  (if (null? runtal)
+		      (begin
+			(dboard:tabdat-not-done-runs-set! tabdat '())
+			(dboard:tabdat-done-runs-set! tabdat allruns))
+		      (if (> (- (current-seconds) update-start-time) 5)
+			  (begin
+			    (print "drawing runs taking too long....  have " (length runtal) " remaining")
+			    (dboard:tabdat-done-runs-set! tabdat newdoneruns) ;; taking too long? stop here!
+			    (dboard:tabdat-non-done-runs-set! tabdat tal))
+			  (runloop (car runtal)(cdr runtal) newdoneruns)))))
+	      
 	      (vg:drawing-cnv-set! (dboard:tabdat-drawing tabdat)(dboard:tabdat-cnv tabdat)) ;; cnv-obj)
 	      (canvas-clear! (dboard:tabdat-cnv tabdat)) ;; -obj)
 	      (print "Number of objs: " (length (vg:draw (dboard:tabdat-drawing tabdat) #t)))
