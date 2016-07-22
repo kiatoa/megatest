@@ -163,13 +163,20 @@ Misc
   ;; runs
   allruns          ;; list of dboard:rundat records
   allruns-by-id    ;; hash of run-id -> dboard:rundat records
+  done-run-ids     ;; list of run-ids already drawn
+  not-done-run-ids ;; list of run-ids not yet drawn
   header           ;; header for decoding the run records
   keys             ;; keys for this run (i.e. target components)
   numruns
+  tot-runs
 
   ;; Runs view
   buttondat 
   item-test-names
+  run-keys
+  runs-matrix       ;; used in newdashboard
+  start-run-offset  ;; left-right slider value
+  start-test-offset ;; up-down slider value
 
   ;; Canvas and drawing data
   cnv
@@ -180,6 +187,9 @@ Misc
   ;; Controls used to launch runs etc.
   command
   command-tb 
+  run-name         ;; from run name setting widget
+  states           ;; states for -state s1,s2 ...
+  statuses         ;; statuses for -status s1,s2 ...
 
   ;; Selector variables
   curr-run-id      ;; current row to display in Run summary view
@@ -188,6 +198,11 @@ Misc
   hide-empty-runs
   hide-not-hide    ;; toggle for hide/not hide empty runs
   hide-not-hide-button
+  searchpatts
+  state-ignore-hash    ;; hash of  STATE => #t/#f for display control
+  status-ignore-hash   ;; hash of STATUS => #t/#f
+  target
+  test-patts
 
   ;; db info to file the .db files for the area
   dbdir
@@ -195,34 +210,22 @@ Misc
   dbkeys 
   last-db-update  ;; last db file timestamp
   monitor-db-path ;; where to find monitor.db
+  ro               ;; is the database read-only?
 
   ;; tests data
-  last-update      ;; last time rmt:get-tests-for-run was used to get data
-  num-tests
+  num-tests        ;; total number of tests to show (used in the old runs display)
 
-  path-run-ids
-  ro
-  run-keys
-  run-name
-  runs
-  runs-listbox
-  runs-matrix 
+  ;; runs tree
+  path-run-ids     ;; path (target / runname) => id
   runs-tree
-  searchpatts
-  start-run-offset
-  start-test-offset
-  state-ignore-hash
-  states 
-  status-ignore-hash
-  statuses
-  target
-  test-patts
-  tests
-  tests-tree
-  tot-runs
+
+  ;; tab data
+  last-update      ;; last time this tab was updated
   view-changed
-  xadj
-  yadj
+  xadj             ;; x slider number (if using canvas)
+  yadj             ;; y slider number (if using canvas)
+
+  tests-tree       ;; used in newdashboard
   )
 
 (define (dboard:tabdat-target-string vec)
@@ -295,10 +298,11 @@ Misc
 ;;
 (defstruct dboard:rundat
   run
-  tests-drawn
-  tests  
+  tests-drawn    ;; list of id's already drawn on screen
+  tests-notdrawn ;; list of id's NOT already drawn
+  tests          ;; hash of id => testdat
   key-vals
-  last-update
+  last-update    ;; last query to db got records from before last-update
   )
 
 (define (dboard:runsdat-make-init)
@@ -459,9 +463,9 @@ Misc
 	 (bubble-type (if (member sort-order '(testname))
 			  'testname
 			  'itempath))
-	 (prev-dat    (let ((rec (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f)))
-			(if rec rec (make-dboard:rundat run: run tests: '() key-vals: key-vals last-update: -100)))) ;; -100 is before time began
-	 (prev-tests  (dboard:rundat-tests prev-dat)) ;; (vector-ref prev-dat 1))
+	 (run-dat    (let ((rec (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f)))
+			(if rec rec (make-dboard:rundat run: run tests: (make-hash-table) key-vals: key-vals last-update: -100)))) ;; -100 is before time began
+	 ;; (prev-tests  (dboard:rundat-tests prev-dat)) ;; (vector-ref prev-dat 1))
 	 (last-update (dboard:tabdat-last-update tabdat)) ;; (vector-ref prev-dat 3))
 	 (tmptests    (rmt:get-tests-for-run run-id testnamepatt states statuses  ;; run-id testpatt states statuses
 					     #f #f                                ;; offset limit 
@@ -473,28 +477,36 @@ Misc
 						 0
 						 last-update) ;; last-update
 					     *dashboard-mode*)) ;; use dashboard mode
-	 (tests      (dashboard:merge-changed-tests prev-tests tmptests  (dboard:tabdat-hide-not-hide tabdat) prev-tests)))
-    (dboard:rundat-last-update-set! prev-dat (- (current-seconds) 10)) ;; go back two seconds in time to ensure all changes are captured.
-    (print "prev-tests: " (length prev-tests) " tests: " (length tests))
-    tests))
+	 (use-new    (dboard:tabdat-hide-not-hide tabdat))
+	 (tests-ht   (dboard:rundat-tests run-dat))
+	 (start-time (current-seconds)))
+    (for-each 
+     (lambda (tdat)
+       (let ((test-id (db:test-get-id tdat))
+	     (state   (db:test-get-state tdat)))
+	 (if (equal? state "DELETED")
+	     (hash-table-delete! tests-ht test-id)
+	     (hash-table-set! tests-ht test-id tdat))))
+     tmptests)
+    (dboard:rundat-last-update-set! run-dat (- (current-seconds) 10)) ;; go back two seconds in time to ensure all changes are captured.
+    tests-ht))
 
 ;; tmptests   - new tests data
 ;; prev-tests - old tests data
 ;;
-(define (dashboard:merge-changed-tests tests tmptests use-new prev-tests) 
-  (let ((start-time (current-seconds))
-	(newdat     (filter
-		     (lambda (x)
-		       (not (equal? (db:test-get-state x) "DELETED"))) ;; remove deleted tests but do it after merging
-		     (delete-duplicates (if use-new ;; (dboard:tabdat-filters-changed tabdat)
-					    tmptests
-					    (append tmptests prev-tests))
-					(lambda (a b)
-					  (eq? (db:test-get-id a)(db:test-get-id b)))))))
-    (print "Time took: " (- (current-seconds) start-time))
-    (if (eq? *tests-sort-reverse* 3) ;; +event_time
-	(sort newdat dboard:compare-tests)
-	newdat)))
+;; (define (dashboard:merge-changed-tests tabdat tests tmptests) ;;  use-new prev-tests) 
+;;   (let* ((newdat     (filter
+;; 		      (lambda (x)
+;; 			(not (equal? (db:test-get-state x) "DELETED"))) ;; remove deleted tests but do it after merging
+;; 		      (delete-duplicates (if use-new ;; (dboard:tabdat-filters-changed tabdat)
+;; 					     tmptests
+;; 					     (append tmptests prev-tests))
+;; 					 (lambda (a b)
+;; 					   (eq? (db:test-get-id a)(db:test-get-id b)))))))
+;;     (print "Time took: " (- (current-seconds) start-time))
+;;     (if (eq? *tests-sort-reverse* 3) ;; +event_time
+;; 	(sort newdat dboard:compare-tests)
+;; 	newdat)))
 
 ;; this calls dboard:get-tests-for-run-duplicate for each run
 ;;
@@ -502,41 +514,47 @@ Misc
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 ;;
 (define (update-rundat tabdat runnamepatt numruns testnamepatt keypatts)
-  (let* ((referenced-run-ids '())
-	 (allruns     (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
+  (let* ((allruns     (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
-	 (result      '())
-	 (maxtests    0))
+	 (start-time  (current-seconds)))
+    (dboard:tabdat-header-set! tabdat header)
     ;; 
     ;; trim runs to only those that are changing often here
     ;; 
-    (for-each (lambda (run)
-		(let* ((run-id      (db:get-value-by-header run header "id"))
-		       (key-vals    (rmt:get-key-vals run-id))
-		       (tests       (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
-		       (num-tests   (length tests)))
-		  ;; NOTE: bubble-up also sets the global (dboard:tabdat-item-test-names tabdat)
-		  ;; (tests       (bubble-up tmptests priority: bubble-type))
-		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
-		  ;; (debug:print 0 *default-log-port* "Getting data for run " run-id " with key-vals=" key-vals)
-		  ;; Not sure this is needed?
-		  (if (not (null? tests))
+    (if (not (null? runs))
+	(let loop ((run      (car runs))
+		   (tal      (cdr runs))
+		   (res     '())
+		   (maxtests 0))
+	  (let* ((run-id       (db:get-value-by-header run header "id"))
+		 (key-vals     (rmt:get-key-vals run-id))
+		 (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
+		 (all-test-ids (hash-table-keys tests-ht))
+		 (num-tests    (length all-test-ids)))
+	    ;; NOTE: bubble-up also sets the global (dboard:tabdat-item-test-names tabdat)
+	    ;; (tests       (bubble-up tmptests priority: bubble-type))
+	    ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
+	    ;; (debug:print 0 *default-log-port* "Getting data for run " run-id " with key-vals=" key-vals)
+	    ;; Not sure this is needed?
+	    (if (not (null? all-test-ids))
+		(let* ((newmaxtests (max num-tests maxtests))
+		       (last-update (- (current-seconds) 10))
+		       (run-struct  (make-dboard:rundat 
+				     run:         run 
+				     tests:       tests-ht
+				     key-vals:    key-vals
+				     last-update: last-update))
+		       (new-res     (cons run-struct res))
+		       (elapsed-time (- (current-seconds) start-time)))
+		  (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id run-struct)
+		  (if (or (null? tal)
+			  (> elapsed-time 5)) ;; stop loading data after 5 seconds, on the next call more data *should* be loaded since get-tests-for-run uses last update
 		      (begin
-			(set! referenced-run-ids (cons run-id referenced-run-ids))
-			(if (> num-tests maxtests)
-			    (set! maxtests num-tests))
-			;; (if (or (not (dboard:tabdat-hide-empty-runs tabdat)) ;; this reduces the data burden when set
-			;;	(not (null? tests)))
-			(let* ((last-update (- (current-seconds) 10))
-			       (run-struct  (make-dboard:rundat run: run tests: tests key-vals: key-vals last-update: last-update)))
-			  (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id run-struct)
-			  (set! result (cons run-struct result)))))))
-	      runs)
-    (dboard:tabdat-header-set! tabdat header)
-    (dboard:tabdat-allruns-set! tabdat result)
-    (debug:print-info 6 *default-log-port* "(dboard:tabdat-allruns tabdat) has " (length (dboard:tabdat-allruns tabdat)) " runs")
-    maxtests))
+			(if (> elapsed-time 5)(print "WARNING: timed out in update-testdat " elapsed-time "s"))
+			(dboard:tabdat-allruns-set! tabdat new-res)
+			maxtests)
+		      (loop (car tal)(cdr tal) new-res newmaxtests)))))))))
 
 (define *collapsed* (make-hash-table))
 
@@ -2296,45 +2314,52 @@ Misc
 	    (car lst)
 	    lst)))
 
-(define-inline (dboard:sort-testsdat-by-event-time testsdat)
-  (sort testsdat
+(define-inline (dboard:sort-testsdat-by-event-time test-ids tests-ht)
+  (sort test-ids
 	(lambda (a b)
-	  (< (db:test-get-event_time a)
-	     (db:test-get-event_time b)))))
+	  (< (db:test-get-event_time (hash-table-ref tests-ht a))
+	     (db:test-get-event_time (hash-table-ref tests-ht b))))))
 
 ;; first group items into lists, then sort by time
 ;; finally sort by first item time
+;; 
+;; NOTE: we are returning lists of lists of ids!
 ;;
 (define (dboard:tests-sort-by-time-group-by-item testsdat)
-  (if (null? testsdat)
-      testsdat
-      (let* ((tests (let ((ht (make-hash-table)))
-		      (for-each
-		       (lambda (tdat)
-			 (let ((testname (db:test-get-testname tdat)))
-			   (hash-table-set! 
-			    ht 
-			    testname
-			    (cons tdat (hash-table-ref/default ht testname '())))))
-		       testsdat)
-		      ht)))
+  (let ((test-ids (hash-table-keys testsdat)))
+    (if (null? test-ids)
+	test-ids
+	;; now group all tests by testname tname => (id1 id2 ...), tname2 => ( ...
+	(let* ((test-ids-by-name
+		(let ((ht (make-hash-table)))
+		  (for-each
+		   (lambda (tdat)
+		     (let ((testname (db:test-get-testname tdat))
+			   (test-id  (db:test-get-id tdat)))
+		       (hash-table-set! 
+			ht 
+			testname
+			(cons test-id (hash-table-ref/default ht testname '())))))
+		   (hash-table-values testsdat))
+		  ht)))
 	;; remove toplevel tests from iterated tests, sort tests in the list by event time
 	(for-each 
 	 (lambda (testname)
-	   (let ((testslst (hash-table-ref tests testname)))
-	     (if (> (length testslst) 1) ;; must be iterated
-		 (let ((item-tests (filter (lambda (tdat) ;; filter out toplevel tests
-					     (not (equal? (db:test-get-item-path tdat) "")))
-					   testslst)))
+	   (let ((tests-id-lst (hash-table-ref test-ids-by-name testname)))
+	     (if (> (length tests-id-lst) 1) ;; must be iterated
+		 (let ((item-tests (filter (lambda (tid) ;; filter out toplevel tests
+					     (let ((tdat (hash-table-ref testsdat tid)))
+					       (not (equal? (db:test-get-item-path tdat) ""))))
+					   tests-id-lst)))
 		   (if (not (null? item-tests)) ;; resist bad data, generally should not fail this condition
 		       (hash-table-set! tests 
 					testname 
-					(dboard:sort-testsdat-by-event-time item-tests)))))))
-	 (hash-table-keys tests))
-	(sort (hash-table-values tests)
+					(dboard:sort-testsdat-by-event-time item-tests testsdat)))))))
+	 (hash-table-keys test-ids-by-name))
+	(sort (hash-table-values test-ids-by-name)
 	      (lambda (a b)
-		(< (db:test-get-event_time (car a))
-		   (db:test-get-event_time (car b))))))))
+		(< (db:test-get-event_time (hash-table-ref testsdat (car a)))
+		   (db:test-get-event_time (hash-table-ref testsdat (car b))))))))))
 
 (define (dashboard:run-times-tab-updater commondat tab-num)
   ;; each test is an object in the run component
@@ -2395,7 +2420,7 @@ Misc
 	  (vg:drawing-xoff-set! drawing (dboard:tabdat-xadj tabdat))
 	  (vg:drawing-yoff-set! drawing (dboard:tabdat-yadj tabdat))
 	  (print "Updating rundat")
-	  (time (update-rundat tabdat
+	  (update-rundat tabdat
 			 "%" ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") 
 			 100  ;; (dboard:tabdat-numruns tabdat)
 			 "%" ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
@@ -2406,7 +2431,7 @@ Misc
 					   (let ((val (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) key #f)))
 					     (if val (set! res (cons (list key val) res))))))
 				     (dboard:tabdat-dbkeys tabdat))
-			   res)))
+			   res))
 	  (let ((allruns (dboard:tabdat-allruns tabdat))
 		(rowhash (make-hash-table)) ;; store me in tabdat
 		(cnv     (dboard:tabdat-cnv tabdat)))
@@ -2418,8 +2443,10 @@ Misc
 	       (lambda (rundat)
 		 (if rundat
 		     (let* ((run       (dboard:rundat-run rundat))
-			    (hierdat   (dboard:tests-sort-by-time-group-by-item (dboard:rundat-tests rundat)))
-			    (testsdat  (apply append hierdat))
+			    (hierdat   (dboard:tests-sort-by-time-group-by-item (dboard:rundat-tests rundat))) ;; hierarchial list of ids
+			    (tests-ht  (dboard:rundat-tests rundat))
+			    (all-tids  (hash-table-keys   tests-ht)) ;; (apply append hierdat)) ;; was testsdat
+			    (testsdat  (hash-table-values tests-ht))
 			    (key-val-dat (dboard:rundat-key-vals rundat))
 			    (run-id   (db:get-value-by-header run (dboard:tabdat-header tabdat) "id"))
 			    (key-vals (append key-val-dat
@@ -2455,16 +2482,17 @@ Misc
 		       (set! start-row (+ start-row 1))
 		       ;; get tests in list sorted by event time ascending
 		       (for-each 
-			(lambda (testdats)
+			(lambda (test-ids)
 			  (let ((test-objs   '())
-				(iterated     (> (length testdats) 1))
+				(iterated     (> (length test-ids) 1))
 				(first-rownum #f)
-				(num-items    (length testdats))
+				(num-items    (length test-ids))
 				(item-num     0))
 			    (set! test-num (+ test-num 1))
 			    (for-each 
-			     (lambda (testdat)
-			       (let* ((event-time   (maptime (db:test-get-event_time   testdat)))
+			     (lambda (test-id)
+			       (let* ((testdat      (hash-table-ref tests-ht test-id))
+				      (event-time   (maptime (db:test-get-event_time   testdat)))
 				      (run-duration (* timescale (db:test-get-run_duration testdat)))
 				      (end-time     (+ event-time run-duration))
 				      (test-name    (db:test-get-testname     testdat))
@@ -2481,8 +2509,7 @@ Misc
 					 (print "processing " run-num " of " num-runs " runs " item-num " of " num-items " of test " test-name ", " test-num " of " num-tests " tests")))
 				 (let loop ((rownum run-start-row)) ;; (+ start-row 1)))
 				   (set! max-row (max rownum max-row)) ;; track the max row used
-				   (print "Allocating test")
-				   (time (if (dashboard:row-collision rowhash rownum event-time end-time)
+				   (if (dashboard:row-collision rowhash rownum event-time end-time)
 				       (loop (+ rownum 1))
 				       (let* ((lly (- sizey (* rownum row-height)))
 					      (uly (+ lly row-height))
@@ -2498,10 +2525,10 @@ Misc
 					       (set! first-rownum rownum)))
 					 (dashboard:add-bar rowhash rownum event-time end-time)
 					 (vg:add-obj-to-comp runcomp obj)
-					 (set! test-objs (cons obj test-objs))))))
+					 (set! test-objs (cons obj test-objs)))))
 				 ;; (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)
 				 ))
-			   testdats)
+			   test-ids)
 			    ;; If it is an iterated test put box around it now.
 			    (if iterated
 				(let* ((xtents (vg:get-extents-for-objs drawing test-objs))
@@ -2511,7 +2538,7 @@ Misc
 				       (uly (+ 0 (cadddr xtents))))
 				  (dashboard:add-bar rowhash first-rownum llx ulx num-rows:  num-items)
 				  (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly
-									     text:  (db:test-get-testname (car testdats))
+									     text:  (db:test-get-testname (hash-table-ref tests-ht (car test-ids)))
 									     font: "Helvetica -10"))))))
 			hierdat)
 		       ;; placeholder box
