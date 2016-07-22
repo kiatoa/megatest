@@ -1108,12 +1108,13 @@ Misc
 ;;
 (define (dashboard:run-times commondat tabdat #!key (tab-num #f))
   (let ((drawing               (vg:drawing-new))
-	(run-times-tab-updater (debug:catch-and-dump 
-				(lambda ()	
-				  (let ((tabdat        (dboard:common-get-tabdat commondat tab-num: tab-num)))
-				    (if tabdat
-					(dashboard:run-times-tab-updater commondat tabdat tab-num))))
-				"dashboard:run-times-tab-updater")))
+	(run-times-tab-updater (lambda ()	
+				 (debug:catch-and-dump 
+				  (lambda ()
+				    (let ((tabdat        (dboard:common-get-tabdat commondat tab-num: tab-num)))
+				      (if tabdat
+					  (dashboard:run-times-tab-updater commondat tabdat tab-num))))
+				  "dashboard:run-times-tab-updater"))))
     (dboard:tabdat-drawing-set! tabdat drawing)
     (dboard:commondat-add-updater commondat run-times-tab-updater tab-num: tab-num)
     (iup:split
@@ -2360,6 +2361,8 @@ Misc
 	    (car lst)
 	    lst)))
 
+;; sort a list of test-ids by the event _time using a hash table of id => testdat
+;;
 (define-inline (dboard:sort-testsdat-by-event-time test-ids tests-ht)
   (sort test-ids
 	(lambda (a b)
@@ -2398,10 +2401,11 @@ Misc
 					       (not (equal? (db:test-get-item-path tdat) ""))))
 					   tests-id-lst)))
 		   (if (not (null? item-tests)) ;; resist bad data, generally should not fail this condition
-		       (hash-table-set! tests 
+		       (hash-table-set! test-ids-by-name 
 					testname 
 					(dboard:sort-testsdat-by-event-time item-tests testsdat)))))))
 	 (hash-table-keys test-ids-by-name))
+	;; finally sort by the event time of the first test
 	(sort (hash-table-values test-ids-by-name)
 	      (lambda (a b)
 		(< (db:test-get-event_time (hash-table-ref testsdat (car a)))
