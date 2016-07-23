@@ -104,13 +104,13 @@
 
 ;; make a rectangle obj
 ;;
-(define (vg:make-rect-obj x1 y1 x2 y2 #!key (line-color #f)(fill-color #f)(text #f)(font #f))
-  (make-vg:obj type: 'r pts: (list x1 y1 x2 y2) text: text font: font line-color: line-color fill-color: fill-color extents: #f))
+(define (vg:make-rect-obj x1 y1 x2 y2 #!key (line-color #f)(fill-color #f)(text #f)(font #f)(extents #f))
+  (make-vg:obj type: 'r pts: (list x1 y1 x2 y2) text: text font: font line-color: line-color fill-color: fill-color extents: extents))
 
 ;; make a rectangle obj
-;;
-(define (vg:make-line-obj x1 y1 x2 y2 #!key (line-color #f)(fill-color #f)(text #f)(font #f))
-  (make-vg:obj type: 'r pts: (list x1 y1 x2 y2) text: text font: font line-color: line-color extents: #f))
+;; 
+(define (vg:make-line-obj x1 y1 x2 y2 #!key (line-color #f)(fill-color #f)(text #f)(font #f)(extents #f))
+  (make-vg:obj type: 'l pts: (list x1 y1 x2 y2) text: text font: font line-color: line-color extents: extents))
 
 ;; make a text obj
 ;;
@@ -119,7 +119,7 @@
 		      (font-size #f))
   (make-vg:obj type: 't pts: (list x1 y1) text: text 
 	       line-color: line-color fill-color: fill-color
-	       angle: angle font: font
+	       angle: angle font: font extents: #f
 	       attributes: (vg:make-attrib 'font-size font-size)))
 
 ;; proc takes startnum and endnum and yields scalef, per-grad and unitname
@@ -409,8 +409,8 @@
     (if (vg:obj-extents obj)
 	(vg:obj-extents obj)
 	(if (not text)
-	    pts
-	    (if (and text-xmax text-ymax)
+	    pts ;; no text
+	    (if (and text-xmax text-ymax) ;; have text
 		(let ((xt (list llx lly
 				(max ulx (+ llx text-xmax))
 				(max uly (+ lly text-ymax)))))
@@ -424,7 +424,8 @@
 						    (max uly (+ lly ymax)))))
 				      (vg:obj-extents-set! obj xt)
 				      xt))
-			pts))))))) ;; return extents 
+			pts)
+		    pts)))))) ;; return extents 
 
 ;; given a rect obj draw it on the canvas applying first the drawing
 ;; scale and offset
