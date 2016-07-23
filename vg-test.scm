@@ -1,17 +1,19 @@
-(use canvas-draw iup)
+(use canvas-draw iup foof-loop)
 (import canvas-draw-iup)
 
 (load "vg.scm")
 
-(define numtorun (if (> (length (argv)) 1)
-		     (string->number (cadr (argv)))
-		     1000))
+(define numtorun 1000)
+;; (if (> (length (argv)) 1)
+;; 		     (string->number (cadr (argv)))
+;; 		     1000))
 
 ;; (use trace)
 ;; (trace 
 ;;  vg:draw-rect
 ;;  vg:grow-rect
-;;  vg:components-get-extents)
+;;  vg:components-get-extents
+;;  vg:instances-get-extents)
 
 (define d1 (vg:drawing-new))
 (define l1 (vg:lib-new))
@@ -24,6 +26,10 @@
       (t1 (vg:make-text-obj 60 60 "The middle" font: "Helvetica, -10")))
   (vg:add-objs-to-comp c1 r1 r2 t1 bt1))
 
+(loop ((for x (up-from 0 (to 20))))
+       (loop ((for y (up-from 0 (to 20))))
+	     (vg:add-objs-to-comp c1 (vg:make-rect-obj x y (+ x 5)(+ y 5)))))
+      
 (let ((start (current-seconds)))
   (let loop ((i 0))
     (vg:add-obj-to-comp c1 (vg:make-rect-obj 0 0 100 100))
