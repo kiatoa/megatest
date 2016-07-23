@@ -1563,11 +1563,12 @@ Misc
       (conc "Kill " test-name)
       #:action
       (lambda (obj)
+        ;; (rmt:test-set-state-status-by-id run-id test-id "KILLREQ" #f #f)
 	(common:run-a-command
 	 (conc "megatest -set-state-status KILLREQ,n/a -target " target
                " -runname " runname
 	       " -testpatt " test-name
-	       " -state RUNNING"))))
+	       " -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))
      (iup:menu-item
       (conc "Clean " test-name)
       #:action
@@ -1580,8 +1581,9 @@ Misc
       "Start xterm"
       #:action
       (lambda (obj)
-	(let* ((cmd (conc (car (argv)) " -xterm " run-id "," test-id "&")))
-	  (system cmd))))
+        (dcommon:examine-xterm run-id test-id)))
+	;;(let* ((cmd (conc (car (argv)) " -xterm " run-id "," test-id "&")))
+	;; (system cmd))))
      (iup:menu-item
       "Edit testconfig"
       #:action
