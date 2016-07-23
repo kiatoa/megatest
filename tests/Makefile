@@ -10,7 +10,7 @@ IPADDR   := "-"
 RUNID    := 1
 SERVER    = 
 DEBUG     = 1
-LOGGING   = 
+LOGGING   = -log logs/$(RUNNAME)
 ROWS      = 20
 
 OS  = $(shell grep ID /etc/*-release|cut -d= -f2)

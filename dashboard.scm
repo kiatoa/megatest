@@ -2487,9 +2487,10 @@ Misc
 					     (if val (set! res (cons (list key val) res))))))
 				     (dboard:tabdat-dbkeys tabdat))
 			   res))
-	  (let ((allruns (if (null? (dboard:tabdat-not-done-runs tabdat))
-			     (dboard:tabdat-allruns tabdat)
-			     (dboard:tabdat-not-done-runs tabdat)))
+	  (let ((incdraw (not (null? (dboard:tabdat-not-done-runs tabdat)))) ;; if there are tests to draw from not-done-runs then this is an incremental draw
+		(allruns (if incdraw
+			     (dboard:tabdat-not-done-runs tabdat)
+			     (dboard:tabdat-allruns tabdat)))
 		(rowhash (make-hash-table)) ;; store me in tabdat
 		(cnv     (dboard:tabdat-cnv tabdat)))
 	    (print "allruns: " allruns)
@@ -2502,7 +2503,13 @@ Misc
 			    (doneruns '())
 			    (run-start-row 0))
 		(let* ((run       (dboard:rundat-run rundat))
-		       (hierdat   (dboard:tests-sort-by-time-group-by-item (dboard:rundat-tests rundat))) ;; hierarchial list of ids
+
+
+		       (not-drawn (dboard:rundat-tests-notdrawn-tests rundat))
+
+
+
+		       (hierdat   (or not-drawn (dboard:tests-sort-by-time-group-by-item (dboard:rundat-tests rundat)))) ;; hierarchial list of ids
 		       (tests-ht  (dboard:rundat-tests rundat))
 		       (all-tids  (hash-table-keys   tests-ht)) ;; (apply append hierdat)) ;; was testsdat
 		       (testsdat  (hash-table-values tests-ht))
