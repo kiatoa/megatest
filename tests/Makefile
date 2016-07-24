@@ -182,7 +182,7 @@ fullprep : cleanprep
 	cd fullrun;$(BINPATH)/dashboard -rows 15 &
 
 dashboard : cleanprep
-	cd fullrun && $(BINPATH)/dashboard -rows $(ROWS) &
+	cd fullrun && $(BINPATH)/dashboard -skip-version-check -rows $(ROWS) &
 
 newdashboard : cleanprep
 	cd fullrun && $(BINPATH)/newdashboard &
