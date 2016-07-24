@@ -169,6 +169,8 @@ Misc
   keys             ;; keys for this run (i.e. target components)
   numruns
   tot-runs
+  last-data-update ;; last time the data in allruns was updated
+  runs-mutex       ;; use to prevent parallel access to draw objects
 
   ;; Runs view
   buttondat 
@@ -256,6 +258,7 @@ Misc
 	      hide-not-hide:        #t
 	      item-test-names:      '()
 	      last-db-update:       0
+	      last-data-update:     0
 	      not-done-runs:        '()
 	      done-runs:            '()
 	      num-tests:            15
@@ -273,6 +276,7 @@ Misc
 	      view-changed:         #t
 	      run-start-row:        0
 	      max-row:              0
+	      runs-mutex:           (make-mutex)
 	      )))
     (dboard:setup-tabdat dat)
     (dboard:setup-num-rows dat)
@@ -313,6 +317,7 @@ Misc
   run
   tests-drawn    ;; list of id's already drawn on screen
   tests-notdrawn ;; list of id's NOT already drawn
+  rowsused       ;; hash of lists covering what areas used - replace with quadtree
   tests          ;; hash of id => testdat
   tests-by-name  ;; hash of testfullname => testdat
   key-vals
@@ -1120,7 +1125,14 @@ Misc
 				  (lambda ()
 				    (let ((tabdat        (dboard:common-get-tabdat commondat tab-num: tab-num)))
 				      (if tabdat
-					  (dashboard:run-times-tab-updater commondat tabdat tab-num))))
+					  (let ((last-data-update (dboard:tabdat-last-data-update tabdat))
+						(now-time         (current-seconds)))
+					    (dashboard:run-times-tab-canvas-updater commondat tabdat tab-num)
+					    (if (> (- now-time last-data-update) 5)
+						(begin
+						  (dashboard:run-times-tab-run-data-updater commondat tabdat tab-num)
+						  (dashboard:run-times-tab-layout-updater commondat tabdat tab-num)
+						  (dboard:tabdat-last-data-update-set! tabdat now-time)))))))
 				  "dashboard:run-times-tab-updater"))))
     (dboard:tabdat-drawing-set! tabdat drawing)
     (dboard:commondat-add-updater commondat run-times-tab-updater tab-num: tab-num)
@@ -1142,8 +1154,7 @@ Misc
 			     (if (number? run-id)
 				 (begin
 				   (dboard:tabdat-curr-run-id-set! tabdat run-id)
-				   ;; (dashboard:update-run-summary-tab)
-				   )
+				   (dboard:tabdat-view-changed-set! tabdat #t))
 				 (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id))))
 			 "treebox"))
 			;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
@@ -1162,7 +1173,10 @@ Misc
 				    (debug:catch-and-dump
 				     (lambda ()
 				       (if (not (dboard:tabdat-cnv tabdat))
-					   (dboard:tabdat-cnv-set! tabdat c))
+					   (let ((cnv     (dboard:tabdat-cnv tabdat)))
+					     (dboard:tabdat-cnv-set! tabdat c)
+					     (vg:drawing-cnv-set! (dboard:tabdat-drawing tabdat)
+								  (dboard:tabdat-cnv tabdat))))
 				       (let ((drawing (dboard:tabdat-drawing tabdat))
 					     (old-xadj (dboard:tabdat-xadj   tabdat))
 					     (old-yadj (dboard:tabdat-yadj   tabdat)))
@@ -2418,16 +2432,10 @@ Misc
 		(< (db:test-get-event_time (hash-table-ref testsdat (car a)))
 		   (db:test-get-event_time (hash-table-ref testsdat (car b))))))))))
 
-(define (dashboard:run-times-tab-updater commondat tabdat tab-num)
-  ;; each test is an object in the run component
-  ;; each run is a component
-  ;; all runs stored in runslib library
-  (let* ((canvas-margin 10)
-	 ;; (start-row     0) ;; each run starts in this row
-	 ;; (run-start-row 0)
-	 ;; (max-row       0) ;; the max row seen for this run
-	 (row-height    10)
-	 (runs-dat      (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
+;; run times tab data updater
+;;
+(define (dashboard:run-times-tab-run-data-updater commondat tabdat tab-num)
+  (let* ((runs-dat      (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
 	 (runs-header   (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 	 (runs-hash     (let ((ht (make-hash-table)))
 			  (for-each (lambda (run)
@@ -2443,54 +2451,75 @@ Misc
 				  (< time-a time-b)))))
 	 (tb            (dboard:tabdat-runs-tree tabdat))
 	 (num-runs      (length (hash-table-keys runs-hash)))
-	 (update-start-time (current-seconds)))
+	 (update-start-time (current-seconds))
+	 (inc-mode      #f))
     ;; fill in the tree
-    (if tb (for-each (lambda (run-id)
-		       (let* ((run-record (hash-table-ref/default runs-hash run-id #f))
-			      (key-vals   (map (lambda (key)(db:get-value-by-header run-record runs-header key))
-					       (dboard:tabdat-keys tabdat)))
-			      (run-name   (db:get-value-by-header run-record runs-header "runname"))
-			      (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
-			      (run-path   (append key-vals (list run-name)))
-			      (existing   (tree:find-node tb run-path)))
-			 (if (not (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) run-path #f))
-			     (begin
-			       (hash-table-set! (dboard:tabdat-run-keys tabdat) run-id run-path)
-			       ;; (iup:attribute-set! (dboard:tabdat-runs-matrix tabdat)
-			       ;;    		 (conc rownum ":" colnum) col-name)
-			       ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
-			       ;; Here we update the tests treebox and tree keys
-			       (tree:add-node tb "Runs" run-path ;; (append key-vals (list run-name))
-					      userdata: (conc "run-id: " run-id))
-			       (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
-			       ;; (set! colnum (+ colnum 1))
-			       ))))
-		     run-ids))
-    ;;
-    (if (and tabdat
-	     (dboard:tabdat-view-changed tabdat))
+    (if (and tb 
+	     (not inc-mode))
+	(for-each
+	 (lambda (run-id)
+	   (let* ((run-record (hash-table-ref/default runs-hash run-id #f))
+		  (key-vals   (map (lambda (key)(db:get-value-by-header run-record runs-header key))
+				   (dboard:tabdat-keys tabdat)))
+		  (run-name   (db:get-value-by-header run-record runs-header "runname"))
+		  (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
+		  (run-path   (append key-vals (list run-name)))
+		  (existing   (tree:find-node tb run-path)))
+	     (if (not (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) run-path #f))
+		 (begin
+		   (hash-table-set! (dboard:tabdat-run-keys tabdat) run-id run-path)
+		   ;; Here we update the tests treebox and tree keys
+		   (tree:add-node tb "Runs" run-path ;; (append key-vals (list run-name))
+				  userdata: (conc "run-id: " run-id))
+		   (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
+		   ;; (set! colnum (+ colnum 1))
+		   ))))
+	 run-ids))
+    (print "Updating rundat")
+    (update-rundat tabdat
+		   "%" ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") 
+		   100  ;; (dboard:tabdat-numruns tabdat)
+		   "%" ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
+		   ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
+		   (let ((res '()))
+		     (for-each (lambda (key)
+				 (if (not (equal? key "runname"))
+				     (let ((val (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) key #f)))
+				       (if val (set! res (cons (list key val) res))))))
+			       (dboard:tabdat-dbkeys tabdat))
+		     res))))
+
+;; run times canvas updater
+;;
+(define (dashboard:run-times-tab-canvas-updater commondat tabdat tab-num)
+  (let ((cnv (dboard:tabdat-cnv tabdat))
+	(dwg (dboard:tabdat-drawing tabdat))
+	(mtx (dboard:tabdat-runs-mutex tabdat)))
+    (if (and cnv dwg)
+	(begin
+	  (mutex-lock! mtx)
+	  (canvas-clear! cnv)
+	  (vg:draw dwg tabdat)
+	  (mutex-unlock! mtx)
+	  (dboard:tabdat-view-changed-set! tabdat #f)))))
+  
+;; run times tab
+;;
+(define (dashboard:run-times-tab-layout-updater commondat tabdat tab-num)
+  ;; each test is an object in the run component
+  ;; each run is a component
+  ;; all runs stored in runslib library
+  (let* ((canvas-margin 10)
+	 (row-height    10)
+	 (not-done-runs (dboard:tabdat-not-done-runs tabdat))
+	 (mtx           (dboard:tabdat-runs-mutex tabdat))) 
+    (if tabdat
 	(let* ((drawing    (dboard:tabdat-drawing tabdat))
 	       (runslib    (vg:get/create-lib drawing "runslib")) ;; creates and adds lib
 	       (compute-start (current-seconds)))
 	  (vg:drawing-xoff-set! drawing (dboard:tabdat-xadj tabdat))
 	  (vg:drawing-yoff-set! drawing (dboard:tabdat-yadj tabdat))
-	  (print "Updating rundat")
-	  (update-rundat tabdat
-			 "%" ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") 
-			 100  ;; (dboard:tabdat-numruns tabdat)
-			 "%" ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
-			 ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
-			 (let ((res '()))
-			   (for-each (lambda (key)
-				       (if (not (equal? key "runname"))
-					   (let ((val (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) key #f)))
-					     (if val (set! res (cons (list key val) res))))))
-				     (dboard:tabdat-dbkeys tabdat))
-			   res))
-	  (let ((incdraw (not (null? (dboard:tabdat-not-done-runs tabdat)))) ;; if there are tests to draw from not-done-runs then this is an incremental draw
-		(allruns (if incdraw
-			     (dboard:tabdat-not-done-runs tabdat)
-			     (dboard:tabdat-allruns tabdat)))
+	  (let ((allruns (dboard:tabdat-allruns tabdat))
 		(rowhash (make-hash-table)) ;; store me in tabdat
 		(cnv     (dboard:tabdat-cnv tabdat)))
 	    (print "allruns: " allruns)
@@ -2503,139 +2532,139 @@ Misc
 			    (doneruns '())
 			    (run-start-row 0))
 		(let* ((run       (dboard:rundat-run rundat))
-
-
-		       (not-drawn (dboard:rundat-tests-notdrawn-tests rundat))
-
-
-
-		       (hierdat   (or not-drawn (dboard:tests-sort-by-time-group-by-item (dboard:rundat-tests rundat)))) ;; hierarchial list of ids
-		       (tests-ht  (dboard:rundat-tests rundat))
-		       (all-tids  (hash-table-keys   tests-ht)) ;; (apply append hierdat)) ;; was testsdat
-		       (testsdat  (hash-table-values tests-ht))
 		       (key-val-dat (dboard:rundat-key-vals rundat))
 		       (run-id   (db:get-value-by-header run (dboard:tabdat-header tabdat) "id"))
 		       (key-vals (append key-val-dat
 					 (list (let ((x (db:get-value-by-header run (dboard:tabdat-header tabdat) "runname")))
 						 (if x x "")))))
 		       (run-key  (string-intersperse key-vals "\n"))
-		       (run-full-name (string-intersperse key-vals "/"))
-		       (runcomp  (vg:comp-new));; new component for this run
-		       (rows-used (make-hash-table)) ;; keep track of what parts of the rows are used here row1 = (obj1 obj2 ...)
-		       ;; (row-height 4)
-		       (run-start  (dboard:min-max < (map db:test-get-event_time testsdat)))
-		       (run-end    (dboard:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat)))
-		       (timeoffset (- (+ originx canvas-margin) run-start))
-		       (run-duration (- run-end run-start))
-		       (timescale  (/ (- sizex (* 2 canvas-margin))
-				      (if (> run-duration 0)
-					  run-duration
-					  (current-seconds)))) ;; a least lously guess
-		       (maptime    (lambda (tsecs)(* timescale (+ tsecs timeoffset))))
-		       (num-tests  (length hierdat))
-		       (tot-tests  (length testsdat))
-		       (new-run-start-row (+ (dboard:tabdat-max-row tabdat) 2)))
-		  ;; (print "timescale: " timescale " timeoffset: " timeoffset " sizex: " sizex " originx: " originx)
-		  (vg:add-comp-to-lib runslib run-full-name runcomp)
-		  ;; (set! run-start-row (+ max-row 2))
-		  ;; (dboard:tabdat-start-row-set! tabdat (+ new-run-start-row 1))
-		  ;; get tests in list sorted by event time ascending
-		  (let testsloop ((test-ids  (car hierdat))              ;; loop on tests (NOTE: not items!)
-				 (tests-tal (cdr hierdat))
-				 (test-num  1))
-		     (let ((test-objs   '())
-			   (iterated     (> (length test-ids) 1))
-			   (first-rownum #f)
-			   (num-items    (length test-ids)))
-		       (let testitemloop ((test-id  (car test-ids))    ;; loop on test or test items
-					  (tidstal  (cdr test-ids))
-					  (item-num 1))
-			 (let* ((testdat      (hash-table-ref tests-ht test-id))
-				(event-time   (maptime (db:test-get-event_time   testdat)))
-				(run-duration (* timescale (db:test-get-run_duration testdat)))
-				(end-time     (+ event-time run-duration))
-				(test-name    (db:test-get-testname     testdat))
-				(item-path    (db:test-get-item-path    testdat))
-				(state         (db:test-get-state       testdat))
-				(status        (db:test-get-status      testdat))
-				(test-fullname (conc test-name "/" item-path))
-				(name-color    (gutils:get-color-for-state-status state status)))
-			   ;; (print "event_time: " (db:test-get-event_time   testdat) " mapped event_time: " event-time)
-			   ;; (print "run-duration: "  (db:test-get-run_duration testdat) " mapped run_duration: " run-duration)
-			   (if (> item-num 50)
-			       (if (eq? 0 (modulo item-num 50))
-				   (print "processing " run-num " of " num-runs " runs " item-num " of " num-items " of test " test-name ", " test-num " of " num-tests " tests")))
-			   (let loop ((rownum new-run-start-row)) ;; (+ start-row 1)))
-			     (dboard:tabdat-max-row-set! tabdat (max rownum (dboard:tabdat-max-row tabdat))) ;; track the max row used
-			     (if (dashboard:row-collision rowhash rownum event-time end-time)
-				 (loop (+ rownum 1))
-				 (let* ((lly (- sizey (* rownum row-height)))
-					(uly (+ lly row-height))
-					(obj (vg:make-rect-obj event-time lly end-time uly
-							       fill-color: (vg:iup-color->number (car name-color))
-							       text: (if iterated item-path test-name)
-							       font: "Helvetica -10")))
-				   ;; (if iterated
-				   ;;     (dashboard:add-bar rowhash (- rownum 1) event-time end-time num-rows: (+ 1 num-items))
-				   (if (not first-rownum)
-				       (begin
-					 (dashboard:row-collision rowhash (- rownum 1) event-time end-time num-rows: num-items)
-					 (set! first-rownum rownum)))
-				   (dashboard:add-bar rowhash rownum event-time end-time)
-				   (vg:add-obj-to-comp runcomp obj)
-				   (set! test-objs (cons obj test-objs)))))
-			   ;; (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)
-			   (if (not (null? tidstal))
-			       (testitemloop (car tidstal)(cdr tidstal)(+ item-num 1)))))
-		       ;; If it is an iterated test put box around it now.
-		       (if iterated
-			   (let* ((xtents (vg:get-extents-for-objs drawing test-objs))
-				  (llx (- (car xtents)   5))
-				  (lly (- (cadr xtents) 10))
-				  (ulx (+ 5 (caddr xtents)))
-				  (uly (+ 0 (cadddr xtents))))
-			     (dashboard:add-bar rowhash first-rownum llx ulx num-rows:  num-items)
-			     (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly
-									   text:  (db:test-get-testname (hash-table-ref tests-ht (car test-ids)))
-									   font: "Helvetica -10"))))
-		       (if (not (null? tests-tal))
-			   (testsloop  (car tests-tal)(cdr tests-tal)(+ test-num 1)))))
-		 ;; placeholder box
-		 (dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat) 1))
-		 (let ((y   (- sizey (* (dboard:tabdat-max-row tabdat) row-height))))
-		   (vg:add-obj-to-comp runcomp (vg:make-rect-obj 0 y 0 y)))
-		 ;; instantiate the component 
-		 (let* ((extents   (vg:components-get-extents drawing runcomp))
-			;; move the following into mapping functions in vg.scm
-			;; (deltax    (- llx ulx))
-			;; (scalex    (if (> deltax 0)(/ sizex deltax) 1))
-			;; (sllx      (* scalex llx))
-			;; (offx      (- sllx originx))
-			(new-xtnts (apply vg:grow-rect 5 5 extents))
-			(llx       (list-ref new-xtnts 0))
-			(lly       (list-ref new-xtnts 1))
-			(ulx       (list-ref new-xtnts 2))
-			(uly       (list-ref new-xtnts 3))
-			) ;;  (vg:components-get-extents d1 c1)))
-		   (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly text: run-full-name))
-		   (vg:instantiate drawing "runslib" run-full-name run-full-name 0 0))
-		 (dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat) 1)))
-		;; end of the run handling loop 
-		(let ((newdoneruns (cons rundat doneruns)))
-		  (if (null? runtal)
-		      (begin
-			(dboard:tabdat-not-done-runs-set! tabdat '())
-			(dboard:tabdat-done-runs-set! tabdat allruns))
-		      (if (> (- (current-seconds) update-start-time) 5)
-			  (begin
-			    (print "drawing runs taking too long....  have " (length runtal) " remaining")
-			    (dboard:tabdat-done-runs-set! tabdat newdoneruns) ;; taking too long? stop here!
-			    (dboard:tabdat-not-done-runs-set! tabdat runtal))
-			  (runloop (car runtal)(cdr runtal) (+ run-num 1) newdoneruns new-run-start-row)))))
-	      (vg:drawing-cnv-set! (dboard:tabdat-drawing tabdat)(dboard:tabdat-cnv tabdat)) ;; cnv-obj)
-	      (canvas-clear! (dboard:tabdat-cnv tabdat)) ;; -obj)
-	      (print "Number of objs: " (length (vg:draw (dboard:tabdat-drawing tabdat) #t)))
-	      (dboard:tabdat-view-changed-set! tabdat #f)
+		       (run-full-name (string-intersperse key-vals "/")))
+		  (if (not (vg:lib-get-component runslib run-full-name))
+		      (let* ((hierdat   (dboard:tests-sort-by-time-group-by-item (dboard:rundat-tests rundat))) ;; hierarchial list of ids
+			     (tests-ht  (dboard:rundat-tests rundat))
+			     (all-tids  (hash-table-keys   tests-ht)) ;; (apply append hierdat)) ;; was testsdat
+			     (testsdat  (hash-table-values tests-ht))
+			     (runcomp   (vg:comp-new));; new component for this run
+			     (rows-used (make-hash-table)) ;; keep track of what parts of the rows are used here row1 = (obj1 obj2 ...)
+			     ;; (row-height 4)
+			     (run-start  (dboard:min-max < (map db:test-get-event_time testsdat)))
+			     (run-end    (dboard:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat)))
+			     (timeoffset (- (+ originx canvas-margin) run-start))
+			     (run-duration (- run-end run-start))
+			     (timescale  (/ (- sizex (* 2 canvas-margin))
+					    (if (> run-duration 0)
+						run-duration
+						(current-seconds)))) ;; a least lously guess
+			     (maptime    (lambda (tsecs)(* timescale (+ tsecs timeoffset))))
+			     (num-tests  (length hierdat))
+			     (tot-tests  (length testsdat))
+			     (new-run-start-row (+ (dboard:tabdat-max-row tabdat) 2)))
+			;; (print "timescale: " timescale " timeoffset: " timeoffset " sizex: " sizex " originx: " originx)
+			(mutex-lock! mtx)
+			(vg:add-comp-to-lib runslib run-full-name runcomp)
+			(mutex-unlock! mtx)
+			;; (set! run-start-row (+ max-row 2))
+			;; (dboard:tabdat-start-row-set! tabdat (+ new-run-start-row 1))
+			;; get tests in list sorted by event time ascending
+			(let testsloop ((test-ids  (car hierdat))              ;; loop on tests (NOTE: not items!)
+					(tests-tal (cdr hierdat))
+					(test-num  1))
+			  (let ((test-objs   '())
+				(iterated     (> (length test-ids) 1))
+				(first-rownum #f)
+				(num-items    (length test-ids)))
+			    (let testitemloop ((test-id  (car test-ids))    ;; loop on test or test items
+					       (tidstal  (cdr test-ids))
+					       (item-num 1))
+			      (let* ((testdat      (hash-table-ref tests-ht test-id))
+				     (event-time   (maptime (db:test-get-event_time   testdat)))
+				     (run-duration (* timescale (db:test-get-run_duration testdat)))
+				     (end-time     (+ event-time run-duration))
+				     (test-name    (db:test-get-testname     testdat))
+				     (item-path    (db:test-get-item-path    testdat))
+				     (state         (db:test-get-state       testdat))
+				     (status        (db:test-get-status      testdat))
+				     (test-fullname (conc test-name "/" item-path))
+				     (name-color    (gutils:get-color-for-state-status state status)))
+				;; (print "event_time: " (db:test-get-event_time   testdat) " mapped event_time: " event-time)
+				;; (print "run-duration: "  (db:test-get-run_duration testdat) " mapped run_duration: " run-duration)
+				(if (> item-num 50)
+				    (if (eq? 0 (modulo item-num 50))
+					(print "processing " run-num " of " num-runs " runs " item-num " of " num-items " of test " test-name ", " test-num " of " num-tests " tests")))
+				(let loop ((rownum new-run-start-row)) ;; (+ start-row 1)))
+				  (dboard:tabdat-max-row-set! tabdat (max rownum (dboard:tabdat-max-row tabdat))) ;; track the max row used
+				  (if (dashboard:row-collision rowhash rownum event-time end-time)
+				      (loop (+ rownum 1))
+				      (let* ((lly (- sizey (* rownum row-height)))
+					     (uly (+ lly row-height))
+					     (obj (vg:make-rect-obj event-time lly end-time uly
+								    fill-color: (vg:iup-color->number (car name-color))
+								    text: (if iterated item-path test-name)
+								    font: "Helvetica -10")))
+					;; (if iterated
+					;;     (dashboard:add-bar rowhash (- rownum 1) event-time end-time num-rows: (+ 1 num-items))
+					(if (not first-rownum)
+					    (begin
+					      (dashboard:row-collision rowhash (- rownum 1) event-time end-time num-rows: num-items)
+					      (set! first-rownum rownum)))
+					(dashboard:add-bar rowhash rownum event-time end-time)
+					(vg:add-obj-to-comp runcomp obj)
+					(set! test-objs (cons obj test-objs)))))
+				;; (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)
+				(let ((newdoneruns (cons rundat doneruns)))
+				  (if (not (null? tidstal))
+				      (if #f ;; (> (- (current-seconds) update-start-time) 5)
+					  (begin
+					    (print "drawing runs taking too long....  have " (length runtal) " remaining")
+					    ;; (dboard:tabdat-done-runs-set! tabdat newdoneruns) ;; taking too long? stop here!
+					    ;; (dboard:tabdat-not-done-runs-set! tabdat runtal)
+					    )
+					  (testitemloop (car tidstal)(cdr tidstal)(+ item-num 1)))))))
+			    ;; If it is an iterated test put box around it now.
+			    (if iterated
+				(let* ((xtents (vg:get-extents-for-objs drawing test-objs))
+				       (llx (- (car xtents)   5))
+				       (lly (- (cadr xtents) 10))
+				       (ulx (+ 5 (caddr xtents)))
+				       (uly (+ 0 (cadddr xtents))))
+				  (dashboard:add-bar rowhash first-rownum llx ulx num-rows:  num-items)
+				  (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly
+										text:  (db:test-get-testname (hash-table-ref tests-ht (car test-ids)))
+										font: "Helvetica -10"))))
+			    (if (not (null? tests-tal))
+				(if #f ;; (> (- (current-seconds) update-start-time) 5)
+				    (print "drawing runs taking too long")
+				    (testsloop  (car tests-tal)(cdr tests-tal)(+ test-num 1))))))
+			;; placeholder box
+			(dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat) 1))
+			(let ((y   (- sizey (* (dboard:tabdat-max-row tabdat) row-height))))
+			  (vg:add-obj-to-comp runcomp (vg:make-rect-obj 0 y 0 y)))
+			;; instantiate the component
+			(mutex-lock! mtx)
+			(let* ((extents   (vg:components-get-extents drawing runcomp))
+			       (new-xtnts (apply vg:grow-rect 5 5 extents))
+			       (llx       (list-ref new-xtnts 0))
+			       (lly       (list-ref new-xtnts 1))
+			       (ulx       (list-ref new-xtnts 2))
+			       (uly       (list-ref new-xtnts 3))
+			       ) ;;  (vg:components-get-extents d1 c1)))
+			  (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly text: run-full-name))
+			  (vg:instantiate drawing "runslib" run-full-name run-full-name 0 0))
+			(mutex-unlock! mtx)
+			(dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat) 1)))
+		      ;; end of the run handling loop 
+		      (let ((newdoneruns (cons rundat doneruns)))
+			(if (null? runtal)
+			    (begin
+			      (dboard:tabdat-not-done-runs-set! tabdat '())
+			      (dboard:tabdat-done-runs-set! tabdat allruns))
+			    (if #f ;; (> (- (current-seconds) update-start-time) 5)
+				(begin
+				  (print "drawing runs taking too long....  have " (length runtal) " remaining")
+				  ;; (dboard:tabdat-done-runs-set! tabdat newdoneruns) ;; taking too long? stop here!
+				  ;; (time (vg:draw (dboard:tabdat-drawing tabdat) #t))
+				  (dboard:tabdat-not-done-runs-set! tabdat runtal))
+				(runloop (car runtal)(cdr runtal) (+ run-num 1) newdoneruns new-run-start-row)))))))
 	      )))
 	(debug:print 2 *default-log-port* "no tabdat for run-times-tab-updater"))))
 
