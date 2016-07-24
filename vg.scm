@@ -181,6 +181,11 @@
   (let ((inst (make-vg:inst libname: libname compname: compname xoff: xoff yoff: yoff theta: theta scalex: scalex scaley: scaley mirrx: mirrx mirry: mirry)) )
     (hash-table-set! (vg:drawing-insts drawing) instname inst)))
 
+(define (vg:instance-move drawing instname newx newy)
+  (let ((inst (hash-table-ref (vg:drawing-insts drawing) instname)))
+    (vg:inst-xoff-set! inst newx)
+    (vg:inst-yoff-set! inst newy)))
+
 ;; get component from drawing (look in apropriate lib) given libname and compname
 (define (vg:get-component drawing libname compname)
   (let* ((lib  (hash-table-ref (vg:drawing-libs drawing) libname))
@@ -204,7 +209,7 @@
   (if (not r1)
       r2
       (if (not r2)
-	  #f ;; no extents from #f #f
+	  r1 ;; #f ;; no extents from #f #f
 	  (list (min (car r1)(car r2))           ;; llx
 		(min (cadr r1)(cadr r2))         ;; lly
 		(max (caddr r1)(caddr r2))       ;; ulx
