@@ -330,6 +330,9 @@
      xtnt-lst)
     (list llx lly ulx uly)))
 
+(define (vg:lib-get-component lib instname)
+  (hash-table-ref/default  (vg:lib-comps lib) instname #f))
+
 ;;======================================================================
 ;; color
 ;;======================================================================
@@ -582,18 +585,20 @@
 	(res   '()))
     (for-each 
      (lambda (instname)
-       (let* ((inst     (hash-table-ref insts instname))
-	      (libname  (vg:inst-libname inst))
-	      (compname (vg:inst-compname inst))
-	      (comp     (vg:get-component drawing libname compname)))
-	 ;; (print "comp: " comp)
-	 (for-each
-	  (lambda (obj)
-	    ;; (print "obj: " (vg:obj-pts obj))
-	    (let ((obj-xfrmd (vg:map-obj drawing inst obj)))
-	      ;; (print "obj-xfrmd: " (vg:obj-pts obj-xfrmd))
-	      (set! res (cons (vg:draw-obj drawing obj-xfrmd draw: draw-mode) res)))) ;;
-	  (vg:comp-objs comp))))
+       (let* ((inst     (hash-table-ref/default insts instname #f)))
+	 (if inst
+	     (let* ((libname  (vg:inst-libname inst))
+		    (compname (vg:inst-compname inst))
+		    (comp     (vg:get-component drawing libname compname)))
+	       ;; (print "comp: " comp)
+	       (for-each
+		(lambda (obj)
+		  ;; (print "obj: " (vg:obj-pts obj))
+		  (let ((obj-xfrmd (vg:map-obj drawing inst obj)))
+		    ;; (print "obj-xfrmd: " (vg:obj-pts obj-xfrmd))
+		    (set! res (cons (vg:draw-obj drawing obj-xfrmd draw: draw-mode) res)))) ;;
+		(vg:comp-objs comp)))
+	     (print "no such instance " instname))))
      (if (null? instnames)
 	 (hash-table-keys insts)
 	 instnames))
