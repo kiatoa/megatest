@@ -2535,7 +2535,8 @@ Misc
 	    (let*-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
 			  ((originx originy)             (canvas-origin cnv))
 			  ((calc-y)             (lambda (rownum)
-						  (- sizey (* rownum row-height)))))
+						 ;;  (- sizey
+						  (* rownum row-height))))
 	      ;; (print "allruns: " allruns)
 	      (let runloop ((rundat   (car allruns))
 			    (runtal   (cdr allruns))
