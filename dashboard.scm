@@ -2527,15 +2527,16 @@ Misc
   (let* ((canvas-margin 10)
 	 (row-height    10)
 	 (not-done-runs (dboard:tabdat-not-done-runs tabdat))
-	 (mtx           (dboard:tabdat-runs-mutex tabdat))) 
+	 (mtx           (dboard:tabdat-runs-mutex tabdat))
+	 (compute-start (current-seconds)))
     (if tabdat
 	(let* ((drawing    (dboard:tabdat-drawing tabdat))
-	       (runslib    (vg:get/create-lib drawing "runslib")) ;; creates and adds lib
-	       (compute-start (current-seconds)))
+	       (runslib    (vg:get/create-lib drawing "runslib"))) ;; creates and adds lib
+	  (print "layout start: " compute-start)
 	  (let* ((allruns (dboard:tabdat-allruns tabdat))
 		 (num-runs (length allruns))
 		 (cnv     (dboard:tabdat-cnv tabdat)))
-	    (print "allruns: " allruns)
+	    ;; (print "allruns: " allruns)
 	    (let*-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
 			  ((originx originy)             (canvas-origin cnv))
 			  ((calc-y)             (lambda (rownum)
@@ -2545,7 +2546,8 @@ Misc
 	      (let runloop ((rundat   (car allruns))
 			    (runtal   (cdr allruns))
 			    (run-num   1)
-			    (doneruns '()))
+			    (doneruns '())
+			    (run-draw-start-time (current-seconds)))
 		(let* ((run         (dboard:rundat-run rundat))
 		       (rowhash     (make-hash-table)) ;; store me in tabdat
 		       (key-val-dat (dboard:rundat-key-vals rundat))
@@ -2556,7 +2558,7 @@ Misc
 		       (run-key  (string-intersperse key-vals "\n"))
 		       (run-full-name (string-intersperse key-vals "/"))
 		       (curr-run-start-row  (dboard:tabdat-max-row tabdat)))
-		  (print "run: " run-full-name " curr-run-start-row: " curr-run-start-row)
+		  ;; (print "run: " run-full-name " curr-run-start-row: " curr-run-start-row)
 		  (if (not (vg:lib-get-component runslib run-full-name))
 		      (let* ((hierdat   (dboard:tests-sort-by-time-group-by-item (dboard:rundat-tests rundat))) ;; hierarchial list of ids
 			     (tests-ht  (dboard:rundat-tests rundat))
@@ -2691,7 +2693,9 @@ Misc
 				  ;; (dboard:tabdat-done-runs-set! tabdat newdoneruns) ;; taking too long? stop here!
 				  ;; (time (vg:draw (dboard:tabdat-drawing tabdat) #t))
 				  (dboard:tabdat-not-done-runs-set! tabdat runtal))
-				(runloop (car runtal)(cdr runtal) (+ run-num 1) newdoneruns))))))) ;;  new-run-start-row
+				(begin
+				  (print "Layout end: " (current-seconds))
+				  (runloop (car runtal)(cdr runtal) (+ run-num 1) newdoneruns (current-seconds))))))))) ;;  new-run-start-row
 	      )))
 	(debug:print 2 *default-log-port* "no tabdat for run-times-tab-updater"))))
 
