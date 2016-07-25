@@ -190,6 +190,8 @@ Misc
   run-start-row
   max-row
   running-layout
+  originx
+  originy
 
   ;; Controls used to launch runs etc.
   command
@@ -265,6 +267,8 @@ Misc
 	      done-runs:            '()
 	      num-tests:            15
 	      numruns:              16
+	      originx:              #f
+	      originy:              #f
 	      path-run-ids:         (make-hash-table)
 	      run-ids:              (make-hash-table)
 	      run-keys:             (make-hash-table)
@@ -1194,8 +1198,8 @@ Misc
 					     (begin
 					       (print  "xadj: " xadj " yadj: " yadj "changed: "(eq? xadj old-xadj) " " (eq? yadj old-yadj))
 					       (dboard:tabdat-view-changed-set! tabdat #t)
-					       (dboard:tabdat-xadj-set! tabdat (* -1000 (- xadj 0.5)))
-					       (dboard:tabdat-yadj-set! tabdat (*  1000 (- yadj 0.5)))
+					       (dboard:tabdat-xadj-set! tabdat (* -2000 (- xadj 0.5)))
+					       (dboard:tabdat-yadj-set! tabdat (*  2000 (- yadj 0.5)))
 					       ))))
 				     "iup:canvas action")))
 		       #:wheel-cb  (lambda (obj step x y dir) ;; dir is 4 for up and 5 for down. I think.
@@ -2527,27 +2531,36 @@ Misc
   (let* ((canvas-margin 10)
 	 (row-height    10)
 	 (not-done-runs (dboard:tabdat-not-done-runs tabdat))
-	 (mtx           (dboard:tabdat-runs-mutex tabdat))
-	 (compute-start (current-seconds)))
+	 (mtx           (dboard:tabdat-runs-mutex tabdat)))
     (if tabdat
 	(let* ((drawing    (dboard:tabdat-drawing tabdat))
-	       (runslib    (vg:get/create-lib drawing "runslib"))) ;; creates and adds lib
-	  (print "layout start: " compute-start)
+	       (runslib    (vg:get/create-lib drawing "runslib")) ;; creates and adds lib
+	       (layout-start (current-milliseconds)))
+	  (print "layout start: " (current-milliseconds) " layout-start: " layout-start)
 	  (let* ((allruns (dboard:tabdat-allruns tabdat))
 		 (num-runs (length allruns))
 		 (cnv     (dboard:tabdat-cnv tabdat)))
 	    ;; (print "allruns: " allruns)
 	    (let*-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
 			  ((originx originy)             (canvas-origin cnv))
-			  ((calc-y)             (lambda (rownum)
-						  (- (/ sizey 2)
-						     (* rownum row-height)))))
+			  ((calc-y)                      (lambda (rownum)
+							   (- (/ sizey 2)
+							      (* rownum row-height))))
+			  ((fixed-originx)               (if (dboard:tabdat-originx tabdat)
+							     (dboard:tabdat-originx tabdat)
+							     (begin
+							       (dboard:tabdat-originx-set! tabdat originx)
+							       originx)))
+			  ((fixed-originy)               (if (dboard:tabdat-originy tabdat)
+							     (dboard:tabdat-originy tabdat)
+							     (begin
+							       (dboard:tabdat-originy-set! tabdat originy)
+							       originy))))
 	      ;; (print "allruns: " allruns)
 	      (let runloop ((rundat   (car allruns))
 			    (runtal   (cdr allruns))
 			    (run-num   1)
-			    (doneruns '())
-			    (run-draw-start-time (current-seconds)))
+			    (doneruns '()))
 		(let* ((run         (dboard:rundat-run rundat))
 		       (rowhash     (make-hash-table)) ;; store me in tabdat
 		       (key-val-dat (dboard:rundat-key-vals rundat))
@@ -2569,7 +2582,7 @@ Misc
 			     ;; (row-height 4)
 			     (run-start  (dboard:min-max < (map db:test-get-event_time testsdat)))
 			     (run-end    (dboard:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat)))
-			     (timeoffset (- (+ originx canvas-margin) run-start))
+			     (timeoffset (- (+ fixed-originx canvas-margin) run-start))
 			     (run-duration (- run-end run-start))
 			     (timescale  (/ (- sizex (* 2 canvas-margin))
 					    (if (> run-duration 0)
@@ -2579,6 +2592,7 @@ Misc
 			     (num-tests  (length hierdat))
 			     (tot-tests  (length testsdat))
 			     )
+			(print "Testing. (maptime run-start=" run-start "): " (maptime run-start) " (maptime run-end=" run-end "): " (maptime run-end) " run-duration: " run-duration)
 			;; (print "timescale: " timescale " timeoffset: " timeoffset " sizex: " sizex " originx: " originx)
 			(mutex-lock! mtx)
 			(vg:add-comp-to-lib runslib run-full-name runcomp)
@@ -2591,74 +2605,74 @@ Misc
 			(let testsloop ((test-ids  (car hierdat))              ;; loop on tests (NOTE: not items!)
 					(tests-tal (cdr hierdat))
 					(test-num  1))
-			  (let ((test-objs   '())
-				(iterated     (> (length test-ids) 1))
+			  (let ((iterated     (> (length test-ids) 1))
 				(first-rownum #f)
 				(num-items    (length test-ids)))
 			    (let testitemloop ((test-id  (car test-ids))    ;; loop on test or test items
 					       (tidstal  (cdr test-ids))
-					       (item-num 1))
+					       (item-num 1)
+					       (test-objs '()))
 			      (let* ((testdat      (hash-table-ref tests-ht test-id))
 				     (event-time   (maptime (db:test-get-event_time   testdat)))
-				     (run-duration (* timescale (db:test-get-run_duration testdat)))
-				     (end-time     (+ event-time run-duration))
+				     (test-duration (* timescale (db:test-get-run_duration testdat)))
+				     (end-time     (+ event-time test-duration))
 				     (test-name    (db:test-get-testname     testdat))
 				     (item-path    (db:test-get-item-path    testdat))
 				     (state         (db:test-get-state       testdat))
 				     (status        (db:test-get-status      testdat))
 				     (test-fullname (conc test-name "/" item-path))
-				     (name-color    (gutils:get-color-for-state-status state status)))
+				     (name-color    (gutils:get-color-for-state-status state status))
+				     (new-test-objs 
+				      (let loop ((rownum 0)) ;;  new-run-start-row)) ;; (+ start-row 1)))
+					(if (dashboard:row-collision rowhash rownum event-time end-time)
+					    (loop (+ rownum 1))
+					    (let* ((title   (if iterated item-path test-name))
+						   (lly     (calc-y rownum)) ;; (- sizey (* rownum row-height)))
+						   (uly     (+ lly row-height))
+						   (use-end (if (< (- end-time event-time) 3)(+ event-time 3) end-time)) ;; if short grow it a little to give the user something to click on
+						   (obj     (vg:make-rect-obj event-time lly use-end uly
+									      fill-color: (vg:iup-color->number (car name-color))
+									      text: title
+									      font: "Helvetica -10")) 
+						   (bar-end (+ 5 (max use-end (+ 3 event-time (* (string-length title) 10)))))) ;; 8 pixels per letter
+					      ;; (if iterated
+					      ;;     (dashboard:add-bar rowhash (- rownum 1) event-time end-time num-rows: (+ 1 num-items))
+					      ;; (if (not first-rownum)
+					      ;;     (begin
+					      ;;       (dashboard:row-collision rowhash (- rownum 1) event-time end-time num-rows: num-items)
+					      ;;       (set! first-rownum rownum)))
+					      (dboard:tabdat-max-row-set! tabdat (max (+ curr-run-start-row rownum)
+										      (dboard:tabdat-max-row tabdat))) ;; track the max row used
+					      ;; bar-end has some margin for text - accounting for text in extents not yet working.
+					      (dashboard:add-bar rowhash rownum event-time bar-end) ;; (+ end-time 5))
+					      (vg:add-obj-to-comp runcomp obj)
+					      ;; (vg:instance-move drawing run-full-name 0 (calc-y (dboard:tabdat-max-row tabdat)))
+					      (dboard:tabdat-view-changed-set! tabdat #t)
+					      (cons obj test-objs))))))
 				;; (print "event_time: " (db:test-get-event_time   testdat) " mapped event_time: " event-time)
 				;; (print "run-duration: "  (db:test-get-run_duration testdat) " mapped run_duration: " run-duration)
 				(if (> item-num 50)
 				    (if (eq? 0 (modulo item-num 50))
 					(print "processing " run-num " of " num-runs " runs " item-num " of " num-items " of test " test-name ", " test-num " of " num-tests " tests")))
-				(let loop ((rownum 0)) ;;  new-run-start-row)) ;; (+ start-row 1)))
-				  (if (dashboard:row-collision rowhash rownum event-time end-time)
-				      (loop (+ rownum 1))
-				      (let* ((lly (calc-y rownum)) ;; (- sizey (* rownum row-height)))
-					     (uly (+ lly row-height))
-					     (obj (vg:make-rect-obj event-time lly end-time uly
-								    fill-color: (vg:iup-color->number (car name-color))
-								    text: (if iterated item-path test-name)
-								    font: "Helvetica -10")))
-					;; (if iterated
-					;;     (dashboard:add-bar rowhash (- rownum 1) event-time end-time num-rows: (+ 1 num-items))
-					;; (if (not first-rownum)
-					;;     (begin
-					;;       (dashboard:row-collision rowhash (- rownum 1) event-time end-time num-rows: num-items)
-					;;       (set! first-rownum rownum)))
-					(dboard:tabdat-max-row-set! tabdat (max (+ curr-run-start-row rownum)
-										(dboard:tabdat-max-row tabdat))) ;; track the max row used
-					(dashboard:add-bar rowhash rownum event-time end-time)
-					(vg:add-obj-to-comp runcomp obj)
-					;; (vg:instance-move drawing run-full-name 0 (calc-y (dboard:tabdat-max-row tabdat)))
-					(dboard:tabdat-view-changed-set! tabdat #t)
-					(set! test-objs (cons obj test-objs)))))
 				;; (print "test-name: " test-name " event-time: " event-time " run-duration: " run-duration)
 				(let ((newdoneruns (cons rundat doneruns)))
-				  (if (not (null? tidstal))
-				      (if #f ;; (> (- (current-seconds) update-start-time) 5)
-					  (begin
-					    (print "drawing runs taking too long....  have " (length runtal) " remaining")
-					    ;; (dboard:tabdat-done-runs-set! tabdat newdoneruns) ;; taking too long? stop here!
-					    ;; (dboard:tabdat-not-done-runs-set! tabdat runtal)
-					    )
-					  (testitemloop (car tidstal)(cdr tidstal)(+ item-num 1)))))))
+				  (if (null? tidstal)
+				      (if iterated
+					  (let* ((xtents (vg:get-extents-for-objs drawing new-test-objs))
+						 (llx (- (car xtents)   5))
+						 (lly (- (cadr xtents) 10))
+						 (ulx (+ 5 (caddr xtents)))
+						 (uly (+ 0 (cadddr xtents))))
+					    ;; (dashboard:add-bar rowhash 0 llx ulx num-rows:  num-items)
+					    ;; This is the box around the tests of an iterated test
+					    (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly
+											  text:  (db:test-get-testname (hash-table-ref tests-ht (car test-ids)))
+											  line-color:  (vg:rgb->number  0 0 255 a: 128)
+											  font: "Helvetica -10"))
+					    ;; (vg:instance-move drawing run-full-name 0 (dboard:tabdat-max-row tabdat))
+					    (dboard:tabdat-view-changed-set! tabdat #t))) ;; trigger a redraw
+				      (testitemloop (car tidstal)(cdr tidstal)(+ item-num 1) new-test-objs)))))
 			    ;; If it is an iterated test put box around it now.
-			    (if iterated
-				(let* ((xtents (vg:get-extents-for-objs drawing test-objs))
-				       (llx (- (car xtents)   5))
-				       (lly (- (cadr xtents) 10))
-				       (ulx (+ 5 (caddr xtents)))
-				       (uly (+ 0 (cadddr xtents))))
-				  (dashboard:add-bar rowhash 0 llx ulx num-rows:  num-items)
-				  (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly
-										text:  (db:test-get-testname (hash-table-ref tests-ht (car test-ids)))
-										font: "Helvetica -10"))
-				  ;; (vg:instance-move drawing run-full-name 0 (dboard:tabdat-max-row tabdat))
-				  (dboard:tabdat-view-changed-set! tabdat #t) ;; trigger a redraw
-				  ))
 			    (if (not (null? tests-tal))
 				(if #f ;; (> (- (current-seconds) update-start-time) 5)
 				    (print "drawing runs taking too long")
@@ -2668,19 +2682,23 @@ Misc
 			;; (let ((y  (calc-y (dboard:tabdat-max-row tabdat)))) ;;  (- sizey (* (dboard:tabdat-max-row tabdat) row-height))))
 			;;   (vg:add-obj-to-comp runcomp (vg:make-rect-obj 0 y 0 y)))
 			;; instantiate the component
-			(mutex-lock! mtx)
 			(let* ((extents   (vg:components-get-extents drawing runcomp))
 			       (new-xtnts (apply vg:grow-rect 5 5 extents))
 			       (llx       (list-ref new-xtnts 0))
 			       (lly       (list-ref new-xtnts 1))
 			       (ulx       (list-ref new-xtnts 2))
 			       (uly       (list-ref new-xtnts 3))
-			       ) ;;  (vg:components-get-extents d1 c1)))
-			  (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly text: run-full-name)))
-			(mutex-unlock! mtx)
-			(dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat) 1))
-			;; (vg:instance-move drawing run-full-name 0 (dboard:tabdat-max-row tabdat))
-			)
+			       (outln     (vg:make-rect-obj llx lly ulx uly 
+							    text: run-full-name
+							    line-color:  (vg:rgb->number  255 0 255 a: 128))))
+					;  (vg:components-get-extents d1 c1)))
+			  ;; this is the box around the run
+			  (mutex-lock! mtx)
+			  (vg:add-obj-to-comp runcomp outln)
+			  (mutex-unlock! mtx)
+			  (dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat) 2))
+			  ;; (vg:instance-move drawing run-full-name 0 (dboard:tabdat-max-row tabdat))
+			  ))
 		      ;; end of the run handling loop 
 		      (let ((newdoneruns (cons rundat doneruns)))
 			(if (null? runtal)
@@ -2694,9 +2712,9 @@ Misc
 				  ;; (time (vg:draw (dboard:tabdat-drawing tabdat) #t))
 				  (dboard:tabdat-not-done-runs-set! tabdat runtal))
 				(begin
-				  (print "Layout end: " (current-seconds))
-				  (runloop (car runtal)(cdr runtal) (+ run-num 1) newdoneruns (current-seconds))))))))) ;;  new-run-start-row
-	      )))
+				  (runloop (car runtal)(cdr runtal) (+ run-num 1) newdoneruns)))))))) ;;  new-run-start-row
+	      )
+	    (print "Layout end: " (current-milliseconds) " delta: " (- (current-milliseconds) layout-start))))
 	(debug:print 2 *default-log-port* "no tabdat for run-times-tab-updater"))))
 
 (define (dashboard:runs-tab-updater commondat tab-num)
