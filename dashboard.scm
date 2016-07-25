@@ -43,6 +43,7 @@
 (include "run_records.scm")
 (include "task_records.scm")
 (include "megatest-fossil-hash.scm")
+(include "vg_records.scm")
 
 (define help (conc 
 	      "Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
@@ -1139,7 +1140,8 @@ Misc
 								      (lambda ()
 									(dboard:tabdat-running-layout-set! tabdat #t)
 									(dashboard:run-times-tab-layout-updater commondat tabdat tab-num)
-									(dboard:tabdat-running-layout-set! tabdat #f)))))
+									(dboard:tabdat-running-layout-set! tabdat #f))
+								      "run-times-tab-layout-updater")))
 						  ))))))
 				  "dashboard:run-times-tab-updater"))))
     (dboard:tabdat-drawing-set! tabdat drawing)
@@ -2352,24 +2354,26 @@ Misc
 ;; bars? Use num-rows to check that a block will fit from rownum to (+ rownum num-rows)
 ;;
 (define (dashboard:row-collision rowhash rownum x1 x2 #!key (num-rows #f))
-  (let ((collision #f)
-	(lastrow   (if num-rows (+ rownum num-rows) rownum)))
+  (let ((lastrow   (if num-rows (+ rownum num-rows) rownum)))
     (let loop ((i      0)
 	       (rowdat (hash-table-ref/default rowhash rownum '())))
-      (for-each
-       (lambda (bar)
-	 (let ((bx1 (car bar))
-	       (bx2 (cdr bar)))
-	   (cond
-	    ;; newbar x1 inside bar
-	    ((dashboard:px-between x1 bx1 bx2)(set! collision #t))
-	    ((dashboard:px-between x2 bx1 bx2)(set! collision #t))
-	    ((and (<= x1 bx1)(>= x2 bx2))(set! collision #t)))))
-       rowdat)
-      (if (< i lastrow)
-	  (loop (+ i 1)
-		(hash-table-ref/default rowhash (+ rownum i) '()))))
-    collision))
+      (if (null? rowdat)
+	  #f
+	  (let rowloop ((bar (car rowdat))
+			(tal (cdr rowdat)))
+	    (let ((bx1 (car bar))
+		  (bx2 (cdr bar)))
+	      (cond
+	       ;; newbar x1 inside bar
+	       ((dashboard:px-between x1 bx1 bx2) #t)
+	       ((dashboard:px-between x2 bx1 bx2) #t)
+	       ((and (<= x1 bx1)(>= x2 bx2))      #t)
+	       (else (if (null? tal)
+			 (if (< i lastrow)
+			     (loop (+ i 1)
+				   (hash-table-ref/default rowhash (+ rownum i) '()))
+			     #f)
+			 (rowloop (car tal)(cdr tal)))))))))))
 
 (define (dashboard:add-bar rowhash rownum x1 x2 #!key (num-rows 0))
   (let loop ((i 0))
