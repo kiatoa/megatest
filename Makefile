@@ -232,7 +232,7 @@ datashare-testing/sretrieve : sretrieve.scm megatest-version.o margs.o configf.o
 	csc $(CSCOPTS) sretrieve.scm megatest-version.o margs.o configf.o process.o -o datashare-testing/sretrieve
 
 sretrieve/sretrieve : datashare-testing/sretrieve
-	csc $(CSCOPTS) -deploy -deployed sretrieve.scm megatest-version.o margs.o configf.o
+	csc $(CSCOPTS) -deploy -deployed sretrieve.scm megatest-version.o margs.o configf.o process.o
 	chicken-install -keep-installed $(PROXY) -deploy -prefix sretrieve defstruct srfi-18 format sql-de-lite \
              srfi-1 posix regex regex-case srfi-69
 
