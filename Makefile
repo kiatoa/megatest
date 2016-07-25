@@ -224,7 +224,7 @@ datashare-testing/sretrieve : sretrieve.scm megatest-version.o margs.o configf.o
 sretrieve/sretrieve : datashare-testing/sretrieve
 	csc -deploy -deployed sretrieve.scm megatest-version.o margs.o configf.o
 	chicken-install -keep-installed $(PROXY) -deploy -prefix sretrieve defstruct srfi-18 format sql-de-lite \
-             srfi-1 posix regex regex-case srfi-69
+             srfi-1 posix regex regex-case srfi-69 
 
 # base64 dot-locking \
 #             csv-xml z3
