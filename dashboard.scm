@@ -2528,19 +2528,18 @@ Misc
   ;; each test is an object in the run component
   ;; each run is a component
   ;; all runs stored in runslib library
-  (let* ((canvas-margin 10)
-	 (row-height    10)
-	 (not-done-runs (dboard:tabdat-not-done-runs tabdat))
-	 (mtx           (dboard:tabdat-runs-mutex tabdat)))
-    (if tabdat
-	(let* ((drawing    (dboard:tabdat-drawing tabdat))
-	       (runslib    (vg:get/create-lib drawing "runslib")) ;; creates and adds lib
-	       (layout-start (current-milliseconds)))
-	  (print "layout start: " (current-milliseconds) " layout-start: " layout-start)
-	  (let* ((allruns (dboard:tabdat-allruns tabdat))
-		 (num-runs (length allruns))
-		 (cnv     (dboard:tabdat-cnv tabdat)))
-	    ;; (print "allruns: " allruns)
+  (if tabdat
+      (let* ((canvas-margin 10)
+	     (row-height    10)
+	     (not-done-runs (dboard:tabdat-not-done-runs tabdat))
+	     (mtx           (dboard:tabdat-runs-mutex tabdat))
+	     (drawing      (dboard:tabdat-drawing tabdat))
+	     (runslib      (vg:get/create-lib drawing "runslib")) ;; creates and adds lib
+	     (layout-start (current-milliseconds))
+	     (allruns      (dboard:tabdat-allruns tabdat))
+	     (num-runs     (length allruns))
+	     (cnv          (dboard:tabdat-cnv tabdat)))
+	(if (canvas? cnv)
 	    (let*-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
 			  ((originx originy)             (canvas-origin cnv))
 			  ((calc-y)                      (lambda (rownum)
@@ -2597,7 +2596,8 @@ Misc
 			(mutex-lock! mtx)
 			(vg:add-comp-to-lib runslib run-full-name runcomp)
 			;; Have to keep moving the instantiated box as it is anchored at the lower left
-			(vg:instantiate drawing "runslib" run-full-name run-full-name 0 (calc-y curr-run-start-row)) ;; 0) ;; (calc-y (dboard:tabdat-max-row tabdat)))
+			;; this should have worked for x in next statement? (maptime run-start)
+			(vg:instantiate drawing "runslib" run-full-name run-full-name fixed-originx (calc-y curr-run-start-row)) ;; 0) ;; (calc-y (dboard:tabdat-max-row tabdat)))
 			(mutex-unlock! mtx)
 			;; (set! run-start-row (+ max-row 2))
 			;; (dboard:tabdat-start-row-set! tabdat (+ new-run-start-row 1))
@@ -2715,7 +2715,7 @@ Misc
 				  (runloop (car runtal)(cdr runtal) (+ run-num 1) newdoneruns)))))))) ;;  new-run-start-row
 	      )
 	    (print "Layout end: " (current-milliseconds) " delta: " (- (current-milliseconds) layout-start))))
-	(debug:print 2 *default-log-port* "no tabdat for run-times-tab-updater"))))
+      (debug:print 2 *default-log-port* "no tabdat for run-times-tab-updater")))
 
 (define (dashboard:runs-tab-updater commondat tab-num)
   (debug:catch-and-dump 
