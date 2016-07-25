@@ -15,16 +15,19 @@
 (declare (unit vg))
 (use canvas-draw iup)
 (import canvas-draw-iup)
-;; structs
-;;
-(defstruct vg:lib     comps)
-(defstruct vg:comp    objs name file)
-;; extents caches extents calculated on draw
-;; proc is called on draw and takes the obj itself as a parameter
-;; attrib is an alist of parameters
-(defstruct vg:obj     type pts fill-color text line-color call-back angle font attrib extents proc)
-(defstruct vg:inst    libname compname theta xoff yoff scalex scaley mirrx mirry call-back cache)
-(defstruct vg:drawing libs insts scalex scaley xoff yoff cnv cache) ;; libs: hash of name->lib, insts: hash of instname->inst
+
+(include "vg_records.scm")
+
+;; ;; structs
+;; ;;
+;; (defstruct vg:lib     comps)
+;; (defstruct vg:comp    objs name file)
+;; ;; extents caches extents calculated on draw
+;; ;; proc is called on draw and takes the obj itself as a parameter
+;; ;; attrib is an alist of parameters
+;; (defstruct vg:obj     type pts fill-color text line-color call-back angle font attrib extents proc)
+;; (defstruct vg:inst    libname compname theta xoff yoff scalex scaley mirrx mirry call-back cache)
+;; (defstruct vg:drawing libs insts scalex scaley xoff yoff cnv cache) ;; libs: hash of name->lib, insts: hash of instname->inst
 
 ;; inits
 ;;
@@ -193,15 +196,29 @@
     inst))
 
 (define (vg:get-extents-for-objs drawing objs)
-  (let ((extents #f))
-    (for-each
-     (lambda (obj)
-       (set! extents
-	 (vg:get-extents-for-two-rects
-	  extents
-	  (vg:obj-get-extents drawing obj))))
-     objs)
-    extents))
+  (if (or (not objs)
+	  (null? objs))
+      #f
+      (let loop ((hed     (car objs))
+		 (tal     (cdr objs))
+		 (extents (vg:obj-get-extents drawing (car objs))))
+	(let ((newextents
+	       (vg:get-extents-for-two-rects
+		extents
+		(vg:obj-get-extents drawing hed))))
+	  (if (null? tal)
+	      extents
+	      (loop (car tal)(cdr tal) newextents))))))
+
+;;   (let ((extents #f))
+;;     (for-each
+;;      (lambda (obj)
+;;        (set! extents
+;; 	 (vg:get-extents-for-two-rects
+;; 	  extents
+;; 	  (vg:obj-get-extents drawing obj))))
+;;      objs)
+;;     extents))
 
 ;; given rectangles r1 and r2, return the box that bounds both
 ;;
@@ -216,16 +233,20 @@
 		(max (cadddr r1)(cadddr r2)))))) ;; uly
 
 (define (vg:components-get-extents drawing . comps)
-  (let ((extents #f))
-    (for-each
-     (lambda (comp)
-       (let* ((objs  (vg:comp-objs comp)))
-	 (set! extents 
-	   (vg:get-extents-for-two-rects
-	    extents
-	    (vg:get-extents-for-objs drawing objs)))))
-     comps)
-    extents))
+  (if (null? comps)
+      #f
+      (let loop ((hed  (car comps))
+		 (tal  (cdr comps))
+		 (extents #f))
+	(let* ((objs  (vg:comp-objs hed))
+	       (newextents (if extents
+			       (vg:get-extents-for-two-rects
+				extents
+				(vg:get-extents-for-objs drawing objs))
+			       (vg:get-extents-for-objs drawing objs))))
+	  (if (null? tal)
+	      newextents
+	      (loop (car tal)(cdr tal) newextents))))))
 
 ;;======================================================================
 ;; libraries

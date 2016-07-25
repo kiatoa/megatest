@@ -64,6 +64,7 @@ runs.o : test_records.scm
 megatest.o : megatest-fossil-hash.scm
 client.scm common.scm configf.scm dashboard-guimonitor.scm dashboard-tests.scm dashboard.scm db.scm dcommon.scm ezsteps.scm fs-transport.scm http-transport.scm index-tree.scm items.scm keys.scm launch.scm megatest.scm monitor.scm mt.scm newdashboard.scm runconfig.scm runs.scm server.scm tdb.scm tests.scm tree.scm : common_records.scm rpc-transport.scm
 common_records.scm : altdb.scm
+vg.o dashboard.o : vg_records.scm
 
 # Temporary while transitioning to new routine
 # runs.o : run-tests-queue-classic.scm  run-tests-queue-new.scm
@@ -169,8 +170,17 @@ $(MTQA_FOSSIL) :
 clean : 
 	rm -f $(OFILES) $(GOFILES) megatest dboard dboard.o megatest.o dashboard.o megatest-fossil-hash.* altdb.scm
 
+#======================================================================
+# Make the records files
+#======================================================================
+
+vg_records.scm : records.sh
+	./records.sh
+
+#======================================================================
 # Deploy section (not complete yet)
-#
+#======================================================================
+
 $(DEPLOYHELPERS) : utils/mt_*
 	$(INSTALL) $< $@
 	chmod a+X $@

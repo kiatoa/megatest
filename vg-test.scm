@@ -8,12 +8,14 @@
 ;; 		     (string->number (cadr (argv)))
 ;; 		     1000))
 
-;; (use trace)
-;; (trace 
-;;  vg:draw-rect
-;;  vg:grow-rect
-;;  vg:components-get-extents
-;;  vg:instances-get-extents)
+ (use trace)
+ (trace 
+  ;; vg:draw-rect
+  ;; vg:grow-rect
+  vg:get-extents-for-objs
+  vg:components-get-extents
+  vg:instances-get-extents
+  vg:get-extents-for-two-rects)
 
 (define d1 (vg:drawing-new))
 (define l1 (vg:lib-new))
