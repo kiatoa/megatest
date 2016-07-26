@@ -207,6 +207,7 @@ Misc
   curr-run-id      ;; current row to display in Run summary view
   curr-test-ids    ;; used only in dcommon:run-update which is used in newdashboard
   filters-changed  ;; to to indicate that the user changed filters for this tab
+  last-filter-str  ;; conc the target runname and testpatt for a signature of changed filters
   hide-empty-runs
   hide-not-hide    ;; toggle for hide/not hide empty runs
   hide-not-hide-button
@@ -2540,22 +2541,27 @@ Misc
 			      ))
 	       (runpatt   (if (dboard:tabdat-target tabdat)
 			     (last (dboard:tabdat-target tabdat))
-			     "%")))
-	  (print "targpatt: " targpatt " runpatt: " runpatt)
+			     "%"))
+	       (testpatt  (or (dboard:tabdat-test-patts tabdat) "%"))
+	       (filtrstr  (conc targpatt "/" runpatt "/" testpatt)))
+	  (print "targpatt: " targpatt " runpatt: " runpatt " testpatt: " testpatt)
 
-	  (if (dboard:tabdat-view-changed tabdat)
+	  (if (not (equal? (dboard:tabdat-last-filter-str tabdat) filtrstr))
 	      (let ((dwg (dboard:tabdat-drawing tabdat)))
+		(print "reseting drawing")
 		(dboard:tabdat-layout-update-ok-set! tabdat #f)
 		(vg:drawing-libs-set! dwg (make-hash-table))
 		(vg:drawing-insts-set! dwg (make-hash-table))
 		(vg:drawing-cache-set! dwg '())
 		(dboard:tabdat-allruns-by-id-set! tabdat (make-hash-table))
-		(dboard:tabdat-max-row-set! tabdat 0)))
+		;; (dboard:tabdat-allruns-set! tabdat '())
+		(dboard:tabdat-max-row-set! tabdat 0)
+		(dboard:tabdat-last-filter-str-set! tabdat filtrstr)))
 	  (update-rundat tabdat
 			 runpatt
 			 ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") 
-			 100  ;; (dboard:tabdat-numruns tabdat)
-			 "%" ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
+			 10  ;; (dboard:tabdat-numruns tabdat)
+			 testpatt ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
 			 ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
 			 
 			 targpatt
@@ -2643,7 +2649,7 @@ Misc
 					    (let ((hd (dboard:tests-sort-by-time-group-by-item (dboard:rundat-tests rundat)))) ;; hierarchial list of ids
 					      (dboard:rundat-hierdat-set! rundat hd)
 					      hd)
-					    (dboard:run-hierdat rundat)))
+					    (dboard:rundat-hierdat rundat)))
 			     (tests-ht  (dboard:rundat-tests rundat))
 			     (all-tids  (hash-table-keys   tests-ht)) ;; (apply append hierdat)) ;; was testsdat
 			     (testsdat  (hash-table-values tests-ht))
