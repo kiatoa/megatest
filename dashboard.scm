@@ -2613,9 +2613,88 @@ Misc
 	  (dboard:tabdat-view-changed-set! tabdat #f)))))
   
 ;; doesn't work.
+;;
 (define (gotoescape tabdat escape)
   (or (dboard:tabdat-layout-update-ok tabdat)
       (escape #t)))
+
+(define (dboard:graph-db-open dbstr)
+  (let* ((parts (string-split dbstr ":"))
+	 (dbpth (if (< (length parts) 2) ;; assume then a filename was provided
+		    dbstr
+		    (if (equal? (car parts) "sqlite3")
+			(cadr parts)
+			(begin
+			  (debug:print 0 *default-log-port* "ERROR: I only know sqlite3 databases for now: " dbstr)
+			  (cadr parts))))))
+    (if (file-read-access? dbpth)
+	(let ((db (sqlite3:open-database dbpth))) ;; (open-database dbpth)))
+	  (sqlite3:set-busy-handler! db (make-busy-timeout 10000))
+	  db))))
+
+(define (dboard:graph-read-data cmdstring tstart tend)
+  (let* ((parts (string-split cmdstring))) ;; spaces not allowed
+    (if (< (length parts) 4) ;; sqlite3:path tablename timefieldname field1 field2 ...
+	(debug:print 0 *default-log-port* "ERROR: malformed graph line: " cmdstring)
+	(let* ((dbdef  (car parts))
+	       (tablen (cadr parts))
+	       (timef  (caddr parts))
+	       (fields (cdddr parts))
+	       (db     (dboard:graph-db-open dbdef))
+	       (res    (make-hash-table)))
+	  (for-each
+	   (lambda (fieldname) ;; fields
+	     (let ((qrystr (conc "SELECT " timef ",var,val FROM " tablen " WHERE var='" fieldname "' AND " timef " >= " tstart " AND " timef " <= " tend " ORDER BY " timef " ASC")))
+	       (print "qrystr: " qrystr)
+	       (hash-table-set! res fieldname ;; (fetch-rows (sql db qrystr)))))
+				(sqlite3:fold-row
+				 (lambda (res t var val)
+				   (cons (vector t var val) res))
+				 '() db qrystr))))
+	   fields)
+	  res))))
+	  
+;; graph data 
+;;  tsc=timescale, tfn=function; time->x
+;;
+(define (dboard:graph commondat tabdat tabnum llx lly ulx uly tstart tend tsc tfn compname cmargin)
+  (let* ((dwg (dboard:tabdat-drawing tabdat))
+	 (lib (vg:get/create-lib dwg "runslib"))
+	 (cnv (dboard:tabdat-cnv tabdat))
+	 (dur (- tstart tend)) ;; time duration
+	 (cmp (vg:get-component dwg "runslib" compname))
+	 (cfg (configf:get-section *configdat* "graph")))
+    (vg:add-obj-to-comp
+     cmp 
+     (vg:make-rect-obj llx lly ulx uly))
+    (for-each 
+     (lambda (cf)
+       (let* ((alldat  (dboard:graph-read-data (cadr cf) tstart tend)))
+	 (for-each
+	  (lambda (fieldn)
+	    (let* ((dat     (hash-table-ref alldat fieldn ))
+		   (vals    (map (lambda (x)(vector-ref x 2)) dat)))
+	      (if (not (null? vals))
+		  (let* ((maxval  (apply max vals))
+			 (minval  (apply min vals))
+			 (yoff    (- lly minval))
+			 (yscale  (/ (- maxval minval)(- uly lly)))
+			 (yfunc   (lambda (y)(* (+ y yoff) yscale))))
+		    ;; (print (car cf) ": " (hash-table->alist
+		    (for-each
+		     (lambda (dpt)
+		       (let* ((tval  (vector-ref dpt 0))
+			      (yval  (vector-ref dpt 2))
+			      (stval (tfn tval))
+			      (syval (yfunc yval)))
+			 (vg:add-obj-to-comp
+			  cmp 
+			  (vg:make-rect-obj (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
+					    fill-color: (vg:rgb->number 50 50 50)))))
+		     dat))))) ;; for each data point in the series
+	  (hash-table-keys alldat))))
+     cfg)))
+	 
 
 ;; run times tab
 ;;
@@ -2636,7 +2715,9 @@ Misc
 	       (num-runs     (length allruns))
 	       (cnv          (dboard:tabdat-cnv tabdat))
 	       (compact-layout (dboard:tabdat-compact-layout tabdat))
-	       (row-height     (if compact-layout 2 10)))
+	       (row-height     (if compact-layout 2 10))
+	       (graph-height 120)
+	       (run-to-run-margin 20))
 	  (dboard:tabdat-layout-update-ok-set! tabdat #t)
 	  (if (canvas? cnv)
 	      (let*-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
@@ -2644,11 +2725,11 @@ Misc
 			    ((calc-y)                      (lambda (rownum)
 							     (- (/ sizey 2)
 								(* rownum row-height))))
-			    ((fixed-originx)               (if (dboard:tabdat-originx tabdat)
-							       (dboard:tabdat-originx tabdat)
-							       (begin
-								 (dboard:tabdat-originx-set! tabdat originx)
-								 originx)))
+			    ((fixed-originx)         0)   ;; (if (dboard:tabdat-originx tabdat)
+							;;   (dboard:tabdat-originx tabdat)
+							;;   (begin
+							;; 	 (dboard:tabdat-originx-set! tabdat originx)
+							;; 	 originx)))
 			    ((fixed-originy)               (if (dboard:tabdat-originy tabdat)
 							       (dboard:tabdat-originy tabdat)
 							       (begin
@@ -2694,14 +2775,19 @@ Misc
 			       (maptime    (lambda (tsecs)(* timescale (+ tsecs timeoffset))))
 			       (num-tests  (length hierdat))
 			       (tot-tests  (length testsdat))
+			       (width      (* timescale run-duration))
+			       (graph-lly  (calc-y (/ -50 row-height)))
+			       (graph-uly  (- (calc-y 0) canvas-margin))
 			       )
-			  (print "Testing. (maptime run-start=" run-start "): " (maptime run-start) " (maptime run-end=" run-end "): " (maptime run-end) " run-duration: " run-duration)
+			  ;; (print "Testing. (maptime run-start=" run-start "): " (maptime run-start) " (maptime run-end=" run-end "): " (maptime run-end) " run-duration: " run-duration)
+			  (print "run_duration: " (seconds->hr-min-sec run-duration))
 			  ;; (print "timescale: " timescale " timeoffset: " timeoffset " sizex: " sizex " originx: " originx)
 			  (mutex-lock! mtx)
 			  (vg:add-comp-to-lib runslib run-full-name runcomp)
 			  ;; Have to keep moving the instantiated box as it is anchored at the lower left
 			  ;; this should have worked for x in next statement? (maptime run-start)
-			  (vg:instantiate drawing "runslib" run-full-name run-full-name fixed-originx (calc-y curr-run-start-row)) ;; 0) ;; (calc-y (dboard:tabdat-max-row tabdat)))
+			  ;; add 60 to make room for the graph
+			  (vg:instantiate drawing "runslib" run-full-name run-full-name fixed-originx (- (calc-y curr-run-start-row) (+ graph-height run-to-run-margin)))
 			  (mutex-unlock! mtx)
 			  ;; (set! run-start-row (+ max-row 2))
 			  ;; (dboard:tabdat-start-row-set! tabdat (+ new-run-start-row 1))
@@ -2807,6 +2893,10 @@ Misc
 			    (vg:add-obj-to-comp runcomp outln)
 			    (mutex-unlock! mtx)
 			    (dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat) 2))
+			    
+			    ;; this is where we have enough info to place the graph
+			    (dboard:graph commondat tabdat tab-num llx uly ulx (+ uly graph-height) run-start run-end timescale maptime run-full-name canvas-margin)
+
 			    ;; (vg:instance-move drawing run-full-name 0 (dboard:tabdat-max-row tabdat))
 			    ))
 			;; end of the run handling loop 
