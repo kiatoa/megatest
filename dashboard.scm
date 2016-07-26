@@ -2646,20 +2646,31 @@ Misc
 	       (valfn  (list-ref parts 4))
 	       (fields (cdr  (cddddr parts)))
 	       (db     (dboard:graph-db-open dbdef))
-	       (res    (make-hash-table)))
+	       (res-ht (make-hash-table)))
 	  (if db
 	      (begin
 		(for-each
 		 (lambda (fieldname) ;; fields
-		   (let ((qrystr (conc "SELECT " timef "," varfn "," valfn " FROM " tablen " WHERE " varfn "='" fieldname "' AND " timef " >= " tstart " AND " timef " <= " tend " ORDER BY " timef " ASC")))
-		     (print "qrystr: " qrystr)
-		     (hash-table-set! res fieldname ;; (fetch-rows (sql db qrystr)))))
+		   (let ((all-dat-qrystr (conc "SELECT " timef "," varfn "," valfn " FROM " tablen " WHERE " varfn "='" fieldname "' AND " timef " >= " tstart " AND " timef " <= " tend " ORDER BY " timef " ASC"))
+			 (zeroth-point   (conc "SELECT " timef "," varfn "," valfn " FROM " tablen " WHERE " varfn "='" fieldname "' AND " timef " < " tstart " LIMIT 1")))
+		     (print "all-dat-qrystr: " all-dat-qrystr)
+		     (hash-table-set! res-ht fieldname ;; (fetch-rows (sql db qrystr)))))
 				      (sqlite3:fold-row
 				       (lambda (res t var val)
 					 (cons (vector t var val) res))
-				       '() db qrystr))))
+				       '() db all-dat-qrystr))
+		     (let ((zeropt (handle-exceptions
+				    exn
+				    #f
+				    (sqlite3:first-row db all-dat-qrystr))))
+		       (if zeropt
+			   (hash-table-set! res-ht
+					    fieldname
+					    (cons
+					     (apply vector tstart (cdr zeropt))						    
+					     (hash-table-ref/default res-ht fieldname '())))))))
 		 fields)
-		res)
+		res-ht)
 	      #f)))))
   
 ;; graph data 
@@ -2671,7 +2682,8 @@ Misc
 	 (cnv (dboard:tabdat-cnv tabdat))
 	 (dur (- tstart tend)) ;; time duration
 	 (cmp (vg:get-component dwg "runslib" compname))
-	 (cfg (configf:get-section *configdat* "graph")))
+	 (cfg (configf:get-section *configdat* "graph"))
+	 (stdcolor (vg:rgb->number 20 30 40)))
     (vg:add-obj-to-comp
      cmp 
      (vg:make-rect-obj llx lly ulx uly))
@@ -2699,7 +2711,7 @@ Misc
 			     (vg:add-obj-to-comp
 			      cmp 
 			      (vg:make-rect-obj (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
-						fill-color: (vg:rgb->number 50 50 50)))))
+						fill-color: stdcolor))))
 			 dat))))) ;; for each data point in the series
 	      (hash-table-keys alldat)))))
      cfg)))
