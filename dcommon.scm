@@ -979,14 +979,14 @@
 			   #:multiline "YES")))
       (set! test-patterns-textbox tb)
       tb))
-   (iup:frame
-    #:title "Target"
-    ;; Target selectors
-    (apply iup:hbox
-	   (let* ((dat      (dashboard:update-target-selector tabdat action-proc: update-keyvals))
-		  (key-lb   (car dat))
-		  (combos   (cadr dat)))
-	     combos)))
+;; (iup:frame
+;;  #:title "Target"
+;;  ;; Target selectors
+;;  (apply iup:hbox
+;; 	   (let* ((dat      (dashboard:update-target-selector tabdat action-proc: update-keyvals))
+;; 		  (key-lb   (car dat))
+;; 		  (combos   (cadr dat)))
+;; 	     combos)))
    (iup:hbox
     ;; Text box for STATES
     (iup:frame
