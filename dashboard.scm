@@ -2626,34 +2626,42 @@ Misc
 			(cadr parts)
 			(begin
 			  (debug:print 0 *default-log-port* "ERROR: I only know sqlite3 databases for now: " dbstr)
-			  (cadr parts))))))
-    (if (file-read-access? dbpth)
+			  #f)))))
+    (if (and dbpth (file-read-access? dbpth))
 	(let ((db (sqlite3:open-database dbpth))) ;; (open-database dbpth)))
 	  (sqlite3:set-busy-handler! db (make-busy-timeout 10000))
-	  db))))
+	  db)
+	#f)))
 
+;; sqlite3:path tablename timefieldname varfieldname field1 field2 ...
+;;
 (define (dboard:graph-read-data cmdstring tstart tend)
   (let* ((parts (string-split cmdstring))) ;; spaces not allowed
-    (if (< (length parts) 4) ;; sqlite3:path tablename timefieldname field1 field2 ...
+    (if (< (length parts) 6) ;; sqlite3:path tablename timefieldname varfname valfname field1 field2 ...
 	(debug:print 0 *default-log-port* "ERROR: malformed graph line: " cmdstring)
-	(let* ((dbdef  (car parts))
-	       (tablen (cadr parts))
-	       (timef  (caddr parts))
-	       (fields (cdddr parts))
+	(let* ((dbdef  (list-ref parts 0))
+	       (tablen (list-ref parts 1))
+	       (timef  (list-ref parts 2))
+	       (varfn  (list-ref parts 3))
+	       (valfn  (list-ref parts 4))
+	       (fields (cdr  (cddddr parts)))
 	       (db     (dboard:graph-db-open dbdef))
 	       (res    (make-hash-table)))
-	  (for-each
-	   (lambda (fieldname) ;; fields
-	     (let ((qrystr (conc "SELECT " timef ",var,val FROM " tablen " WHERE var='" fieldname "' AND " timef " >= " tstart " AND " timef " <= " tend " ORDER BY " timef " ASC")))
-	       (print "qrystr: " qrystr)
-	       (hash-table-set! res fieldname ;; (fetch-rows (sql db qrystr)))))
-				(sqlite3:fold-row
-				 (lambda (res t var val)
-				   (cons (vector t var val) res))
-				 '() db qrystr))))
-	   fields)
-	  res))))
-	  
+	  (if db
+	      (begin
+		(for-each
+		 (lambda (fieldname) ;; fields
+		   (let ((qrystr (conc "SELECT " timef "," varfn "," valfn " FROM " tablen " WHERE " varfn "='" fieldname "' AND " timef " >= " tstart " AND " timef " <= " tend " ORDER BY " timef " ASC")))
+		     (print "qrystr: " qrystr)
+		     (hash-table-set! res fieldname ;; (fetch-rows (sql db qrystr)))))
+				      (sqlite3:fold-row
+				       (lambda (res t var val)
+					 (cons (vector t var val) res))
+				       '() db qrystr))))
+		 fields)
+		res)
+	      #f)))))
+  
 ;; graph data 
 ;;  tsc=timescale, tfn=function; time->x
 ;;
@@ -2670,29 +2678,30 @@ Misc
     (for-each 
      (lambda (cf)
        (let* ((alldat  (dboard:graph-read-data (cadr cf) tstart tend)))
-	 (for-each
-	  (lambda (fieldn)
-	    (let* ((dat     (hash-table-ref alldat fieldn ))
-		   (vals    (map (lambda (x)(vector-ref x 2)) dat)))
-	      (if (not (null? vals))
-		  (let* ((maxval  (apply max vals))
-			 (minval  (apply min vals))
-			 (yoff    (- lly minval))
-			 (yscale  (/ (- maxval minval)(- uly lly)))
-			 (yfunc   (lambda (y)(* (+ y yoff) yscale))))
-		    ;; (print (car cf) ": " (hash-table->alist
-		    (for-each
-		     (lambda (dpt)
-		       (let* ((tval  (vector-ref dpt 0))
-			      (yval  (vector-ref dpt 2))
-			      (stval (tfn tval))
-			      (syval (yfunc yval)))
-			 (vg:add-obj-to-comp
-			  cmp 
-			  (vg:make-rect-obj (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
-					    fill-color: (vg:rgb->number 50 50 50)))))
-		     dat))))) ;; for each data point in the series
-	  (hash-table-keys alldat))))
+	 (if alldat
+	     (for-each
+	      (lambda (fieldn)
+		(let* ((dat     (hash-table-ref alldat fieldn ))
+		       (vals    (map (lambda (x)(vector-ref x 2)) dat)))
+		  (if (not (null? vals))
+		      (let* ((maxval  (apply max vals))
+			     (minval  (apply min vals))
+			     (yoff    (- lly minval))
+			     (yscale  (/ (- maxval minval)(- uly lly)))
+			     (yfunc   (lambda (y)(* (+ y yoff) yscale))))
+			;; (print (car cf) ": " (hash-table->alist
+			(for-each
+			 (lambda (dpt)
+			   (let* ((tval  (vector-ref dpt 0))
+				  (yval  (vector-ref dpt 2))
+				  (stval (tfn tval))
+				  (syval (yfunc yval)))
+			     (vg:add-obj-to-comp
+			      cmp 
+			      (vg:make-rect-obj (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
+						fill-color: (vg:rgb->number 50 50 50)))))
+			 dat))))) ;; for each data point in the series
+	      (hash-table-keys alldat)))))
      cfg)))
 	 
 
@@ -2892,11 +2901,9 @@ Misc
 			    (mutex-lock! mtx)
 			    (vg:add-obj-to-comp runcomp outln)
 			    (mutex-unlock! mtx)
-			    (dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat) 2))
-			    
 			    ;; this is where we have enough info to place the graph
 			    (dboard:graph commondat tabdat tab-num llx uly ulx (+ uly graph-height) run-start run-end timescale maptime run-full-name canvas-margin)
-
+			    (dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat)(quotient (+ graph-height 40) row-height)))
 			    ;; (vg:instance-move drawing run-full-name 0 (dboard:tabdat-max-row tabdat))
 			    ))
 			;; end of the run handling loop 
