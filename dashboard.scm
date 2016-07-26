@@ -193,6 +193,7 @@ Misc
   originx
   originy
   layout-update-ok
+  compact-layout
 
   ;; Controls used to launch runs etc.
   command          ;; for run control this is the command being built up
@@ -259,6 +260,7 @@ Misc
 	      buttondat:            (make-hash-table)
 	      curr-test-ids:        (make-hash-table)
 	      command:              ""
+	      compact-layout:       #f
 	      dbdir:                #f
 	      filters-changed:      #f
 	      header:               #f 
@@ -791,7 +793,8 @@ Misc
     (update-labels uidat)
     (for-each
      (lambda (rundat)
-       (if (not rundat) ;; handle padded runs
+       (if (or (not rundat) ;; handle padded runs
+	       (not (dboard:rundat-run rundat)))
 	   ;;           ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration
 	   (set! rundat (dboard:rundat-make-init
 			 key-vals: (map (lambda (x) "")(dboard:tabdat-keys tabdat)))))
@@ -1210,6 +1213,21 @@ Misc
 		       )))
 	(dboard:tabdat-runs-tree-set! tabdat tb)
 	tb)
+      (iup:hbox
+       (iup:toggle 
+	"Compact layout"
+	#:fontsize 8
+	#:expand "YES"
+	#:action (lambda (obj tstate)
+		   (debug:catch-and-dump 
+		    (lambda ()
+		      (print "tstate: " tstate)
+		      (if (eq? tstate 0)
+			  (dboard:tabdat-compact-layout-set! tabdat #f)
+			  (dboard:tabdat-compact-layout-set! tabdat #t))
+		      (dboard:tabdat-last-filter-str-set! tabdat "")
+		      )
+		    "text-list-toggle-box"))))
       (dcommon:command-runname-selector commondat tabdat tab-num: tab-num)
       (dcommon:command-testname-selector commondat tabdat update-keyvals))
      (iup:vbox
@@ -2601,7 +2619,6 @@ Misc
   ;; all runs stored in runslib library
   (if tabdat
       (let* ((canvas-margin 10)
-	     (row-height    10)
 	     (not-done-runs (dboard:tabdat-not-done-runs tabdat))
 	     (mtx           (dboard:tabdat-runs-mutex tabdat))
 	     (drawing      (dboard:tabdat-drawing tabdat))
@@ -2609,7 +2626,9 @@ Misc
 	     (layout-start (current-milliseconds))
 	     (allruns      (dboard:tabdat-allruns tabdat))
 	     (num-runs     (length allruns))
-	     (cnv          (dboard:tabdat-cnv tabdat)))
+	     (cnv          (dboard:tabdat-cnv tabdat))
+	     (compact-layout (dboard:tabdat-compact-layout tabdat))
+	     (row-height     (if compact-layout 2 10)))
 	(dboard:tabdat-layout-update-ok-set! tabdat #t)
 	(if (canvas? cnv)
 	    (let*-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
@@ -2703,7 +2722,7 @@ Misc
 				      (let loop ((rownum 0)) ;;  new-run-start-row)) ;; (+ start-row 1)))
 					(if (dashboard:row-collision rowhash rownum event-time end-time)
 					    (loop (+ rownum 1))
-					    (let* ((title   (if iterated item-path test-name))
+					    (let* ((title   (if iterated (if compact-layout #f item-path) test-name))
 						   (lly     (calc-y rownum)) ;; (- sizey (* rownum row-height)))
 						   (uly     (+ lly row-height))
 						   (use-end (if (< (- end-time event-time) 3)(+ event-time 3) end-time)) ;; if short grow it a little to give the user something to click on
@@ -2711,7 +2730,11 @@ Misc
 									      fill-color: (vg:iup-color->number (car name-color))
 									      text: title
 									      font: "Helvetica -10")) 
-						   (bar-end (+ 5 (max use-end (+ 3 event-time (* (string-length title) 10)))))) ;; 8 pixels per letter
+						   (bar-end (+ 5 (max use-end
+								      (+ 3 event-time 
+									 (if compact-layout
+									     0
+									     (* (string-length title) 10))))))) ;; 8 pixels per letter
 					      ;; (if iterated
 					      ;;     (dashboard:add-bar rowhash (- rownum 1) event-time end-time num-rows: (+ 1 num-items))
 					      ;; (if (not first-rownum)
