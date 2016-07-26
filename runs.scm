@@ -998,7 +998,8 @@
 	(last-time-incomplete  (- (current-seconds) 900)) ;; force at least one clean up cycle
 	(last-time-some-running (current-seconds))
 	(tdbdat                (tasks:open-db)))
-
+    ;; BB: suspicion: sorted-tests violate dependency topology
+    (debug:print 0 "BB> sorted-test-names: "sorted-test-names)
     ;; Initialize the test-registery hash with tests that already have a record
     ;; convert state to symbol and use that as the hash value
     (for-each (lambda (trec)
@@ -1015,6 +1016,7 @@
 	       (tal         (cdr sorted-test-names))
 	       (reg         '()) ;; registered, put these at the head of tal 
 	       (reruns      '()))
+
 
       (set! reruns '()) ;; force it to test impact!!
 
