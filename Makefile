@@ -174,8 +174,8 @@ clean :
 # Make the records files
 #======================================================================
 
-vg_records.scm : records.sh
-	./records.sh
+# vg_records.scm : records.sh
+#	./records.sh
 
 #======================================================================
 # Deploy section (not complete yet)

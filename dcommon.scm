@@ -921,18 +921,24 @@
    (let* ((default-run-name (seconds->work-week/day (current-seconds)))
 	  (tb (iup:textbox #:expand "HORIZONTAL"
 			   #:action (lambda (obj val txt)
-				      ;; (print "obj: " obj " val: " val " unk: " unk)
-				      (dboard:tabdat-run-name-set! tabdat txt) ;; (iup:attribute obj "VALUE"))
-				      (dashboard:update-run-command tabdat))
+				      (debug:catch-and-dump
+				       (lambda ()
+					 ;; (print "obj: " obj " val: " val " unk: " unk)
+					 (dboard:tabdat-run-name-set! tabdat txt) ;; (iup:attribute obj "VALUE"))
+					 (dashboard:update-run-command tabdat))
+				       "command-runname-selector tb action"))
 			   #:value (or default-run-name (dboard:tabdat-run-name tabdat))))
 	  (lb (iup:listbox #:expand "HORIZONTAL"
 			   #:dropdown "YES"
 			   #:action (lambda (obj val index lbstate)
-				      (if (not (equal? val ""))
-					  (begin
-					    (iup:attribute-set! tb "VALUE" val)
-					    (dboard:tabdat-run-name-set! tabdat val)
-					    (dashboard:update-run-command tabdat))))))
+				      (debug:catch-and-dump
+				       (lambda ()
+					 (if (not (equal? val ""))
+					     (begin
+					       (iup:attribute-set! tb "VALUE" val)
+					       (dboard:tabdat-run-name-set! tabdat val)
+					       (dashboard:update-run-command tabdat))))
+				       "command-runname-selector lb action"))))
 	  (refresh-runs-list (lambda ()
 			       (if (dashboard:database-changed? commondat tabdat)
 				   (let* ((target        (dboard:tabdat-target-string tabdat))
@@ -953,52 +959,52 @@
       tb
       lb))))
 
-(define (dcommon:command-testname-selector commondat tabdat update-keyvals key-listboxes)
-  (iup:frame
-   #:title "SELECTORS"
-   (iup:vbox
-    ;; Text box for test patterns
+(define (dcommon:command-testname-selector commondat tabdat update-keyvals) ;;  key-listboxes)
+  (iup:vbox
+   ;; Text box for test patterns
+   (iup:frame
+    #:title "Test patterns (one per line)"
+    (let ((tb (iup:textbox #:action (lambda (val a b)
+				      (debug:catch-and-dump
+				       (lambda ()
+					 (dboard:tabdat-test-patts-set!-use
+					  tabdat
+					  (dboard:lines->test-patt b))
+					 (dashboard:update-run-command tabdat))
+				       "command-testname-selector tb action"))
+			   #:value (dboard:test-patt->lines
+				    (dboard:tabdat-test-patts-use tabdat))
+			   #:expand "YES"
+			   #:size "x30"
+			   #:multiline "YES")))
+      (set! test-patterns-textbox tb)
+      tb))
+   (iup:frame
+    #:title "Target"
+    ;; Target selectors
+    (apply iup:hbox
+	   (let* ((dat      (dashboard:update-target-selector tabdat action-proc: update-keyvals))
+		  (key-lb   (car dat))
+		  (combos   (cadr dat)))
+	     combos)))
+   (iup:hbox
+    ;; Text box for STATES
     (iup:frame
-     #:title "Test patterns (one per line)"
-     (let ((tb (iup:textbox #:action (lambda (val a b)
-				       (dboard:tabdat-test-patts-set!-use
-					tabdat
-					(dboard:lines->test-patt b))
-				       (dashboard:update-run-command tabdat))
-			    #:value (dboard:test-patt->lines
-				     (dboard:tabdat-test-patts-use tabdat))
-			    #:expand "YES"
-			    #:size "x50"
-			    #:multiline "YES")))
-       (set! test-patterns-textbox tb)
-       tb))
+     #:title "States"
+     (dashboard:text-list-toggle-box 
+      ;; Move these definitions to common and find the other useages and replace!
+      (map cadr *common:std-states*) ;; '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
+      (lambda (all)
+	(dboard:tabdat-states-set! tabdat all)
+	(dashboard:update-run-command tabdat))))
+    ;; Text box for STATES
     (iup:frame
-     #:title "Target"
-     ;; Target selectors
-     (apply iup:hbox
-	    (let* ((dat      (dashboard:update-target-selector key-listboxes action-proc: update-keyvals))
-		   (key-lb   (car dat))
-		   (combos   (cadr dat)))
-	      (set! key-listboxes key-lb)
-	      combos)))
-    (iup:hbox
-     ;; Text box for STATES
-     (iup:frame
-      #:title "States"
-      (dashboard:text-list-toggle-box 
-       ;; Move these definitions to common and find the other useages and replace!
-       (map cadr *common:std-states*) ;; '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
-       (lambda (all)
-	 (dboard:tabdat-states-set! tabdat all)
-	 (dashboard:update-run-command tabdat))))
-     ;; Text box for STATES
-     (iup:frame
-      #:title "Statuses"
-      (dashboard:text-list-toggle-box 
-       (map cadr *common:std-statuses*) ;; '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
-       (lambda (all)
-	 (dboard:tabdat-statuses-set! tabdat all)
-	 (dashboard:update-run-command tabdat))))))))
+     #:title "Statuses"
+     (dashboard:text-list-toggle-box 
+      (map cadr *common:std-statuses*) ;; '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
+      (lambda (all)
+	(dboard:tabdat-statuses-set! tabdat all)
+	(dashboard:update-run-command tabdat)))))))
 
 (define (dcommon:command-tests-tasks-canvas data test-records sorted-testnames tests-draw-state)
   (iup:frame
