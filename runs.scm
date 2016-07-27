@@ -87,8 +87,7 @@
 					(if (and itempath
 						 (not (equal? itempath "")))
 					    (conc "/" itempath)
-					    ""))))
-    ))
+					    ""))))))
 
 (define (set-item-env-vars itemdat)
   (for-each (lambda (item)
@@ -129,8 +128,7 @@
 (define (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)
   (thread-sleep! (cond
         	  ((> *runs:can-run-more-tests-count* 20)
-		   (if (runs:lownoise "waiting on tasks" 60)
-		       (debug:print-info 2 *default-log-port* "waiting for tasks to complete, sleeping briefly ..."))
+		   (if (runs:lownoise "waiting on tasks" 60)(debug:print-info 2 *default-log-port* "waiting for tasks to complete, sleeping briefly ..."))
 		   2);; obviously haven't had any work to do for a while
         	  (else 0)))
   (let* ((num-running             (rmt:get-count-tests-running run-id))
@@ -149,7 +147,7 @@
 	(list #f num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)
 	(let ((can-not-run-more (cond
 				 ;; if max-concurrent-jobs is set and the number running is greater 
-				 ;; than it than cannot run more jobs
+				 ;; than it then cannot run more jobs
 				 ((and max-concurrent-jobs (>= num-running max-concurrent-jobs))
 				  (if (runs:lownoise "mcj msg" 60)
 				      (debug:print 0 *default-log-port* "WARNING: Max running jobs exceeded, current number running: " num-running 
