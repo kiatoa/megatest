@@ -10,7 +10,7 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
-(use defstruct srfi-1)
+(use typed-records srfi-1)
 
 (declare (unit vg))
 (use canvas-draw iup)
