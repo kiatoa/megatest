@@ -16,7 +16,7 @@
 (use canvas-draw)
 (import canvas-draw-iup)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 defstruct sparse-vectors)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 typed-records sparse-vectors) ;; defstruct
 (import (prefix sqlite3 sqlite3:))
 
 (declare (uses common))
@@ -162,82 +162,79 @@ Misc
 ;;
 (defstruct dboard:tabdat 
   ;; runs
-  allruns          ;; list of dboard:rundat records
-  allruns-by-id    ;; hash of run-id -> dboard:rundat records
-  done-runs        ;; list of runs already drawn
-  not-done-runs    ;; list of runs not yet drawn
-  header           ;; header for decoding the run records
-  keys             ;; keys for this run (i.e. target components)
-  numruns
-  tot-runs
-  last-data-update ;; last time the data in allruns was updated
-  runs-mutex       ;; use to prevent parallel access to draw objects
+  ((allruns         '())                 : list)        ;; list of dboard:rundat records
+  ((allruns-by-id    (make-hash-table))  : hash-table)  ;; hash of run-id -> dboard:rundat records
+  ((done-runs       '())                 : list)        ;; list of runs already drawn
+  ((not-done-runs   '())                 : list)        ;; list of runs not yet drawn
+  (header            #f)                                ;; header for decoding the run records
+  (keys              #f)                                ;; keys for this run (i.e. target components)
+  ((numruns          16)                 : number)      ;; 
+  ((tot-runs          0)                 : number)
+  ((last-data-update  0)                 : number)      ;; last time the data in allruns was updated
+  (runs-mutex         (make-mutex))                     ;; use to prevent parallel access to draw objects
 
   ;; Runs view
-  buttondat 
-  item-test-names
-  run-keys
-  runs-matrix       ;; used in newdashboard
-  start-run-offset  ;; left-right slider value
-  start-test-offset ;; up-down slider value
+  ((buttondat         (make-hash-table)) : hash-table)  ;;     
+  ((item-test-names  '())                : list)        
+  ((run-keys          (make-hash-table)) : hash-table)
+  (runs-matrix        #f)                               ;; used in newdashboard
+  ((start-run-offset   0)                : number)      ;; left-right slider value
+  ((start-test-offset  0)                : number)      ;; up-down slider value
 
   ;; Canvas and drawing data
-  cnv
-  cnv-obj
-  drawing
-  draw-cache     ;; 
-  start-row
-  run-start-row
-  max-row
-  running-layout
-  originx
-  originy
-  layout-update-ok
-  compact-layout
+  (cnv                #f)
+  (cnv-obj            #f)
+  (drawing            #f)
+  ((run-start-row     0)                 : number)
+  ((max-row           0)                 : number)
+  ((running-layout    #f)                : boolean)
+  (originx            #f)
+  (originy            #f)
+  ((layout-update-ok  #t)                : boolean)
+  ((compact-layout    #t)                : boolean)
 
   ;; Controls used to launch runs etc.
-  command          ;; for run control this is the command being built up
-  command-tb 
-  key-listboxes
-  key-lbs           
-  run-name         ;; from run name setting widget
-  states           ;; states for -state s1,s2 ...
-  statuses         ;; statuses for -status s1,s2 ...
-
-  ;; Selector variables
-  curr-run-id      ;; current row to display in Run summary view
-  curr-test-ids    ;; used only in dcommon:run-update which is used in newdashboard
-  filters-changed  ;; to to indicate that the user changed filters for this tab
-  last-filter-str  ;; conc the target runname and testpatt for a signature of changed filters
-  hide-empty-runs
-  hide-not-hide    ;; toggle for hide/not hide empty runs
-  hide-not-hide-button
-  searchpatts
-  state-ignore-hash    ;; hash of  STATE => #t/#f for display control
-  status-ignore-hash   ;; hash of STATUS => #t/#f
-  target
-  test-patts
+  ((command          "")                 : string)      ;; for run control this is the command being built up
+  (command-tb        #f)			         
+  (key-listboxes     #f)			         
+  (key-lbs           #f)			         
+  run-name                                              ;; from run name setting widget
+  states                                                ;; states for -state s1,s2 ...
+  statuses                                              ;; statuses for -status s1,s2 ...
+						         
+  ;; Selector variables				         
+  curr-run-id                                           ;; current row to display in Run summary view
+  curr-test-ids                                         ;; used only in dcommon:run-update which is used in newdashboard
+  ((filters-changed  #f)                 : boolean)     ;; to to indicate that the user changed filters for this tab
+  ((last-filter-str  "")                 : string)      ;; conc the target runname and testpatt for a signature of changed filters
+  ((hide-empty-runs  #f)                 : boolean)     
+  ((hide-not-hide    #t)                 : boolean)     ;; toggle for hide/not hide empty runs
+  (hide-not-hide-button #f)
+  ((searchpatts      (make-hash-table))  : hash-table)  ;;
+  ((state-ignore-hash (make-hash-table)) : hash-table)  ;; hash of  STATE => #t/#f for display control
+  ((status-ignore-hash (make-hash-table)) : hash-table)  ;; hash of STATUS => #t/#f
+  (target              #f)
+  (test-patts          #f)
 
   ;; db info to file the .db files for the area
-  dbdir
-  dbfpath
-  dbkeys 
-  last-db-update  ;; last db file timestamp
-  monitor-db-path ;; where to find monitor.db
-  ro               ;; is the database read-only?
+  (dbdir               #f)
+  (dbfpath             #f)
+  (dbkeys              #f)
+  ((last-db-update     0)                : number)      ;; last db file timestamp
+  (monitor-db-path     #f)                              ;; where to find monitor.db
+  ro                                                    ;; is the database read-only?
 
   ;; tests data
-  num-tests        ;; total number of tests to show (used in the old runs display)
+  ((num-tests          10)               : number)      ;; total number of tests to show (used in the old runs display)
 
   ;; runs tree
-  path-run-ids     ;; path (target / runname) => id
-  runs-tree
+  ((path-run-ids       (make-hash-table)) : hash-table) ;; path (target / runname) => id
+  (runs-tree           #f)
 
   ;; tab data
-  last-update      ;; last time this tab was updated
-  view-changed
-  xadj             ;; x slider number (if using canvas)
-  yadj             ;; y slider number (if using canvas)
+  ((view-changed       #t)                : boolean)   
+  ((xadj               0)                 : number)     ;; x slider number (if using canvas)
+  ((yadj               0)                 : number)     ;; y slider number (if using canvas)
 
   tests-tree       ;; used in newdashboard
   )
@@ -254,47 +251,30 @@ Misc
   (dboard:tabdat-test-patts-set! vec (if (equal? val "") #f val)))
 
 (define (dboard:tabdat-make-data)
-  (let ((dat (make-dboard:tabdat
-	      allruns-by-id:        (make-hash-table)
-	      allruns:              '() ;; list of run records (vectors)
-	      buttondat:            (make-hash-table)
-	      curr-test-ids:        (make-hash-table)
-	      command:              ""
-	      compact-layout:       #t
-	      dbdir:                #f
-	      filters-changed:      #f
-	      header:               #f 
-	      hide-empty-runs:      #f
-	      hide-not-hide-button: #f
-	      hide-not-hide:        #t
-	      item-test-names:      '()
-	      keys:                 #f
-	      key-listboxes:        #f
-	      last-db-update:       0
-	      last-data-update:     0
-	      layout-update-ok:     #t
-	      not-done-runs:        '()
-	      done-runs:            '()
-	      num-tests:            15
-	      numruns:              16
-	      originx:              #f
-	      originy:              #f
-	      path-run-ids:         (make-hash-table)
-	      run-ids:              (make-hash-table)
-	      run-keys:             (make-hash-table)
-	      running-layout:       #f
-	      searchpatts:          (make-hash-table)
-	      start-run-offset:     0
-	      start-test-offset:    0
-	      state-ignore-hash:    (make-hash-table)
-	      status-ignore-hash:   (make-hash-table)
-	      xadj:                 0
-	      yadj:                 0
-	      view-changed:         #t
-	      run-start-row:        0
-	      max-row:              0
-	      runs-mutex:           (make-mutex)
-	      )))
+  (let ((dat (make-dboard:tabdat)))
+    ;; 	      curr-test-ids:        (make-hash-table)
+    ;; 	      command:              ""
+    ;; 	      dbdir:                #f
+    ;; 	      filters-changed:      #f
+    ;; 	      hide-empty-runs:      #f
+    ;; 	      hide-not-hide-button: #f
+    ;; 	      hide-not-hide:        #t
+    ;; 	      key-listboxes:        #f
+    ;; 	      last-db-update:       0
+    ;; 	      num-tests:            15
+    ;; 	      originx:              #f
+    ;; 	      originy:              #f
+    ;; 	      path-run-ids:         (make-hash-table)
+    ;; 	      run-ids:              (make-hash-table)
+    ;; 	      run-keys:             (make-hash-table)
+    ;; 	      searchpatts:          (make-hash-table)
+    ;; 	      start-test-offset:    0
+    ;; 	      state-ignore-hash:    (make-hash-table)
+    ;; 	      status-ignore-hash:   (make-hash-table)
+    ;; 	      xadj:                 0
+    ;; 	      yadj:                 0
+    ;; 	      view-changed:         #t
+    ;; 	      )))
     (dboard:setup-tabdat dat)
     (dboard:setup-num-rows dat)
     dat))
@@ -523,7 +503,7 @@ Misc
 			      (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id rd)
 			      rd))))
 	 ;; (prev-tests  (dboard:rundat-tests prev-dat)) ;; (vector-ref prev-dat 1))
-	 (last-update (dboard:tabdat-last-update tabdat)) ;; (vector-ref prev-dat 3))
+	 (last-update (dboard:rundat-last-update run-dat)) ;; (vector-ref prev-dat 3))
 	 (tmptests    (rmt:get-tests-for-run run-id testnamepatt states statuses  ;; run-id testpatt states statuses
 					     #f #f                                ;; offset limit 
 					     (dboard:tabdat-hide-not-hide tabdat) ;; no-in
