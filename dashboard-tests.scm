@@ -237,7 +237,7 @@
 (define (submegatest-panel dbstruct keydat testdat runname testconfig)
   (let* ((subarea (configf:lookup testconfig "setup" "submegatest"))
 	 (area-exists (and subarea (file-exists? subarea))))
-    ;; (debug:print-info 0 #f "Megatest subarea=" subarea ", area-exists=" area-exists)
+    ;; (debug:print-info 0 *default-log-port* "Megatest subarea=" subarea ", area-exists=" area-exists)
     (if subarea
 	(iup:frame 
 	 #:title "Megatest Run Info" ; #:expand "YES"
@@ -426,7 +426,7 @@
 	 (request-update #t))
     (if (not testdat)
 	(begin
-	  (debug:print 2 #f "ERROR: No test data found for test " test-id ", exiting")
+	  (debug:print 2 *default-log-port* "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
 	(let* (;; (run-id        (if testdat (db:test-get-run_id testdat) #f))
 	       (test-registry (tests:get-all))
@@ -513,9 +513,9 @@
 						    ;; NOTE: BUG HIDER, try to eliminate this exception handler
 						    (handle-exceptions
 						     exn 
-						     (debug:print-info 0 #f "test db access issue in examine test for run-id " run-id ", test-id " test-id ": " ((condition-property-accessor 'exn 'message) exn))
+						     (debug:print-info 0 *default-log-port* "test db access issue in examine test for run-id " run-id ", test-id " test-id ": " ((condition-property-accessor 'exn 'message) exn))
 						     (rmt:get-test-info-by-id run-id test-id )))))
-			       ;; (debug:print-info 0 #f "need-update= " need-update " curr-mod-time = " curr-mod-time)
+			       ;; (debug:print-info 0 *default-log-port* "need-update= " need-update " curr-mod-time = " curr-mod-time)
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
@@ -524,7 +524,7 @@
 				 (set! rundir       ;; (filedb:get-path *fdb* 
 				       (db:test-get-rundir testdat)) ;; )
 				 (set! testfullname (db:test-get-fullname testdat))
-				 ;; (debug:print 0 #f "INFO: teststeps=" (intersperse teststeps "\n    "))
+				 ;; (debug:print 0 *default-log-port* "INFO: teststeps=" (intersperse teststeps "\n    "))
 				 
 				 ;; I don't see why this was implemented this way. Please comment it ...
 				 ;; (if (eq? curr-mod-time db-mod-time) ;; do only once if same
@@ -577,12 +577,8 @@
 			      lbl))
 	       (store-button store-label)
 	       (command-proc (lambda (command-text-box)
-			       (let* ((cmd     (iup:attribute command-text-box "VALUE"))
-				      (fullcmd (conc (dtests:get-pre-command)
-						     cmd 
-						     (dtests:get-post-command))))
-				 (debug:print-info 02 #f "Running command: " fullcmd)
-				 (common:without-vars fullcmd "MT_.*"))))
+			       (let* ((cmd     (iup:attribute command-text-box "VALUE")))
+				 (common:run-a-command cmd))))
 	       (command-text-box (iup:textbox
 				  #:expand "HORIZONTAL"
 				  #:font "Courier New, -10"
@@ -598,14 +594,14 @@
 	;; 								       (fullcmd (conc (dtests:get-pre-command)
 	;; 										      cmd 
 	;; 										      (dtests:get-post-command))))
-	;; 								  (debug:print-info 02 #f "Running command: " fullcmd)
+	;; 								  (debug:print-info 02 *default-log-port* "Running command: " fullcmd)
 	;; 								  (common:without-vars fullcmd "MT_.*")))))
 	       (kill-jobs (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
 			     (conc "megatest -target " keystring " -runname "  runname 
 				   " -set-state-status KILLREQ,n/a -testpatt %/% "
-				   " -state RUNNING"))))
+				   " -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))
 	       (run-test  (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"

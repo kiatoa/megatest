@@ -113,7 +113,7 @@
    exn
    (let ((call-chain (get-call-chain)))
      (print-call-chain (current-error-port))
-     (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))       
+     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))       
      (vector #f (vector exn call-chain dat))) ;; return some stuff for debug if an exception happens
    (if (not (vector? dat))                    ;; it is an error to not receive a vector
        (vector #f #f "remote must be called with a vector")       
@@ -172,6 +172,7 @@
 	    ;; TASKS
 	    ((tasks-add)                 (apply tasks:add dbstruct params))   
 	    ((tasks-set-state-given-param-key) (apply tasks:set-state-given-param-key dbstruct params))
+	    ((tasks-get-last)            (apply tasks:get-last dbstruct params))
 
 	    ;; ARCHIVES
 	    ;; ((archive-get-allocations)   
@@ -187,7 +188,8 @@
 	    ((get-key-val-pairs)               (apply db:get-key-val-pairs dbstruct params))
 	    ((get-keys)                        (db:get-keys dbstruct))
 	    ((get-key-vals)                    (apply db:get-key-vals dbstruct params))
-	    ((get-targets)                     (db:get-targets  dbstruct))
+	    ((get-target)                      (apply db:get-target dbstruct params))
+	    ((get-targets)                     (db:get-targets dbstruct))
 
 	    ;; ARCHIVES
 	    ((test-get-archive-block-info)     (apply db:test-get-archive-block-info dbstruct params))
@@ -228,6 +230,7 @@
 	    ((get-run-name-from-id)         (apply db:get-run-name-from-id dbstruct params))
 	    ((get-main-run-stats)           (apply db:get-main-run-stats dbstruct params))
 	    ((get-var)                      (apply db:get-var dbstruct params))
+	    ((get-run-stats)                (apply db:get-run-stats dbstruct params))
 
 	    ;; STEPS
 	    ((get-steps-data)               (apply db:get-steps-data dbstruct params))

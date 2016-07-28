@@ -32,6 +32,20 @@
   (syntax-rules ()
     ((_ exn-in errstmt ...)(handle-exceptions exn-in errstmt ...))))
 
+;; iup callbacks are not dumping the stack, this is a work-around
+;;
+(define-simple-syntax (debug:catch-and-dump proc procname)
+  (handle-exceptions
+   exn
+   (begin
+     (print-call-chain (current-error-port))
+     (with-output-to-port (current-error-port)
+       (lambda ()
+	 (print ((condition-property-accessor 'exn 'message) exn))
+	 (print "Callback error in " procname)
+	 (print "Full condition info:\n" (condition->list exn)))))
+   (proc)))
+
 (define (debug:calc-verbosity vstr)
   (cond
    ((number? vstr) vstr)
@@ -89,9 +103,25 @@
 	(lambda ()
 	  (if *logging*
 	      (db:log-event (apply conc params))
-	      ;; (apply print "pid:" (current-process-id) " " params)
 	      (apply print params)
 	      )))))
+
+(define (debug:print-error n e . params)
+  ;; normal print
+  (if (debug:debug-mode n)
+      (with-output-to-port (or e (current-error-port))
+	(lambda ()
+	  (if *logging*
+	      (db:log-event (apply conc params))
+	      ;; (apply print "pid:" (current-process-id) " " params)
+	      (apply print "ERROR: " params)
+	      ))))
+  ;; pass important messages to stderr
+  (if (and (eq? n 0)(not (eq? e (current-error-port)))) 
+      (with-output-to-port (current-error-port)
+	(lambda ()
+	  (apply print "ERROR: " params)
+	  ))))
 
 (define (debug:print-info n e . params)
   (if (debug:debug-mode n)

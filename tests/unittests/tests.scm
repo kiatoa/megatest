@@ -70,7 +70,7 @@
 
 (print "MODE=not in, state in RUNNING and status IN WARN")
 (set! *verbosity* 8)
-(test #f '(("RUNNING" . "n/a") ("COMPLETED" . "WARN"))
+(test #f '(("DELETED" . "n/a") ("COMPLETED" . "PASS") ("COMPLETED" . "FAIL"))
       (map 
        (lambda (x)
 	 (cons (vector-ref x 3)(vector-ref x 4)))

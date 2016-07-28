@@ -36,9 +36,9 @@
   (if (and (string? val)(string? key))
       (handle-exceptions
        exn
-       (debug:print 0 #f "ERROR: bad value for setenv, key=" key ", value=" val)
+       (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val)
        (setenv key val))
-      (debug:print 0 #f "ERROR: bad value for setenv, key=" key ", value=" val)))
+      (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val)))
 
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
@@ -60,6 +60,7 @@
 (define *write-frequency*   (make-hash-table)) ;; run-id => (vector (current-seconds) 0))
 (define *alt-log-file* #f)  ;; used by -log
 (define *common:denoise*    (make-hash-table)) ;; for low noise printing
+(define *default-log-port*  (current-error-port))
 
 ;; DATABASE
 (define *dbstruct-db*  #f)
@@ -171,24 +172,24 @@
 (define (common:exit-on-version-changed)
   (if (common:version-changed?)
       (let ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config")))
-        (debug:print 0 #f
+        (debug:print 0 *default-log-port*
 		     "ERROR: Version mismatch!\n"
 		     "   expected: " (common:version-signature) "\n"
 		     "   got:      " (common:get-last-run-version))
 	(if (and (file-exists? mtconf)
 		 (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
 	    (begin
-	      (debug:print 0 #f "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
+	      (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
 	      (handle-exceptions
 	       exn
 	       (begin
-		 (debug:print 0 #f "Failed to switch versions.")
-		 (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
+		 (debug:print 0 *default-log-port* "Failed to switch versions.")
+		 (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 		 (print-call-chain (current-error-port))
 		 (exit 1))
 	       (common:cleanup-db)))
 	    (begin
-	      (debug:print 0 #f " to switch versions you can run: \"megatest -cleanup-db\"")
+	      (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
 	      (exit 1))))))
 
 ;;======================================================================
@@ -275,7 +276,7 @@
    (handle-exceptions
     exn
     (begin
-      (debug:print 0 #f "ERROR: received bad encoded string \"" instr "\", message: " ((condition-property-accessor 'exn 'message) exn))
+      (debug:print-error 0 *default-log-port* "received bad encoded string \"" instr "\", message: " ((condition-property-accessor 'exn 'message) exn))
       (print-call-chain (current-error-port))
       #f)
     (read (open-input-string (base64:base64-decode instr))))
@@ -377,7 +378,7 @@
 		       (begin
 			 (set! *time-to-exit* #t)
 			 #t))))
-    (debug:print-info 4 #f "starting exit process, finalizing databases.")
+    (debug:print-info 4 *default-log-port* "starting exit process, finalizing databases.")
     (if (and no-hurry (debug:debug-mode 18))
 	(rmt:print-db-stats))
     (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
@@ -400,13 +401,15 @@
 					(begin
 					  (sqlite3:interrupt! db)
 					  (sqlite3:finalize! db #t)
-					  (vector-set! *task-db* 0 #f)))))) "Cleanup db exit thread"))
+					  (vector-set! *task-db* 0 #f)))))
+			      (close-output-port *default-log-port*)
+			      (set! *default-log-port* (current-error-port))) "Cleanup db exit thread"))
 	  (th2 (make-thread (lambda ()
-			      (debug:print 4 #f "Attempting clean exit. Please be patient and wait a few seconds...")
+			      (debug:print 4 *default-log-port* "Attempting clean exit. Please be patient and wait a few seconds...")
 			      (if no-hurry
 				  (thread-sleep! 5) ;; give the clean up few seconds to do it's stuff
 				  (thread-sleep! 2))
-			      (debug:print 4 #f " ... done")
+			      (debug:print 4 *default-log-port* " ... done")
 			      )
 			    "clean exit")))
       (thread-start! th1)
@@ -416,7 +419,7 @@
 (define (std-signal-handler signum)
   ;; (signal-mask! signum)
   (set! *time-to-exit* #t)
-  (debug:print 0 #f "ERROR: Received signal " signum " exiting promptly")
+  (debug:print-error 0 *default-log-port* "Received signal " signum " exiting promptly")
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))
 
@@ -428,28 +431,6 @@
 ;; M I S C   U T I L S
 ;;======================================================================
 
-;; Convert strings like "5s 2h 3m" => 60x60x2 + 3x60 + 5
-(define (common:hms-string->seconds tstr)
-  (let ((parts     (string-split tstr))
-	(time-secs 0)
-	;; s=seconds, m=minutes, h=hours, d=days
-	(trx       (regexp "(\\d+)([smhd])")))
-    (for-each (lambda (part)
-		(let ((match  (string-match trx part)))
-		  (if match
-		      (let ((val (string->number (cadr match)))
-			    (unt (caddr match)))
-			(if val 
-			    (set! time-secs (+ time-secs (* val
-							    (case (string->symbol unt)
-							      ((s) 1)
-							      ((m) 60)
-							      ((h) (* 60 60))
-							      ((d) (* 24 60 60))
-							      (else 0))))))))))
-	      parts)
-    time-secs))
-		       
 ;; one-of args defined
 (define (args-defined? . param)
   (let ((res #f))
@@ -472,13 +453,13 @@
     (if num num val)))
 
 (define (patt-list-match item patts)
-  (debug:print-info 8 #f "patt-list-match item=" item " patts=" patts)
+  (debug:print-info 8 *default-log-port* "patt-list-match item=" item " patts=" patts)
   (if (and item patts)  ;; here we are filtering for matches with item patterns
       (let ((res #f))   ;; look through all the item-patts if defined, format is patt1,patt2,patt3 ... wildcard is %
 	(for-each 
 	 (lambda (patt)
 	   (let ((modpatt (string-substitute "%" ".*" patt #t)))
-	     (debug:print-info 10 #f "patt " patt " modpatt " modpatt)
+	     (debug:print-info 10 *default-log-port* "patt " patt " modpatt " modpatt)
 	     (if (string-match (regexp modpatt) item)
 		 (set! res #t))))
 	 (string-split patts ","))
@@ -533,7 +514,7 @@
 	 (testpatt    (or (and (equal? args-testpatt "%")
 			       rtestpatt)
 			  args-testpatt)))
-    (if rtestpatt (debug:print-info 0 #f "TESTPATT from runconfigs: " rtestpatt))
+    (if rtestpatt (debug:print-info 0 *default-log-port* "TESTPATT from runconfigs: " rtestpatt))
     testpatt))
 
 (define (common:get-linktree)
@@ -567,7 +548,7 @@
 	    target)
 	(if target
 	    (begin
-	      (debug:print 0 #f "ERROR: Invalid target, spaces or blanks not allowed \"" target "\", target should be: " (string-intersperse keys "/") ", have " tlist " for elements")
+	      (debug:print-error 0 *default-log-port* "Invalid target, spaces or blanks not allowed \"" target "\", target should be: " (string-intersperse keys "/") ", have " tlist " for elements")
 	      #f)
 	    #f))))
 
@@ -640,7 +621,7 @@
 	       (curr-colnum     (if existing-coldat colnum (+ colnum 1)))
 	       (new-rownames    (if existing-rowdat rownames (cons (list rowkey curr-rownum) rownames)))
 	       (new-colnames    (if existing-coldat colnames (cons (list colkey curr-colnum) colnames))))
-	  ;; (debug:print-info 0 #f "Processing record: " hed )
+	  ;; (debug:print-info 0 *default-log-port* "Processing record: " hed )
 	  (if proc (proc curr-rownum curr-colnum rowkey colkey value))
 	  (if (null? tal)
 	      (list new-rownames new-colnames)
@@ -672,7 +653,7 @@
   (handle-exceptions
       exn
       (begin
-	(debug:print 0 #f "ERROR: command \"/bin/readlink -f " path "\" failed.")
+	(debug:print-error 0 *default-log-port* "command \"/bin/readlink -f " path "\" failed.")
 	path) ;; just give up
     (with-input-from-pipe
 	(conc "/bin/readlink -f " path)
@@ -708,12 +689,12 @@
     (cond
      ((and (> first adjload)
 	   (> count 0))
-      (debug:print-info 0 #f "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload (if msg msg ""))
+      (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
      ((and (> loadjmp numcpus)
 	   (> count 0))
-      (debug:print-info 0 #f "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus (if msg msg ""))
+      (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
 
@@ -822,7 +803,7 @@
 	 (dbdir    (cadddr spacedat)))
     (if (not is-ok)
 	(begin
-	  (debug:print 0 #f "ERROR: Insufficient space in " dbdir ", require " required ", have " dbspace  ", exiting now.")
+	  (debug:print-error 0 *default-log-port* "Insufficient space in " dbdir ", require " required ", have " dbspace  ", exiting now.")
 	  (exit 1)))))
   
 ;; paths is list of lists ((name path) ... )
@@ -836,15 +817,15 @@
 	      (freespc    (cond
 			   ((not (directory? dirpath))
 			    (if (common:low-noise-print 300 "disks not a dir " disk-num)
-				(debug:print 0 #f "WARNING: disk " disk-num " at path \"" dirpath "\" is not a directory - ignoring it."))
+				(debug:print 0 *default-log-port* "WARNING: disk " disk-num " at path \"" dirpath "\" is not a directory - ignoring it."))
 			    -1)
 			   ((not (file-write-access? dirpath))
 			    (if (common:low-noise-print 300 "disks not writeable " disk-num)
-				(debug:print 0 #f "WARNING: disk " disk-num " at path \"" dirpath "\" is not writeable - ignoring it."))
+				(debug:print 0 *default-log-port* "WARNING: disk " disk-num " at path \"" dirpath "\" is not writeable - ignoring it."))
 			    -1)
 			   ((not (eq? (string-ref dirpath 0) #\/))
 			    (if (common:low-noise-print 300 "disks not a proper path " disk-num)
-				(debug:print 0 #f "WARNING: disk " disk-num " at path \"" dirpath "\" is not a fully qualified path - ignoring it."))
+				(debug:print 0 *default-log-port* "WARNING: disk " disk-num " at path \"" dirpath "\" is not a fully qualified path - ignoring it."))
 			    -1)
 			   (else
 			    (get-df dirpath)))))
@@ -938,11 +919,40 @@
      (lambda (var val)
        (setenv var val)))
     vars))
+
+(define (common:run-a-command cmd)
+  (let ((fullcmd  (conc (dtests:get-pre-command)
+			cmd 
+			(dtests:get-post-command))))
+    (debug:print-info 02 *default-log-port* "Running command: " fullcmd)
+    (common:without-vars fullcmd "MT_.*")))
 		  
 ;;======================================================================
 ;; T I M E   A N D   D A T E
 ;;======================================================================
 
+;; Convert strings like "5s 2h 3m" => 60x60x2 + 3x60 + 5
+(define (common:hms-string->seconds tstr)
+  (let ((parts     (string-split tstr))
+	(time-secs 0)
+	;; s=seconds, m=minutes, h=hours, d=days
+	(trx       (regexp "(\\d+)([smhd])")))
+    (for-each (lambda (part)
+		(let ((match  (string-match trx part)))
+		  (if match
+		      (let ((val (string->number (cadr match)))
+			    (unt (caddr match)))
+			(if val 
+			    (set! time-secs (+ time-secs (* val
+							    (case (string->symbol unt)
+							      ((s) 1)
+							      ((m) 60)
+							      ((h) (* 60 60))
+							      ((d) (* 24 60 60))
+							      (else 0))))))))))
+	      parts)
+    time-secs))
+		       
 (define (seconds->hr-min-sec secs)
   (let* ((hrs (quotient secs 3600))
 	 (min (quotient (- secs (* hrs 3600)) 60))
@@ -969,7 +979,7 @@
 
 (define (seconds->year-work-week/day-time sec)
   (time->string
-   (seconds->local-time sec) "%yww%V.%w %H:%M"))
+   (seconds->local-time sec) "%Yww%V.%w %H:%M"))
 
 (define (seconds->quarter sec)
   (case (string->number
@@ -1232,12 +1242,12 @@
 		      (host-type (cadr hed)))
 		  (if (tests:match patt testname itempath)
 		      (begin
-			(debug:print-info 2 #f "Have flexi-launcher match for " testname "/" itempath " = " host-type)
+			(debug:print-info 2 *default-log-port* "Have flexi-launcher match for " testname "/" itempath " = " host-type)
 			(let ((launcher (configf:lookup configdat "host-types" host-type)))
 			  (if launcher
 			      launcher
 			      (begin
-				(debug:print-info 0 #f "WARNING: no launcher found for host-type " host-type)
+				(debug:print-info 0 *default-log-port* "WARNING: no launcher found for host-type " host-type)
 				(if (null? tal)
 				    fallback-launcher
 				    (loop (car tal)(cdr tal)))))))

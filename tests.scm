@@ -49,7 +49,7 @@
 		  d
 		  (begin
 		    (if (common:low-noise-print 60 "tests:get-tests-search-path" d)
-			(debug:print 0 #f "WARNING: problem with directory " d ", dropping it from tests path"))
+			(debug:print 0 *default-log-port* "WARNING: problem with directory " d ", dropping it from tests path"))
 		    #f)))
 	    (append paths (list (conc *toppath* "/tests"))))))
 
@@ -103,7 +103,7 @@
     (if (null? best-matches)
 	#f
 	(let ((res (car best-matches)))
-	  ;; (debug:print 0 #f "res=" res)
+	  ;; (debug:print 0 *default-log-port* "res=" res)
 	  (cond
 	   ((string? res) res) ;;; FIX THE ROOT CAUSE HERE ....
 	   ((null? res)   #f)
@@ -122,10 +122,10 @@
     ;; otherwise return #f - this is not an iterated test
     (cond
      ((procedure? items)      
-      (debug:print-info 4 #f "items is a procedure, will calc later")
+      (debug:print-info 4 *default-log-port* "items is a procedure, will calc later")
       items)            ;; calc later
      ((procedure? itemstable)
-      (debug:print-info 4 #f "itemstable is a procedure, will calc later")
+      (debug:print-info 4 *default-log-port* "itemstable is a procedure, will calc later")
       itemstable)       ;; calc later
      ((filter (lambda (x)
 		(let ((val (car x)))
@@ -134,7 +134,7 @@
 		      (if (list? itemstable) itemstable '())))
       'have-procedure)
      ((or (list? items)(list? itemstable)) ;; calc now
-      (debug:print-info 4 #f "items and itemstable are lists, calc now\n"
+      (debug:print-info 4 *default-log-port* "items and itemstable are lists, calc now\n"
 			"    items: " items " itemstable: " itemstable)
       (items:get-items-from-config tconfig))
      (else #f))))                           ;; not iterated
@@ -147,31 +147,31 @@
      (let ((instr (if config 
 		      (config-lookup config "requirements" "waiton")
 		      (begin ;; No config means this is a non-existant test
-			(debug:print 0 #f "ERROR: non-existent required test \"" test-name "\"")
+			(debug:print-error 0 *default-log-port* "non-existent required test \"" test-name "\"")
 			(exit 1))))
 	   (instr2 (if config
 		       (config-lookup config "requirements" "waitor")
 		       "")))
-       (debug:print-info 8 #f "waitons string is " instr ", waitors string is " instr2)
+       (debug:print-info 8 *default-log-port* "waitons string is " instr ", waitors string is " instr2)
        (let ((newwaitons
 	      (string-split (cond
 			     ((procedure? instr) ;; here 
 			      (let ((res (instr)))
-				(debug:print-info 8 #f "waiton procedure results in string " res " for test " test-name)
+				(debug:print-info 8 *default-log-port* "waiton procedure results in string " res " for test " test-name)
 				res))
 			     ((string? instr)     instr)
 			     (else 
-			      ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 #f "ERROR: something went wrong in processing waitons for test " test-name)
+			      ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print-error 0 *default-log-port* "something went wrong in processing waitons for test " test-name)
 			      ""))))
 	     (newwaitors
 	      (string-split (cond
 			     ((procedure? instr2)
 			      (let ((res (instr2)))
-				(debug:print-info 8 #f "waitor procedure results in string " res " for test " test-name)
+				(debug:print-info 8 *default-log-port* "waitor procedure results in string " res " for test " test-name)
 				res))
 			     ((string? instr2)     instr2)
 			     (else 
-			      ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 #f "ERROR: something went wrong in processing waitons for test " test-name)
+			      ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print-error 0 *default-log-port* "something went wrong in processing waitons for test " test-name)
 			      "")))))
 	 (values
 	  ;; the waitons
@@ -179,14 +179,14 @@
 		    (if (hash-table-ref/default all-tests-registry x #f)
 			#t
 			(begin
-			  (debug:print 0 #f "ERROR: test " test-name " has unrecognised waiton testname " x)
+			  (debug:print-error 0 *default-log-port* "test " test-name " has unrecognised waiton testname " x)
 			  #f)))
 		  newwaitons)
 	  (filter (lambda (x)
 		    (if (hash-table-ref/default all-tests-registry x #f)
 			#t
 			(begin
-			  (debug:print 0 #f "ERROR: test " test-name " has unrecognised waiton testname " x)
+			  (debug:print-error 0 *default-log-port* "test " test-name " has unrecognised waiton testname " x)
 			  #f)))
 		  newwaitors)
 	  config)))))
@@ -304,7 +304,7 @@
 	 (logpro-rule "diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html"))
     (if (not (file-exists? test-rundir))
 	(begin
-	  (debug:print 0 #f "ERROR: test run directory is gone, cannot propagate waiver")
+	  (debug:print-error 0 *default-log-port* "test run directory is gone, cannot propagate waiver")
 	  #f)
 	(begin
 	  (push-directory test-rundir)
@@ -312,7 +312,7 @@
 			    #f
 			    (let loop ((hed (car waivers))
 				       (tal (cdr waivers)))
-			      (debug:print 0 #f "INFO: Applying waiver rule \"" hed "\"")
+			      (debug:print 0 *default-log-port* "INFO: Applying waiver rule \"" hed "\"")
 			      (let* ((waiver      (configf:lookup testconfig "waivers" hed))
 				     (wparts      (if waiver (string-match waiver-rx waiver) #f))
 				     (waiver-rule (if wparts (cadr wparts)  #f))
@@ -322,7 +322,7 @@
 							(if (file-exists? fname)
 							    fname 
 							    (begin
-							      (debug:print 0 #f "INFO: No logpro file " fname " falling back to diff")
+							      (debug:print 0 *default-log-port* "INFO: No logpro file " fname " falling back to diff")
 							      #f)))
 						      #f))
 				     ;; if rule by name of waiver-rule is found in testconfig - use it
@@ -334,7 +334,7 @@
 							(if logpro-file
 							    logpro-rule
 							    (begin
-							      (debug:print 0 #f "INFO: No logpro file " logpro-file " found, using diff rule")
+							      (debug:print 0 *default-log-port* "INFO: No logpro file " logpro-file " found, using diff rule")
 							      diff-rule)))))
 				     ;; (string-substitute "%file1%" "foofoo.txt" "This is %file1% and so is this %file1%." #t)
 				     (processed-cmd (string-substitute 
@@ -344,7 +344,7 @@
 						      (string-substitute
 						       "%waivername%" hed rule-string #t) #t) #t))
 				     (res            #f))
-				(debug:print 0 #f "INFO: waiver command is \"" processed-cmd "\"")
+				(debug:print 0 *default-log-port* "INFO: waiver command is \"" processed-cmd "\"")
 				(if (eq? (system processed-cmd) 0)
 				    (if (null? tal)
 					#t
@@ -379,7 +379,7 @@
 			   (let ((prev-status  (db:test-get-status  prev-test))
 				 (prev-state   (db:test-get-state   prev-test))
 				 (prev-comment (db:test-get-comment prev-test)))
-			     (debug:print 4 #f "prev-status " prev-status ", prev-state " prev-state ", prev-comment " prev-comment)
+			     (debug:print 4 *default-log-port* "prev-status " prev-status ", prev-state " prev-state ", prev-comment " prev-comment)
 			     (if (and (equal? prev-state  "COMPLETED")
 				      (equal? prev-status "WAIVED"))
 				 (if comment
@@ -392,7 +392,7 @@
 	     (tests:check-waiver-eligibility testdat prev-test))
 	(set! real-status "WAIVED"))
 
-    (debug:print 4 #f "real-status " real-status ", waived " waived ", status " status)
+    (debug:print 4 *default-log-port* "real-status " real-status ", waived " waived ", status " status)
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
@@ -425,7 +425,7 @@
 	  (units    (hash-table-ref/default otherdat ":units"    ""))
 	  (type     (hash-table-ref/default otherdat ":type"     ""))
 	  (dcomment (hash-table-ref/default otherdat ":comment"  "")))
-      (debug:print 4 #f 
+      (debug:print 4 *default-log-port* 
 		   "category: " category ", variable: " variable ", value: " value
 		   ", expected: " expected ", tol: " tol ", units: " units)
       (if (and value expected tol) ;; all three required
@@ -467,11 +467,11 @@
     (if (and (string? path)
 	     (directory? path)) ;; can get #f here under some wierd conditions. why, unknown ...
 	(begin
-	  (debug:print 4 #f "Found path: " path)
+	  (debug:print 4 *default-log-port* "Found path: " path)
 	  (change-directory path))
 	;; (set! outputfilename (conc path "/" outputfilename)))
-	(debug:print 0 #f "ERROR: summarize-items for run-id=" run-id ", test-name=" test-name ", no such path: " path))
-    (debug:print 4 #f "summarize-items with logf " logf ", outputfilename " outputfilename " and force " force)
+	(debug:print-error 0 *default-log-port* "summarize-items for run-id=" run-id ", test-name=" test-name ", no such path: " path))
+    (debug:print 4 *default-log-port* "summarize-items with logf " logf ", outputfilename " outputfilename " and force " force)
     (if (or (equal? logf "logs/final.log")
 	    (equal? logf outputfilename)
 	    force)
@@ -496,7 +496,7 @@
 		(if (> my-start-time (file-modification-time lockf))
 		    ;; we started since current re-gen in flight, delay a little and try again
 		    (begin
-		      (debug:print-info 1 #f "Waiting to update " outputfilename ", another test currently updating it")
+		      (debug:print-info 1 *default-log-port* "Waiting to update " outputfilename ", another test currently updating it")
 		      (thread-sleep! (+ 5 (random 5))) ;; delay between 5 and 10 seconds
 		      (loop (common:simple-file-lock lockf))))))))))
 
@@ -581,13 +581,13 @@
     (let ((res (make-hash-table)))
       (for-each 
        (lambda (step)
-	 (debug:print 6 #f "step=" step)
+	 (debug:print 6 *default-log-port* "step=" step)
 	 (let ((record (hash-table-ref/default 
 			res 
 			(tdb:step-get-stepname step) 
 			;;        stepname                start end status Duration  Logfile Comment
 			(vector (tdb:step-get-stepname step) ""   "" ""     ""        ""     ""))))
-	   (debug:print 6 #f "record(before) = " record 
+	   (debug:print 6 *default-log-port* "record(before) = " record 
 			"\nid:       " (tdb:step-get-id step)
 			"\nstepname: " (tdb:step-get-stepname step)
 			"\nstate:    " (tdb:step-get-state step)
@@ -605,7 +605,7 @@
 	      (vector-set! record 3 (tdb:step-get-status step))
 	      (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
 					  (endt   (any->number (vector-ref record 2))))
-				      (debug:print 4 #f "record[1]=" (vector-ref record 1) 
+				      (debug:print 4 *default-log-port* "record[1]=" (vector-ref record 1) 
 						   ", startt=" startt ", endt=" endt
 						   ", get-status: " (tdb:step-get-status step))
 				      (if (and (number? startt)(number? endt))
@@ -622,7 +622,7 @@
 	      (vector-set! record 4 (tdb:step-get-event_time step))
 	      (vector-set! record 6 (tdb:step-get-comment step))))
 	   (hash-table-set! res (tdb:step-get-stepname step) record)
-	   (debug:print 6 #f "record(after)  = " record 
+	   (debug:print 6 *default-log-port* "record(after)  = " record 
 			"\nid:       " (tdb:step-get-id step)
 			"\nstepname: " (tdb:step-get-stepname step)
 			"\nstate:    " (tdb:step-get-state step)
@@ -814,7 +814,7 @@
 			 cache-file
 			 (file-write-access? cache-path))
 		    (let ((tpath (conc cache-path "/.testconfig")))
-		      (debug:print-info 1 #f "Caching testconfig for " test-name " in " tpath)
+		      (debug:print-info 1 *default-log-port* "Caching testconfig for " test-name " in " tpath)
 		      (configf:write-alist tcfg tpath)))
 		tcfg))))))
   
@@ -824,7 +824,7 @@
   (let* ((mungepriority (lambda (priority)
 			  (if priority
 			      (let ((tmp (any->number priority)))
-				(if tmp tmp (begin (debug:print 0 #f "ERROR: bad priority value " priority ", using 0") 0)))
+				(if tmp tmp (begin (debug:print-error 0 *default-log-port* "bad priority value " priority ", using 0") 0)))
 			      0)))
 	 (all-tests      (hash-table-keys test-records))
 	 (all-waited-on  (let loop ((hed (car all-tests))
@@ -849,31 +849,31 @@
 		   (b-priority (mungepriority b-raw-pri)))
 	      (tests:testqueue-set-priority! a-record a-priority)
 	      (tests:testqueue-set-priority! b-record b-priority)
-	      ;; (debug:print 0 #f "a=" a ", b=" b ", a-waitons=" a-waitons ", b-waitons=" b-waitons)
+	      ;; (debug:print 0 *default-log-port* "a=" a ", b=" b ", a-waitons=" a-waitons ", b-waitons=" b-waitons)
 	      (cond
 	       ;; is 
 	       ((member a b-waitons)          ;; is b waiting on a?
-		;; (debug:print 0 #f "case1")
+		;; (debug:print 0 *default-log-port* "case1")
 		#t)
 	       ((member b a-waitons)          ;; is a waiting on b?
-		;; (debug:print 0 #f "case2")
+		;; (debug:print 0 *default-log-port* "case2")
 		#f)
 	       ((and (not (null? a-waitons))  ;; both have waitons - do not disturb
 		     (not (null? b-waitons)))
-		;; (debug:print 0 #f "case2.1")
+		;; (debug:print 0 *default-log-port* "case2.1")
 		#t)
 	       ((and (null? a-waitons)        ;; no waitons for a but b has waitons
 		     (not (null? b-waitons)))
-		;; (debug:print 0 #f "case3")
+		;; (debug:print 0 *default-log-port* "case3")
 		#f)
 	       ((and (not (null? a-waitons))  ;; a has waitons but b does not
 		     (null? b-waitons)) 
-		;; (debug:print 0 #f "case4")
+		;; (debug:print 0 *default-log-port* "case4")
 		#t)
 	       ((not (eq? a-priority b-priority)) ;; use
 		(> a-priority b-priority))
 	       (else
-		;; (debug:print 0 #f "case5")
+		;; (debug:print 0 *default-log-port* "case5")
 		(string>? a b))))))
 	 
 	 (sort-fn2
@@ -1034,34 +1034,34 @@
   (if (not (null? test-names))
       (let loop ((hed (car test-names))
 		 (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
-	(debug:print-info 4 #f "hed=" hed " at top of loop")
+	(debug:print-info 4 *default-log-port* "hed=" hed " at top of loop")
 	(let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs))
 	       (waitons (let ((instr (if config 
 					 (config-lookup config "requirements" "waiton")
 					 (begin ;; No config means this is a non-existant test
-					   (debug:print 0 #f "ERROR: non-existent required test \"" hed "\", grep through your testconfigs to find and remove or create the test. Discarding and continuing.")
+					   (debug:print-error 0 *default-log-port* "non-existent required test \"" hed "\", grep through your testconfigs to find and remove or create the test. Discarding and continuing.")
 					     ""))))
-			  (debug:print-info 8 #f "waitons string is " instr)
+			  (debug:print-info 8 *default-log-port* "waitons string is " instr)
 			  (string-split (cond
 					 ((procedure? instr)
 					  (let ((res (instr)))
-					    (debug:print-info 8 #f "waiton procedure results in string " res " for test " hed)
+					    (debug:print-info 8 *default-log-port* "waiton procedure results in string " res " for test " hed)
 					    res))
 					 ((string? instr)     instr)
 					 (else 
-					  ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 #f "ERROR: something went wrong in processing waitons for test " hed)
+					  ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print-error 0 *default-log-port* "something went wrong in processing waitons for test " hed)
 					  ""))))))
 	  (if (not config) ;; this is a non-existant test called in a waiton. 
 	      (if (null? tal)
 		  test-records
 		  (loop (car tal)(cdr tal)))
 	      (begin
-		(debug:print-info 8 #f "waitons: " waitons)
+		(debug:print-info 8 *default-log-port* "waitons: " waitons)
 		;; check for hed in waitons => this would be circular, remove it and issue an
 		;; error
 		(if (member hed waitons)
 		    (begin
-		      (debug:print 0 #f "ERROR: test " hed " has listed itself as a waiton, please correct this!")
+		      (debug:print-error 0 *default-log-port* "test " hed " has listed itself as a waiton, please correct this!")
 		      (set! waitons (filter (lambda (x)(not (equal? x hed))) waitons))))
 		
 		;; (items   (items:get-items-from-config config)))
@@ -1079,10 +1079,10 @@
 						   ;; otherwise return #f - this is not an iterated test
 						   (cond
 						    ((procedure? items)      
-						     (debug:print-info 4 #f "items is a procedure, will calc later")
+						     (debug:print-info 4 *default-log-port* "items is a procedure, will calc later")
 						     items)            ;; calc later
 						    ((procedure? itemstable)
-						     (debug:print-info 4 #f "itemstable is a procedure, will calc later")
+						     (debug:print-info 4 *default-log-port* "itemstable is a procedure, will calc later")
 						     itemstable)       ;; calc later
 						    ((filter (lambda (x)
 							       (let ((val (car x)))
@@ -1091,7 +1091,7 @@
 								     (if (list? itemstable) itemstable '())))
 						     'have-procedure)
 						    ((or (list? items)(list? itemstable)) ;; calc now
-						     (debug:print-info 4 #f "items and itemstable are lists, calc now\n"
+						     (debug:print-info 4 *default-log-port* "items and itemstable are lists, calc now\n"
 								       "    items: " items " itemstable: " itemstable)
 						     (items:get-items-from-config config))
 						    (else #f)))                           ;; not iterated
@@ -1160,16 +1160,16 @@
      (if (> remtries 0)
 	 (begin
 	   (print-call-chain (current-error-port))
-	   (debug:print-info 0 #f "WARNING: failed to set meta info. Will try " remtries " more times")
+	   (debug:print-info 0 *default-log-port* "WARNING: failed to set meta info. Will try " remtries " more times")
 	   (set! remtries (- remtries 1))
 	   (thread-sleep! 10)
 	   (tests:set-full-meta-info db test-id run-id minutes work-area (- remtries 1)))
 	 (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
-	   (debug:print 0 #f "ERROR: tried for over a minute to update meta info and failed. Giving up")
-	   (debug:print 0 #f "EXCEPTION: database probably overloaded or unreadable.")
-	   (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print-error 0 *default-log-port* "tried for over a minute to update meta info and failed. Giving up")
+	   (debug:print 0 *default-log-port* "EXCEPTION: database probably overloaded or unreadable.")
+	   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 	   (print "exn=" (condition->list exn))
-	   (debug:print 0 #f " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
+	   (debug:print 0 *default-log-port* " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
 	   (print-call-chain (current-error-port))))
      (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
   )))

@@ -56,9 +56,9 @@
      exn
      (begin
        ;; (release-dot-lock fname)
-       (debug:print 0 #f "ERROR: portlogger:open-run-close failed. " proc " " params)
-       (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
-       (debug:print 0 #f "exn=" (condition->list exn))
+       (debug:print-error 0 *default-log-port* "portlogger:open-run-close failed. " proc " " params)
+       (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+       (debug:print 0 *default-log-port* "exn=" (condition->list exn))
        (if (file-exists? fname)(delete-file fname)) ;; brutally get rid of it
        (print-call-chain (current-error-port)))
      (let* (;; (lock   (obtain-dot-lock fname 2 9 10))
@@ -103,11 +103,11 @@
   (handle-exceptions
    exn
    (begin
-     (debug:print 0 #f "EXCEPTION: portlogger database probably overloaded or unreadable. If you see this message again remove /tmp/.$USER-portlogger.db")
-     (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
-     (debug:print 0 #f "exn=" (condition->list exn))
+     (debug:print 0 *default-log-port* "EXCEPTION: portlogger database probably overloaded or unreadable. If you see this message again remove /tmp/.$USER-portlogger.db")
+     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+     (debug:print 0 *default-log-port* "exn=" (condition->list exn))
      (print-call-chain (current-error-port))
-     (debug:print 0 #f "Continuing anyway.")
+     (debug:print 0 *default-log-port* "Continuing anyway.")
      #f)
    (sqlite3:fold-row
     (lambda (var curr)
@@ -128,11 +128,11 @@
     (handle-exceptions
      exn
      (begin
-       (debug:print 0 #f "EXCEPTION: portlogger database probably overloaded or unreadable. If you see this message again remove /tmp/.$USER-portlogger.db")
-       (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
-       (debug:print 0 #f "exn=" (condition->list exn))
+       (debug:print 0 *default-log-port* "EXCEPTION: portlogger database probably overloaded or unreadable. If you see this message again remove /tmp/.$USER-portlogger.db")
+       (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+       (debug:print 0 *default-log-port* "exn=" (condition->list exn))
        (print-call-chain (current-error-port))
-       (debug:print 0 #f "Continuing anyway."))
+       (debug:print 0 *default-log-port* "Continuing anyway."))
      (portlogger:take-port db portnum))
     portnum))
 
@@ -158,10 +158,10 @@
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 0 #f "EXCEPTION: portlogger database at " dbfname " probably overloaded or unreadable. Try removing it.")
-	     (debug:print 0 #f " message: " ((condition-property-accessor 'exn 'message) exn))
+	     (debug:print 0 *default-log-port* "EXCEPTION: portlogger database at " dbfname " probably overloaded or unreadable. Try removing it.")
+	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 	     (print "exn=" (condition->list exn))
-	     (debug:print 0 #f " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
+	     (debug:print 0 *default-log-port* " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
 	     (print-call-chain (current-error-port))
 	     #f)
 	   (case (string->symbol (car args)) ;; commands with two or more params
