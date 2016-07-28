@@ -601,7 +601,7 @@
 			     command-text-box "VALUE"
 			     (conc "megatest -target " keystring " -runname "  runname 
 				   " -set-state-status KILLREQ,n/a -testpatt %/% "
-				   " -state RUNNING"))))
+				   " -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))
 	       (run-test  (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
