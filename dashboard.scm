@@ -2726,11 +2726,11 @@ Misc
 			    ((calc-y)                      (lambda (rownum)
 							     (- (/ sizey 2)
 								(* rownum row-height))))
-			    ((fixed-originx)         0)   ;; (if (dboard:tabdat-originx tabdat)
-							;;   (dboard:tabdat-originx tabdat)
-							;;   (begin
-							;; 	 (dboard:tabdat-originx-set! tabdat originx)
-							;; 	 originx)))
+			    ((fixed-originx)               (if (dboard:tabdat-originx tabdat)
+							       (dboard:tabdat-originx tabdat)
+							       (begin
+							 	 (dboard:tabdat-originx-set! tabdat originx)
+							 	 originx)))
 			    ((fixed-originy)               (if (dboard:tabdat-originy tabdat)
 							       (dboard:tabdat-originy tabdat)
 							       (begin
@@ -2767,7 +2767,7 @@ Misc
 			       ;; (row-height 4)
 			       (run-start  (dboard:min-max < (map db:test-get-event_time testsdat)))
 			       (run-end    (dboard:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat)))
-			       (timeoffset (- (+ fixed-originx canvas-margin) run-start))
+			       (timeoffset (- run-start)) ;; (+ fixed-originx canvas-margin) run-start))
 			       (run-duration (- run-end run-start))
 			       (timescale  (/ (- sizex (* 2 canvas-margin))
 					      (if (> run-duration 0)
@@ -2788,7 +2788,7 @@ Misc
 			  ;; Have to keep moving the instantiated box as it is anchored at the lower left
 			  ;; this should have worked for x in next statement? (maptime run-start)
 			  ;; add 60 to make room for the graph
-			  (vg:instantiate drawing "runslib" run-full-name run-full-name fixed-originx (- (calc-y curr-run-start-row) (+ graph-height run-to-run-margin)))
+			  (vg:instantiate drawing "runslib" run-full-name run-full-name 0 (- (calc-y curr-run-start-row) (+ graph-height run-to-run-margin)))
 			  (mutex-unlock! mtx)
 			  ;; (set! run-start-row (+ max-row 2))
 			  ;; (dboard:tabdat-start-row-set! tabdat (+ new-run-start-row 1))
@@ -2854,10 +2854,10 @@ Misc
 				    (if (null? tidstal)
 					(if iterated
 					    (let* ((xtents (vg:get-extents-for-objs drawing new-test-objs))
-						   (llx (- (car xtents)   5))
+						   (llx (- (car xtents)  10))
 						   (lly (- (cadr xtents) 10))
 						   (ulx (+ 5 (caddr xtents)))
-						   (uly (+ 0 (cadddr xtents))))
+						   (uly (+ 10 (cadddr xtents))))
 					      ;; (dashboard:add-bar rowhash 0 llx ulx num-rows:  num-items)
 					      ;; This is the box around the tests of an iterated test
 					      (vg:add-obj-to-comp runcomp (vg:make-rect-obj llx lly ulx uly
@@ -2885,7 +2885,7 @@ Misc
 				 (lly       (list-ref new-xtnts 1))
 				 (ulx       (list-ref new-xtnts 2))
 				 (uly       (list-ref new-xtnts 3))
-				 (outln     (vg:make-rect-obj llx lly ulx uly 
+				 (outln     (vg:make-rect-obj -5 lly ulx uly 
 							      text: run-full-name
 							      line-color:  (vg:rgb->number  255 0 255 a: 128))))
 					;  (vg:components-get-extents d1 c1)))
@@ -2894,8 +2894,8 @@ Misc
 			    (vg:add-obj-to-comp runcomp outln)
 			    (mutex-unlock! mtx)
 			    ;; this is where we have enough info to place the graph
-			    (dboard:graph commondat tabdat tab-num llx uly ulx (+ uly graph-height) run-start run-end timescale maptime run-full-name canvas-margin)
-			    (dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat)(quotient (+ graph-height 40) row-height)))
+			    (dboard:graph commondat tabdat tab-num -5 (+ uly 3) ulx (+ uly graph-height 3) run-start run-end timescale maptime run-full-name canvas-margin)
+			    (dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat)(quotient (+ graph-height 40 3) row-height)))
 			    ;; (vg:instance-move drawing run-full-name 0 (dboard:tabdat-max-row tabdat))
 			    ))
 			;; end of the run handling loop 
