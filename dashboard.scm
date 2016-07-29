@@ -252,29 +252,6 @@ Misc
 
 (define (dboard:tabdat-make-data)
   (let ((dat (make-dboard:tabdat)))
-    ;; 	      curr-test-ids:        (make-hash-table)
-    ;; 	      command:              ""
-    ;; 	      dbdir:                #f
-    ;; 	      filters-changed:      #f
-    ;; 	      hide-empty-runs:      #f
-    ;; 	      hide-not-hide-button: #f
-    ;; 	      hide-not-hide:        #t
-    ;; 	      key-listboxes:        #f
-    ;; 	      last-db-update:       0
-    ;; 	      num-tests:            15
-    ;; 	      originx:              #f
-    ;; 	      originy:              #f
-    ;; 	      path-run-ids:         (make-hash-table)
-    ;; 	      run-ids:              (make-hash-table)
-    ;; 	      run-keys:             (make-hash-table)
-    ;; 	      searchpatts:          (make-hash-table)
-    ;; 	      start-test-offset:    0
-    ;; 	      state-ignore-hash:    (make-hash-table)
-    ;; 	      status-ignore-hash:   (make-hash-table)
-    ;; 	      xadj:                 0
-    ;; 	      yadj:                 0
-    ;; 	      view-changed:         #t
-    ;; 	      )))
     (dboard:setup-tabdat dat)
     (dboard:setup-num-rows dat)
     dat))
@@ -2623,9 +2600,9 @@ Misc
   
 ;; doesn't work.
 ;;
-(define (gotoescape tabdat escape)
-  (or (dboard:tabdat-layout-update-ok tabdat)
-      (escape #t)))
+;;(define (gotoescape tabdat escape)
+;;  (or (dboard:tabdat-layout-update-ok tabdat)
+;;      (escape #t)))
 
 (define (dboard:graph-db-open dbstr)
   (let* ((parts (string-split dbstr ":"))
@@ -2740,7 +2717,6 @@ Misc
 	       (mtx           (dboard:tabdat-runs-mutex tabdat))
 	       (drawing      (dboard:tabdat-drawing tabdat))
 	       (runslib      (vg:get/create-lib drawing "runslib")) ;; creates and adds lib
-	       (layout-start (current-milliseconds))
 	       (allruns      (dboard:tabdat-allruns tabdat))
 	       (num-runs     (length allruns))
 	       (cnv          (dboard:tabdat-cnv tabdat))
@@ -2808,9 +2784,9 @@ Misc
 			       (width      (* timescale run-duration))
 			       (graph-lly  (calc-y (/ -50 row-height)))
 			       (graph-uly  (- (calc-y 0) canvas-margin))
+			       (sec-per-50pt (/ 50 timescale))
 			       )
-			  ;; (print "Testing. (maptime run-start=" run-start "): " (maptime run-start) " (maptime run-end=" run-end "): " (maptime run-end) " run-duration: " run-duration)
-			  (print "run_duration: " (seconds->hr-min-sec run-duration))
+			  (print "timeoffset: " timeoffset " timescale: " timescale " run-duration: " (seconds->hr-min-sec run-duration) " width: " width " sec-per-50pt: " sec-per-50pt)
 			  ;; (print "timescale: " timescale " timeoffset: " timeoffset " sizex: " sizex " originx: " originx)
 			  (mutex-lock! mtx)
 			  (vg:add-comp-to-lib runslib run-full-name runcomp)
@@ -2895,13 +2871,15 @@ Misc
 											    font: "Helvetica -10"))
 					      ;; (vg:instance-move drawing run-full-name 0 (dboard:tabdat-max-row tabdat))
 					      (dboard:tabdat-view-changed-set! tabdat #t))) ;; trigger a redraw
-					(if (gotoescape tabdat escape) ;; (dboard:tabdat-layout-update-ok tabdat)
+					(if (or (dboard:tabdat-layout-update-ok tabdat)
+      (escape #t)) ;; (dboard:tabdat-layout-update-ok tabdat)
 					    (testitemloop (car tidstal)(cdr tidstal)(+ item-num 1) new-test-objs))))))
 			      ;; If it is an iterated test put box around it now.
 			      (if (not (null? tests-tal))
 				  (if #f ;; (> (- (current-seconds) update-start-time) 5)
 				      (print "drawing runs taking too long")
-				      (if (gotoescape tabdat escape) ;; (dboard:tabdat-layout-update-ok tabdat)
+				      (if (or (dboard:tabdat-layout-update-ok tabdat)
+      (escape #t)) ;; (dboard:tabdat-layout-update-ok tabdat)
 					  (testsloop  (car tests-tal)(cdr tests-tal)(+ test-num 1)))))))
 			  ;; placeholder box
 			  (dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat) 1))
@@ -2928,7 +2906,8 @@ Misc
 			    ;; (vg:instance-move drawing run-full-name 0 (dboard:tabdat-max-row tabdat))
 			    ))
 			;; end of the run handling loop 
-			(if (gotoescape tabdat escape) ;; (dboard:tabdat-layout-update-ok tabdat)
+			(if (or (dboard:tabdat-layout-update-ok tabdat)
+      (escape #t)) ;; (dboard:tabdat-layout-update-ok tabdat)
 			    (let ((newdoneruns (cons rundat doneruns)))
 			      (if (null? runtal)
 				  (begin
@@ -2942,10 +2921,10 @@ Misc
 					;; (time (vg:draw (dboard:tabdat-drawing tabdat) #t))
 					(dboard:tabdat-not-done-runs-set! tabdat runtal))
 				      (begin
-					(if (gotoescape tabdat escape) ;; (dboard:tabdat-layout-update-ok tabdat)
+					(if (or (dboard:tabdat-layout-update-ok tabdat)
+      (escape #t)) ;; (dboard:tabdat-layout-update-ok tabdat)
 					    (runloop (car runtal)(cdr runtal) (+ run-num 1) newdoneruns)))))))))) ;;  new-run-start-row
-		)
-	      (print "Layout end: " (current-milliseconds) " delta: " (- (current-milliseconds) layout-start))))
+		)))
 	(debug:print 2 *default-log-port* "no tabdat for run-times-tab-updater"))))
 
 (define (dashboard:runs-tab-updater commondat tab-num)
