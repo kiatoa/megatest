@@ -1159,7 +1159,8 @@ Misc
 			  (lambda ()
 			    (let* ((run-path (tree:node->path obj id))
 				   (run-id    (tree-path->run-id tabdat (cdr run-path))))
-			      (dboard:tabdat-target-set! tabdat (cdr run-path)) ;; (print "run-path: " run-path)
+			      (dboard:tabdat-target-set! tabdat (cdr run-path)) ;; (print "run-path: " run-path)			    
+			      (dboard:tabdat-layout-update-ok-set! tabdat #f)
 			      (if (number? run-id)
 				  (begin
 				    (dboard:tabdat-curr-run-id-set! tabdat run-id)
@@ -1460,6 +1461,7 @@ Misc
 		       (if (number? run-id)
 			   (begin
 			     (dboard:tabdat-curr-run-id-set! tabdat run-id)
+			     (dboard:tabdat-layout-update-ok-set! tabdat #f)
 			     ;; (dashboard:update-run-summary-tab)
 			     )
 			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
@@ -1749,6 +1751,7 @@ Misc
 		       (if (number? run-id)
 			   (begin
 			     (dboard:tabdat-curr-run-id-set! tabdat run-id)
+			     (dboard:tabdat-layout-update-ok-set! tabdat #f)
 			     ;; (dashboard:update-run-summary-tab)
 			     )
 			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
@@ -1791,6 +1794,7 @@ Misc
 			   (begin
 			     (dboard:tabdat-curr-run-id-set! tabdat run-id)
 			     ;; (dashboard:update-new-view-tab)
+			     (dboard:tabdat-layout-update-ok-set! tabdat #f)
 			     )
 			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
@@ -2722,7 +2726,6 @@ Misc
 	      (hash-table-keys alldat)))))
      cfg)))
 	 
-
 ;; run times tab
 ;;
 (define (dashboard:run-times-tab-layout-updater commondat tabdat tab-num)
@@ -2891,16 +2894,18 @@ Misc
 											    font: "Helvetica -10"))
 					      ;; (vg:instance-move drawing run-full-name 0 (dboard:tabdat-max-row tabdat))
 					      (dboard:tabdat-view-changed-set! tabdat #t))) ;; trigger a redraw
-					(if (or (dboard:tabdat-layout-update-ok tabdat)
-      (escape #t)) ;; (dboard:tabdat-layout-update-ok tabdat)
-					    (testitemloop (car tidstal)(cdr tidstal)(+ item-num 1) new-test-objs))))))
+					(if (dboard:tabdat-layout-update-ok tabdat)
+					    (testitemloop (car tidstal)(cdr tidstal)(+ item-num 1) new-test-objs)
+					    (escapeloop #t) ;; (dboard:tabdat-layout-update-ok tabdat)
+					    )))))
 			      ;; If it is an iterated test put box around it now.
 			      (if (not (null? tests-tal))
 				  (if #f ;; (> (- (current-seconds) update-start-time) 5)
 				      (print "drawing runs taking too long")
-				      (if (or (dboard:tabdat-layout-update-ok tabdat)
-      (escape #t)) ;; (dboard:tabdat-layout-update-ok tabdat)
-					  (testsloop  (car tests-tal)(cdr tests-tal)(+ test-num 1)))))))
+				      (if (dboard:tabdat-layout-update-ok tabdat)
+					  (testsloop  (car tests-tal)(cdr tests-tal)(+ test-num 1))
+					  (escapeloop #t) ;; (dboard:tabdat-layout-update-ok tabdat)
+					  )))))
 			  ;; placeholder box
 			  (dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat) 1))
 			  ;; (let ((y  (calc-y (dboard:tabdat-max-row tabdat)))) ;;  (- sizey (* (dboard:tabdat-max-row tabdat) row-height))))
@@ -2926,8 +2931,8 @@ Misc
 			    ;; (vg:instance-move drawing run-full-name 0 (dboard:tabdat-max-row tabdat))
 			    ))
 			;; end of the run handling loop 
-			(if (or (dboard:tabdat-layout-update-ok tabdat)
-      (escape #t)) ;; (dboard:tabdat-layout-update-ok tabdat)
+			(if (not (dboard:tabdat-layout-update-ok tabdat))
+			    (escapeloop #t) ;; (dboard:tabdat-layout-update-ok tabdat)
 			    (let ((newdoneruns (cons rundat doneruns)))
 			      (if (null? runtal)
 				  (begin
@@ -2941,9 +2946,10 @@ Misc
 					;; (time (vg:draw (dboard:tabdat-drawing tabdat) #t))
 					(dboard:tabdat-not-done-runs-set! tabdat runtal))
 				      (begin
-					(if (or (dboard:tabdat-layout-update-ok tabdat)
-      (escape #t)) ;; (dboard:tabdat-layout-update-ok tabdat)
-					    (runloop (car runtal)(cdr runtal) (+ run-num 1) newdoneruns)))))))))) ;;  new-run-start-row
+					(if (dboard:tabdat-layout-update-ok tabdat)
+					    (runloop (car runtal)(cdr runtal) (+ run-num 1) newdoneruns)
+					    (escapeloop #t) ;; (dboard:tabdat-layout-update-ok tabdat)
+					    ))))))))) ;;  new-run-start-row
 		)))
 	(debug:print 2 *default-log-port* "no tabdat for run-times-tab-updater"))))
 
