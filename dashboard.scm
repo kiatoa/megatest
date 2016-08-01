@@ -2746,7 +2746,7 @@ Misc
 	       (compact-layout (dboard:tabdat-compact-layout tabdat))
 	       (row-height     (if compact-layout 2 10))
 	       (graph-height 120)
-	       (run-to-run-margin 20))
+	       (run-to-run-margin 25))
 	  (dboard:tabdat-layout-update-ok-set! tabdat #t)
 	  (if (canvas? cnv)
 	      (let*-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
@@ -2816,7 +2816,7 @@ Misc
 			  ;; Have to keep moving the instantiated box as it is anchored at the lower left
 			  ;; this should have worked for x in next statement? (maptime run-start)
 			  ;; add 60 to make room for the graph
-			  (vg:instantiate drawing "runslib" run-full-name run-full-name 0 (- (calc-y curr-run-start-row) (+ graph-height run-to-run-margin)))
+			  (vg:instantiate drawing "runslib" run-full-name run-full-name 8 (- (calc-y curr-run-start-row) (+ 5 graph-height run-to-run-margin)))
 			  (mutex-unlock! mtx)
 			  ;; (set! run-start-row (+ max-row 2))
 			  ;; (dboard:tabdat-start-row-set! tabdat (+ new-run-start-row 1))
@@ -2926,7 +2926,7 @@ Misc
 			    (vg:add-obj-to-comp runcomp outln)
 			    (mutex-unlock! mtx)
 			    ;; this is where we have enough info to place the graph
-			    (dboard:graph commondat tabdat tab-num -5 (+ uly 3) ulx (+ uly graph-height 3) run-start run-end timescale maptime run-full-name canvas-margin)
+			    (dboard:graph commondat tabdat tab-num -5 (+ uly 10) ulx (+ uly graph-height 3) run-start run-end timescale maptime run-full-name canvas-margin)
 			    (dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat)(quotient (+ graph-height 40 3) row-height)))
 			    ;; (vg:instance-move drawing run-full-name 0 (dboard:tabdat-max-row tabdat))
 			    ))
