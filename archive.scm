@@ -70,7 +70,7 @@
 				  (vector-ref block 2))) ;; disk-path
 			       existing-blocks)))
     (or (common:get-disk-with-most-free-space candidate-disks dused)
-	(archive:allocate-new-archive-block testname itempath))))
+	(archive:allocate-new-archive-block #f #f #f)))) ;; BROKEN. testname itempath))))
 
 ;; allocate a new archive area
 ;;

@@ -354,7 +354,7 @@
   (hash-table-ref/default cfgdat section '()))
 
 (define (setup)
-  (let* ((configf (find-config))
+  (let* ((configf (find-config "megatest.config"))
 	 (config  (if configf (read-config configf #f #t) #f)))
     (if config
 	(setenv "RUN_AREA_HOME" (pathname-directory configf)))
