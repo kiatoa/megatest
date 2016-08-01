@@ -23,7 +23,7 @@
 		       (+ thetime sec) ;; (* sec 60))
 		       "stuff" 
 		       (if (even? thehour)
-			   (random 100)
+			   (random 1000)
 			   (random 6))))
 	     (if (< count 20)
 		 (loop (max sec lastsec)(random 60)(+ count 1))))))))
