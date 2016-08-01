@@ -2641,15 +2641,16 @@ Misc
 			 (zeroth-point   (conc "SELECT " timef "," varfn "," valfn " FROM " tablen " WHERE " varfn "='" fieldname "' AND " timef " < " tstart " LIMIT 1")))
 		     (print "all-dat-qrystr: " all-dat-qrystr)
 		     (hash-table-set! res-ht fieldname ;; (fetch-rows (sql db qrystr)))))
-				      (sqlite3:fold-row
-				       (lambda (res t var val)
-					 (cons (vector t var val) res))
-				       '() db all-dat-qrystr))
+				      (reverse
+				       (sqlite3:fold-row
+					(lambda (res t var val)
+					  (cons (vector t var val) res))
+					'() db all-dat-qrystr)))
 		     (let ((zeropt (handle-exceptions
 				    exn
 				    #f
 				    (sqlite3:first-row db all-dat-qrystr))))
-		       (if zeropt
+		       (if zeropt ;; NOTE: Add zeropt to the beginning of the list as the list was reversed above.
 			   (hash-table-set! res-ht
 					    fieldname
 					    (cons
@@ -2669,7 +2670,7 @@ Misc
 	 (dur (- tstart tend)) ;; time duration
 	 (cmp (vg:get-component dwg "runslib" compname))
 	 (cfg (configf:get-section *configdat* "graph"))
-	 (stdcolor (vg:rgb->number 20 30 40)))
+	 (stdcolor (vg:rgb->number 120 130 140)))
     (vg:add-obj-to-comp
      cmp 
      (vg:make-rect-obj llx lly ulx uly))
@@ -2682,23 +2683,42 @@ Misc
 		(let* ((dat     (hash-table-ref alldat fieldn ))
 		       (vals    (map (lambda (x)(vector-ref x 2)) dat)))
 		  (if (not (null? vals))
-		      (let* ((maxval  (apply max vals))
-			     (minval  (apply min vals))
-			     (yoff    (- lly minval))
-			     (yscale  (/ (- maxval minval)(- uly lly)))
-			     (yfunc   (lambda (y)(* (+ y yoff) yscale))))
+		      (let* ((maxval   (apply max vals))
+			     (minval   (apply min vals))
+			     (yoff     (- lly minval))
+			     (deltaval (- maxval minval))
+			     (yscale   (/ (- uly lly)(if (eq? deltaval 0) 1 deltaval)))
+			     (yfunc    (lambda (y)(* (+ y yoff) yscale))))
 			;; (print (car cf) ": " (hash-table->alist
-			(for-each
-			 (lambda (dpt)
-			   (let* ((tval  (vector-ref dpt 0))
-				  (yval  (vector-ref dpt 2))
-				  (stval (tfn tval))
-				  (syval (yfunc yval)))
-			     (vg:add-obj-to-comp
-			      cmp 
-			      (vg:make-rect-obj (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
-						fill-color: stdcolor))))
-			 dat))))) ;; for each data point in the series
+			(fold 
+			 (lambda (next prev)  ;; #(time ? val) #(time ? val)
+			   (if prev
+			       (let* ((last-tval  (tfn   (vector-ref prev 0)))
+				      (last-yval  (+ lly (* yscale (vector-ref prev 2))))
+				      (curr-tval  (tfn   (vector-ref next 0))))
+				 (if (> curr-tval last-tval)
+				     (vg:add-obj-to-comp
+				      cmp 
+				      (vg:make-rect-obj last-tval lly curr-tval last-yval ;; (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
+							fill-color: stdcolor
+							line-color: stdcolor))
+				     (print "ERROR: curr-tval is not > last-tval; curr-tval " curr-tval ", last-tval " last-tval))))
+			   next)
+			 ;; for init create vector tstart,0
+			 #f ;; (vector tstart minval minval)
+			 dat)
+			;; (for-each
+			;;  (lambda (dpt)
+			;;    (let* ((tval  (vector-ref dpt 0))
+			;; 	  (yval  (vector-ref dpt 2))
+			;; 	  (stval (tfn tval))
+			;; 	  (syval (yfunc yval)))
+			;;      (vg:add-obj-to-comp
+			;;       cmp 
+			;;       (vg:make-rect-obj (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
+			;; 			fill-color: stdcolor))))
+			;;  dat)
+			)))) ;; for each data point in the series
 	      (hash-table-keys alldat)))))
      cfg)))
 	 
