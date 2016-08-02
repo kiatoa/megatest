@@ -2299,9 +2299,12 @@ Misc
 					 (lambda ()
 					   (let* ((tab-num (dboard:commondat-curr-tab-num commondat))
 						  (tabdat  (dboard:common-get-tabdat commondat tab-num: tab-num)))
-					     (dboard:tabdat-layout-update-ok-set! tabdat #f)
+					     (dboard:tabdat-layout-update-ok-set! tabdat #f))
+					   (dboard:commondat-curr-tab-num-set! commondat curr)
+					   (let* ((tab-num (dboard:commondat-curr-tab-num commondat))
+						  (tabdat  (dboard:common-get-tabdat commondat tab-num: tab-num)))
 					     (dboard:commondat-please-update-set! commondat #t)
-					     (dboard:commondat-curr-tab-num-set! commondat curr)))
+					     (dboard:tabdat-layout-update-ok-set! tabdat #t)))
 					 "tabchangepos"))
 		    (dashboard:summary commondat stats-dat tab-num: 0)
 		    runs-view
@@ -2671,13 +2674,14 @@ Misc
 ;;  tsc=timescale, tfn=function; time->x
 ;;
 (define (dboard:graph commondat tabdat tabnum llx lly ulx uly tstart tend tsc tfn compname cmargin)
-  (let* ((dwg (dboard:tabdat-drawing tabdat))
-	 (lib (vg:get/create-lib dwg "runslib"))
-	 (cnv (dboard:tabdat-cnv tabdat))
-	 (dur (- tstart tend)) ;; time duration
-	 (cmp (vg:get-component dwg "runslib" compname))
-	 (cfg (configf:get-section *configdat* "graph"))
-	 (stdcolor (vg:rgb->number 120 130 140)))
+  (let* ((dwg      (dboard:tabdat-drawing tabdat))
+	 (lib      (vg:get/create-lib dwg "runslib"))
+	 (cnv      (dboard:tabdat-cnv tabdat))
+	 (dur      (- tstart tend)) ;; time duration
+	 (cmp      (vg:get-component dwg "runslib" compname))
+	 (cfg      (configf:get-section *configdat* "graph"))
+	 (stdcolor (vg:rgb->number 120 130 140))
+	 (delta-y  (- uly lly)))
     (vg:add-obj-to-comp
      cmp 
      (vg:make-rect-obj llx lly ulx uly))
@@ -2692,18 +2696,19 @@ Misc
 		  (if (not (null? vals))
 		      (let* ((maxval   (apply max vals))
 			     (minval   (apply min vals))
-			     (yoff     (- lly minval))
+			     (yoff     (- minval lly)) ;;  minval))
 			     (deltaval (- maxval minval))
-			     (yscale   (/ (- uly lly)(if (eq? deltaval 0) 1 deltaval)))
-			     (yfunc    (lambda (y)(* (+ y yoff) yscale))))
-			;; (print (car cf) ": " (hash-table->alist
+			     (yscale   (/ delta-y (if (eq? deltaval 0) 1 deltaval)))
+			     (yfunc    (lambda (y)(+ lly (* yscale (- y minval)))))) ;; (lambda (y)(* (+ y yoff) yscale))))
+			(print (car cf) "; maxval: " maxval " minval: " minval " deltaval: " deltaval " yscale: " yscale)
 			(fold 
 			 (lambda (next prev)  ;; #(time ? val) #(time ? val)
 			   (if prev
-			       (let* ((last-tval  (tfn   (vector-ref prev 0)))
-				      (last-yval  (+ lly (* yscale (vector-ref prev 2))))
+			       (let* ((yval       (vector-ref prev 2))
+				      (last-tval  (tfn   (vector-ref prev 0)))
+				      (last-yval  (yfunc yval)) ;; (+ lly (* yscale (vector-ref prev 2))))
 				      (curr-tval  (tfn   (vector-ref next 0))))
-				 (if (> curr-tval last-tval)
+				 (if (>= curr-tval last-tval)
 				     (vg:add-obj-to-comp
 				      cmp 
 				      (vg:make-rect-obj last-tval lly curr-tval last-yval ;; (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
