@@ -2332,7 +2332,8 @@ Misc
 	(dboard:common-set-tabdat! commondat 4 runtimes-dat)
 	(iup:vbox
 	 tabs
-	 controls))))
+	 ;; controls
+	 ))))
     (vector keycol lftcol header runsvec)))
 
 (define (dboard:setup-num-rows tabdat)
@@ -2685,6 +2686,25 @@ Misc
     (vg:add-obj-to-comp
      cmp 
      (vg:make-rect-obj llx lly ulx uly))
+    (vg:add-obj-to-comp
+     cmp
+     (vg:make-text-obj (- (tfn tstart) 10)(- lly 10)(seconds->year-week/day-time tstart)))
+    (let*-values (((span timeunit time-blk first timesym) (common:find-start-mark-and-mark-delta tstart tend)))
+		 (let loop ((mark  first)
+			    (count 0))
+		   (let* ((smark (tfn mark))           ;; scale the mark
+			  (mark-delta (quotient (- mark tstart) time-blk)) ;; how far from first mark
+			  (label      (conc (* count span) timesym))) ;; was mark-delta
+		     (if (> count 2)
+			 (begin
+			   (vg:add-obj-to-comp
+			    cmp
+			    (vg:make-rect-obj (- smark 1)(- lly 2)(+ smark 1) lly))
+			   (vg:add-obj-to-comp
+			    cmp
+			    (vg:make-text-obj (- smark 1)(- lly 10) label))))
+		     (if (< mark (- tend time-blk))
+			 (loop (+ mark time-blk)(+ count 1))))))
     (for-each 
      (lambda (cf)
        (let* ((alldat  (dboard:graph-read-data (cadr cf) tstart tend)))
@@ -2719,25 +2739,6 @@ Misc
 			 ;; for init create vector tstart,0
 			 #f ;; (vector tstart minval minval)
 			 dat)
-			 (vg:add-obj-to-comp
-			  cmp
-			  (vg:make-text-obj (- (tfn tstart) 10)(- lly 10)(seconds->year-week/day-time tstart)))
-			 (let*-values (((span timeunit time-blk first timesym) (common:find-start-mark-and-mark-delta tstart tend)))
-			   (let loop ((mark  first)
-				      (count 0))
-			     (let* ((smark (tfn mark))           ;; scale the mark
-				    (mark-delta (quotient (- mark tstart) time-blk)) ;; how far from first mark
-				    (label      (conc mark-delta timesym)))
-			       (if (> count 2)
-				   (begin
-				     (vg:add-obj-to-comp
-				      cmp
-				      (vg:make-rect-obj (- smark 1)(- lly 2)(+ smark 1) lly))
-				     (vg:add-obj-to-comp
-				      cmp
-				      (vg:make-text-obj (- smark 1)(- lly 10) label))))
-			       (if (< mark (- tend time-blk))
-				   (loop (+ mark time-blk)(+ count 1))))))
 			   
 			 ;; (for-each
 			;;  (lambda (dpt)
