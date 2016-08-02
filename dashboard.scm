@@ -2297,8 +2297,11 @@ Misc
 		    #:tabchangepos-cb (lambda (obj curr prev)
 					(debug:catch-and-dump
 					 (lambda ()
-					   (dboard:commondat-please-update-set! commondat #t)
-					   (dboard:commondat-curr-tab-num-set! commondat curr))
+					   (let* ((tab-num (dboard:commondat-curr-tab-num commondat))
+						  (tabdat  (dboard:common-get-tabdat commondat tab-num: tab-num)))
+					     (dboard:tabdat-layout-update-ok-set! tabdat #f)
+					     (dboard:commondat-please-update-set! commondat #t)
+					     (dboard:commondat-curr-tab-num-set! commondat curr)))
 					 "tabchangepos"))
 		    (dashboard:summary commondat stats-dat tab-num: 0)
 		    runs-view
