@@ -2720,7 +2720,13 @@ Misc
 			     (deltaval (- maxval minval))
 			     (yscale   (/ delta-y (if (eq? deltaval 0) 1 deltaval)))
 			     (yfunc    (lambda (y)(+ lly (* yscale (- y minval)))))) ;; (lambda (y)(* (+ y yoff) yscale))))
-			(print (car cf) "; maxval: " maxval " minval: " minval " deltaval: " deltaval " yscale: " yscale)
+			;; (print (car cf) "; maxval: " maxval " minval: " minval " deltaval: " deltaval " yscale: " yscale)
+			(vg:add-obj-to-comp
+			 cmp 
+			 (vg:make-text-obj (- llx 10)(yfunc maxval) (conc maxval)))
+			(vg:add-obj-to-comp
+			 cmp 
+			 (vg:make-text-obj (- llx 10)(yfunc minval) (conc minval)))
 			(fold 
 			 (lambda (next prev)  ;; #(time ? val) #(time ? val)
 			   (if prev
