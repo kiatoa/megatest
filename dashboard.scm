@@ -1159,7 +1159,8 @@ Misc
 			  (lambda ()
 			    (let* ((run-path (tree:node->path obj id))
 				   (run-id    (tree-path->run-id tabdat (cdr run-path))))
-			      (dboard:tabdat-target-set! tabdat (cdr run-path)) ;; (print "run-path: " run-path)
+			      (dboard:tabdat-target-set! tabdat (cdr run-path)) ;; (print "run-path: " run-path)			    
+			      (dboard:tabdat-layout-update-ok-set! tabdat #f)
 			      (if (number? run-id)
 				  (begin
 				    (dboard:tabdat-curr-run-id-set! tabdat run-id)
@@ -1460,6 +1461,7 @@ Misc
 		       (if (number? run-id)
 			   (begin
 			     (dboard:tabdat-curr-run-id-set! tabdat run-id)
+			     (dboard:tabdat-layout-update-ok-set! tabdat #f)
 			     ;; (dashboard:update-run-summary-tab)
 			     )
 			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
@@ -1749,6 +1751,7 @@ Misc
 		       (if (number? run-id)
 			   (begin
 			     (dboard:tabdat-curr-run-id-set! tabdat run-id)
+			     (dboard:tabdat-layout-update-ok-set! tabdat #f)
 			     ;; (dashboard:update-run-summary-tab)
 			     )
 			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
@@ -1791,6 +1794,7 @@ Misc
 			   (begin
 			     (dboard:tabdat-curr-run-id-set! tabdat run-id)
 			     ;; (dashboard:update-new-view-tab)
+			     (dboard:tabdat-layout-update-ok-set! tabdat #f)
 			     )
 			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
@@ -2301,8 +2305,14 @@ Misc
 		    #:tabchangepos-cb (lambda (obj curr prev)
 					(debug:catch-and-dump
 					 (lambda ()
-					   (dboard:commondat-please-update-set! commondat #t)
-					   (dboard:commondat-curr-tab-num-set! commondat curr))
+					   (let* ((tab-num (dboard:commondat-curr-tab-num commondat))
+						  (tabdat  (dboard:common-get-tabdat commondat tab-num: tab-num)))
+					     (dboard:tabdat-layout-update-ok-set! tabdat #f))
+					   (dboard:commondat-curr-tab-num-set! commondat curr)
+					   (let* ((tab-num (dboard:commondat-curr-tab-num commondat))
+						  (tabdat  (dboard:common-get-tabdat commondat tab-num: tab-num)))
+					     (dboard:commondat-please-update-set! commondat #t)
+					     (dboard:tabdat-layout-update-ok-set! tabdat #t)))
 					 "tabchangepos"))
 		    (dashboard:summary commondat stats-dat tab-num: 0)
 		    runs-view
@@ -2330,7 +2340,8 @@ Misc
 	(dboard:common-set-tabdat! commondat 4 runtimes-dat)
 	(iup:vbox
 	 tabs
-	 controls))))
+	 ;; controls
+	 ))))
     (vector keycol lftcol header runsvec)))
 
 (define (dboard:setup-num-rows tabdat)
@@ -2672,16 +2683,36 @@ Misc
 ;;  tsc=timescale, tfn=function; time->x
 ;;
 (define (dboard:graph commondat tabdat tabnum llx lly ulx uly tstart tend tsc tfn compname cmargin)
-  (let* ((dwg (dboard:tabdat-drawing tabdat))
-	 (lib (vg:get/create-lib dwg "runslib"))
-	 (cnv (dboard:tabdat-cnv tabdat))
-	 (dur (- tstart tend)) ;; time duration
-	 (cmp (vg:get-component dwg "runslib" compname))
-	 (cfg (configf:get-section *configdat* "graph"))
-	 (stdcolor (vg:rgb->number 120 130 140)))
+  (let* ((dwg      (dboard:tabdat-drawing tabdat))
+	 (lib      (vg:get/create-lib dwg "runslib"))
+	 (cnv      (dboard:tabdat-cnv tabdat))
+	 (dur      (- tstart tend)) ;; time duration
+	 (cmp      (vg:get-component dwg "runslib" compname))
+	 (cfg      (configf:get-section *configdat* "graph"))
+	 (stdcolor (vg:rgb->number 120 130 140))
+	 (delta-y  (- uly lly)))
     (vg:add-obj-to-comp
      cmp 
      (vg:make-rect-obj llx lly ulx uly))
+    (vg:add-obj-to-comp
+     cmp
+     (vg:make-text-obj (- (tfn tstart) 10)(- lly 10)(seconds->year-week/day-time tstart)))
+    (let*-values (((span timeunit time-blk first timesym) (common:find-start-mark-and-mark-delta tstart tend)))
+		 (let loop ((mark  first)
+			    (count 0))
+		   (let* ((smark (tfn mark))           ;; scale the mark
+			  (mark-delta (quotient (- mark tstart) time-blk)) ;; how far from first mark
+			  (label      (conc (* count span) timesym))) ;; was mark-delta
+		     (if (> count 2)
+			 (begin
+			   (vg:add-obj-to-comp
+			    cmp
+			    (vg:make-rect-obj (- smark 1)(- lly 2)(+ smark 1) lly))
+			   (vg:add-obj-to-comp
+			    cmp
+			    (vg:make-text-obj (- smark 1)(- lly 10) label))))
+		     (if (< mark (- tend time-blk))
+			 (loop (+ mark time-blk)(+ count 1))))))
     (for-each 
      (lambda (cf)
        (let* ((alldat  (dboard:graph-read-data (cadr cf) tstart tend)))
@@ -2690,21 +2721,31 @@ Misc
 	      (lambda (fieldn)
 		(let* ((dat     (hash-table-ref alldat fieldn ))
 		       (vals    (map (lambda (x)(vector-ref x 2)) dat)))
+                  (print "RA : dat " dat " vals " vals " fieldn " fieldn " lly " lly " llx " llx)
 		  (if (not (null? vals))
 		      (let* ((maxval   (apply max vals))
 			     (minval   (apply min vals))
-			     (yoff     (- lly minval))
+			     (yoff     (- minval lly)) ;;  minval))
 			     (deltaval (- maxval minval))
-			     (yscale   (/ (- uly lly)(if (eq? deltaval 0) 1 deltaval)))
-			     (yfunc    (lambda (y)(* (+ y yoff) yscale))))
-			;; (print (car cf) ": " (hash-table->alist
+			     (yscale   (/ delta-y (if (eq? deltaval 0) 1 deltaval)))
+			     (yfunc    (lambda (y)(+ lly (* yscale (- y minval)))))) ;; (lambda (y)(* (+ y yoff) yscale))))
+			(print (car cf) "; maxval: " maxval " minval: " minval " deltaval: " deltaval " yscale: " yscale)
+			     (yfunc    (lambda (y)(+ lly (* yscale (- y minval)))))) ;; (lambda (y)(* (+ y yoff) yscale))))
+			;; (print (car cf) "; maxval: " maxval " minval: " minval " deltaval: " deltaval " yscale: " yscale)
+			(vg:add-obj-to-comp
+			 cmp 
+			 (vg:make-text-obj (- llx 10)(yfunc maxval) (conc maxval)))
+			(vg:add-obj-to-comp
+			 cmp 
+			 (vg:make-text-obj (- llx 10)(yfunc minval) (conc minval)))
 			(fold 
 			 (lambda (next prev)  ;; #(time ? val) #(time ? val)
 			   (if prev
-			       (let* ((last-tval  (tfn   (vector-ref prev 0)))
-				      (last-yval  (+ lly (* yscale (vector-ref prev 2))))
+			       (let* ((yval       (vector-ref prev 2))
+				      (last-tval  (tfn   (vector-ref prev 0)))
+				      (last-yval  (yfunc yval)) ;; (+ lly (* yscale (vector-ref prev 2))))
 				      (curr-tval  (tfn   (vector-ref next 0))))
-				 (if (> curr-tval last-tval)
+				 (if (>= curr-tval last-tval)
 				     (vg:add-obj-to-comp
 				      cmp 
 				      (vg:make-rect-obj last-tval lly curr-tval last-yval ;; (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
@@ -2715,10 +2756,11 @@ Misc
 			 ;; for init create vector tstart,0
 			 #f ;; (vector tstart minval minval)
 			 dat)
-			;; (for-each
+			   
+			 ;; (for-each
 			;;  (lambda (dpt)
 			;;    (let* ((tval  (vector-ref dpt 0))
-			;; 	  (yval  (vector-ref dpt 2))
+			 ;; 	  (yval  (vector-ref dpt 2))
 			;; 	  (stval (tfn tval))
 			;; 	  (syval (yfunc yval)))
 			;;      (vg:add-obj-to-comp
@@ -2730,7 +2772,6 @@ Misc
 	      (hash-table-keys alldat)))))
      cfg)))
 	 
-
 ;; run times tab
 ;;
 (define (dashboard:run-times-tab-layout-updater commondat tabdat tab-num)
@@ -2751,7 +2792,7 @@ Misc
 	       (compact-layout (dboard:tabdat-compact-layout tabdat))
 	       (row-height     (if compact-layout 2 10))
 	       (graph-height 120)
-	       (run-to-run-margin 20))
+	       (run-to-run-margin 25))
 	  (dboard:tabdat-layout-update-ok-set! tabdat #t)
 	  (if (canvas? cnv)
 	      (let*-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
@@ -2821,7 +2862,7 @@ Misc
 			  ;; Have to keep moving the instantiated box as it is anchored at the lower left
 			  ;; this should have worked for x in next statement? (maptime run-start)
 			  ;; add 60 to make room for the graph
-			  (vg:instantiate drawing "runslib" run-full-name run-full-name 0 (- (calc-y curr-run-start-row) (+ graph-height run-to-run-margin)))
+			  (vg:instantiate drawing "runslib" run-full-name run-full-name 8 (- (calc-y curr-run-start-row) (+ 5 graph-height run-to-run-margin)))
 			  (mutex-unlock! mtx)
 			  ;; (set! run-start-row (+ max-row 2))
 			  ;; (dboard:tabdat-start-row-set! tabdat (+ new-run-start-row 1))
@@ -2899,16 +2940,18 @@ Misc
 											    font: "Helvetica -10"))
 					      ;; (vg:instance-move drawing run-full-name 0 (dboard:tabdat-max-row tabdat))
 					      (dboard:tabdat-view-changed-set! tabdat #t))) ;; trigger a redraw
-					(if (or (dboard:tabdat-layout-update-ok tabdat)
-      (escape #t)) ;; (dboard:tabdat-layout-update-ok tabdat)
-					    (testitemloop (car tidstal)(cdr tidstal)(+ item-num 1) new-test-objs))))))
+					(if (dboard:tabdat-layout-update-ok tabdat)
+					    (testitemloop (car tidstal)(cdr tidstal)(+ item-num 1) new-test-objs)
+					    (escapeloop #t) ;; (dboard:tabdat-layout-update-ok tabdat)
+					    )))))
 			      ;; If it is an iterated test put box around it now.
 			      (if (not (null? tests-tal))
 				  (if #f ;; (> (- (current-seconds) update-start-time) 5)
 				      (print "drawing runs taking too long")
-				      (if (or (dboard:tabdat-layout-update-ok tabdat)
-      (escape #t)) ;; (dboard:tabdat-layout-update-ok tabdat)
-					  (testsloop  (car tests-tal)(cdr tests-tal)(+ test-num 1)))))))
+				      (if (dboard:tabdat-layout-update-ok tabdat)
+					  (testsloop  (car tests-tal)(cdr tests-tal)(+ test-num 1))
+					  (escapeloop #t) ;; (dboard:tabdat-layout-update-ok tabdat)
+					  )))))
 			  ;; placeholder box
 			  (dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat) 1))
 			  ;; (let ((y  (calc-y (dboard:tabdat-max-row tabdat)))) ;;  (- sizey (* (dboard:tabdat-max-row tabdat) row-height))))
@@ -2929,13 +2972,13 @@ Misc
 			    (vg:add-obj-to-comp runcomp outln)
 			    (mutex-unlock! mtx)
 			    ;; this is where we have enough info to place the graph
-			    (dboard:graph commondat tabdat tab-num -5 (+ uly 3) ulx (+ uly graph-height 3) run-start run-end timescale maptime run-full-name canvas-margin)
+			    (dboard:graph commondat tabdat tab-num -5 (+ uly 10) ulx (+ uly graph-height 3) run-start run-end timescale maptime run-full-name canvas-margin)
 			    (dboard:tabdat-max-row-set! tabdat (+ (dboard:tabdat-max-row tabdat)(quotient (+ graph-height 40 3) row-height)))
 			    ;; (vg:instance-move drawing run-full-name 0 (dboard:tabdat-max-row tabdat))
 			    ))
 			;; end of the run handling loop 
-			(if (or (dboard:tabdat-layout-update-ok tabdat)
-      (escape #t)) ;; (dboard:tabdat-layout-update-ok tabdat)
+			(if (not (dboard:tabdat-layout-update-ok tabdat))
+			    (escapeloop #t) ;; (dboard:tabdat-layout-update-ok tabdat)
 			    (let ((newdoneruns (cons rundat doneruns)))
 			      (if (null? runtal)
 				  (begin
@@ -2949,9 +2992,10 @@ Misc
 					;; (time (vg:draw (dboard:tabdat-drawing tabdat) #t))
 					(dboard:tabdat-not-done-runs-set! tabdat runtal))
 				      (begin
-					(if (or (dboard:tabdat-layout-update-ok tabdat)
-      (escape #t)) ;; (dboard:tabdat-layout-update-ok tabdat)
-					    (runloop (car runtal)(cdr runtal) (+ run-num 1) newdoneruns)))))))))) ;;  new-run-start-row
+					(if (dboard:tabdat-layout-update-ok tabdat)
+					    (runloop (car runtal)(cdr runtal) (+ run-num 1) newdoneruns)
+					    (escapeloop #t) ;; (dboard:tabdat-layout-update-ok tabdat)
+					    ))))))))) ;;  new-run-start-row
 		)))
 	(debug:print 2 *default-log-port* "no tabdat for run-times-tab-updater"))))
 
