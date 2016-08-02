@@ -981,6 +981,10 @@
   (time->string
    (seconds->local-time sec) "%Yww%V.%w %H:%M"))
 
+(define (seconds->year-week/day-time sec)
+  (time->string
+   (seconds->local-time sec) "%Yw%V.%w %H:%M"))
+
 (define (seconds->quarter sec)
   (case (string->number
 	 (time->string 
@@ -991,6 +995,40 @@
     ((7 8 9) 3)
     ((10 11 12) 4)
     (else #f)))
+
+;; given span of seconds tstart to tend
+;; find start time to mark and mark delta
+;;
+(define (common:find-start-mark-and-mark-delta tstart tend)
+  (let* ((deltat   (- tend tstart))
+	 (result   #f)
+	 (min      60)
+	 (hr       (* 60 60))
+	 (day      (* 24 hr))
+	 (yr       (* 365 day)) ;; year
+	 (mo       (/ yr 12))
+	 (wk       (* day 7)))
+    (for-each
+     (lambda (max-blks)
+       (for-each
+	(lambda (span) ;; 5 2 1
+	  (if (not result)
+	      (for-each 
+	       (lambda (timeunit timesym) ;; year month day hr min sec
+		 (if (not result)
+		     (let* ((time-blk (* span timeunit))
+			    (num-blks (quotient deltat time-blk)))
+		       (if (and (> num-blks 4)(< num-blks max-blks))
+			   (let ((first (* (quotient tstart time-blk) time-blk)))
+			     (set! result (list span timeunit time-blk first timesym))
+			     )))))
+	       (list yr mo wk day hr min 1)
+	       '(     y  mo w  d   h  m   s))))
+	(list 8 6 5 2 1)))
+     '(5 10 15 20 30 40 50 500))
+    (apply values result)))
+	    
+	  
 
 ;;======================================================================
 ;; C O L O R S
