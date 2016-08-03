@@ -824,20 +824,167 @@ Debug
 </div>
 <div class="sect2">
 <h3 id="_get_list_of_runs">1.2. Get List of Runs</h3>
-<div class="paragraph"><p>URL: &lt;base&gt;/get_runs</p></div>
+<div class="paragraph"><p>URL: &lt;base&gt;/runs</p></div>
 <div class="paragraph"><p>Method: GET</p></div>
-<div class="paragraph"><p>Params: target, testpatt, offset, limit</p></div>
+<div class="paragraph"><p>Filter Params: target, testpatt, offset, limit</p></div>
 <div class="paragraph"><p>Response:</p></div>
 <div class="exampleblock">
 <div class="content">
-<div class="paragraph"><p>{ "<span class="blue">us</span>" : "<span class="red">United States of America</span>" }</p></div>
+<div class="paragraph"><p>[
+  {
+    "<span class="red">run_id</span>" : "1",
+    "<span class="red">name</span>"   : "runname1",
+    "<span class="red">target</span>" : "target1",
+    "<span class="red">tests</span>"  :
+      [
+          "<span class="green">test</span>":
+              [
+                   {"<span class="blue">id</span>": 1, "<span class="blue">name</span>":test1, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target1/runname1/test1", "<span class="blue">final_logf</span>": "megatest-rollup-test1.html",  "<span class="blue">status</span>": "PASS#"}
+                   {"<span class="blue">id</span>": 2, "<span class="blue">name</span>":test2, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target1/runname1/test2", "<span class="blue">final_logf</span>": "megatest-rollup-test2.html",  "<span class="blue">status</span>": "PASS"}
+                   {"<span class="blue">id</span>": 3, "<span class="blue">name</span>":test3, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target1/runname1/test3", "<span class="blue">final_logf</span>": "megatest-rollup-test3.html",  "<span class="blue">status</span>": "PASS"}
+              ]
+      ]
+   },
+   {
+    "<span class="red">run_id</span>" : "2",
+    "<span class="red">name</span>"   : "runname2",
+    "<span class="red">target</span>" : "target2",
+    "<span class="red">tests</span>"  :
+      [
+          "<span class="green">test</span>:
+              [
+                   {"<span class="blue">id</span>": 4, "<span class="blue">name</span>":[blue]test1, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test1", "<span class="blue">final_logf</span>": "megatest-rollup-test1.html",  "<span class="blue">status</span>": "PASS"}
+                   {"<span class="blue">id</span>": 5, "<span class="blue">name</span>":[blue]test2, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test2", "<span class="blue">final_logf</span>": "megatest-rollup-test2.html",  "<span class="blue">status</span>": "FAIL"}
+                   {"<span class="blue">id</span>": 6, "<span class="blue">name</span>":test3, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test3", "<span class="blue">final_logf</span>": "megatest-rollup-test3.html",  "<span class="blue">status</span>": "PASS"}
+              ]
+      ]
+   }
+]</p></div>
 </div></div>
-<div class="paragraph"><p>Another example &#8230;.</p></div>
+</div>
+<div class="sect2">
+<h3 id="_trigger_a_new_run">1.3. Trigger a new Run</h3>
+<div class="paragraph"><p>URL: &lt;base&gt;/runs</p></div>
+<div class="paragraph"><p>Method: POST</p></div>
+<div class="paragraph"><p>Request Params:</p></div>
 <div class="exampleblock">
 <div class="content">
-<div class="paragraph"><p>{ "<span class="blue">places</span>":  [ [ "<span class="red">place_name</span>", "<span class="red">place_description</span> ], &#8230; ],
-  "<span class="blue">friends</span>": [ [ "<span class="red">short_name</span>", "<span class="red">username</span>", "<span class="red">location</span>", <span class="red">uid</span>, <span class="red">frequency</span> ], &#8230; ],
-  "<span class="blue">iousum</span>":  [ [ "<span class="red">nick:location</span>", <span class="red">est_iou</span> ], &#8230;] }</p></div>
+<div class="paragraph"><p>{"<span class="blue">target</span>": "target_value", "<span class="blue">runname</span>" : "runname", "<span class="blue">test_pattern</span>": "optional test pattern"}</p></div>
+</div></div>
+<div class="paragraph"><p>Response:</p></div>
+<div class="paragraph"><p>If Error</p></div>
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph"><p>{ "<span class="blue">error</span>" : "<span class="red">Error message</span>" }</p></div>
+</div></div>
+<div class="paragraph"><p>If Success returns the results of the run</p></div>
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph"><p>[
+   {
+    "<span class="red">run_id</span>" : "2",
+    "<span class="red">name</span>"   : "runname2",
+    "<span class="red">target</span>" : "target2",
+    "<span class="red">tests</span>"  :
+      [
+          "<span class="green">test</span>:
+              [
+                   {"<span class="blue">id</span>": 4, "<span class="blue">name</span>":[blue]test1, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test1", "<span class="blue">final_logf</span>": "megatest-rollup-test1.html",  "<span class="blue">status</span>": "PASS"}
+                   {"<span class="blue">id</span>": 5, "<span class="blue">name</span>":[blue]test2, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test2", "<span class="blue">final_logf</span>": "megatest-rollup-test2.html",  "<span class="blue">status</span>": "FAIL"}
+                   {"<span class="blue">id</span>": 6, "<span class="blue">name</span>":test3, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test3", "<span class="blue">final_logf</span>": "megatest-rollup-test3.html",  "<span class="blue">status</span>": "PASS"}
+              ]
+      ]
+   }
+]</p></div>
+</div></div>
+</div>
+<div class="sect2">
+<h3 id="_get_perticular_run">1.4. Get perticular Run</h3>
+<div class="paragraph"><p>URL: &lt;base&gt;/runs/:id</p></div>
+<div class="paragraph"><p>Method: GET</p></div>
+<div class="paragraph"><p>Filter Params: testpatt</p></div>
+<div class="paragraph"><p>Response:</p></div>
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph"><p>[
+   {
+    "<span class="red">run_id</span>" : "2",
+    "<span class="red">name</span>"   : "runname2",
+    "<span class="red">target</span>" : "target2",
+    "<span class="red">tests</span>"  :
+      [
+          "<span class="green">test</span>":
+              [
+                   {"<span class="blue">id</span>": 4, "<span class="blue">name</span>":[blue]test1, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test1", "<span class="blue">final_logf</span>": "megatest-rollup-test1.html",  "<span class="blue">status</span>": "PASS"}
+                   {"<span class="blue">id</span>": 5, "<span class="blue">name</span>":[blue]test2, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test2", "<span class="blue">final_logf</span>": "megatest-rollup-test2.html",  "<span class="blue">status</span>": "FAIL"}
+                   {"<span class="blue">id</span>": 6, "<span class="blue">name</span>":test3, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test3", "<span class="blue">final_logf</span>": "megatest-rollup-test3.html",  "<span class="blue">status</span>": "PASS"}
+              ]
+      ]
+   }
+]</p></div>
+</div></div>
+</div>
+<div class="sect2">
+<h3 id="_re_execute_a_run">1.5. Re-execute a run</h3>
+<div class="paragraph"><p>URL: &lt;base&gt;/runs/:id</p></div>
+<div class="paragraph"><p>Method: PUT/PATCH</p></div>
+<div class="paragraph"><p>Request Params: {"testpatt" : "pattern"}</p></div>
+<div class="paragraph"><p>Response:</p></div>
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph"><p>[
+   {
+    "<span class="red">run_id</span>" : "2",
+    "<span class="red">name</span>"   : "runname2",
+    "<span class="red">target</span>" : "target2",
+    "<span class="red">tests</span>"  :
+      [
+          "<span class="green">test</span>":
+              [
+                   {"<span class="blue">id</span>": 4, "<span class="blue">name</span>":[blue]test1, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test1", "<span class="blue">final_logf</span>": "megatest-rollup-test1.html",  "<span class="blue">status</span>": "PASS"}
+                   {"<span class="blue">id</span>": 5, "<span class="blue">name</span>":[blue]test2, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test2", "<span class="blue">final_logf</span>": "megatest-rollup-test2.html",  "<span class="blue">status</span>": "FAIL"}
+                   {"<span class="blue">id</span>": 6, "<span class="blue">name</span>":test3, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test3", "<span class="blue">final_logf</span>": "megatest-rollup-test3.html",  "<span class="blue">status</span>": "PASS"}
+              ]
+      ]
+   }
+]</p></div>
+</div></div>
+</div>
+<div class="sect2">
+<h3 id="_get_list_of_tests_within_a_run">1.6. Get List of tests within a run</h3>
+<div class="paragraph"><p>URL: &lt;base&gt;/runs/:id/tests</p></div>
+<div class="paragraph"><p>Method: GET</p></div>
+<div class="paragraph"><p>Response:</p></div>
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph"><p>[
+     "<span class="red">tests</span>"  :
+              [
+                   {"<span class="blue">id</span>": 4, "<span class="blue">name</span>":[blue]test1, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test1", "<span class="blue">final_logf</span>": "megatest-rollup-test1.html",  "<span class="blue">status</span>": "PASS"}
+                   {"<span class="blue">id</span>": 5, "<span class="blue">name</span>":[blue]test2, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test2", "<span class="blue">final_logf</span>": "megatest-rollup-test2.html",  "<span class="blue">status</span>": "FAIL"}
+                   {"<span class="blue">id</span>": 6, "<span class="blue">name</span>":test3, "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test3", "<span class="blue">final_logf</span>": "megatest-rollup-test3.html",  "<span class="blue">status</span>": "PASS"}
+              ]
+]</p></div>
+</div></div>
+</div>
+<div class="sect2">
+<h3 id="_re_execute_a_test_within_a_run">1.7. Re-execute a test within a run</h3>
+<div class="paragraph"><p>URL: &lt;base&gt;/runs/:id/tests/:id</p></div>
+<div class="paragraph"><p>Method: PUT/PATCH</p></div>
+<div class="paragraph"><p>Response:</p></div>
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph"><p>{"<span class="blue">id</span>": "4", "<span class="blue">name</span>":"test1", "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test1", "<span class="blue">final_logf</span>": "megatest-rollup-test1.html",  "<span class="blue">status</span>": "PASS"}</p></div>
+</div></div>
+</div>
+<div class="sect2">
+<h3 id="_get_perticular_test_that_belongs_to_a_runs">1.8. Get perticular test that belongs to a Runs</h3>
+<div class="paragraph"><p>URL: &lt;base&gt;/runs/:id/tests/:id</p></div>
+<div class="paragraph"><p>Method: GET</p></div>
+<div class="paragraph"><p>Response:</p></div>
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph"><p>{"<span class="blue">id</span>": "4", "<span class="blue">name</span>":"test1", "<span class="blue">item_path</span>": "", "<span class="blue">shortdir</span>": "/temp/foo/bar/target2/runname2/test1", "<span class="blue">final_logf</span>": "megatest-rollup-test1.html",  "<span class="blue">status</span>": "PASS"}</p></div>
 </div></div>
 </div>
 </div>
@@ -865,7 +1012,7 @@ baz
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br>
-Last updated 2016-07-25 15:03:20 PDT
+Last updated 2016-08-03 14:52:22 PDT
 </div>
 </div>
 </body>
