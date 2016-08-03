@@ -2731,15 +2731,23 @@ Misc
 			 (lambda (next prev)  ;; #(time ? val) #(time ? val)
 			   (if prev
 			       (let* ((yval       (vector-ref prev 2))
+                                      (yval-next  (vector-ref next 2))
 				      (last-tval  (tfn   (vector-ref prev 0)))
 				      (last-yval  (yfunc yval)) ;; (+ lly (* yscale (vector-ref prev 2))))
+                                      (next-yval  (yfunc yval-next))
 				      (curr-tval  (tfn   (vector-ref next 0))))
 				 (if (>= curr-tval last-tval)
-				     (vg:add-obj-to-comp
-				      cmp 
-				      (vg:make-rect-obj last-tval lly curr-tval last-yval ;; (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
-							fill-color: stdcolor
-							line-color: stdcolor))
+                                     (begin
+                                       (vg:add-obj-to-comp
+                                        cmp 
+                                        ;;(vg:make-rect-obj last-tval lly curr-tval last-yval ;; (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
+                                        (vg:make-line-obj last-tval last-yval curr-tval last-yval
+                                                          line-color: stdcolor))
+                                       (vg:add-obj-to-comp
+                                        cmp 
+                                        ;;(vg:make-rect-obj last-tval lly curr-tval last-yval ;; (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
+                                        (vg:make-line-obj curr-tval last-yval curr-tval next-yval
+                                                 line-color: stdcolor)))         
 				     (print "ERROR: curr-tval is not > last-tval; curr-tval " curr-tval ", last-tval " last-tval))))
 			   next)
 			 ;; for init create vector tstart,0
