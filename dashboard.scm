@@ -2711,14 +2711,14 @@ Misc
 	 (if alldat
 	     (for-each
 	      (lambda (fieldn)
-		(let* ((dat     (hash-table-ref alldat fieldn ))
+		(let* ((dat     (hash-table-ref alldat fieldn))
 		       (vals    (map (lambda (x)(vector-ref x 2)) dat)))
 		  (if (not (null? vals))
 		      (let* ((maxval   (apply max vals))
 			     (minval   (apply min vals))
 			     (yoff     (- minval lly)) ;;  minval))
 			     (deltaval (- maxval minval))
-			     (yscale   (/ delta-y (if (eq? deltaval 0) 1 deltaval)))
+			     (yscale   (/ delta-y (if (zero? deltaval) 1 deltaval)))
 			     (yfunc    (lambda (y)(+ lly (* yscale (- y minval)))))) ;; (lambda (y)(* (+ y yoff) yscale))))
 			;; (print (car cf) "; maxval: " maxval " minval: " minval " deltaval: " deltaval " yscale: " yscale)
 			(vg:add-obj-to-comp
@@ -2891,16 +2891,16 @@ Misc
 					      (let* ((title   (if iterated (if compact-layout #f item-path) test-name))
 						     (lly     (calc-y rownum)) ;; (- sizey (* rownum row-height)))
 						     (uly     (+ lly row-height))
-						     (use-end (if (< (- end-time event-time) 3)(+ event-time 3) end-time)) ;; if short grow it a little to give the user something to click on
+						     (use-end (if (< (- end-time event-time) 2)(+ event-time 2) end-time)) ;; if short grow it a little to give the user something to click on
 						     (obj     (vg:make-rect-obj event-time lly use-end uly
 										fill-color: (vg:iup-color->number (car name-color))
 										text: title
 										font: "Helvetica -10")) 
-						     (bar-end (+ 5 (max use-end
-									(+ 3 event-time 
-									   (if compact-layout
-									       0
-									       (* (string-length title) 10))))))) ;; 8 pixels per letter
+						     (bar-end (max use-end
+								   (+ event-time 
+								      (if compact-layout
+									  1
+									  (+ 7 (* (string-length title) 10))))))) ;; 8 pixels per letter
 						;; (if iterated
 						;;     (dashboard:add-bar rowhash (- rownum 1) event-time end-time num-rows: (+ 1 num-items))
 						;; (if (not first-rownum)
