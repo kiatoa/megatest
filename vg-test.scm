@@ -9,13 +9,14 @@
 ;; 		     1000))
 
  (use trace)
- (trace 
-  ;; vg:draw-rect
-  ;; vg:grow-rect
-  vg:get-extents-for-objs
-  vg:components-get-extents
-  vg:instances-get-extents
-  vg:get-extents-for-two-rects)
+ ;; (trace 
+ ;;  ;; vg:draw-rect
+ ;;  ;; vg:grow-rect
+ ;;  vg:get-extents-for-objs
+ ;;  vg:components-get-extents
+ ;;  vg:instances-get-extents
+ ;;  vg:get-extents-for-two-rects
+ ;;  canvas-line!)
 
 (define d1 (vg:drawing-new))
 (define l1 (vg:lib-new))
@@ -38,6 +39,8 @@
     (if (< i numtorun)(loop (+ i 1))))
   (print "Run time: " (- (current-seconds) start)))
 
+(vg:add-obj-to-comp c1 (vg:make-line-obj 0 0 100 100))
+
 ;; add the c1 component to lib l1 with name firstcomp
 (vg:add-comp-to-lib l1 "firstcomp" c1)
 (vg:add-comp-to-lib l1 "secondcomp" c2)
@@ -48,6 +51,7 @@
 ;; instantiate firstlib/firstcomp as inst1 in drawing d1 at 0,0
 (vg:instantiate d1 "firstlib" "firstcomp" "inst1" 0 0)
 (vg:instantiate d1 "firstlib" "firstcomp" "inst2" 200 200)
+
 
 ;; (vg:drawing-scalex-set! d1 1.1)
 ;; (vg:drawing-scaley-set! d1 0.5)
