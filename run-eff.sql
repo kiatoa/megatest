@@ -10,5 +10,5 @@ select runs.runname,num_items,printf("%.2f",wall_runtime) AS runtime,printf("%.2
           group by run_id
           order by ratio DESC) AS dat
     join runs on dat.run_id=runs.id
-WHERE ratio > 1
+WHERE ratio > 0
 AND runs.state != 'deleted';
