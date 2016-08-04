@@ -2715,7 +2715,7 @@ Misc
 		       (vals    (map (lambda (x)(vector-ref x 2)) dat)))
 		  (if (not (null? vals))
 		      (let* ((maxval   (apply max vals))
-			     (minval   (apply min vals))
+			     (minval   (min 0 (apply min vals)))
 			     (yoff     (- minval lly)) ;;  minval))
 			     (deltaval (- maxval minval))
 			     (yscale   (/ delta-y (if (zero? deltaval) 1 deltaval)))
