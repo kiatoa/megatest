@@ -1026,7 +1026,9 @@
 	       '(     y  mo w  d   h  m   s))))
 	(list 8 6 5 2 1)))
      '(5 10 15 20 30 40 50 500))
-    (apply values result)))
+    (if values
+	(apply values result)
+	(values 0 day 1 0 'd))))
 	    
 	  
 
