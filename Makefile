@@ -221,6 +221,10 @@ datashare-testing/spublish : spublish.scm $(OFILES)
 datashare-testing/sretrieve : sretrieve.scm megatest-version.o margs.o configf.o process.o 
 	csc sretrieve.scm megatest-version.o margs.o configf.o process.o -o datashare-testing/sretrieve
 
+datashare-testing/sauthorize : sretrieve.scm megatest-version.o margs.o configf.o process.o common.o
+	 csc sauthorize.scm megatest-version.o margs.o configf.o process.o common.o -o datashare-testing/sauthorize
+
+
 sretrieve/sretrieve : datashare-testing/sretrieve
 	csc -deploy -deployed sretrieve.scm megatest-version.o margs.o configf.o
 	chicken-install -keep-installed $(PROXY) -deploy -prefix sretrieve defstruct srfi-18 format sql-de-lite \
