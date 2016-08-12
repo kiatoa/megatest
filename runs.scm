@@ -11,7 +11,7 @@
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking (srfi 18) 
-     posix-extras directory-utils pathname-expand defstruct format)
+     posix-extras directory-utils pathname-expand typed-records format)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit runs))
@@ -32,6 +32,11 @@
 (include "test_records.scm")
 
 ;; (include "debugger.scm")
+
+;; use this struct to facilitate refactoring
+;;
+(defstruct runs:dat  hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmaps)
+
 
 (define (runs:test-get-full-path test)
   (let* ((testname (db:test-get-testname   test))
@@ -438,15 +443,6 @@
 	  (car reg)
 	  (car tal))))
 
-;;   (cond
-;;    ((and regfull (null? reg)(not (null? tal)))      (car tal))
-;;    ((and regfull (not (null? reg)))                 (car reg))
-;;    ((and (not regfull)(null? tal)(not (null? reg))) (car reg))
-;;    ((and (not regfull)(not (null? tal)))            (car tal))
-;;    (else
-;;     (debug:print-error 0 *default-log-port* "runs:queue-next-hed, tal=" tal ", reg=" reg ", n=" n ", regfull=" regfull)
-;;     #f)))
-
 (define (runs:queue-next-tal tal reg n regfull)
   (if regfull
       tal
@@ -656,8 +652,36 @@
 	       (conc t))))
 	   inlst)))
 
-(define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmaps)
-  (let* ((run-limits-info         (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
+
+;;  hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmaps)
+(define (runs:process-expanded-tests runsdat)
+  (let* ((hed                (runs:dat-hed runsdat))
+	 (tal                (runs:dat-tal runsdat))
+	 (reg                (runs:dat-reg runsdat))
+	 (reruns                (runs:dat-reruns runsdat))
+	 (reglen                (runs:dat-reglen runsdat))
+	 (regfull                (runs:dat-regfull runsdat))
+	 (test-record            (runs:dat-test-record runsdat))
+	 (runname            (runs:dat-runname runsdat))
+	 (test-name            (runs:dat-test-name runsdat))
+	 (item-path            (runs:dat-item-path runsdat))
+	 (jobgroup            (runs:dat-jobgroup runsdat))
+	 (max-concurrent-jobs            (runs:dat-max-concurrent-jobs runsdat))
+	 (run-id                  (runs:dat-run-id runsdat))
+	 (waitons                 (runs:dat-waitons runsdat))
+	 (item-path               (runs:dat-item-path runsdat))
+	 (testmode                (runs:dat-testmode runsdat))
+	 (test-patts              (runs:dat-test-patts runsdat))
+	 (required-tests            (runs:dat-required-tests runsdat))
+	 (test-registry            (runs:dat-test-registry runsdat))
+	 (registry-mutex            (runs:dat-registry-mutex runsdat))
+	 (flags                  (runs:dat-flags runsdat))
+	 (keyvals                (runs:dat-keyvals runsdat))
+	 (run-info               (runs:dat-run-info runsdat))
+	 (newtal                 (runs:dat-newtal runsdat))
+	 (all-tests-registry            (runs:dat-all-tests-registry runsdat))
+	 (itemmaps                (runs:dat-itemmaps runsdat))
+	 (run-limits-info         (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 	 (have-resources          (car run-limits-info))
 	 (num-running             (list-ref run-limits-info 1))
 	 (num-running-in-jobgroup (list-ref run-limits-info 2)) 
@@ -1151,8 +1175,35 @@
 	  (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests))
 		   (not (null? tal)))
 	      (loop (car tal)(cdr tal) reg reruns))
-	  (let ((loop-list (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmaps)))
-	    (if loop-list (apply loop loop-list))))
+	  (let ((runsdat (make-runs:dat
+			  hed: hed
+			  tal: tal
+			  reg: reg
+			  reruns: reruns
+			  reglen: reglen
+			  regfull: regfull
+			  test-record: test-record
+			  runname: runname
+			  test-name: test-name
+			  item-path: item-path
+			  jobgroup: jobgroup
+			  max-concurrent-jobs: max-concurrent-jobs
+			  run-id: run-id
+			  waitons: waitons
+			  item-path: item-path
+			  testmode: testmode
+			  test-patts: test-patts
+			  required-tests: required-tests
+			  test-registry: test-registry
+			  registry-mutex: registry-mutex
+			  flags: flags
+			  keyvals: keyvals
+			  run-info: run-info
+			  newtal: newtal
+			  all-tests-registry: all-tests-registry
+			  itemmaps: itemmaps)))
+	    (let ((loop-list (runs:process-expanded-tests runsdat)))
+	      (if loop-list (apply loop loop-list)))))
 
 	 ;; items processed into a list but not came in as a list been processed
 	 ;;
@@ -1308,6 +1359,7 @@
        lst))
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
+;;
 (define (run:test run-id run-info keyvals runname test-record flags parent-test test-registry all-tests-registry)
   ;; All these vars might be referenced by the testconfig file reader
   (let* ((test-name    (tests:testqueue-get-testname   test-record))
