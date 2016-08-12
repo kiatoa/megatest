@@ -1629,7 +1629,8 @@
 
 ;; look up values in a header/data structure
 (define (db:get-value-by-header row header field)
-  (if (null? header) #f
+  (if (or (null? header) (not row))
+      #f
       (let loop ((hed (car header))
 		 (tal (cdr header))
 		 (n   0))
