@@ -35,8 +35,19 @@
 
 ;; use this struct to facilitate refactoring
 ;;
-(defstruct runs:dat  hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmaps)
 
+(defstruct runs:dat
+  reglen regfull
+  runname max-concurrent-jobs run-id
+  test-patts required-tests test-registry
+  registry-mutex flags keyvals run-info all-tests-registry
+  can-run-more-tests
+  ((can-run-more-tests-count 0) : fixnum))
+
+(defstruct runs:testdat
+  hed tal reg reruns  test-record
+  test-name item-path jobgroup
+  waitons testmode  newtal itemmaps prereqs-not-met)
 
 ;; set up needed environment variables given a run-id and optionally a target, itempath etc.
 ;;
@@ -101,9 +112,16 @@
 ;; NOTE: We run this server-side!! Do not use this global except in the runs:can-run-more-tests routine
 ;;
 (define *last-num-running-tests* 0)
-(define *runs:can-run-more-tests-count* 0)
-(define (runs:shrink-can-run-more-tests-count)
-  (set! *runs:can-run-more-tests-count* 0)) ;; (/ *runs:can-run-more-tests-count* 2)))
+;; (define *runs:can-run-more-tests-count* 0)
+(define (runs:shrink-can-run-more-tests-count runsdat)
+  (runs:dat-can-run-more-tests-count-set! runsdat 0))
+
+(define (runs:inc-can-run-more-tests-count runsdat)
+  (runs:dat-can-run-more-tests-count-set!
+   runsdat
+   (+ (runs:dat-can-run-more-tests-count runsdat) 1)))
+
+;;  (set! *runs:can-run-more-tests-count* 0)) ;; (/ *runs:can-run-more-tests-count* 2)))
 
 ;; Temporary globals. Move these into the logic or into common
 ;;
@@ -132,9 +150,13 @@
 	  #t)
 	#f)))
 
-(define (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)
+(define (runs:can-run-more-tests runsdat run-id jobgroup max-concurrent-jobs)
+  ;; Take advantage of a good place to exit if running the one-pass methodology
+  (if (and (> (runs:dat-can-run-more-tests-count runsdat) 20)
+	   (args:get-arg "-one-pass"))
+      (exit 0))
   (thread-sleep! (cond
-        	  ((> *runs:can-run-more-tests-count* 20)
+        	  ((> (runs:dat-can-run-more-tests-count runsdat) 20)
 		   (if (runs:lownoise "waiting on tasks" 60)(debug:print-info 2 *default-log-port* "waiting for tasks to complete, sleeping briefly ..."))
 		   2);; obviously haven't had any work to do for a while
         	  (else 0)))
@@ -145,7 +167,7 @@
 					(string->number jobg-count)
 					jobg-count))))
     (if (> (+ num-running num-running-in-jobgroup) 0)
-	(set! *runs:can-run-more-tests-count* (+ *runs:can-run-more-tests-count* 1)))
+	(runs:inc-can-run-more-tests-count runsdat)) ;; (set! *runs:can-run-more-tests-count* (+ *runs:can-run-more-tests-count* 1)))
     (if (not (eq? *last-num-running-tests* num-running))
 	(begin
 	  (debug:print 2 *default-log-port* "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
@@ -654,42 +676,46 @@
 
 
 ;;  hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmaps)
-(define (runs:process-expanded-tests runsdat)
-  (let* ((hed                (runs:dat-hed runsdat))
-	 (tal                (runs:dat-tal runsdat))
-	 (reg                (runs:dat-reg runsdat))
-	 (reruns                (runs:dat-reruns runsdat))
-	 (reglen                (runs:dat-reglen runsdat))
+(define (runs:process-expanded-tests runsdat testdat)
+  ;; unroll the contents of runsdat and testdat (due to ongoing refactoring).
+  (let* ((hed                    (runs:testdat-hed testdat))
+	 (tal                    (runs:testdat-tal testdat))
+	 (reg                    (runs:testdat-reg testdat))
+	 (reruns                 (runs:testdat-reruns testdat))
+	 (test-name              (runs:testdat-test-name testdat))
+	 (item-path              (runs:testdat-item-path testdat))
+	 (jobgroup               (runs:testdat-jobgroup testdat))
+	 (waitons                (runs:testdat-waitons testdat))
+	 (item-path              (runs:testdat-item-path testdat))
+	 (testmode               (runs:testdat-testmode testdat))
+	 (newtal                 (runs:testdat-newtal testdat))
+	 (itemmaps               (runs:testdat-itemmaps testdat))
+	 (test-record            (runs:testdat-test-record testdat))
+	 (prereqs-not-met        (runs:testdat-prereqs-not-met testdat))
+
+	 (reglen                 (runs:dat-reglen runsdat))
 	 (regfull                (runs:dat-regfull runsdat))
-	 (test-record            (runs:dat-test-record runsdat))
-	 (runname            (runs:dat-runname runsdat))
-	 (test-name            (runs:dat-test-name runsdat))
-	 (item-path            (runs:dat-item-path runsdat))
-	 (jobgroup            (runs:dat-jobgroup runsdat))
-	 (max-concurrent-jobs            (runs:dat-max-concurrent-jobs runsdat))
-	 (run-id                  (runs:dat-run-id runsdat))
-	 (waitons                 (runs:dat-waitons runsdat))
-	 (item-path               (runs:dat-item-path runsdat))
-	 (testmode                (runs:dat-testmode runsdat))
-	 (test-patts              (runs:dat-test-patts runsdat))
-	 (required-tests            (runs:dat-required-tests runsdat))
-	 (test-registry            (runs:dat-test-registry runsdat))
-	 (registry-mutex            (runs:dat-registry-mutex runsdat))
+	 (runname                (runs:dat-runname runsdat))
+	 (max-concurrent-jobs    (runs:dat-max-concurrent-jobs runsdat))
+	 (run-id                 (runs:dat-run-id runsdat))
+	 (test-patts             (runs:dat-test-patts runsdat))
+	 (required-tests         (runs:dat-required-tests runsdat))
+	 (test-registry          (runs:dat-test-registry runsdat))
+	 (registry-mutex         (runs:dat-registry-mutex runsdat))
 	 (flags                  (runs:dat-flags runsdat))
 	 (keyvals                (runs:dat-keyvals runsdat))
 	 (run-info               (runs:dat-run-info runsdat))
-	 (newtal                 (runs:dat-newtal runsdat))
-	 (all-tests-registry            (runs:dat-all-tests-registry runsdat))
-	 (itemmaps                (runs:dat-itemmaps runsdat))
-	 (run-limits-info         (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
-	 (have-resources          (car run-limits-info))
-	 (num-running             (list-ref run-limits-info 1))
-	 (num-running-in-jobgroup (list-ref run-limits-info 2)) 
-	 (max-concurrent-jobs     (list-ref run-limits-info 3))
-	 (job-group-limit         (list-ref run-limits-info 4))
-	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps))
+	 (all-tests-registry     (runs:dat-all-tests-registry runsdat))
+	 (run-limits-info        (runs:dat-can-run-more-tests runsdat))
+	 ;; (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
+	 (have-resources         (car run-limits-info))
+	 (num-running            (list-ref run-limits-info 1))
+	 (num-running-in-jobgroup(list-ref run-limits-info 2)) 
+	 (max-concurrent-jobs    (list-ref run-limits-info 3))
+	 (job-group-limit        (list-ref run-limits-info 4))
+	 ;; (prereqs-not-met        (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps))
 	 ;; (prereqs-not-met         (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
-	 (fails                   (if (list? prereqs-not-met)
+	 (fails                  (if (list? prereqs-not-met)
 				      (runs:calc-fails prereqs-not-met)
 				      (begin
 					(debug:print-error 0 *default-log-port* "prereqs-not-met is not a list! " prereqs-not-met)
@@ -756,7 +782,7 @@
 	    (rmt:register-test run-id test-name "")
 	    (if (rmt:get-test-id run-id test-name "")
 		(hash-table-set! test-registry (db:test-make-full-name test-name "") 'done))))
-      (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
+      (runs:shrink-can-run-more-tests-count runsdat)   ;; DELAY TWEAKER (still needed?)
       (if (and (null? tal)(null? reg))
 	  (list hed tal (append reg (list hed)) reruns)
 	  (list (runs:queue-next-hed tal reg reglen regfull)
@@ -809,7 +835,7 @@
       (run:test run-id run-info keyvals runname test-record flags #f test-registry all-tests-registry)
       (runs:incremental-print-results run-id)
       (hash-table-set! test-registry (db:test-make-full-name test-name item-path) 'running)
-      (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
+      (runs:shrink-can-run-more-tests-count runsdat)  ;; DELAY TWEAKER (still needed?)
       ;; (thread-sleep! *global-delta*)
       (if (or (not (null? tal))(not (null? reg)))
 	  (list (runs:queue-next-hed tal reg reglen regfull)
@@ -846,7 +872,7 @@
 				 " from the launch list as it has prerequistes that are FAIL")
 		    (let ((test-id (rmt:get-test-id run-id hed "")))
 		      (if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites")))
-		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
+		    (runs:shrink-can-run-more-tests-count runsdat) ;; DELAY TWEAKER (still needed?)
 		    ;; (thread-sleep! *global-delta*)
 		    ;; This next is for the items
 		    (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "BLOCKED" #f)
@@ -875,7 +901,7 @@
 		      (if (runs:lownoise (conc "not removing test " hed) 60)
 			  (debug:print 1 *default-log-port* "WARNING: not removing test " hed " from queue although it may not be runnable due to FAILED prerequisites"))
 		      ;; may not have processed correctly. Could be a race condition in your test implementation? Dropping test " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
-		      (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
+		      (runs:shrink-can-run-more-tests-count runsdat) ;; DELAY TWEAKER (still needed?)
 		      ;; (list hed tal reg reruns)
 		      ;; (list (car newtal)(cdr newtal) reg reruns)
 		      ;; (hash-table-set! test-registry hed 'removed)
@@ -1018,7 +1044,7 @@
   ;;
   ;; (rmt:find-and-mark-incomplete)
 
-  (let ((run-info              (rmt:get-run-info run-id))
+  (let* ((run-info              (rmt:get-run-info run-id))
 	(tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
 	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
 	(test-registry         (make-hash-table))
@@ -1032,7 +1058,36 @@
 	(reglen                (if (number? reglen-in) reglen-in 1))
 	(last-time-incomplete  (- (current-seconds) 900)) ;; force at least one clean up cycle
 	(last-time-some-running (current-seconds))
-	(tdbdat                (tasks:open-db)))
+	(tdbdat                (tasks:open-db))
+	(runsdat (make-runs:dat
+		  ;; hed: hed
+		  ;; tal: tal
+		  ;; reg: reg
+		  ;; reruns: reruns
+		  reglen: reglen
+		  regfull: #f ;; regfull
+		  ;; test-record: test-record
+		  runname: runname
+		  ;; test-name: test-name
+		  ;; item-path: item-path
+		  ;; jobgroup: jobgroup
+		  max-concurrent-jobs: max-concurrent-jobs
+		  run-id: run-id
+		  ;; waitons: waitons
+		  ;; testmode: testmode
+		  test-patts: test-patts
+		  required-tests: required-tests
+		  test-registry: test-registry
+		  registry-mutex: registry-mutex
+		  flags: flags
+		  keyvals: keyvals
+		  run-info: run-info
+		  ;; newtal: newtal
+		  all-tests-registry: all-tests-registry
+		  ;; itemmaps: itemmaps
+		  ;; prereqs-not-met: (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps)
+		  ;; can-run-more-tests: (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs) ;; look at the test jobgroup and tot jobs running
+		  )))
 
     ;; Initialize the test-registery hash with tests that already have a record
     ;; convert state to symbol and use that as the hash value
@@ -1080,8 +1135,23 @@
 	     (tfullname   (db:test-make-full-name test-name item-path))
 	     (newtal      (append tal (list hed)))
 	     (regfull     (>= (length reg) reglen))
-	     (num-running (rmt:get-count-tests-running-for-run-id run-id)))
-
+	     (num-running (rmt:get-count-tests-running-for-run-id run-id))
+	     (testdat     (make-runs:testdat
+			   hed: hed
+			   tal: tal
+			   reg: reg
+			   reruns: reruns
+			   test-record: test-record
+			   test-name:   test-name
+			   item-path:   item-path
+			   jobgroup:    jobgroup
+			   waitons:     waitons
+			   testmode:    testmode
+			   newtal:      newtal
+			   itemmaps:    itemmaps
+			   ;; prereqs-not-met: prereqs-not-met
+			   )))
+	(runs:dat-regfull-set! runsdat regfull)
 	;; every couple minutes verify the server is there for this run
 	(if (and (common:low-noise-print 60 "try start server"  run-id)
 		 (tasks:need-server run-id))
@@ -1132,17 +1202,6 @@
 		     "\n  length reg:  " (length reg)
 		     "\n  reg:         " reg)
 
-	;; lets use the debugger eh?
-;;	(debugger-start start: 7)
-;;	(debugger-trace-var "runs:run-tests-queue" "")
-;;	(debugger-trace-var "hed"              hed)
-;;	(debugger-trace-var "tal"              tal)
-;;	(debugger-trace-var "items"            items)
-;;	(debugger-trace-var "item-path"        item-path)
-;;	(debugger-trace-var "waitons"          waitons) 
-;;	(debugger-pauser)
-
-
 	;; check for hed in waitons => this would be circular, remove it and issue an
 	;; error
 	(if (member test-name waitons)
@@ -1175,35 +1234,10 @@
 	  (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests))
 		   (not (null? tal)))
 	      (loop (car tal)(cdr tal) reg reruns))
-	  (let ((runsdat (make-runs:dat
-			  hed: hed
-			  tal: tal
-			  reg: reg
-			  reruns: reruns
-			  reglen: reglen
-			  regfull: regfull
-			  test-record: test-record
-			  runname: runname
-			  test-name: test-name
-			  item-path: item-path
-			  jobgroup: jobgroup
-			  max-concurrent-jobs: max-concurrent-jobs
-			  run-id: run-id
-			  waitons: waitons
-			  item-path: item-path
-			  testmode: testmode
-			  test-patts: test-patts
-			  required-tests: required-tests
-			  test-registry: test-registry
-			  registry-mutex: registry-mutex
-			  flags: flags
-			  keyvals: keyvals
-			  run-info: run-info
-			  newtal: newtal
-			  all-tests-registry: all-tests-registry
-			  itemmaps: itemmaps)))
-	    (let ((loop-list (runs:process-expanded-tests runsdat)))
-	      (if loop-list (apply loop loop-list)))))
+	  (runs:testdat-prereqs-not-met-set! testdat (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps))
+	  (runs:dat-can-run-more-tests-set! runsdat (runs:can-run-more-tests runsdat run-id jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
+	  (let ((loop-list (runs:process-expanded-tests runsdat testdat)))
+	      (if loop-list (apply loop loop-list))))
 
 	 ;; items processed into a list but not came in as a list been processed
 	 ;;
@@ -1254,7 +1288,7 @@
 	 ;;    - but only do that if resources exist to kick off the job
 	 ;; EXPAND ITEMS
 	 ((or (procedure? items)(eq? items 'have-procedure))
-	  (let ((can-run-more    (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)))
+	  (let ((can-run-more    (runs:can-run-more-tests runsdat run-id jobgroup max-concurrent-jobs)))
 	    (if (and (list? can-run-more)
 		     (car can-run-more))
 		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmaps)))
