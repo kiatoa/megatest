@@ -56,7 +56,8 @@ Usage: dashboard [options]
   -skip-version-check   : skip the version check
 
 Misc
-  -rows N         : set number of rows
+  -rows R         : set number of rows
+  -cols C         : set number of columns
 "))
 
 ;;   -server host:port     : connect to host:port instead of db access
@@ -67,6 +68,7 @@ Misc
 (define remargs (args:get-args 
 		 (argv)
 		 (list  "-rows"
+			"-cols"
 			"-run"
 			"-test"
                         "-xterm"
@@ -168,7 +170,7 @@ Misc
   ((not-done-runs   '())                 : list)        ;; list of runs not yet drawn
   (header            #f)                                ;; header for decoding the run records
   (keys              #f)                                ;; keys for this run (i.e. target components)
-  ((numruns          16)                 : number)      ;; 
+  ((numruns          (string->number (or (args:get-arg "-cols") "8")))                 : number)      ;; 
   ((tot-runs          0)                 : number)
   ((last-data-update  0)                 : number)      ;; last time the data in allruns was updated
   (runs-mutex         (make-mutex))                     ;; use to prevent parallel access to draw objects
@@ -180,6 +182,8 @@ Misc
   (runs-matrix        #f)                               ;; used in newdashboard
   ((start-run-offset   0)                : number)      ;; left-right slider value
   ((start-test-offset  0)                : number)      ;; up-down slider value
+  ((runs-btn-height    (or (configf:lookup *configdat* "dashboard" "btn-height") "x12")) : string) 
+  ((runs-btn-fontsz    (or (configf:lookup *configdat* "dashboard" "btn-fontsz") "8")) : string) 
 
   ;; Canvas and drawing data
   (cnv                #f)
@@ -1955,9 +1959,9 @@ Misc
 				 #:alignment "ALEFT"
 					; #:image img1
 					; #:impress img2
-				 #:size "x15"
+				 #:size  (dboard:tabdat-runs-btn-height runs-dat) ;; "x15"
 				 #:expand "HORIZONTAL"
-				 #:fontsize "10"
+				 #:fontsize (dboard:tabdat-runs-btn-fontsz runs-dat) ;; "10"
 				 #:action (lambda (obj)
 					    (mark-for-update tabdat)
 					    (toggle-hide testnum uidat))))) ;; (iup:attribute obj "TITLE"))))
@@ -1993,9 +1997,9 @@ Misc
 	(let* ((button-key (mkstr runnum testnum))
 	       (butn       (iup:button
 			    "" ;; button-key 
-			    #:size "60x15" 
+			    #:size (dboard:tabdat-runs-btn-height runs-dat) ;; "60x15" 
 			    #:expand "HORIZONTAL"
-			    #:fontsize "10"
+			    #:fontsize (dboard:tabdat-runs-btn-fontsz runs-dat) ;; "10"
 			    #:button-cb
 			    (lambda (obj a pressed x y btn . rem)
 			      ;; (print "pressed= " pressed " x= " x " y= " y " rem=" rem " btn=" btn " string? " (string? btn))
