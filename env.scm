@@ -152,7 +152,27 @@
 	    dat))
       #f))
 
-(define (env:print added removed changed)
+(define (env:inc-path path)
+  (print "PATH "
+	 (conc "#{scheme (env:min-path \"" path "\" \"#{getenv PATH}\")}")))
+;; 	 (conc
+;; 	  "#{scheme (string-intersperse "
+;; 	  "(delete-duplicates "
+;; 	  "(append (string-split \"" path "\" \":\") "
+;; 	  "(string-split \"#{getenv PATH}\" \":\")))"
+;; 	  " \":\")}")))
+
+(define (env:min-path path1 path2)
+  (string-intersperse
+   (delete-duplicates
+    (append
+     (string-split path1 ":")
+     (string-split path2 ":")))
+   ":"))
+
+;; inc path will set a PATH that is incrementally modified when read - config mode only
+;;
+(define (env:print added removed changed #!key (inc-path #t))
   (let ((a  (env:lazy-hash-table->alist added))
 	(r  (env:lazy-hash-table->alist removed))
 	(c  (env:lazy-hash-table->alist changed)))
@@ -195,7 +215,13 @@
        (if a
 	   (begin
 	     (print "# Added vars")
-	     (map (lambda (dat)(print (car dat) " " (cdr dat)))
+	     (map (lambda (dat)
+		    (let ((var (car dat))
+			  (val (cdr dat)))
+		      (if (and inc-path
+			       (equal? var "PATH"))
+			  (env:inc-path val)
+			  (print var " " val))))
 		  (hash-table->alist added))))
        (if r
 	   (begin
@@ -205,7 +231,13 @@
        (if c
 	   (begin
 	     (print "# Changed vars")
-	     (map (lambda (dat)(print (car dat) " " (cdr dat)))
+	     (map (lambda (dat)
+		    (let ((var (car dat))
+			  (val (cdr dat)))
+		      (if (and inc-path
+			       (equal? var "PATH"))
+			  (env:inc-path val)
+			  (print var " " val))))
 		  (hash-table->alist changed)))))
       (else
        (debug:print-error 0 *default-log-port* "No dumpmode specified, use -dumpmode [bash|csh|config]")))))
