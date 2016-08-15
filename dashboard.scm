@@ -301,7 +301,7 @@ Misc
   tests          ;; hash of id => testdat
   tests-by-name  ;; hash of testfullname => testdat
   key-vals
-  last-update    ;; last query to db got records from before last-update
+  ((last-update 0) : fixnum) ;; last query to db got records from before last-update
   data-changed
   )
 
@@ -548,8 +548,13 @@ Misc
 		   (res     '())
 		   (maxtests 0))
 	  (let* ((run-id       (db:get-value-by-header run header "id"))
+		 (run-struct   (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f))
+		 (last-update  (if run-struct (dboard:rundat-last-update run-struct) 0))
 		 (key-vals     (rmt:get-key-vals run-id))
 		 (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
+		 ;; GET RID OF dboard:get-tests-dat - it is superceded by dboard:get-tests-for-run-duplicate
+		 ;;  dboard:get-tests-for-run-duplicate - returns a hash table
+		 ;;  (dboard:get-tests-dat tabdat run-id last-update))
 		 (all-test-ids (hash-table-keys tests-ht))
 		 (num-tests    (length all-test-ids)))
 	    ;; NOTE: bubble-up also sets the global (dboard:tabdat-item-test-names tabdat)
@@ -1979,8 +1984,8 @@ Misc
 				 #:alignment "ALEFT"
 					; #:image img1
 					; #:impress img2
-				 #:size  btn-height
-				 #:expand "NO" ;; "HORIZONTAL"
+				 #:size  (conc cell-width btn-height)
+				 #:expand  "NO" ;; "HORIZONTAL"
 				 #:fontsize btn-fontsz
 				 #:action (lambda (obj)
 					    (mark-for-update tabdat)
