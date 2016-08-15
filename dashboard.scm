@@ -183,8 +183,9 @@ Misc
   ((start-run-offset   0)                : number)      ;; left-right slider value
   ((start-test-offset  0)                : number)      ;; up-down slider value
   ((runs-btn-height    (or (configf:lookup *configdat* "dashboard" "btn-height") "x12")) : string) 
-  ((runs-btn-fontsz    (or (configf:lookup *configdat* "dashboard" "btn-fontsz") "8")) : string) 
-
+  ((runs-btn-fontsz    (or (configf:lookup *configdat* "dashboard" "btn-fontsz") "8")) : string)
+  ((runs-cell-width    (or (configf:lookup *configdat* "dashboard" "cell-width") "50")) : string)
+  
   ;; Canvas and drawing data
   (cnv                #f)
   (cnv-obj            #f)
@@ -1545,280 +1546,291 @@ Misc
 
 ;; This is the New View tab
 ;; 
-(define (dashboard:new-view db commondat tabdat #!key (tab-num #f))
-  (let* ((tb      (iup:treebox
-		   #:value 0
-		   #:name "Runs"
-		   #:expand "YES"
-		   #:addexpanded "NO"
-		   #:selection-cb
-		   (lambda (obj id state)
-		     ;; (print "obj: " obj ", id: " id ", state: " state)
-		     (let* ((run-path (tree:node->path obj id))
-			    (run-id   (tree-path->run-id tabdat (cdr run-path))))
-		       (if (number? run-id)
-			   (begin
-			     (dboard:tabdat-curr-run-id-set! tabdat run-id)
-			     ;; (dashboard:update-new-view-tab)
-			     (dboard:tabdat-layout-update-ok-set! tabdat #f)
-			     )
-			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
-		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
-		     )))
-	 (cell-lookup (make-hash-table))
-	 (run-matrix (iup:matrix
-		      #:expand "YES"
-		      #:click-cb
-		      (lambda (obj lin col status)
-			(let* ((toolpath (car (argv)))
-			       (key      (conc lin ":" col))
-			       (test-id  (hash-table-ref/default cell-lookup key -1))
-			       (cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id "&")))
-			  (system cmd)))))
-	 (new-view-updater  (lambda ()
-			      (if  (dashboard:database-changed? commondat tabdat)
-				   (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
-					  (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
-					  (run-id       (dboard:tabdat-curr-run-id tabdat))
-					  (last-update  0) ;; fix me
-					  (tests-dat    (dboard:get-tests-dat tabdat run-id last-update))
-					  (tests-mindat (dcommon:minimize-test-data tests-dat))
-					  (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
-					  (row-indices  (cadr indices))
-					  (col-indices  (car indices))
-					  (max-row      (if (null? row-indices) 1 (common:max (map cadr row-indices))))
-					  (max-col      (if (null? col-indices) 1 (common:max (map cadr col-indices))))
-					  (max-visible  (max (- (dboard:tabdat-num-tests tabdat) 15) 3)) ;; (dboard:tabdat-num-tests tabdat) is proportional to the size of the window
-					  (numrows      1)
-					  (numcols      1)
-					  (changed      #f)
-					  (runs-hash    (let ((ht (make-hash-table)))
-							  (for-each (lambda (run)
-								      (hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
-								    (vector-ref runs-dat 1))
-							  ht))
-					  (run-ids      (sort (filter number? (hash-table-keys runs-hash))
-							      (lambda (a b)
-								(let* ((record-a (hash-table-ref runs-hash a))
-								       (record-b (hash-table-ref runs-hash b))
-								       (time-a   (db:get-value-by-header record-a runs-header "event_time"))
-								       (time-b   (db:get-value-by-header record-b runs-header "event_time")))
-								  (< time-a time-b))))))
-				     ;; (iup:attribute-set! tb "VALUE" "0")
-				     ;; (iup:attribute-set! tb "NAME" "Runs")
-				     ;; Update the runs tree
-				     (for-each (lambda (run-id)
-						 (let* ((run-record (hash-table-ref/default runs-hash run-id #f))
-							(key-vals   (map (lambda (key)(db:get-value-by-header run-record runs-header key))
-									 (dboard:tabdat-keys tabdat)))
-							(run-name   (db:get-value-by-header run-record runs-header "runname"))
-							(col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
-							(run-path   (append key-vals (list run-name)))
-							(existing   (tree:find-node tb run-path)))
-						   (if (not (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) run-path #f))
-						       (begin
-							 (hash-table-set! (dboard:tabdat-run-keys tabdat) run-id run-path)
-							 ;; (iup:attribute-set! (dboard:tabdat-runs-matrix tabdat)
-							 ;;    		 (conc rownum ":" colnum) col-name)
-							 ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
-							 ;; Here we update the tests treebox and tree keys
-							 (tree:add-node tb "Runs" run-path ;; (append key-vals (list run-name))
-									userdata: (conc "run-id: " run-id))
-							 (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
-							 ;; (set! colnum (+ colnum 1))
-							 ))))
-					       run-ids)
-				     (iup:attribute-set! run-matrix "CLEARVALUE" "ALL") ;; NOTE: Was CONTENTS
-				     (iup:attribute-set! run-matrix "CLEARATTRIB" "CONTENTS")
-				     (iup:attribute-set! run-matrix "RESIZEMATRIX" "YES")
-				     (iup:attribute-set! run-matrix "NUMCOL" max-col )
-				     (iup:attribute-set! run-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
-				     ;; (iup:attribute-set! run-matrix "NUMCOL_VISIBLE" max-col)
-				     ;; (iup:attribute-set! run-matrix "NUMLIN_VISIBLE" (if (> max-row max-visible) max-visible max-row))
-				     
-				     ;; Row labels
-				     (for-each (lambda (ind)
-						 (let* ((name (car ind))
-							(num  (cadr ind))
-							(key  (conc num ":0")))
-						   (if (not (equal? (iup:attribute run-matrix key) name))
-						       (begin
-							 (set! changed #t)
-							 (iup:attribute-set! run-matrix key name)))))
-					       row-indices)
-
-				     
-				     ;; Cell contents
-				     (for-each (lambda (entry)
-						 (let* ((row-name  (cadr entry))
-							(col-name  (car entry))
-							(valuedat  (caddr entry))
-							(test-id   (list-ref valuedat 0))
-							(test-name row-name) ;; (list-ref valuedat 1))
-							(item-path col-name) ;; (list-ref valuedat 2))
-							(state     (list-ref valuedat 1))
-							(status    (list-ref valuedat 2))
-							(value     (gutils:get-color-for-state-status state status))
-							(row-num   (cadr (assoc row-name row-indices)))
-							(col-num   (cadr (assoc col-name col-indices)))
-							(key       (conc row-num ":" col-num)))
-						   (hash-table-set! cell-lookup key test-id)
-						   (if (not (equal? (iup:attribute run-matrix key) (cadr value)))
-						       (begin
-							 (set! changed #t)
-							 (iup:attribute-set! run-matrix key (cadr value))
-							 (iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
-					       tests-mindat)
-				     
-				     ;; Col labels - do after setting Cell contents so they are accounted for in the size calc.
-
-				     (for-each (lambda (ind)
-						 (let* ((name (car ind))
-							(num  (cadr ind))
-							(key  (conc "0:" num)))
-						   (if (not (equal? (iup:attribute run-matrix key) name))
-						       (begin
-							 (set! changed #t)
-							 (iup:attribute-set! run-matrix key name)
-							 (iup:attribute-set! run-matrix "FITTOTEXT" (conc "C" num))))))
-					       col-indices)
-				     (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL")))))))
-    (dboard:commondat-add-updater commondat new-view-updater tab-num: tab-num)
-    (dboard:tabdat-runs-tree-set! tabdat tb)
-    (iup:split
-     tb
-     run-matrix)))
+;; (define (dashboard:new-view db commondat tabdat #!key (tab-num #f))
+;;   (let* ((tb      (iup:treebox
+;; 		   #:value 0
+;; 		   #:name "Runs"
+;; 		   #:expand "YES"
+;; 		   #:addexpanded "NO"
+;; 		   #:selection-cb
+;; 		   (lambda (obj id state)
+;; 		     ;; (print "obj: " obj ", id: " id ", state: " state)
+;; 		     (let* ((run-path (tree:node->path obj id))
+;; 			    (run-id   (tree-path->run-id tabdat (cdr run-path))))
+;; 		       (if (number? run-id)
+;; 			   (begin
+;; 			     (dboard:tabdat-curr-run-id-set! tabdat run-id)
+;; 			     ;; (dashboard:update-new-view-tab)
+;; 			     (dboard:tabdat-layout-update-ok-set! tabdat #f)
+;; 			     )
+;; 			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
+;; 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
+;; 		     )))
+;; 	 (cell-lookup (make-hash-table))
+;; 	 (run-matrix (iup:matrix
+;; 		      #:expand "YES"
+;; 		      #:click-cb
+;; 		      (lambda (obj lin col status)
+;; 			(let* ((toolpath (car (argv)))
+;; 			       (key      (conc lin ":" col))
+;; 			       (test-id  (hash-table-ref/default cell-lookup key -1))
+;; 			       (cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id "&")))
+;; 			  (system cmd)))))
+;; 	 (new-view-updater  (lambda ()
+;; 			      (if  (dashboard:database-changed? commondat tabdat)
+;; 				   (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
+;; 					  (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
+;; 					  (run-id       (dboard:tabdat-curr-run-id tabdat))
+;; 					  (last-update  0) ;; fix me
+;; 					  (tests-dat    (dboard:get-tests-dat tabdat run-id last-update))
+;; 					  (tests-mindat (dcommon:minimize-test-data tests-dat))
+;; 					  (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
+;; 					  (row-indices  (cadr indices))
+;; 					  (col-indices  (car indices))
+;; 					  (max-row      (if (null? row-indices) 1 (common:max (map cadr row-indices))))
+;; 					  (max-col      (if (null? col-indices) 1 (common:max (map cadr col-indices))))
+;; 					  (max-visible  (max (- (dboard:tabdat-num-tests tabdat) 15) 3)) ;; (dboard:tabdat-num-tests tabdat) is proportional to the size of the window
+;; 					  (numrows      1)
+;; 					  (numcols      1)
+;; 					  (changed      #f)
+;; 					  (runs-hash    (let ((ht (make-hash-table)))
+;; 							  (for-each (lambda (run)
+;; 								      (hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
+;; 								    (vector-ref runs-dat 1))
+;; 							  ht))
+;; 					  (run-ids      (sort (filter number? (hash-table-keys runs-hash))
+;; 							      (lambda (a b)
+;; 								(let* ((record-a (hash-table-ref runs-hash a))
+;; 								       (record-b (hash-table-ref runs-hash b))
+;; 								       (time-a   (db:get-value-by-header record-a runs-header "event_time"))
+;; 								       (time-b   (db:get-value-by-header record-b runs-header "event_time")))
+;; 								  (< time-a time-b))))))
+;; 				     ;; (iup:attribute-set! tb "VALUE" "0")
+;; 				     ;; (iup:attribute-set! tb "NAME" "Runs")
+;; 				     ;; Update the runs tree
+;; 				     (for-each (lambda (run-id)
+;; 						 (let* ((run-record (hash-table-ref/default runs-hash run-id #f))
+;; 							(key-vals   (map (lambda (key)(db:get-value-by-header run-record runs-header key))
+;; 									 (dboard:tabdat-keys tabdat)))
+;; 							(run-name   (db:get-value-by-header run-record runs-header "runname"))
+;; 							(col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
+;; 							(run-path   (append key-vals (list run-name)))
+;; 							(existing   (tree:find-node tb run-path)))
+;; 						   (if (not (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) run-path #f))
+;; 						       (begin
+;; 							 (hash-table-set! (dboard:tabdat-run-keys tabdat) run-id run-path)
+;; 							 ;; (iup:attribute-set! (dboard:tabdat-runs-matrix tabdat)
+;; 							 ;;    		 (conc rownum ":" colnum) col-name)
+;; 							 ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
+;; 							 ;; Here we update the tests treebox and tree keys
+;; 							 (tree:add-node tb "Runs" run-path ;; (append key-vals (list run-name))
+;; 									userdata: (conc "run-id: " run-id))
+;; 							 (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
+;; 							 ;; (set! colnum (+ colnum 1))
+;; 							 ))))
+;; 					       run-ids)
+;; 				     (iup:attribute-set! run-matrix "CLEARVALUE" "ALL") ;; NOTE: Was CONTENTS
+;; 				     (iup:attribute-set! run-matrix "CLEARATTRIB" "CONTENTS")
+;; 				     (iup:attribute-set! run-matrix "RESIZEMATRIX" "YES")
+;; 				     (iup:attribute-set! run-matrix "NUMCOL" max-col )
+;; 				     (iup:attribute-set! run-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
+;; 				     ;; (iup:attribute-set! run-matrix "NUMCOL_VISIBLE" max-col)
+;; 				     ;; (iup:attribute-set! run-matrix "NUMLIN_VISIBLE" (if (> max-row max-visible) max-visible max-row))
+;; 				     
+;; 				     ;; Row labels
+;; 				     (for-each (lambda (ind)
+;; 						 (let* ((name (car ind))
+;; 							(num  (cadr ind))
+;; 							(key  (conc num ":0")))
+;; 						   (if (not (equal? (iup:attribute run-matrix key) name))
+;; 						       (begin
+;; 							 (set! changed #t)
+;; 							 (iup:attribute-set! run-matrix key name)))))
+;; 					       row-indices)
+;; 
+;; 				     
+;; 				     ;; Cell contents
+;; 				     (for-each (lambda (entry)
+;; 						 (let* ((row-name  (cadr entry))
+;; 							(col-name  (car entry))
+;; 							(valuedat  (caddr entry))
+;; 							(test-id   (list-ref valuedat 0))
+;; 							(test-name row-name) ;; (list-ref valuedat 1))
+;; 							(item-path col-name) ;; (list-ref valuedat 2))
+;; 							(state     (list-ref valuedat 1))
+;; 							(status    (list-ref valuedat 2))
+;; 							(value     (gutils:get-color-for-state-status state status))
+;; 							(row-num   (cadr (assoc row-name row-indices)))
+;; 							(col-num   (cadr (assoc col-name col-indices)))
+;; 							(key       (conc row-num ":" col-num)))
+;; 						   (hash-table-set! cell-lookup key test-id)
+;; 						   (if (not (equal? (iup:attribute run-matrix key) (cadr value)))
+;; 						       (begin
+;; 							 (set! changed #t)
+;; 							 (iup:attribute-set! run-matrix key (cadr value))
+;; 							 (iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
+;; 					       tests-mindat)
+;; 				     
+;; 				     ;; Col labels - do after setting Cell contents so they are accounted for in the size calc.
+;; 
+;; 				     (for-each (lambda (ind)
+;; 						 (let* ((name (car ind))
+;; 							(num  (cadr ind))
+;; 							(key  (conc "0:" num)))
+;; 						   (if (not (equal? (iup:attribute run-matrix key) name))
+;; 						       (begin
+;; 							 (set! changed #t)
+;; 							 (iup:attribute-set! run-matrix key name)
+;; 							 (iup:attribute-set! run-matrix "FITTOTEXT" (conc "C" num))))))
+;; 					       col-indices)
+;; 				     (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL")))))))
+;;     (dboard:commondat-add-updater commondat new-view-updater tab-num: tab-num)
+;;     (dboard:tabdat-runs-tree-set! tabdat tb)
+;;     (iup:split
+;;      tb
+;;      run-matrix)))
 
 ;;======================================================================
 ;; R U N S 
 ;;======================================================================
 
 (define (dboard:make-controls commondat tabdat)
-	  (iup:hbox
+  (let ((btn-fontsz  (dboard:tabdat-runs-btn-fontsz tabdat)))
+    (iup:hbox
+     (iup:vbox
+      (iup:frame 
+       #:title "filter test and items"
+       (iup:hbox
+	(iup:vbox
+	 (iup:textbox #:size "120x15" #:fontsize "10" #:value "%"
+		      #:expand "NO"
+		      #:action (lambda (obj unk val)
+				 (debug:catch-and-dump
+				  (lambda ()
+				    (mark-for-update tabdat)
+				    (update-search commondat tabdat "test-name" val))
+				  "make-controls")))
+	 (iup:hbox
+	  (iup:button "Quit"      #:action (lambda (obj)
+					     ;; (if (dboard:tabdat-dblocal tabdat) (db:close-all (dboard:tabdat-dblocal tabdat)))
+					     (exit))
+		      #:expand "NO" #:size "40x15")
+	  (iup:button "Refresh"   #:action (lambda (obj)
+					     (mark-for-update tabdat))
+		      #:expand "NO" #:size "40x15")
+	  (iup:button "Collapse"  #:action (lambda (obj)
+					     (debug:catch-and-dump 
+					      (lambda ()
+						(let ((myname (iup:attribute obj "TITLE")))
+						  (if (equal? myname "Collapse")
+						      (begin
+							(for-each (lambda (tname)
+								    (hash-table-set! *collapsed* tname #t))
+								  (dboard:tabdat-item-test-names tabdat))
+							(iup:attribute-set! obj "TITLE" "Expand"))
+						      (begin
+							(for-each (lambda (tname)
+								    (hash-table-delete! *collapsed* tname))
+								  (hash-table-keys *collapsed*))
+							(iup:attribute-set! obj "TITLE" "Collapse"))))
+						(mark-for-update tabdat))
+					      "make-controls collapse button"))
+		      #:expand "NO" #:size "40x15"))
+	 )
+	(iup:vbox
+	 ;; (iup:button "Sort -t"   #:action (lambda (obj)
+	 ;;   				 (next-sort-option)
+	 ;;   				 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
+	 ;;   				 (mark-for-update tabdat)))
+	 
+	 (let* ((hide #f)
+		(show #f)
+		(hide-empty #f)
+		(sel-color    "180 100 100")
+		(nonsel-color "170 170 170")
+		(cmds-list '("+testname" "-testname" "+event_time" "-event_time" "+statestatus" "-statestatus"))
+		(sort-lb    (iup:listbox #:expand "NO" ;; "HORIZONTAL"
+					 #:size   "80x15"
+					 #:dropdown "YES"
+					 #:action (lambda (obj val index lbstate)
+						    (set! *tests-sort-reverse* index)
+						    (mark-for-update tabdat))))
+		(default-cmd (car (list-ref *tests-sort-type-index* *tests-sort-reverse*))))
+	   (iuplistbox-fill-list sort-lb cmds-list selected-item: default-cmd)
+	   
+	   (set! hide-empty (iup:button "HideEmpty"
+					;; #:expand HORIZONTAL"
+					#:expand "NO" #:size "80x15"
+					#:action (lambda (obj)
+						   (dboard:tabdat-hide-empty-runs-set! tabdat (not (dboard:tabdat-hide-empty-runs tabdat)))
+						   (iup:attribute-set! obj "TITLE" (if (dboard:tabdat-hide-empty-runs tabdat) "+HideE" "-HideE"))
+						   (mark-for-update tabdat))))
+	   (set! hide (iup:button "Hide"
+				  #:expand "NO" #:size "40x15" ;; #:expand "HORIZONTAL"
+				  #:action (lambda (obj)
+					     (dboard:tabdat-hide-not-hide-set! tabdat #t) ;; (not (dboard:tabdat-hide-not-hide tabdat)))
+					     ;; (iup:attribute-set! obj "TITLE" (if (dboard:tabdat-hide-not-hide tabdat) "HideTests" "NotHide"))
+					     (iup:attribute-set! hide "BGCOLOR" sel-color)
+					     (iup:attribute-set! show "BGCOLOR" nonsel-color)
+					     (mark-for-update tabdat))))
+	   (set! show (iup:button "Show"
+				  #:expand "NO" #:size "40x15" ;; #:expand "HORIZONTAL"
+				  #:action (lambda (obj)
+					     (dboard:tabdat-hide-not-hide-set! tabdat #f) ;; (not (dboard:tabdat-hide-not-hide tabdat)))
+					     (iup:attribute-set! show "BGCOLOR" sel-color)
+					     (iup:attribute-set! hide "BGCOLOR" nonsel-color)
+					     (mark-for-update tabdat))))
+	   (iup:attribute-set! hide "BGCOLOR" sel-color)
+	   (iup:attribute-set! show "BGCOLOR" nonsel-color)
+	   ;; (dboard:tabdat-hide-not-hide-button-set! tabdat hideit) ;; never used, can eliminate ...
 	   (iup:vbox
-	    (iup:frame 
-	     #:title "filter test and items"
-	     (iup:hbox
-	      (iup:vbox
-	       (iup:textbox #:size "120x15" #:fontsize "10" #:value "%"
-			    #:action (lambda (obj unk val)
-				       (debug:catch-and-dump
-					(lambda ()
-					  (mark-for-update tabdat)
-					  (update-search commondat tabdat "test-name" val))
-					"make-controls")))
-	       (iup:hbox
-		(iup:button "Quit"      #:action (lambda (obj)
-						   ;; (if (dboard:tabdat-dblocal tabdat) (db:close-all (dboard:tabdat-dblocal tabdat)))
-						   (exit)))
-		(iup:button "Refresh"   #:action (lambda (obj)
-						   (mark-for-update tabdat)))
-		(iup:button "Collapse"  #:action (lambda (obj)
-						   (debug:catch-and-dump 
-						    (lambda ()
-						      (let ((myname (iup:attribute obj "TITLE")))
-							(if (equal? myname "Collapse")
-							    (begin
-							      (for-each (lambda (tname)
-									  (hash-table-set! *collapsed* tname #t))
-									(dboard:tabdat-item-test-names tabdat))
-							      (iup:attribute-set! obj "TITLE" "Expand"))
-							    (begin
-							      (for-each (lambda (tname)
-									  (hash-table-delete! *collapsed* tname))
-									(hash-table-keys *collapsed*))
-							      (iup:attribute-set! obj "TITLE" "Collapse"))))
-						      (mark-for-update tabdat))
-						    "make-controls collapse button"))))
-	       )
-	      (iup:vbox
-	       ;; (iup:button "Sort -t"   #:action (lambda (obj)
-	       ;;   				 (next-sort-option)
-	       ;;   				 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
-	       ;;   				 (mark-for-update tabdat)))
-	       
-	       (let* ((hide #f)
-		      (show #f)
-		      (hide-empty #f)
-		      (sel-color    "180 100 100")
-		      (nonsel-color "170 170 170")
-		      (cmds-list '("+testname" "-testname" "+event_time" "-event_time" "+statestatus" "-statestatus"))
-		      (sort-lb    (iup:listbox #:expand "HORIZONTAL"
-					       #:dropdown "YES"
-					       #:action (lambda (obj val index lbstate)
-							  (set! *tests-sort-reverse* index)
-							  (mark-for-update tabdat))))
-		      (default-cmd (car (list-ref *tests-sort-type-index* *tests-sort-reverse*))))
-		 (iuplistbox-fill-list sort-lb cmds-list selected-item: default-cmd)
-		 
-		 (set! hide-empty (iup:button "HideEmpty"
-					      #:expand "HORIZONTAL"
-					      #:action (lambda (obj)
-							 (dboard:tabdat-hide-empty-runs-set! tabdat (not (dboard:tabdat-hide-empty-runs tabdat)))
-							 (iup:attribute-set! obj "TITLE" (if (dboard:tabdat-hide-empty-runs tabdat) "+HideE" "-HideE"))
-							 (mark-for-update tabdat))))
-		 (set! hide (iup:button "Hide"
-					#:expand "HORIZONTAL"
-					#:action (lambda (obj)
-						   (dboard:tabdat-hide-not-hide-set! tabdat #t) ;; (not (dboard:tabdat-hide-not-hide tabdat)))
-						   ;; (iup:attribute-set! obj "TITLE" (if (dboard:tabdat-hide-not-hide tabdat) "HideTests" "NotHide"))
-						   (iup:attribute-set! hide "BGCOLOR" sel-color)
-						   (iup:attribute-set! show "BGCOLOR" nonsel-color)
-						   (mark-for-update tabdat))))
-		 (set! show (iup:button "Show"
-					#:expand "HORIZONTAL"
-					#:action (lambda (obj)
-						   (dboard:tabdat-hide-not-hide-set! tabdat #f) ;; (not (dboard:tabdat-hide-not-hide tabdat)))
-						   (iup:attribute-set! show "BGCOLOR" sel-color)
-						   (iup:attribute-set! hide "BGCOLOR" nonsel-color)
-						   (mark-for-update tabdat))))
-		 (iup:attribute-set! hide "BGCOLOR" sel-color)
-		 (iup:attribute-set! show "BGCOLOR" nonsel-color)
-		 ;; (dboard:tabdat-hide-not-hide-button-set! tabdat hideit) ;; never used, can eliminate ...
-		 (iup:vbox
-		  (iup:hbox hide show)
-		  hide-empty sort-lb)))
-	       )))
-	   (iup:frame 
-	    #:title "state/status filter"
-	    (iup:vbox
-	     (apply 
-	      iup:hbox
-	      (map (lambda (status)
-		     (iup:toggle (conc status "  ")
-				 #:action   (lambda (obj val)
-					      (mark-for-update tabdat)
-					      (if (eq? val 1)
-						  (hash-table-set! (dboard:tabdat-status-ignore-hash tabdat) status #t)
-						  (hash-table-delete! (dboard:tabdat-status-ignore-hash tabdat) status))
-					      (set-bg-on-filter commondat tabdat))))
-		   (map cadr *common:std-statuses*))) ;; '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
-	     (apply 
-	      iup:hbox
-	      (map (lambda (state)
-		     (iup:toggle (conc state "  ")
-				 #:action   (lambda (obj val)
-					      (mark-for-update tabdat)
-					      (if (eq? val 1)
-						  (hash-table-set! (dboard:tabdat-state-ignore-hash tabdat) state #t)
-						  (hash-table-delete! (dboard:tabdat-state-ignore-hash tabdat) state))
-					      (set-bg-on-filter commondat tabdat))))
-		   (map cadr *common:std-states*))) ;; '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
-	     (iup:valuator #:valuechanged_cb (lambda (obj)
-					       (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))
-						     (oldmax   (string->number (iup:attribute obj "MAX")))
-						     (maxruns  (dboard:tabdat-tot-runs tabdat)))
-						 (dboard:tabdat-start-run-offset-set! tabdat val)
-						 (mark-for-update tabdat)
-						 (debug:print 6 *default-log-port* "(dboard:tabdat-start-run-offset tabdat) " (dboard:tabdat-start-run-offset tabdat) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
-						 (iup:attribute-set! obj "MAX" (* maxruns 10))))
+	    (iup:hbox hide show)
+	    hide-empty sort-lb)))
+	)))
+     (iup:frame 
+      #:title "state/status filter"
+      (iup:vbox
+       (apply 
+	iup:hbox
+	(map (lambda (status)
+	       (iup:toggle (conc status "  ")
+			   #:fontsize btn-fontsz ;; "10"
 			   #:expand "HORIZONTAL"
-			   #:max (* 10 (length (dboard:tabdat-allruns tabdat)))
-			   #:min 0
-			   #:step 0.01)))
+			   #:action   (lambda (obj val)
+					(mark-for-update tabdat)
+					(if (eq? val 1)
+					    (hash-table-set! (dboard:tabdat-status-ignore-hash tabdat) status #t)
+					    (hash-table-delete! (dboard:tabdat-status-ignore-hash tabdat) status))
+					(set-bg-on-filter commondat tabdat))))
+	     (map cadr *common:std-statuses*))) ;; '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
+       (apply 
+	iup:hbox
+	(map (lambda (state)
+	       (iup:toggle (conc state "  ")
+			   #:fontsize btn-fontsz
+			   #:expand "HORIZONTAL"
+			   #:action   (lambda (obj val)
+					(mark-for-update tabdat)
+					(if (eq? val 1)
+					    (hash-table-set! (dboard:tabdat-state-ignore-hash tabdat) state #t)
+					    (hash-table-delete! (dboard:tabdat-state-ignore-hash tabdat) state))
+					(set-bg-on-filter commondat tabdat))))
+	     (map cadr *common:std-states*))) ;; '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
+       (iup:valuator #:valuechanged_cb (lambda (obj)
+					 (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))
+					       (oldmax   (string->number (iup:attribute obj "MAX")))
+					       (maxruns  (dboard:tabdat-tot-runs tabdat)))
+					   (dboard:tabdat-start-run-offset-set! tabdat val)
+					   (mark-for-update tabdat)
+					   (debug:print 6 *default-log-port* "(dboard:tabdat-start-run-offset tabdat) " (dboard:tabdat-start-run-offset tabdat) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
+					   (iup:attribute-set! obj "MAX" (* maxruns 10))))
+		     #:expand "HORIZONTAL"
+		     #:max (* 10 (length (dboard:tabdat-allruns tabdat)))
+		     #:min 0
+		     #:step 0.01)))
 					;(iup:button "inc rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (+ (dboard:tabdat-num-tests tabdat) 1))))
 					;(iup:button "dec rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (if (> (dboard:tabdat-num-tests tabdat) 0)(- (dboard:tabdat-num-tests tabdat) 1) 0))))
-	   ))
+     )))
 
 (define (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt)
   (iup:menu 
@@ -1921,7 +1933,8 @@ Misc
 	 (result          '())
 	 (i               0)
 	 (btn-height      (dboard:tabdat-runs-btn-height runs-dat))
-	 (btn-fontsz      (dboard:tabdat-runs-btn-fontsz runs-dat)))
+	 (btn-fontsz      (dboard:tabdat-runs-btn-fontsz runs-dat))
+	 (cell-width      (dboard:tabdat-runs-cell-width runs-dat)))
     ;; controls (along bottom)
     (set! controls (dboard:make-controls commondat runs-dat))
     
@@ -1931,8 +1944,8 @@ Misc
 			(apply iup:vbox 
 			       (map (lambda (x)		
 				      (let ((res (iup:hbox #:expand "HORIZONTAL"
-							   (iup:label x #:size (conc 30 btn-height) #:fontsize btn-fontsz #:expand "NO") ;; "HORIZONTAL")
-							   (iup:textbox #:size (conc 20 btn-height) #:fontsize btn-fontsz #:value "%" #:expand "NO" ;; "HORIZONTAL"
+							   (iup:label x #:size (conc 40 btn-height) #:fontsize btn-fontsz #:expand "NO") ;; "HORIZONTAL")
+							   (iup:textbox #:size (conc 35 btn-height) #:fontsize btn-fontsz #:value "%" #:expand "NO" ;; "HORIZONTAL"
 									#:action (lambda (obj unk val)
 										   (mark-for-update runs-dat)
 										   (update-search commondat runs-dat x val))))))
@@ -1961,7 +1974,7 @@ Misc
 								   #:step 0.01)
 						     (apply iup:vbox (reverse res)))))))
        (else
-	(let ((labl  (iup:button "" 
+	(let ((labl  (iup:button "" ;; the testname labels
 				 #:flat "YES" 
 				 #:alignment "ALEFT"
 					; #:image img1
@@ -1986,7 +1999,7 @@ Misc
 	(set! hdrlst (cons (apply iup:vbox (reverse res)) hdrlst))
 	(loop (+ runnum 1) 0 (make-vector nkeys) '()))
        (else
-	(let ((labl  (iup:label "" #:size btn-height  #:fontsize btn-fontsz #:expand "HORIZONTAL"))) ;; #:expand "HORIZONTAL" "60x15" 
+	(let ((labl  (iup:label "" #:size (conc cell-width btn-height)  #:fontsize btn-fontsz #:expand "NO"))) ;; #:expand "HORIZONTAL" "60x15" 
 	  (vector-set! keyvec keynum labl)
 	  (loop runnum (+ keynum 1) keyvec (cons labl res))))))
     ;; By here the hdrlst contains a list of vboxes containing nkeys labels
@@ -2004,8 +2017,8 @@ Misc
 	(let* ((button-key (mkstr runnum testnum))
 	       (butn       (iup:button
 			    "" ;; button-key 
-			    #:size btn-height 
-			    #:expand "HORIZONTAL"
+			    #:size (conc cell-width btn-height )
+			    #:expand "NO"
 			    #:fontsize btn-fontsz
 			    #:button-cb
 			    (lambda (obj a pressed x y btn . rem)
