@@ -1114,6 +1114,31 @@ Misc
  ;;	 logs-tb))
       )))
 
+(define (dboard:runs-tree-browser commondat tabdat)
+  (let* ((tb      (iup:treebox
+		   #:value 0
+		   #:name "Runs"
+		   #:expand "YES"
+		   #:addexpanded "NO"
+		   #:selection-cb
+		   (lambda (obj id state)
+		     (debug:catch-and-dump
+		      (lambda ()
+			(let* ((run-path (tree:node->path obj id))
+			       (run-id    (tree-path->run-id tabdat (cdr run-path))))
+			  (dboard:tabdat-target-set! tabdat (cdr run-path)) ;; (print "run-path: " run-path)			    
+			  (dboard:tabdat-layout-update-ok-set! tabdat #f)
+			  (if (number? run-id)
+			      (begin
+				(dboard:tabdat-curr-run-id-set! tabdat run-id)
+				(dboard:tabdat-view-changed-set! tabdat #t))
+			      (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id))))
+		      "treebox"))
+		   ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
+		   )))
+    (dboard:tabdat-runs-tree-set! tabdat tb)
+    tb))
+
 ;;======================================================================
 ;; R U N   C O N T R O L S
 ;;======================================================================
@@ -1152,34 +1177,14 @@ Misc
      #:orientation "VERTICAL" ;; "HORIZONTAL"
      #:value 150
      (iup:vbox
-      (let* ((tb      (iup:treebox
-		       #:value 0
-		       #:name "Runs"
-		       #:expand "YES"
-		       #:addexpanded "NO"
-		       #:selection-cb
-		       (lambda (obj id state)
-			 (debug:catch-and-dump
-			  (lambda ()
-			    (let* ((run-path (tree:node->path obj id))
-				   (run-id    (tree-path->run-id tabdat (cdr run-path))))
-			      (dboard:tabdat-target-set! tabdat (cdr run-path)) ;; (print "run-path: " run-path)			    
-			      (dboard:tabdat-layout-update-ok-set! tabdat #f)
-			      (if (number? run-id)
-				  (begin
-				    (dboard:tabdat-curr-run-id-set! tabdat run-id)
-				    (dboard:tabdat-view-changed-set! tabdat #t))
-				  (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id))))
-			  "treebox"))
-		       ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
-		       )))
-	(dboard:tabdat-runs-tree-set! tabdat tb)
-	tb)
+
+      (dboard:runs-tree-browser commondat tabdat)
+
       (iup:hbox
        (iup:toggle 
 	"Compact layout"
 	#:fontsize 8
-	#:expand "YES"
+	#:expand "HORIZONTAL"
 	#:value 1
 	#:action (lambda (obj tstate)
 		   (debug:catch-and-dump 
@@ -1747,13 +1752,13 @@ Misc
 		 (iuplistbox-fill-list sort-lb cmds-list selected-item: default-cmd)
 		 
 		 (set! hide-empty (iup:button "HideEmpty"
-					      #:expand "YES"
+					      #:expand "HORIZONTAL"
 					      #:action (lambda (obj)
 							 (dboard:tabdat-hide-empty-runs-set! tabdat (not (dboard:tabdat-hide-empty-runs tabdat)))
 							 (iup:attribute-set! obj "TITLE" (if (dboard:tabdat-hide-empty-runs tabdat) "+HideE" "-HideE"))
 							 (mark-for-update tabdat))))
 		 (set! hide (iup:button "Hide"
-					#:expand "YES"
+					#:expand "HORIZONTAL"
 					#:action (lambda (obj)
 						   (dboard:tabdat-hide-not-hide-set! tabdat #t) ;; (not (dboard:tabdat-hide-not-hide tabdat)))
 						   ;; (iup:attribute-set! obj "TITLE" (if (dboard:tabdat-hide-not-hide tabdat) "HideTests" "NotHide"))
@@ -1761,7 +1766,7 @@ Misc
 						   (iup:attribute-set! show "BGCOLOR" nonsel-color)
 						   (mark-for-update tabdat))))
 		 (set! show (iup:button "Show"
-					#:expand "YES"
+					#:expand "HORIZONTAL"
 					#:action (lambda (obj)
 						   (dboard:tabdat-hide-not-hide-set! tabdat #f) ;; (not (dboard:tabdat-hide-not-hide tabdat)))
 						   (iup:attribute-set! show "BGCOLOR" sel-color)
@@ -1914,7 +1919,9 @@ Misc
 	 (hdrlst          '())
 	 (bdylst          '())
 	 (result          '())
-	 (i               0))
+	 (i               0)
+	 (btn-height      (dboard:tabdat-runs-btn-height runs-dat))
+	 (btn-fontsz      (dboard:tabdat-runs-btn-fontsz runs-dat)))
     ;; controls (along bottom)
     (set! controls (dboard:make-controls commondat runs-dat))
     
@@ -1924,8 +1931,8 @@ Misc
 			(apply iup:vbox 
 			       (map (lambda (x)		
 				      (let ((res (iup:hbox #:expand "HORIZONTAL"
-							   (iup:label x #:size "x15" #:fontsize "10" #:expand "HORIZONTAL")
-							   (iup:textbox #:size "x15" #:fontsize "10" #:value "%" #:expand "HORIZONTAL"
+							   (iup:label x #:size (conc 30 btn-height) #:fontsize btn-fontsz #:expand "NO") ;; "HORIZONTAL")
+							   (iup:textbox #:size (conc 20 btn-height) #:fontsize btn-fontsz #:value "%" #:expand "NO" ;; "HORIZONTAL"
 									#:action (lambda (obj unk val)
 										   (mark-for-update runs-dat)
 										   (update-search commondat runs-dat x val))))))
@@ -1959,15 +1966,15 @@ Misc
 				 #:alignment "ALEFT"
 					; #:image img1
 					; #:impress img2
-				 #:size  (dboard:tabdat-runs-btn-height runs-dat) ;; "x15"
-				 #:expand "HORIZONTAL"
-				 #:fontsize (dboard:tabdat-runs-btn-fontsz runs-dat) ;; "10"
+				 #:size  btn-height
+				 #:expand "NO" ;; "HORIZONTAL"
+				 #:fontsize btn-fontsz
 				 #:action (lambda (obj)
 					    (mark-for-update tabdat)
 					    (toggle-hide testnum uidat))))) ;; (iup:attribute obj "TITLE"))))
 	  (vector-set! lftcol testnum labl)
 	  (loop (+ testnum 1)(cons labl res))))))
-    ;; 
+    ;; These are the headers for each row
     (let loop ((runnum  0)
 	       (keynum  0)
 	       (keyvec  (make-vector nkeys))
@@ -1979,7 +1986,7 @@ Misc
 	(set! hdrlst (cons (apply iup:vbox (reverse res)) hdrlst))
 	(loop (+ runnum 1) 0 (make-vector nkeys) '()))
        (else
-	(let ((labl  (iup:label "" #:size "60x15" #:fontsize "10" #:expand "HORIZONTAL"))) ;; #:expand "HORIZONTAL"
+	(let ((labl  (iup:label "" #:size btn-height  #:fontsize btn-fontsz #:expand "HORIZONTAL"))) ;; #:expand "HORIZONTAL" "60x15" 
 	  (vector-set! keyvec keynum labl)
 	  (loop runnum (+ keynum 1) keyvec (cons labl res))))))
     ;; By here the hdrlst contains a list of vboxes containing nkeys labels
@@ -1997,9 +2004,9 @@ Misc
 	(let* ((button-key (mkstr runnum testnum))
 	       (butn       (iup:button
 			    "" ;; button-key 
-			    #:size (dboard:tabdat-runs-btn-height runs-dat) ;; "60x15" 
+			    #:size btn-height 
 			    #:expand "HORIZONTAL"
-			    #:fontsize (dboard:tabdat-runs-btn-fontsz runs-dat) ;; "10"
+			    #:fontsize btn-fontsz
 			    #:button-cb
 			    (lambda (obj a pressed x y btn . rem)
 			      ;; (print "pressed= " pressed " x= " x " y= " y " rem=" rem " btn=" btn " string? " (string? btn))
@@ -2044,14 +2051,18 @@ Misc
       #:title (conc "Megatest dashboard " (current-user-name) ":" *toppath*)
       #:menu (dcommon:main-menu)
       (let* ((runs-view (iup:vbox
-			 (apply iup:hbox 
-				(cons (apply iup:vbox lftlst)
-				      (list 
-				       (iup:vbox
-					;; the header
-					(apply iup:hbox (reverse hdrlst))
-					(apply iup:hbox (reverse bdylst))))))
-			 ;; controls
+			 (iup:split
+			  #:orientation "VERTICAL" ;; "HORIZONTAL"
+			  #:value 150
+			  (dboard:runs-tree-browser commondat runs-dat)
+			  (apply iup:hbox
+				 (cons (apply iup:vbox lftlst)
+				       (list 
+					(iup:vbox
+					 ;; the header
+					 (apply iup:hbox (reverse hdrlst))
+					 (apply iup:hbox (reverse bdylst)))))))
+			 controls
 			 ))
 	     ;; (data (dboard:tabdat-init (make-d:data)))
 	     (tabs (iup:tabs
