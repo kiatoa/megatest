@@ -575,25 +575,25 @@ Misc
 	    ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
 	    ;; (debug:print 0 *default-log-port* "Getting data for run " run-id " with key-vals=" key-vals)
 	    ;; Not sure this is needed?
-	    (if (null? all-test-ids)
-		(hash-table-delete! (dboard:tabdat-allruns-by-id tabdat) run-id)
-		(let* ((newmaxtests (max num-tests maxtests))
-		       (last-update (- (current-seconds) 10))
-		       (run-struct  (dboard:rundat-make-init
-				     run:         run 
-				     tests:       tests-ht
-				     key-vals:    key-vals
-				     last-update: last-update))
-		       (new-res     (cons run-struct res))
-		       (elapsed-time (- (current-seconds) start-time)))
-		  (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id run-struct)
-		  (if (or (null? tal)
-			  (> elapsed-time 2)) ;; stop loading data after 5 seconds, on the next call more data *should* be loaded since get-tests-for-run uses last update
-		      (begin
-			(if (> elapsed-time 2)(print "WARNING: timed out in update-testdat " elapsed-time "s"))
-			(dboard:tabdat-allruns-set! tabdat new-res)
-			maxtests)
-		      (loop (car tal)(cdr tal) new-res newmaxtests)))))))
+	    (let* ((newmaxtests (max num-tests maxtests))
+		   (last-update (- (current-seconds) 10))
+		   (run-struct  (dboard:rundat-make-init
+				 run:         run 
+				 tests:       tests-ht
+				 key-vals:    key-vals
+				 last-update: last-update))
+		   (new-res     (if (null? all-test-ids) res (cons run-struct res)))
+		   (elapsed-time (- (current-seconds) start-time)))
+	      (if (null? all-test-ids)
+		  (hash-table-delete! (dboard:tabdat-allruns-by-id tabdat) run-id)
+		  (hash-table-set!    (dboard:tabdat-allruns-by-id tabdat) run-id run-struct))
+	      (if (or (null? tal)
+		      (> elapsed-time 2)) ;; stop loading data after 5 seconds, on the next call more data *should* be loaded since get-tests-for-run uses last update
+		  (begin
+		    (if (> elapsed-time 2)(print "WARNING: timed out in update-testdat " elapsed-time "s"))
+		    (dboard:tabdat-allruns-set! tabdat new-res)
+		    maxtests)
+		  (loop (car tal)(cdr tal) new-res newmaxtests))))))
     (dboard:tabdat-filters-changed-set! tabdat #f)))
 
 (define *collapsed* (make-hash-table))
@@ -748,6 +748,8 @@ Misc
 	 (table       (dboard:uidat-get-runsvec uidat))
 	 (coln        0)
 	 (all-test-names (make-hash-table)))
+
+    (debug:print-info 0 *default-log-port* "runs: " runs)
 
     ;; create a concise list of test names
     ;;
