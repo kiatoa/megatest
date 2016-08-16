@@ -516,7 +516,7 @@ Misc
 	     (hash-table-set! tests-ht test-id tdat))))
      tmptests)
     (dboard:rundat-last-update-set! run-dat (- (current-seconds) 2)) ;; go back two seconds in time to ensure all changes are captured.
-    (debug:print-info 0 *default-log-port* "tests-ht: " (hash-table-keys tests-ht))
+    ;; (debug:print-info 0 *default-log-port* "tests-ht: " (hash-table-keys tests-ht))
     tests-ht))
 
 ;; tmptests   - new tests data
@@ -748,8 +748,6 @@ Misc
 	 (table       (dboard:uidat-get-runsvec uidat))
 	 (coln        0)
 	 (all-test-names (make-hash-table)))
-
-    (debug:print-info 0 *default-log-port* "runs: " runs)
 
     ;; create a concise list of test names
     ;;
@@ -2018,8 +2016,8 @@ Misc
 				 #:expand  "NO" ;; "HORIZONTAL"
 				 #:fontsize btn-fontsz
 				 #:action (lambda (obj)
-					    (mark-for-update tabdat)
-					    (toggle-hide testnum uidat))))) ;; (iup:attribute obj "TITLE"))))
+					    (mark-for-update runs-dat)
+					    (toggle-hide testnum (dboard:commondat-uidat commondat)))))) ;; (iup:attribute obj "TITLE"))))
 	  (vector-set! lftcol testnum labl)
 	  (loop (+ testnum 1)(cons labl res))))))
     ;; These are the headers for each row
@@ -2161,11 +2159,6 @@ Misc
 					(or (args:get-arg "-rows")
 					    (get-environment-variable "DASHBOARDROWS")
 					    "15"))))
-;;   (if (or (args:get-arg "-rows")
-;; 	  (get-environment-variable "DASHBOARDROWS" ))
-;;       (begin
-;;   (update-rundat tabdat "%" (dboard:tabdat-numruns tabdat) "%/%" '()))
-;;       (dboard:tabdat-num-tests-set! tabdat (min (max (update-rundat tabdat "%" (dboard:tabdat-numruns tabdat) "%/%" '()) 8) 20))))
   
 (define *tim* (iup:timer))
 (define *ord* #f)
