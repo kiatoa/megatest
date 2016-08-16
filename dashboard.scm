@@ -177,14 +177,14 @@ Misc
 
   ;; Runs view
   ((buttondat         (make-hash-table)) : hash-table)  ;;     
-  ((item-test-names  '())                : list)        
+  ((item-test-names  '())                : list)        ;; list of itemized tests
   ((run-keys          (make-hash-table)) : hash-table)
   (runs-matrix        #f)                               ;; used in newdashboard
   ((start-run-offset   0)                : number)      ;; left-right slider value
   ((start-test-offset  0)                : number)      ;; up-down slider value
-  ((runs-btn-height    (or (configf:lookup *configdat* "dashboard" "btn-height") "x12")) : string) 
-  ((runs-btn-fontsz    (or (configf:lookup *configdat* "dashboard" "btn-fontsz") "8")) : string)
-  ((runs-cell-width    (or (configf:lookup *configdat* "dashboard" "cell-width") "50")) : string)
+  ((runs-btn-height    (or (configf:lookup *configdat* "dashboard" "btn-height") "x14")) : string)  ;; was 12
+  ((runs-btn-fontsz    (or (configf:lookup *configdat* "dashboard" "btn-fontsz") "10")) : string)   ;; was 8
+  ((runs-cell-width    (or (configf:lookup *configdat* "dashboard" "cell-width") "60")) : string)   ;; was 50
   ((all-test-names     '())              : list)
   
   ;; Canvas and drawing data
@@ -515,7 +515,7 @@ Misc
 	     (hash-table-delete! tests-ht test-id)
 	     (hash-table-set! tests-ht test-id tdat))))
      tmptests)
-    (dboard:rundat-last-update-set! run-dat (- (current-seconds) 10)) ;; go back two seconds in time to ensure all changes are captured.
+    (dboard:rundat-last-update-set! run-dat (- (current-seconds) 2)) ;; go back two seconds in time to ensure all changes are captured.
     (debug:print-info 0 *default-log-port* "tests-ht: " (hash-table-keys tests-ht))
     tests-ht))
 
@@ -550,7 +550,12 @@ Misc
     ;; 
     ;; trim runs to only those that are changing often here
     ;; 
-    (if (not (null? runs))
+    (if (null? runs)
+	(begin
+	  (dboard:tabdat-allruns-set! tabdat '())
+	  (dboard:tabdat-all-test-names-set! tabdat '())
+	  (dboard:tabdat-item-test-names-set! tabdat '())
+	  (hash-table-clear! (dboard:tabdat-allruns-by-id tabdat)))
 	(let loop ((run      (car runs))
 		   (tal      (cdr runs))
 		   (res     '())
@@ -570,7 +575,8 @@ Misc
 	    ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
 	    ;; (debug:print 0 *default-log-port* "Getting data for run " run-id " with key-vals=" key-vals)
 	    ;; Not sure this is needed?
-	    (if (not (null? all-test-ids))
+	    (if (null? all-test-ids)
+		(hash-table-delete! (dboard:tabdat-allruns-by-id tabdat) run-id)
 		(let* ((newmaxtests (max num-tests maxtests))
 		       (last-update (- (current-seconds) 10))
 		       (run-struct  (dboard:rundat-make-init
@@ -582,12 +588,13 @@ Misc
 		       (elapsed-time (- (current-seconds) start-time)))
 		  (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id run-struct)
 		  (if (or (null? tal)
-			  (> elapsed-time 5)) ;; stop loading data after 5 seconds, on the next call more data *should* be loaded since get-tests-for-run uses last update
+			  (> elapsed-time 2)) ;; stop loading data after 5 seconds, on the next call more data *should* be loaded since get-tests-for-run uses last update
 		      (begin
-			(if (> elapsed-time 5)(print "WARNING: timed out in update-testdat " elapsed-time "s"))
+			(if (> elapsed-time 2)(print "WARNING: timed out in update-testdat " elapsed-time "s"))
 			(dboard:tabdat-allruns-set! tabdat new-res)
 			maxtests)
-		      (loop (car tal)(cdr tal) new-res newmaxtests)))))))))
+		      (loop (car tal)(cdr tal) new-res newmaxtests)))))))
+    (dboard:tabdat-filters-changed-set! tabdat #f)))
 
 (define *collapsed* (make-hash-table))
 
@@ -1314,7 +1321,7 @@ Misc
   (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 	 (run-id       (dboard:tabdat-curr-run-id tabdat))
-	 (last-update  0) ;; fix me
+	 (last-update  0) ;; fix me - have to create and store a rundat record for this
 	 (tests-dat    (dboard:get-tests-dat tabdat run-id last-update))
 	 (tests-mindat (dcommon:minimize-test-data tests-dat))
 	 (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
@@ -2148,14 +2155,15 @@ Misc
     (vector keycol lftcol header runsvec)))
 
 (define (dboard:setup-num-rows tabdat)
-  (if (or (args:get-arg "-rows")
-	  (get-environment-variable "DASHBOARDROWS" ))
-      (begin
-	(dboard:tabdat-num-tests-set! tabdat (string->number
-					      (or (args:get-arg "-rows")
-						  (get-environment-variable "DASHBOARDROWS"))))
-	(update-rundat tabdat "%" (dboard:tabdat-numruns tabdat) "%/%" '()))
-      (dboard:tabdat-num-tests-set! tabdat (min (max (update-rundat tabdat "%" (dboard:tabdat-numruns tabdat) "%/%" '()) 8) 20))))
+  (dboard:tabdat-num-tests-set! tabdat (string->number
+					(or (args:get-arg "-rows")
+					    (get-environment-variable "DASHBOARDROWS")
+					    "15"))))
+;;   (if (or (args:get-arg "-rows")
+;; 	  (get-environment-variable "DASHBOARDROWS" ))
+;;       (begin
+;;   (update-rundat tabdat "%" (dboard:tabdat-numruns tabdat) "%/%" '()))
+;;       (dboard:tabdat-num-tests-set! tabdat (min (max (update-rundat tabdat "%" (dboard:tabdat-numruns tabdat) "%/%" '()) 8) 20))))
   
 (define *tim* (iup:timer))
 (define *ord* #f)
