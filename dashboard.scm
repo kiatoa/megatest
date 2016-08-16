@@ -2729,8 +2729,8 @@ Misc
 			     (deltaval (- maxval minval))
 			     (yscale   (/ delta-y (if (eq? deltaval 0) 1 deltaval)))
 			     (yfunc    (lambda (y)(+ lly (* yscale (- y minval)))))) ;; (lambda (y)(* (+ y yoff) yscale))))
-			(print (car cf) "; maxval: " maxval " minval: " minval " deltaval: " deltaval " yscale: " yscale)
-			     (yfunc    (lambda (y)(+ lly (* yscale (- y minval)))))) ;; (lambda (y)(* (+ y yoff) yscale))))
+                        (print (car cf) "; maxval: " maxval " minval: " minval " deltaval: " deltaval " yscale: " yscale)
+;; (lambda (y)(* (+ y yoff) yscale))))
 			;; (print (car cf) "; maxval: " maxval " minval: " minval " deltaval: " deltaval " yscale: " yscale)
 			(vg:add-obj-to-comp
 			 cmp 
