@@ -185,6 +185,7 @@ Misc
   ((runs-btn-height    (or (configf:lookup *configdat* "dashboard" "btn-height") "x12")) : string) 
   ((runs-btn-fontsz    (or (configf:lookup *configdat* "dashboard" "btn-fontsz") "8")) : string)
   ((runs-cell-width    (or (configf:lookup *configdat* "dashboard" "cell-width") "50")) : string)
+  ((all-test-names     '())              : list)
   
   ;; Canvas and drawing data
   (cnv                #f)
@@ -319,10 +320,12 @@ Misc
   (let ((src-ht (dboard:rundat-tests rundat))
 	(trg-ht (dboard:rundat-tests-by-name rundat)))
     (if (and (hash-table? src-ht)(hash-table? trg-ht))
-	(for-each
-	 (lambda (testdat)
-	   (hash-table-set! trg-ht (test:test-get-fullname testdat) testdat))
-	 (hash-table-values src-ht))
+	(begin
+	  (hash-table-clear! trg-ht)
+	  (for-each
+	   (lambda (testdat)
+	     (hash-table-set! trg-ht (test:test-get-fullname testdat) testdat))
+	   (hash-table-values src-ht)))
 	(debug:print 0 *default-log-port* "WARNING: src-ht " src-ht " trg-ht " trg-ht))))
   
 (defstruct dboard:testdat
@@ -497,7 +500,11 @@ Misc
 						 last-update) ;; last-update
 					     *dashboard-mode*)) ;; use dashboard mode
 	 (use-new    (dboard:tabdat-hide-not-hide tabdat))
-	 (tests-ht   (dboard:rundat-tests run-dat))
+	 (tests-ht   (if (dboard:tabdat-filters-changed tabdat)
+			 (let ((ht (make-hash-table)))
+			   (dboard:rundat-tests-set! run-dat ht)
+			   ht)
+			 (dboard:rundat-tests run-dat)))
 	 (start-time (current-seconds)))
     (for-each 
      (lambda (tdat)
@@ -509,6 +516,7 @@ Misc
 	     (hash-table-set! tests-ht test-id tdat))))
      tmptests)
     (dboard:rundat-last-update-set! run-dat (- (current-seconds) 10)) ;; go back two seconds in time to ensure all changes are captured.
+    (debug:print-info 0 *default-log-port* "tests-ht: " (hash-table-keys tests-ht))
     tests-ht))
 
 ;; tmptests   - new tests data
@@ -636,7 +644,7 @@ Misc
 	       (conc (vector-ref x 0) "(" (vector-ref x 1) ")")))
 	 vlst2)))
 
-(define (update-labels uidat)
+(define (update-labels uidat alltestnames)
   (let* ((rown    0)
 	 (keycol  (dboard:uidat-get-keycol uidat))
 	 (lftcol  (dboard:uidat-get-lftcol uidat))
@@ -647,7 +655,7 @@ Misc
 		(if (<= rown maxn)
 		    (vector-set! allvals rown name)) ;)
 		(set! rown (+ 1 rown)))
-	      *alltestnamelst*)
+	      alltestnames)
     (let loop ((i 0))
       (let* ((lbl    (vector-ref lftcol i))
 	     (keyval (vector-ref keycol i))
@@ -731,38 +739,49 @@ Misc
 	 (lftcol      (dboard:uidat-get-lftcol uidat))
 	 (tableheader (dboard:uidat-get-header uidat))
 	 (table       (dboard:uidat-get-runsvec uidat))
-	 (coln        0))
-    (set! *alltestnamelst* '())
+	 (coln        0)
+	 (all-test-names (make-hash-table)))
+
     ;; create a concise list of test names
+    ;;
     (for-each
      (lambda (rundat)
        (if rundat
 	   (let* ((testdats  (dboard:rundat-tests rundat))
-		  (testnames (map test:test-get-fullname (hash-table-values testdats)))
-		  (alltests-by-name (make-hash-table)))
+		  (testnames (map test:test-get-fullname (hash-table-values testdats))))
 	     (dboard:rundat-copy-tests-to-by-name rundat)
 	     ;; for the normalized list of testnames (union of all runs)
 	     (if (not (and (dboard:tabdat-hide-empty-runs tabdat)
 			   (null? testnames)))
 		 (for-each (lambda (testname)
-			     (if (not (member testname *alltestnamelst*))
-				 (begin
-				   (set! *alltestnamelst* (append *alltestnamelst* (list testname))))))
+			     (hash-table-set! all-test-names testname #t))
 			   testnames)))))
      runs)
 
-    ;; need alltestnames to enable lining up all tests from all runs
-    (set! *alltestnamelst* (collapse-rows tabdat *alltestnamelst*)) ;;; argh. please clean up this sillyness
-    (set! *alltestnamelst* (let ((xl (if (> (length *alltestnamelst*) (dboard:tabdat-start-test-offset tabdat))
-					 (drop *alltestnamelst* (dboard:tabdat-start-test-offset tabdat))
-					 '())))
-			     (append xl (make-list (- (dboard:tabdat-num-tests tabdat) (length xl)) ""))))
-    (update-labels uidat)
+    ;; create the minimize list of testnames to be displayed. Sorting
+    ;; happens here *before* trimming
+    ;;
+    (dboard:tabdat-all-test-names-set!
+     tabdat
+     (collapse-rows
+      tabdat
+      (sort (hash-table-keys all-test-names) string>?))) ;; FIXME: Sorting needs to happen here
+
+    ;; Trim the names list to fit the matrix of buttons
+    ;;
+    (dboard:tabdat-all-test-names-set!
+     tabdat
+     (let ((xl (if (> (length (dboard:tabdat-all-test-names tabdat)) (dboard:tabdat-start-test-offset tabdat))
+		   (drop (dboard:tabdat-all-test-names tabdat)
+			 (dboard:tabdat-start-test-offset tabdat))
+		   '())))
+       (append xl (make-list (- (dboard:tabdat-num-tests tabdat) (length xl)) ""))))
+    (update-labels uidat (dboard:tabdat-all-test-names tabdat))
     (for-each
      (lambda (rundat)
+       ;; if rundat is junk clobber it with a decent placeholder
        (if (or (not rundat) ;; handle padded runs
 	       (not (dboard:rundat-run rundat)))
-	   ;;           ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration
 	   (set! rundat (dboard:rundat-make-init
 			 key-vals: (map (lambda (x) "")(dboard:tabdat-keys tabdat)))))
        (let* ((run              (dboard:rundat-run rundat))
@@ -775,6 +794,7 @@ Misc
 	      (run-key          (string-intersperse key-vals "\n")))
 	 
 	 ;; fill in the run header key values
+	 ;;
 	 (let ((rown      0)
 	       (headercol (vector-ref tableheader coln)))
 	   (for-each (lambda (kval)
@@ -785,6 +805,7 @@ Misc
 		     key-vals))
 	 
 	 ;; For this run now fill in the buttons for each test
+	 ;;
 	 (let ((rown 0)
 	       (columndat  (vector-ref table coln)))
 	   (for-each
@@ -828,7 +849,7 @@ Misc
 		      (vector-set! buttondat 3 testdat)
 		      (vector-set! buttondat 4 run-key)))
 		(set! rown (+ rown 1))))
-	    *alltestnamelst*))
+	    (dboard:tabdat-all-test-names tabdat)))
 	 (set! coln (+ coln 1))))
      runs)))
 
@@ -1966,7 +1987,7 @@ Misc
 						     (iup:valuator #:valuechanged_cb (lambda (obj)
 										       (let ((val (string->number (iup:attribute obj "VALUE")))
 											     (oldmax  (string->number (iup:attribute obj "MAX")))
-											     (newmax  (* 10 (length *alltestnamelst*))))
+											     (newmax  (* 10 (length (dboard:tabdat-all-test-names runs-dat)))))
 											 (dboard:commondat-please-update-set! commondat #t)
 											 (dboard:tabdat-start-test-offset-set! runs-dat (inexact->exact (round (/ val 10))))
 											 (debug:print 6 *default-log-port* "(dboard:tabdat-start-test-offset runs-dat) " (dboard:tabdat-start-test-offset runs-dat) " val: " val " newmax: " newmax " oldmax: " oldmax)
