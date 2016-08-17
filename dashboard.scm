@@ -211,13 +211,13 @@ Misc
   ;; Selector variables				         
   curr-run-id                                           ;; current row to display in Run summary view
   curr-test-ids                                         ;; used only in dcommon:run-update which is used in newdashboard
-  ((filters-changed  #f)                 : boolean)     ;; to to indicate that the user changed filters for this tab
-  ((last-filter-str  "")                 : string)      ;; conc the target runname and testpatt for a signature of changed filters
-  ((hide-empty-runs  #f)                 : boolean)     
-  ((hide-not-hide    #t)                 : boolean)     ;; toggle for hide/not hide empty runs
+  ((filters-changed  #f)                  : boolean)    ;; to to indicate that the user changed filters for this tab
+  ((last-filter-str  "")                  : string)      ;; conc the target runname and testpatt for a signature of changed filters
+  ((hide-empty-runs  #f)                  : boolean)     
+  ((hide-not-hide    #t)                  : boolean)     ;; toggle for hide/not hide empty runs
   (hide-not-hide-button #f)
-  ((searchpatts      (make-hash-table))  : hash-table)  ;;
-  ((state-ignore-hash (make-hash-table)) : hash-table)  ;; hash of  STATE => #t/#f for display control
+  ((searchpatts        (make-hash-table)) : hash-table)  ;;
+  ((state-ignore-hash  (make-hash-table)) : hash-table)  ;; hash of  STATE => #t/#f for display control
   ((status-ignore-hash (make-hash-table)) : hash-table)  ;; hash of STATUS => #t/#f
   (target              #f)
   (test-patts          #f)
@@ -545,7 +545,13 @@ Misc
   (let* ((allruns     (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
-	 (start-time  (current-seconds)))
+	 (start-time  (current-seconds))
+	 (runs-hash   (let ((ht (make-hash-table)))
+			 (for-each (lambda (run)
+				     (hash-table-set! ht (db:get-value-by-header run header "id") run))
+				   runs) ;; (vector-ref runs-dat 1))
+			 ht))
+	 (tb          (dboard:tabdat-runs-tree tabdat)))
     (dboard:tabdat-header-set! tabdat header)
     ;; 
     ;; trim runs to only those that are changing often here
@@ -594,7 +600,8 @@ Misc
 		    (dboard:tabdat-allruns-set! tabdat new-res)
 		    maxtests)
 		  (loop (car tal)(cdr tal) new-res newmaxtests))))))
-    (dboard:tabdat-filters-changed-set! tabdat #f)))
+    (dboard:tabdat-filters-changed-set! tabdat #f)
+    (dboard:update-tree tabdat runs-hash header tb)))
 
 (define *collapsed* (make-hash-table))
 
@@ -1317,6 +1324,36 @@ Misc
 	(cadr res)
 	#f)))
 
+(define (dboard:update-tree tabdat runs-hash runs-header tb)
+  (let ((run-ids (sort (filter number? (hash-table-keys runs-hash))
+		       (lambda (a b)
+			 (let* ((record-a (hash-table-ref runs-hash a))
+				(record-b (hash-table-ref runs-hash b))
+				(time-a   (db:get-value-by-header record-a runs-header "event_time"))
+				(time-b   (db:get-value-by-header record-b runs-header "event_time")))
+			   (< time-a time-b))))))
+    (for-each (lambda (run-id)
+		(let* ((run-record (hash-table-ref/default runs-hash run-id #f))
+		       (key-vals   (map (lambda (key)(db:get-value-by-header run-record runs-header key))
+					(dboard:tabdat-keys tabdat)))
+		       (run-name   (db:get-value-by-header run-record runs-header "runname"))
+		       (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
+		       (run-path   (append key-vals (list run-name)))
+		       (existing   (tree:find-node tb run-path)))
+		  (if (not (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) run-path #f))
+		      (begin
+			(hash-table-set! (dboard:tabdat-run-keys tabdat) run-id run-path)
+			;; (iup:attribute-set! (dboard:tabdat-runs-matrix tabdat)
+			;;    		 (conc rownum ":" colnum) col-name)
+			;; (hash-table-set! runid-to-col run-id (list colnum run-record))
+			;; Here we update the tests treebox and tree keys
+			(tree:add-node tb "Runs" run-path ;; (append key-vals (list run-name))
+				       userdata: (conc "run-id: " run-id))
+			(hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
+			;; (set! colnum (+ colnum 1))
+			))))
+	      run-ids)))
+  
 (define (dashboard:one-run-updater commondat tabdat tb cell-lookup run-matrix)
   (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
@@ -1337,41 +1374,12 @@ Misc
 			 (for-each (lambda (run)
 				     (hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
 				   (vector-ref runs-dat 1))
-			 ht))
-	 (run-ids      (sort (filter number? (hash-table-keys runs-hash))
-			     (lambda (a b)
-			       (let* ((record-a (hash-table-ref runs-hash a))
-				      (record-b (hash-table-ref runs-hash b))
-				      (time-a   (db:get-value-by-header record-a runs-header "event_time"))
-				      (time-b   (db:get-value-by-header record-b runs-header "event_time")))
-				 (< time-a time-b))))))
+			 ht)))
     (dboard:tabdat-filters-changed-set! tabdat #f)
     (let loop ((pass-num 0)
 	       (changed  #f))
-      ;; (iup:attribute-set! tb "VALUE" "0")
-      ;; (iup:attribute-set! tb "NAME" "Runs")
       ;; Update the runs tree
-      (for-each (lambda (run-id)
-		  (let* ((run-record (hash-table-ref/default runs-hash run-id #f))
-			 (key-vals   (map (lambda (key)(db:get-value-by-header run-record runs-header key))
-					  (dboard:tabdat-keys tabdat)))
-			 (run-name   (db:get-value-by-header run-record runs-header "runname"))
-			 (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
-			 (run-path   (append key-vals (list run-name)))
-			 (existing   (tree:find-node tb run-path)))
-		    (if (not (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) run-path #f))
-			(begin
-			  (hash-table-set! (dboard:tabdat-run-keys tabdat) run-id run-path)
-			  ;; (iup:attribute-set! (dboard:tabdat-runs-matrix tabdat)
-			  ;;    		 (conc rownum ":" colnum) col-name)
-			  ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
-			  ;; Here we update the tests treebox and tree keys
-			  (tree:add-node tb "Runs" run-path ;; (append key-vals (list run-name))
-					 userdata: (conc "run-id: " run-id))
-			  (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
-			  ;; (set! colnum (+ colnum 1))
-			  ))))
-		run-ids)
+      (dboard:update-tree tabdat runs-hash runs-header tb)
       (if (eq? pass-num 1)
 	  (begin ;; big reset
 	    (iup:attribute-set! run-matrix "CLEARVALUE" "ALL") ;; NOTE: Was CONTENTS
@@ -1379,10 +1387,7 @@ Misc
 	    (iup:attribute-set! run-matrix "RESIZEMATRIX" "YES")
 	    (iup:attribute-set! run-matrix "NUMCOL" max-col )
 	    (iup:attribute-set! run-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)))) ;; min of 20
-      
-      ;; (iup:attribute-set! run-matrix "NUMCOL_VISIBLE" max-col)
-      ;; (iup:attribute-set! run-matrix "NUMLIN_VISIBLE" (if (> max-row max-visible) max-visible max-row))
-      
+
       ;; Row labels
       (for-each (lambda (ind)
 		  (let* ((name (car ind))
@@ -2813,17 +2818,28 @@ Misc
 (define (dashboard:runs-tab-updater commondat tab-num)
   (debug:catch-and-dump 
    (lambda ()
-     (let ((tabdat (dboard:common-get-tabdat commondat tab-num: tab-num)))
-       (update-rundat tabdat (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") (dboard:tabdat-numruns tabdat)
+     (let* ((tabdat (dboard:common-get-tabdat commondat tab-num: tab-num))
+	    (dbkeys (dboard:tabdat-dbkeys tabdat)))
+       (update-rundat tabdat
+		      (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%")
+		      (dboard:tabdat-numruns tabdat)
 		      (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
 		      ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
-		      (let ((res '()))
-			(for-each (lambda (key)
-				    (if (not (equal? key "runname"))
-					(let ((val (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) key #f)))
-					  (if val (set! res (cons (list key val) res))))))
-				  (dboard:tabdat-dbkeys tabdat))
-			res))
+		      (let* ((dbkeys (dboard:tabdat-dbkeys tabdat)))
+			;; (print "dbkeys: " dbkeys)
+			(let ((fres   (if (dboard:tabdat-target tabdat)
+					 (let ((ptparts (append (dboard:tabdat-target tabdat)(make-list (length dbkeys) "%"))))
+					   (map (lambda (k v)(list k v)) dbkeys ptparts))
+					 (let ((res '()))
+					   ;; (print "target: " (dboard:tabdat-target tabdat))
+					   (for-each (lambda (key)
+						       (if (not (equal? key "runname"))
+							   (let ((val (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) key #f)))
+							     (if val (set! res (cons (list key val) res))))))
+						     dbkeys)
+					   res))))
+			  (debug:print 0 *default-log-port* "fres: " fres)
+			  fres)))
        (let ((uidat (dboard:commondat-uidat commondat)))
 	 (update-buttons tabdat uidat (dboard:tabdat-numruns tabdat) (dboard:tabdat-num-tests tabdat)))
        ))
