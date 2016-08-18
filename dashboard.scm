@@ -1886,7 +1886,15 @@ Misc
          (conc "megatest -set-state-status NOT_STARTED,n/a -run -target " target
                " -runname " runname
                " -testpatt % "
-               " -preclean -clean-cache"))))))
+               " -preclean -clean-cache"))))
+     (iup:menu-item
+      "Clean Complete Run"
+      #:action
+      (lambda (obj)
+        (common:run-a-command
+         (conc "megatest -remove-runs -target " target
+               " -runname " runname
+               " -testpatt % "))))))
    (iup:menu-item
     "Test"
     (iup:menu 
