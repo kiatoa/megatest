@@ -1315,8 +1315,6 @@ Misc
 		       (< anum bnum)
 		       (string<= aval bval)))))))
 
-
-
 (define (dboard:update-tree tabdat runs-hash runs-header tb)
   (let* ((run-ids (sort (filter number? (hash-table-keys runs-hash))
 			(lambda (a b)
@@ -1396,6 +1394,7 @@ Misc
     
     ;; Cell contents
     (for-each (lambda (entry)
+		;; (print "entry: " entry)
 		(let* ((row-name  (cadr entry))
 		       (col-name  (car entry))
 		       (valuedat  (caddr entry))

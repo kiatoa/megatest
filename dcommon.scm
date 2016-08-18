@@ -274,11 +274,11 @@
       (let loop ((hed (car tests-dat))
 		 (tal (cdr tests-dat))
 		 (res '()))
-	(let* ((test-id    (vector-ref hed 0)) ;; look at the tests-dat spec for locations
-	       (test-name  (vector-ref hed 1))
-	       (item-path  (vector-ref hed 2))
-	       (state      (vector-ref hed 3))
-	       (status     (vector-ref hed 4))
+	(let* ((test-id    (db:test-get-id hed)) ;; look at the tests-dat spec for locations
+	       (test-name  (db:test-get-testname hed))
+	       (item-path  (db:test-get-item-path hed))
+	       (state      (db:test-get-status hed))
+	       (status     (db:test-get-status hed))
 	       (newitem    (list test-name item-path (list test-id state status))))
 	  (if (null? tal)
 	      (reverse (cons newitem res))
