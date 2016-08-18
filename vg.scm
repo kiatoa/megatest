@@ -139,6 +139,7 @@
 (define (vg:obj-get-extents drawing obj)
   (let ((type (vg:obj-type obj)))
     (case type
+      ((l)(vg:rect-get-extents obj))
       ((r)(vg:rect-get-extents obj))
       ((t)(vg:draw-text drawing obj draw: #f))
       (else #f))))
@@ -390,6 +391,7 @@
 (define (vg:draw-obj drawing obj #!key (draw #t))
   ;; (print "obj type: " (vg:obj-type obj))
   (case (vg:obj-type obj)
+    ((l)(vg:draw-line drawing obj draw: draw))
     ((r)(vg:draw-rect drawing obj draw: draw))
     ((t)(vg:draw-text drawing obj draw: draw))))
 
@@ -481,10 +483,10 @@
 	;; 	(canvas-foreground-set! cnv fill-color)
 	;; 	(canvas-box! cnv llx ulx lly uly))) ;; docs are all over the place on this one.;; w h)
 	  (if line-color
-	      (canvas-foreground-set! cnv line-color)
-	      (if fill-color
-		  (canvas-foreground-set! cnv prev-foreground-color)))
-	  (canvas-line! cnv llx ulx lly uly)
+	      (canvas-foreground-set! cnv line-color))
+	     ;; (if fill-color
+	     ;;  (canvas-foreground-set! cnv prev-foreground-color)))
+	  (canvas-line! cnv llx lly ulx uly)
 	  (canvas-foreground-set! cnv prev-foreground-color)
 	  (if text 
 	      (let* ((prev-font    (canvas-font cnv))
@@ -494,7 +496,7 @@
 		(let-values (((xmax ymax)(canvas-text-size cnv text)))
 		  (set! text-xmax xmax)(set! text-ymax ymax))
 		(if font-changed (canvas-font-set! cnv prev-font))))))
-    (print "text-xmax: " text-xmax " text-ymax: " text-ymax)
+    ;; (print "text-xmax: " text-xmax " text-ymax: " text-ymax)
     (if (vg:obj-extents obj)
 	(vg:obj-extents obj)
 	(if (not text)
@@ -553,7 +555,7 @@
 		(let-values (((xmax ymax)(canvas-text-size cnv text)))
 		  (set! text-xmax xmax)(set! text-ymax ymax))
 		(if font-changed (canvas-font-set! cnv prev-font))))))
-    (print "text-xmax: " text-xmax " text-ymax: " text-ymax)
+    ;; (print "text-xmax: " text-xmax " text-ymax: " text-ymax)
     (if (vg:obj-extents obj)
 	(vg:obj-extents obj)
 	(if (not text)

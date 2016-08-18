@@ -16,6 +16,7 @@
 (use regex regex-case) ;;  directory-utils)
 (declare (unit configf))
 (declare (uses process))
+(declare (uses env))
 
 (include "common_records.scm")
 

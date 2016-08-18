@@ -69,11 +69,11 @@
 
 ;; modify a cell if the data is changed, return #t or-ed with previous if modified, #f elsewise
 ;;
-(define (dcommon:modify-if-different mtrx cell-name new-val prev-changed)
+(define (dcommon:modifiy-if-different mtrx cell-name new-val prev-changed)
   (let ((curr-val (iup:attribute mtrx cell-name)))
     (if (not (equal? curr-val new-val)) 
 	(begin
-	  (iup:attribute-set! mtrx cell-name new-val)
+	  (iup:attribute-set! mtrx cell-name col-name)
 	  #t) ;; need a re-draw
 	prev-changed)))
 
@@ -146,7 +146,7 @@
 		       (run-path   (append key-vals (list run-name))))
 		  (hash-table-set! (dboard:tabdat-run-keys data) run-id run-path)
 		  ;; modify cell - but only if changed
-		  (set! changed (dcommon:modify-if-different (dboard:tabdat-runs-matrix data) cellname col-name changed))
+		  (set! changed (dcommon:modifiy-if-different (dboard:tabdat-runs-matrix data) cellname col-name changed))
 		  (hash-table-set! runid-to-col run-id (list colnum run-record))
 		  ;; Here we update the tests treebox and tree keys
 		  (tree:add-node (dboard:tabdat-tests-tree data) "Runs" (append key-vals (list run-name))
@@ -205,7 +205,7 @@
 				      (color    (car (gutils:get-color-for-state-status state status))))
 				  (debug:print 0 *default-log-port* "node-num: " node-num ", color: " color)
 
-				  (set! changed (dcommon:modify-if-different 
+				  (set! changed (dcommon:modifiy-if-different 
 						 tb
 						 (conc "COLOR" node-num)
 						 color changed))
@@ -220,7 +220,7 @@
 						       (+ 1 (apply max rownums))))
 				      (hash-table-set! testname-to-row fullname rownum)
 				      ;; create the label
-				      (set! changed (dcommon:modify-if-different 
+				      (set! changed (dcommon:modifiy-if-different 
 						     (dboard:tabdat-runs-matrix data)
 						     (conc rownum ":" 0)
 						     dispname
@@ -230,7 +230,7 @@
 				      ))
 				;; set the cell text and color
 				;; (debug:print 2 *default-log-port* "rownum:colnum=" rownum ":" colnum ", state=" status)
-				(set! changed (dcommon:modify-if-different 
+				(set! changed (dcommon:modifiy-if-different 
 						     (dboard:tabdat-runs-matrix data)
 						     (conc rownum ":" colnum)
 						     (if (member state '("ARCHIVED" "COMPLETED"))
@@ -242,7 +242,7 @@
 				;; 		    (if (member state '("ARCHIVED" "COMPLETED"))
 				;; 			status
 				;; 			state))
-				(set! changed (dcommon:modify-if-different 
+				(set! changed (dcommon:modifiy-if-different 
 					       (dboard:tabdat-runs-matrix data)
 					       (conc "BGCOLOR" rownum ":" colnum)
 					       (car (gutils:get-color-for-state-status state status))
@@ -274,11 +274,11 @@
       (let loop ((hed (car tests-dat))
 		 (tal (cdr tests-dat))
 		 (res '()))
-	(let* ((test-id    (vector-ref hed 0)) ;; look at the tests-dat spec for locations
-	       (test-name  (vector-ref hed 1))
-	       (item-path  (vector-ref hed 2))
-	       (state      (vector-ref hed 3))
-	       (status     (vector-ref hed 4))
+	(let* ((test-id    (db:test-get-id hed)) ;; look at the tests-dat spec for locations
+	       (test-name  (db:test-get-testname hed))
+	       (item-path  (db:test-get-item-path hed))
+	       (state      (db:test-get-status hed))
+	       (status     (db:test-get-status hed))
 	       (newitem    (list test-name item-path (list test-id state status))))
 	  (if (null? tal)
 	      (reverse (cons newitem res))

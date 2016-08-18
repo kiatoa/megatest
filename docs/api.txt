@@ -36,25 +36,201 @@ All API errors are returned in the following format:
 Get List of Runs
 ~~~~~~~~~~~~~~~~
 
-URL: <base>/get_runs
+URL: <base>/runs
 
 Method: GET
 
-Params: target, testpatt, offset, limit
+Filter Params: target, testpatt, offset, limit
 
 Response:
 
-=================
-{ "[blue]#us#" : "[red]#United States of America#" }
-=================
-
-Another example ....
 
 ==================
-{ "[blue]#places#":  [ [ "[red]#place_name#", "[red]#place_description# ], ... ],
-  "[blue]#friends#": [ [ "[red]#short_name#", "[red]#username#", "[red]#location#", [red]#uid#, [red]#frequency# ], ... ],
-  "[blue]#iousum#":  [ [ "[red]#nick:location#", [red]#est_iou# ], ...] }
+[
+  {
+    "[red]#run_id#" : "1",
+    "[red]#name#"   : "runname1",
+    "[red]#target#" : "target1",
+    "[red]#tests#"  :
+      [
+          "[green]#test#":
+              [
+                   {"[blue]#id#": 1, "[blue]#name#":test1, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target1/runname1/test1", "[blue]#final_logf#": "megatest-rollup-test1.html",  "[blue]#status#": "PASS#"}
+		   {"[blue]#id#": 2, "[blue]#name#":test2, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target1/runname1/test2", "[blue]#final_logf#": "megatest-rollup-test2.html",  "[blue]#status#": "PASS"}
+                   {"[blue]#id#": 3, "[blue]#name#":test3, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target1/runname1/test3", "[blue]#final_logf#": "megatest-rollup-test3.html",  "[blue]#status#": "PASS"}
+              ]  
+      ]
+   },
+   {
+    "[red]#run_id#" : "2",
+    "[red]#name#"   : "runname2",
+    "[red]#target#" : "target2",
+    "[red]#tests#"  :
+      [
+          "[green]#test#:
+              [
+                   {"[blue]#id#": 4, "[blue]#name#":[blue]#test1#, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test1", "[blue]#final_logf#": "megatest-rollup-test1.html",  "[blue]#status#": "PASS"}
+		   {"[blue]#id#": 5, "[blue]#name#":[blue]#test2#, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test2", "[blue]#final_logf#": "megatest-rollup-test2.html",  "[blue]#status#": "FAIL"}
+                   {"[blue]#id#": 6, "[blue]#name#":test3, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test3", "[blue]#final_logf#": "megatest-rollup-test3.html",  "[blue]#status#": "PASS"}
+              ]  
+      ]
+   }
+]
 ==================
+
+
+Trigger a new Run
+~~~~~~~~~~~~~~~~~~
+
+URL: <base>/runs
+
+Method: POST
+
+Request Params: 
+==================
+{"[blue]#target#": "target_value", "[blue]#runname#" : "runname", "[blue]#test_pattern#": "optional test pattern"}
+==================
+
+Response: 
+
+If Error
+===================
+{ "[blue]#error#" : "[red]#Error message#" }
+===================
+
+If Success returns the results of the run
+
+==================
+[
+   {
+    "[red]#run_id#" : "2",
+    "[red]#name#"   : "runname2",
+    "[red]#target#" : "target2",
+    "[red]#tests#"  :
+      [
+          "[green]#test#:
+              [
+                   {"[blue]#id#": 4, "[blue]#name#":[blue]#test1#, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test1", "[blue]#final_logf#": "megatest-rollup-test1.html",  "[blue]#status#": "PASS"}
+		   {"[blue]#id#": 5, "[blue]#name#":[blue]#test2#, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test2", "[blue]#final_logf#": "megatest-rollup-test2.html",  "[blue]#status#": "FAIL"}
+                   {"[blue]#id#": 6, "[blue]#name#":test3, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test3", "[blue]#final_logf#": "megatest-rollup-test3.html",  "[blue]#status#": "PASS"}
+              ]  
+      ]
+   }
+]
+==================
+
+
+
+Get perticular Run
+~~~~~~~~~~~~~~~~~~~
+
+URL: <base>/runs/:id
+
+Method: GET
+
+Filter Params: testpatt
+
+Response: 
+
+==================
+[
+   {
+    "[red]#run_id#" : "2",
+    "[red]#name#"   : "runname2",
+    "[red]#target#" : "target2",
+    "[red]#tests#"  :
+      [
+          "[green]#test#":
+              [
+                   {"[blue]#id#": 4, "[blue]#name#":[blue]#test1#, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test1", "[blue]#final_logf#": "megatest-rollup-test1.html",  "[blue]#status#": "PASS"}
+		   {"[blue]#id#": 5, "[blue]#name#":[blue]#test2#, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test2", "[blue]#final_logf#": "megatest-rollup-test2.html",  "[blue]#status#": "FAIL"}
+                   {"[blue]#id#": 6, "[blue]#name#":test3, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test3", "[blue]#final_logf#": "megatest-rollup-test3.html",  "[blue]#status#": "PASS"}
+              ]  
+      ]
+   }
+]
+==================
+ 
+
+Re-execute a run
+~~~~~~~~~~~~~~~~~
+
+URL: <base>/runs/:id
+
+Method: PUT/PATCH
+
+Request Params: {"testpatt" : "pattern"}
+
+Response: 
+
+==================
+[
+   {
+    "[red]#run_id#" : "2",
+    "[red]#name#"   : "runname2",
+    "[red]#target#" : "target2",
+    "[red]#tests#"  :
+      [
+          "[green]#test#":
+              [
+                   {"[blue]#id#": 4, "[blue]#name#":[blue]#test1#, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test1", "[blue]#final_logf#": "megatest-rollup-test1.html",  "[blue]#status#": "PASS"}
+		   {"[blue]#id#": 5, "[blue]#name#":[blue]#test2#, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test2", "[blue]#final_logf#": "megatest-rollup-test2.html",  "[blue]#status#": "FAIL"}
+                   {"[blue]#id#": 6, "[blue]#name#":test3, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test3", "[blue]#final_logf#": "megatest-rollup-test3.html",  "[blue]#status#": "PASS"}
+              ]  
+      ]
+   }
+]
+==================
+ 
+
+
+Get List of tests within a run 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+URL: <base>/runs/:id/tests
+
+Method: GET
+
+Response: 
+==================
+[
+     "[red]#tests#"  :
+              [
+                   {"[blue]#id#": 4, "[blue]#name#":[blue]#test1#, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test1", "[blue]#final_logf#": "megatest-rollup-test1.html",  "[blue]#status#": "PASS"}
+		   {"[blue]#id#": 5, "[blue]#name#":[blue]#test2#, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test2", "[blue]#final_logf#": "megatest-rollup-test2.html",  "[blue]#status#": "FAIL"}
+                   {"[blue]#id#": 6, "[blue]#name#":test3, "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test3", "[blue]#final_logf#": "megatest-rollup-test3.html",  "[blue]#status#": "PASS"}
+              ]  
+]
+==================
+
+
+Re-execute a test within a run
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+URL: <base>/runs/:id/tests/:id
+
+Method: PUT/PATCH
+
+Response: 
+
+==================
+{"[blue]#id#": "4", "[blue]#name#":"test1", "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test1", "[blue]#final_logf#": "megatest-rollup-test1.html",  "[blue]#status#": "PASS"}
+==================
+
+
+Get perticular test that belongs to a Runs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+URL: <base>/runs/:id/tests/:id
+
+Method: GET
+
+Response: 
+
+==================
+{"[blue]#id#": "4", "[blue]#name#":"test1", "[blue]#item_path#": "", "[blue]#shortdir#": "/temp/foo/bar/target2/runname2/test1", "[blue]#final_logf#": "megatest-rollup-test1.html",  "[blue]#status#": "PASS"}
+==================
+
 
 
 Notes
