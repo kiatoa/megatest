@@ -1315,6 +1315,13 @@ Misc
 		       (< anum bnum)
 		       (string<= aval bval)))))))
 
+
+(define (dashboard:safe-cadr-assoc name lst)
+  (let ((res (assoc name lst)))
+    (if (and res (> (length res) 1))
+	(cadr res)
+	#f)))
+
 (define (dboard:update-tree tabdat runs-hash runs-header tb)
   (let* ((run-ids (sort (filter number? (hash-table-keys runs-hash))
 			(lambda (a b)
@@ -1369,17 +1376,18 @@ Misc
 				   (vector-ref runs-dat 1))
 			 ht)))
     (dboard:tabdat-filters-changed-set! tabdat #f)
-    ;; let loop ((pass-num 0)
-    ;; 	       (changed  #f))
-    ;;  ;; Update the runs tree
+    (let loop ((pass-num 0)
+	       (changed  #f))
+      ;; Update the runs tree
       (dboard:update-tree tabdat runs-hash runs-header tb)
 
-
+(if (eq? pass-num 1)
+	  (begin ;; big reset
     (iup:attribute-set! run-matrix "CLEARVALUE" "ALL") ;; NOTE: Was CONTENTS
     (iup:attribute-set! run-matrix "CLEARATTRIB" "CONTENTS")
     (iup:attribute-set! run-matrix "RESIZEMATRIX" "YES")
     (iup:attribute-set! run-matrix "NUMCOL" max-col )
-    (iup:attribute-set! run-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
+    (iup:attribute-set! run-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)))) ;; min of 20
 
     ;; Row labels
     (for-each (lambda (ind)
@@ -1392,6 +1400,10 @@ Misc
 			(iup:attribute-set! run-matrix key name)))))
 	      row-indices)
     
+     (print "row-indices: " row-indices " col-indices: " col-indices)
+      (if (and (eq? pass-num 0) changed)
+	  (loop 1 #t)) ;; force second pass
+
     ;; Cell contents
     (for-each (lambda (entry)
 		;; (print "entry: " entry)
@@ -1427,7 +1439,13 @@ Misc
 			(iup:attribute-set! run-matrix key name)
 			(iup:attribute-set! run-matrix "FITTOTEXT" (conc "C" num))))))
 	      col-indices)
-    (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))
+
+      (if (and (eq? pass-num 0) changed)
+	  (loop 1 #t)) ;; force second pass due to column labels changing
+
+      ;; (debug:print 0 *default-debug-port* "one-run-updater, changed: " changed " pass-num: " pass-num)
+      (print "one-run-updater, changed: " changed " pass-num: " pass-num)
+      (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL")))))
 
 ;;======================================================================
 ;; S U M M A R Y 
