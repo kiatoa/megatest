@@ -1171,7 +1171,7 @@ Misc
 			      (begin
 				(dboard:tabdat-curr-run-id-set! tabdat run-id)
 				(dboard:tabdat-view-changed-set! tabdat #t))
-			      (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id))))
+			      (debug:print-error 5 *default-log-port* "tree-path->run-id returned non-number " run-id))))
 		      "treebox"))
 		   ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		   )))
