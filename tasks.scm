@@ -368,7 +368,7 @@
     res))
 
 (define (tasks:need-server run-id)
-  (configf:lookup *configdat* "server" "required"))
+  (equal? (configf:lookup *configdat* "server" "required") "yes"))
 
 ;; 	(maxqry (cdr (rmt:get-max-query-average run-id)))
 ;; 	(threshold   (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "10"))))
