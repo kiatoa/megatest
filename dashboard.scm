@@ -2658,7 +2658,8 @@ Misc
 			       (rows-used (make-hash-table)) ;; keep track of what parts of the rows are used here row1 = (obj1 obj2 ...)
 			       ;; (row-height 4)
 			       (run-start  (dboard:min-max < (map db:test-get-event_time testsdat)))
-			       (run-end    (dboard:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat)))
+			       (run-end    (let ((re (dboard:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat))))
+					     (max re (+ 1 run-start)))) ;; use run-start+1 if run-start == run-end so delta is not zero
 			       (timeoffset (- run-start)) ;; (+ fixed-originx canvas-margin) run-start))
 			       (run-duration (- run-end run-start))
 			       (timescale  (/ (- sizex (* 2 canvas-margin))
