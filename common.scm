@@ -1000,7 +1000,7 @@
 ;; find start time to mark and mark delta
 ;;
 (define (common:find-start-mark-and-mark-delta tstart tend)
-  (let* ((deltat   (- tend tstart))
+  (let* ((deltat   (- (max tend (+ tend 10)) tstart)) ;; can't handle runs of less than 4 seconds. Pad it to 10 seconds ...
 	 (result   #f)
 	 (min      60)
 	 (hr       (* 60 60))
