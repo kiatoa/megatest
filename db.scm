@@ -790,7 +790,29 @@
 		      (sqlite3:execute
 		       maindb
 		       "ALTER TABLE runs ADD COLUMN last_update INTEGER DEFAULT 0"))
+		     (handle-exceptions
+		      exn
+		      (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
+			  (debug:print 0 *default-log-port* "Column area_id already added to runs table")
+			  (db:general-sqlite-error-dump exn "alter table runs ..." run-id "none"))
+		      (sqlite3:execute
+		       maindb
+		       "ALTER TABLE runs ADD COLUMN area_id INTEGER DEFAULT -1"))
 		     ;; these schema changes don't need exception handling
+		     (sqlite3:execute
+		      maindb
+		      "CREATE TABLE IF NOT EXISTS areas (
+                             id          INTEGER PRIMARY KEY,
+                             path        TEXT NOT NULL,
+                             description TEXT,
+                             owner       TEXT,
+                             last_update INTEGER DEFAULT (strftime('%s','now')))")
+		      (sqlite3:execute maindb "CREATE TRIGGER  IF NOT EXISTS update_areas_trigger AFTER UPDATE ON areas
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE areas SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;")
 		     (sqlite3:execute
 		      maindb
 		      "CREATE TRIGGER IF NOT EXISTS update_runs_trigger AFTER UPDATE ON runs
@@ -926,10 +948,23 @@
        (for-each (lambda (key)
 		   (sqlite3:execute db "INSERT OR REPLACE INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
 		 keys)
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS areas (
+                               id INTEGER PRIMARY KEY,
+                               path        TEXT NOT NULL,
+                               description TEXT,
+                               owner       TEXT,
+                               last_update INTEGER DEFAULT (strftime('%s','now')))")
+       (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_areas_trigger AFTER UPDATE ON areas
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE areas SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;")
        (sqlite3:execute db (conc 
 			    "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, \n			 " 
 			    fieldstr (if havekeys "," "") "
 			 runname    TEXT DEFAULT 'norun',
+                         area_id    INTEGER DEFAULT -1,
 			 state      TEXT DEFAULT '',
 			 status     TEXT DEFAULT '',
 			 owner      TEXT DEFAULT '',
