@@ -28,8 +28,11 @@ Trim trailing spaces
 [configf:settings trim-trailing-spaces yes]
 ------------------
 
+Job Submission Control
+~~~~~~~~~~~~~~~~~~~~~~
+
 Submit jobs to Host Types based on Test Name
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .In megatest.config
 ------------------------
@@ -43,8 +46,8 @@ runfirst/sum% remote
 
 [jobtools]
 launcher bsub
-# if defined and not "no" flexi-launcher will bypass launcher unless there is no
-# match.
+# if defined and not "no" flexi-launcher will bypass launcher unless 
+# there is no host-type match.
 flexi-launcher yes
 ------------------------
 
@@ -66,7 +69,7 @@ runfirst/sum% remote
 ------------
 
 Miscellaneous Setup Items
-^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Attempt to rerun tests in "STUCK/DEAD", "n/a", "ZERO_ITEMS" states.
 
@@ -81,7 +84,8 @@ Run time limit
 
 -----------------
 [setup]
-runtimelim 1h 2m 3s  # this will automatically kill the test if it runs for more than 1h 2m and 3s
+# this will automatically kill the test if it runs for more than 1h 2m and 3s
+runtimelim 1h 2m 3s
 -----------------
 
 Tests browser view
@@ -99,6 +103,24 @@ well in that mode then use "nodot" to turn it off.
 [setup]
 nodot
 -----------------
+
+Database settings
+~~~~~~~~~~~~~~~~~
+
+.Database config settings in [setup] section of megatest.config
+[width="70%",cols="^,2m,2m,2m",frame="topbot",options="header"]
+|======================
+|Var                       | Purpose            | Valid values            | Comments
+|delay-on-busy             | Prevent concurrent access issues | yes\|no or not defined | Default=no, may help on some network file systems, may slow things down also.
+|daemonize                 | Daemonize the server on start | yes\|no or not defined | Default=no
+|faststart		   | All direct file access to sqlite db files | yes\|no or not defined | Default=yes, suggest no for central automated systems and yes for interactive use
+|homehost 		   | Start servers on this host | <hostname> | Defaults to local host
+|hostname		   | Hostname to bind to | <hostname>\|-	  | On multi-homed hosts allows binding to specific hostname
+|lowport		   | Start searching for a port at this portnum| 32768 | 
+|required		   | Server required    | yes\|no or not defined  | Default=no, force start of server always
+|server-query-threshold	   | Start server when queries take longer than this | number in milliseconds | Default=300
+|timeout		   | http api timeout 	| number in hours	  | Default is 1 minute, do not change
+|======================
 
 The testconfig File
 -------------------
@@ -478,19 +500,11 @@ cat testconfig
 [include modified.config]
 ------------------------------
 
+
 Programming API
 ---------------
 
 These routines can be called from the megatest repl. 
-
-.API Server Management Calls
-[width="70%",cols="^,2m,2m,2m",frame="topbot",options="header,footer"]
-|======================
-|API Call                  | Purpose comments   | Returns                 | Comments
-|(rmt:start-server run-id) |                    | #( success/fail   n/a ) | 
-|(rmt:kill-server  run-id) |                    | #( success/fail   n/a ) | Works only if the server is still reachable
-|(rmt:login        run-id) | Verify the the version, testsuite area etc. are correct. | #( #t "successful login" ) |
-|======================
 
 .API Keys Related Calls
 [width="70%",cols="^,2m,2m,2m",frame="topbot",options="header,footer"]
