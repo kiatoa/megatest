@@ -122,12 +122,14 @@ Misc
    hide-not-hide-tabs:   #f
    ))
 
+;; RA => returns the value of curr-tab-num for the tabdats in commondats otherwise #f is NULL
 (define (dboard:common-get-tabdat commondat #!key (tab-num #f))
   (hash-table-ref/default 
    (dboard:commondat-tabdats commondat)
-   (or tab-num (dboard:commondat-curr-tab-num commondat))
+   (or tab-num (dboard:commondat-curr-tab-num commondat)) ;; tab-num value is curr-tab-num value in passed commondat
    #f))
 
+;; RA => Sets the value of tabnum in commondat-tabdats to tabdat
 (define (dboard:common-set-tabdat! commondat tabnum tabdat)
   (hash-table-set!
    (dboard:commondat-tabdats commondat)
@@ -855,6 +857,7 @@ Misc
 			  (iup:attribute-set! button "BGCOLOR" color))
 		      (if (not (equal? curr-title buttontxt))
 			  (iup:attribute-set! button "TITLE"   buttontxt))
+                      ;;(print "RA => testdat " testdat " teststate " teststate " teststatus " teststatus " buttondat " buttondat " curr-color " curr-color  " curr-title " curr-title "buttontxt" buttontxt " title " curr-title )
 		      (vector-set! buttondat 0 run-id)
 		      (vector-set! buttondat 1 color)
 		      (vector-set! buttondat 2 buttontxt)
@@ -1503,7 +1506,7 @@ Misc
 		   #:addexpanded "NO"
 		   #:selection-cb
 		   (lambda (obj id state)
-		     ;; (print "obj: " obj ", id: " id ", state: " state)
+		      (print "RA => obj: " obj ", id: " id ", state: " state)
 		     (let* ((run-path (tree:node->path obj id))
 			    (run-id   (tree-path->run-id tabdat (cdr run-path))))
 		       (if (number? run-id)
@@ -1894,7 +1897,16 @@ Misc
         (common:run-a-command
          (conc "megatest -remove-runs -target " target
                " -runname " runname
-               " -testpatt % "))))))
+               " -testpatt % "))))
+     (iup:menu-item
+      "Kill Complete Run"
+      #:action
+      (lambda (obj)
+        (common:run-a-command
+         (conc "megatest -set-state-status KILLREQ,n/a -target " target
+               " -runname " runname
+               " -testpatt % "
+               "  -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))))
    (iup:menu-item
     "Test"
     (iup:menu 
@@ -1953,7 +1965,7 @@ Misc
 (define (make-dashboard-buttons commondat) ;;  runs-sum-dat new-view-dat)
   (let* ((stats-dat       (dboard:tabdat-make-data))
 	 (runs-dat        (dboard:tabdat-make-data))
-	 (onerun-dat      (dboard:tabdat-make-data))
+	 (onerun-dat      (dboard:tabdat-make-data)) ;; name for run-summary structure 
 	 (runcontrols-dat (dboard:tabdat-make-data))
 	 (runtimes-dat    (dboard:tabdat-make-data))
 	 (nruns           (dboard:tabdat-numruns runs-dat))
@@ -2822,6 +2834,7 @@ Misc
    (lambda ()
      (let* ((tabdat (dboard:common-get-tabdat commondat tab-num: tab-num))
 	    (dbkeys (dboard:tabdat-dbkeys tabdat)))
+       ;;(print "RA => calling runs-tab-updater with commondat " commondat " tab-num " tab-num)
        (update-rundat tabdat
 		      (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%")
 		      (dboard:tabdat-numruns tabdat)
@@ -2843,6 +2856,7 @@ Misc
 			  ;; (debug:print 0 *default-log-port* "fres: " fres)
 			  fres)))
        (let ((uidat (dboard:commondat-uidat commondat)))
+         ;;(print "RA => Calling update-buttons with tabdat : " tabdat " uidat " uidat)
 	 (update-buttons tabdat uidat (dboard:tabdat-numruns tabdat) (dboard:tabdat-num-tests tabdat)))
        ))
    "dashboard:runs-tab-updater"))
