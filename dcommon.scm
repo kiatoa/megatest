@@ -277,7 +277,7 @@
 	(let* ((test-id    (db:test-get-id hed)) ;; look at the tests-dat spec for locations
 	       (test-name  (db:test-get-testname hed))
 	       (item-path  (db:test-get-item-path hed))
-	       (state      (db:test-get-status hed))
+	       (state      (db:test-get-state hed))
 	       (status     (db:test-get-status hed))
 	       (newitem    (list test-name item-path (list test-id state status))))
 	  (if (null? tal)
