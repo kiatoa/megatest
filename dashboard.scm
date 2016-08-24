@@ -122,21 +122,23 @@ Misc
    hide-not-hide-tabs:   #f
    ))
 
-;; RA => returns the value of curr-tab-num for the tabdats in commondats otherwise #f is NULL
+;; RA => returns the tabdat stored at hashkey passed in commondat-tabdats table (e.g. 0 gives summary)
+;;
 (define (dboard:common-get-tabdat commondat #!key (tab-num #f))
   (hash-table-ref/default 
    (dboard:commondat-tabdats commondat)
    (or tab-num (dboard:commondat-curr-tab-num commondat)) ;; tab-num value is curr-tab-num value in passed commondat
    #f))
 
-;; RA => Sets the value of tabnum in commondat-tabdats to tabdat
+;; RA => sets the tabdat passed to the hashkey at commondat:tabdats hash table
+;;
 (define (dboard:common-set-tabdat! commondat tabnum tabdat)
   (hash-table-set!
    (dboard:commondat-tabdats commondat)
    tabnum
    tabdat))
 
-;; gets and calls updater based on curr-tab-num
+;; gets and calls updater list based on curr-tab-num
 (define (dboard:common-run-curr-updaters commondat #!key (tab-num #f))
   (if (dboard:common-get-tabdat commondat tab-num: tab-num) ;; only update if there is a tabdat
       (let* ((tnum     (or tab-num (dboard:commondat-curr-tab-num commondat)))
@@ -144,13 +146,14 @@ Misc
 					       tnum
 					       '())))
 	(debug:print 4 *default-log-port* "Found these updaters: " updaters " for tab-num: " tnum)
-	(for-each
+	(for-each ;; perform the function calls for the complete updaters list
 	 (lambda (updater)
 	   ;; (debug:print 3 *default-log-port* "Running " updater)
 	   (updater))
 	 updaters))))
 
 ;; if tab-num passed in then use it, otherwise look in commondat at curr-tab-num
+;; adds the updater passed in the updaters list at that hashkey
 ;;
 (define (dboard:commondat-add-updater commondat updater #!key (tab-num #f))
   (let* ((tnum          (or tab-num
@@ -767,7 +770,6 @@ Misc
 	 (table       (dboard:uidat-get-runsvec uidat))
 	 (coln        0)
 	 (all-test-names (make-hash-table)))
-
     ;; create a concise list of test names
     ;;
     (for-each
@@ -1529,7 +1531,7 @@ Misc
 		   #:addexpanded "NO"
 		   #:selection-cb
 		   (lambda (obj id state)
-		      (print "RA => obj: " obj ", id: " id ", state: " state)
+		     ;; (print "RA => obj: " obj ", id: " id ", state: " state)
 		     (let* ((run-path (tree:node->path obj id))
 			    (run-id   (tree-path->run-id tabdat (cdr run-path))))
 		       (if (number? run-id)
@@ -2853,12 +2855,81 @@ Misc
 		)))
 	(debug:print 2 *default-log-port* "no tabdat for run-times-tab-updater"))))
 
+(define (tabdat-values tabdat)
+  (let ((allruns (dboard:tabdat-allruns tabdat))
+        (allruns-by-id (dboard:tabdat-allruns-by-id tabdat))
+        (done-runs (dboard:tabdat-done-runs tabdat))
+        (not-done-runs (dboard:tabdat-not-done-runs tabdat))
+        (header  (dboard:tabdat-header  tabdat))
+        (keys (dboard:tabdat-keys tabdat))
+        (numruns (dboard:tabdat-numruns tabdat))
+        (tot-runs (dboard:tabdat-tot-runs tabdat))
+        (last-data-update (dboard:tabdat-last-data-update tabdat))
+        (runs-mutex (dboard:tabdat-runs-mutex tabdat))
+        (run-update-times (dboard:tabdat-run-update-times tabdat))
+        (last-test-dat (dboard:tabdat-last-test-dat tabdat))
+        (run-db-paths (dboard:tabdat-run-db-paths tabdat))
+        (buttondat (dboard:tabdat-buttondat tabdat))
+        (item-test-names (dboard:tabdat-item-test-names tabdat))
+        (run-keys (dboard:tabdat-run-keys tabdat))
+        (start-run-offset (dboard:tabdat-start-run-offset tabdat))
+        (start-test-offset (dboard:tabdat-start-test-offset tabdat))
+        (runs-btn-height (dboard:tabdat-runs-btn-height tabdat))
+        (all-test-names (dboard:tabdat-all-test-names tabdat))
+        (cnv (dboard:tabdat-cnv tabdat))
+        (command (dboard:tabdat-command tabdat))
+        (run-name (dboard:tabdat-run-name tabdat))
+        (states (dboard:tabdat-states tabdat))
+        (statuses (dboard:tabdat-statuses tabdat))
+        (curr-run-id (dboard:tabdat-curr-run-id tabdat))
+        (curr-test-ids (dboard:tabdat-curr-test-ids tabdat))
+        (state-ignore-hash (dboard:tabdat-state-ignore-hash tabdat))
+        (test-patts (dboard:tabdat-test-patts tabdat))
+        (target (dboard:tabdat-target tabdat))
+        (dbdir (dboard:tabdat-dbdir tabdat))
+        (monitor-db-path (dboard:tabdat-monitor-db-path tabdat))
+        (path-run-ids (dboard:tabdat-path-run-ids tabdat)))
+        (print "allruns is : " allruns)
+        (print "allruns-by-id is : " allruns-by-id)
+        (print "done-runs is : " done-runs)
+        (print "not-done-runs is : " not-done-runs)
+        (print "header  is : " header )
+        (print "keys is : " keys)
+        (print "numruns is : " numruns)
+        (print "tot-runs is : " tot-runs)
+        (print "last-data-update is : " last-data-update)
+        (print "runs-mutex is : " runs-mutex)
+        (print "run-update-times is : " run-update-times)
+        (print "last-test-dat is : " last-test-dat)
+        (print "run-db-paths is : " run-db-paths)
+        (print "buttondat is : " buttondat)
+        (print "item-test-names is : " item-test-names)
+        (print "run-keys is : " run-keys)
+        (print "start-run-offset is : " start-run-offset)
+        (print "start-test-offset is : " start-test-offset)
+        (print "runs-btn-height is : " runs-btn-height)
+        (print "all-test-names is : " all-test-names)
+        (print "cnv is : " cnv)
+        (print "command is : " command)
+        (print "run-name is : " run-name)
+        (print "states is : " states)
+        (print "statuses is : " statuses)
+        (print "curr-run-id is : " curr-run-id)
+        (print "curr-test-ids is : " curr-test-ids)
+        (print "state-ignore-hash is : " state-ignore-hash)
+        (print "test-patts is : " test-patts)
+        (print "target is : " target)
+        (print "dbdir is : " dbdir)
+        (print "monitor-db-path is : " monitor-db-path)
+        (print "path-run-ids is : " path-run-ids)))
+
 (define (dashboard:runs-tab-updater commondat tab-num)
   (debug:catch-and-dump 
    (lambda ()
      (let* ((tabdat (dboard:common-get-tabdat commondat tab-num: tab-num))
 	    (dbkeys (dboard:tabdat-dbkeys tabdat)))
        ;;(print "RA => calling runs-tab-updater with commondat " commondat " tab-num " tab-num)
+       (tabdat-values tabdat) ;;RA added 
        (update-rundat tabdat
 		      (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%")
 		      (dboard:tabdat-numruns tabdat)
