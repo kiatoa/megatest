@@ -1282,7 +1282,7 @@ Misc
 					(let* ((drawing (dboard:tabdat-drawing tabdat))
 					       (scalex  (vg:drawing-scalex drawing)))
 					  (dboard:tabdat-view-changed-set! tabdat #t)
-					  (print "step: " step " x: " x " y: " y " dir: " dir " scalex: " scalex)
+					  ;; (print "step: " step " x: " x " y: " y " dir: " dir " scalex: " scalex)
 					  (vg:drawing-scalex-set! drawing
 								  (+ scalex
 								     (if (> step 0)
@@ -2042,7 +2042,7 @@ Misc
 					; #:image img1
 					; #:impress img2
 				 #:size  (conc cell-width btn-height)
-				 #:expand  "NO" ;; "HORIZONTAL"
+				 #:expand  "HORIZONTAL"
 				 #:fontsize btn-fontsz
 				 #:action (lambda (obj)
 					    (mark-for-update runs-dat)
@@ -2130,13 +2130,14 @@ Misc
 			  #:orientation "VERTICAL" ;; "HORIZONTAL"
 			  #:value 150
 			  (dboard:runs-tree-browser commondat runs-dat)
-			  (apply iup:hbox
-				 (cons (apply iup:vbox lftlst)
-				       (list 
-					(iup:vbox
-					 ;; the header
-					 (apply iup:hbox (reverse hdrlst))
-					 (apply iup:hbox (reverse bdylst)))))))
+			  (iup:split
+			   ;; left most block, including row names
+			   (apply iup:vbox lftlst)
+			   ;; right hand block, including cells
+			   (iup:vbox
+			    ;; the header
+			    (apply iup:hbox (reverse hdrlst))
+			    (apply iup:hbox (reverse bdylst)))))
 			 controls
 			 ))
 	     ;; (data (dboard:tabdat-init (make-d:data)))
