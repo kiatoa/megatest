@@ -30,9 +30,27 @@ writing a suite of tests and tasks for implementing continuous build
 for software, design engineering or process control (via owlfs for
 example) without being specialized for any specific problem
 space. Megatest in of itself does not know what constitutes a PASS or
-FAIL of a test. In most cases megatest is best used in conjunction
-with logpro or a similar tool to parse, analyze and decide on the test
-outcome.
+FAIL of a test or task. In most cases megatest is best used in
+conjunction with logpro or a similar tool to parse, analyze and decide
+on the test outcome. 
+
+ * Self-checking -Repeatable strive for directed or self-checking test
+   as opposed to delta based tests
+
+ * Traceable - environment variables, host OS and other possibly influential
+   variables are captured and kept recorded.
+
+ * Immutable - once this test is run it cannot be easily overwritten or
+   accidentally modified.
+
+ * Repeatable - this test result can be recreated in the future
+
+ * Relocatable - the testsuite or automation area can be checked out and the tests run anywhere
+
+ * Encapsulated - the tests run in self-contained directories and all inputs
+   and outputs to the process can be found in the run areas.
+
+ * Deployable - anyone on the team, at any site, at any time can run the flow
 
 Megatest Architecture
 ~~~~~~~~~~~~~~~~~~~~~
