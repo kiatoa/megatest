@@ -172,6 +172,9 @@ Misc
   ((tot-runs          0)                 : number)
   ((last-data-update  0)                 : number)      ;; last time the data in allruns was updated
   (runs-mutex         (make-mutex))                     ;; use to prevent parallel access to draw objects
+  ((run-update-times  (make-hash-table)) : hash-table)  ;; update times indexed by run-id
+  (last-test-dat      #f)                               ;; cache last tests dat
+  ((run-db-paths      (make-hash-table)) : hash-table)  ;; cache the paths to the run db files
 
   ;; Runs view
   ((buttondat         (make-hash-table)) : hash-table)  ;;     
@@ -302,6 +305,7 @@ Misc
   key-vals
   ((last-update 0) : fixnum) ;; last query to db got records from before last-update
   data-changed
+  (db-path #f)
   )
 
 (define (dboard:rundat-make-init #!key (run #f)(key-vals #f)(tests #f)(last-update -100));; -100 is before time began
@@ -487,16 +491,24 @@ Misc
 			      rd))))
 	 ;; (prev-tests  (dboard:rundat-tests prev-dat)) ;; (vector-ref prev-dat 1))
 	 (last-update (dboard:rundat-last-update run-dat)) ;; (vector-ref prev-dat 3))
-	 (tmptests    (rmt:get-tests-for-run run-id testnamepatt states statuses  ;; run-id testpatt states statuses
-					     #f #f                                ;; offset limit 
-					     (dboard:tabdat-hide-not-hide tabdat) ;; no-in
-					     sort-by                              ;; sort-by
-					     sort-order                           ;; sort-order
-					     #f ;; 'shortlist                           ;; qrytype
-					     (if (dboard:tabdat-filters-changed tabdat) 
-						 0
-						 last-update) ;; last-update
-					     *dashboard-mode*)) ;; use dashboard mode
+	 (db-path     (or (dboard:rundat-db-path run-dat)
+			  (let* ((db-dir (tasks:get-task-db-path))
+				 (db-pth (conc db-dir "/" run-id ".db")))
+			    (dboard:rundat-db-path-set! run-dat db-pth)
+			    db-pth)))
+	 (tmptests    (if (or (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
+			      (>= (file-modification-time db-path) last-update))
+			  (rmt:get-tests-for-run run-id testnamepatt states statuses  ;; run-id testpatt states statuses
+						 #f #f                                ;; offset limit 
+						 (dboard:tabdat-hide-not-hide tabdat) ;; no-in
+						 sort-by                              ;; sort-by
+						 sort-order                           ;; sort-order
+						 #f ;; 'shortlist                           ;; qrytype
+						 (if (dboard:tabdat-filters-changed tabdat) 
+						     0
+						     last-update) ;; last-update
+						 *dashboard-mode*) ;; use dashboard mode
+			  '()))
 	 (use-new    (dboard:tabdat-hide-not-hide tabdat))
 	 (tests-ht   (if (dboard:tabdat-filters-changed tabdat)
 			 (let ((ht (make-hash-table)))
@@ -1258,7 +1270,7 @@ Misc
 					     (old-yadj (dboard:tabdat-yadj   tabdat)))
 					 (if (not (and (eq? xadj old-xadj)(eq? yadj old-yadj)))
 					     (begin
-					       (print  "xadj: " xadj " yadj: " yadj "changed: "(eq? xadj old-xadj) " " (eq? yadj old-yadj))
+					       ;; (print  "xadj: " xadj " yadj: " yadj "changed: "(eq? xadj old-xadj) " " (eq? yadj old-yadj))
 					       (dboard:tabdat-view-changed-set! tabdat #t)
 					       (dboard:tabdat-xadj-set! tabdat (* -2000 (- xadj 0.5)))
 					       (dboard:tabdat-yadj-set! tabdat (*  2000 (- yadj 0.5)))
@@ -1270,7 +1282,7 @@ Misc
 					(let* ((drawing (dboard:tabdat-drawing tabdat))
 					       (scalex  (vg:drawing-scalex drawing)))
 					  (dboard:tabdat-view-changed-set! tabdat #t)
-					  (print "step: " step " x: " x " y: " y " dir: " dir " scalex: " scalex)
+					  ;; (print "step: " step " x: " x " y: " y " dir: " dir " scalex: " scalex)
 					  (vg:drawing-scalex-set! drawing
 								  (+ scalex
 								     (if (> step 0)
@@ -1292,7 +1304,7 @@ Misc
       #f))
 
 (define (dboard:get-tests-dat tabdat run-id last-update)
-  (let ((tdat (if run-id (rmt:get-tests-for-run run-id 
+  (let* ((tdat (if run-id (rmt:get-tests-for-run run-id 
 					     (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
 					     (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat))  ;; '()
 					     (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)) ;; '()
@@ -1358,8 +1370,17 @@ Misc
   (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 	 (run-id       (dboard:tabdat-curr-run-id tabdat))
-	 (last-update  0) ;; fix me - have to create and store a rundat record for this
-	 (tests-dat    (dboard:get-tests-dat tabdat run-id last-update))
+	 (last-update  (hash-table-ref/default (dboard:tabdat-run-update-times tabdat) run-id 0))
+	 (db-path      (or (hash-table-ref/default (dboard:tabdat-run-db-paths tabdat) run-id #f)
+			   (let* ((db-dir (tasks:get-task-db-path))
+				  (db-pth (conc db-dir "/" run-id ".db")))
+			     (hash-table-set! (dboard:tabdat-run-db-paths tabdat) run-id db-pth)
+			     db-pth)))
+	 (tests-dat    (if (or (not run-id)
+			       (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
+			       (>= (file-modification-time db-path) last-update))
+			   (dboard:get-tests-dat tabdat run-id last-update)
+			   (dboard:tabdat-last-test-dat  tabdat)))
 	 (tests-mindat (dcommon:minimize-test-data tests-dat))
 	 (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
 	 (row-indices  (cadr indices))
@@ -1375,76 +1396,78 @@ Misc
 				     (hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
 				   (vector-ref runs-dat 1))
 			 ht)))
+    (dboard:tabdat-last-test-dat-set! tabdat tests-dat)
+    (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- (current-seconds) 10))
     (dboard:tabdat-filters-changed-set! tabdat #f)
     (let loop ((pass-num 0)
 	       (changed  #f))
       ;; Update the runs tree
       (dboard:update-tree tabdat runs-hash runs-header tb)
-
-(if (eq? pass-num 1)
+      
+      (if (eq? pass-num 1)
 	  (begin ;; big reset
-    (iup:attribute-set! run-matrix "CLEARVALUE" "ALL") ;; NOTE: Was CONTENTS
-    (iup:attribute-set! run-matrix "CLEARATTRIB" "CONTENTS")
-    (iup:attribute-set! run-matrix "RESIZEMATRIX" "YES")
-    (iup:attribute-set! run-matrix "NUMCOL" max-col )
-    (iup:attribute-set! run-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)))) ;; min of 20
-
-    ;; Row labels
-    (for-each (lambda (ind)
-		(let* ((name (car ind))
-		       (num  (cadr ind))
-		       (key  (conc num ":0")))
-		  (if (not (equal? (iup:attribute run-matrix key) name))
-		      (begin
-			(set! changed #t)
-			(iup:attribute-set! run-matrix key name)))))
-	      row-indices)
-    
-     (print "row-indices: " row-indices " col-indices: " col-indices)
+	    (iup:attribute-set! run-matrix "CLEARVALUE" "ALL") ;; NOTE: Was CONTENTS
+	    (iup:attribute-set! run-matrix "CLEARATTRIB" "CONTENTS")
+	    (iup:attribute-set! run-matrix "RESIZEMATRIX" "YES")
+	    (iup:attribute-set! run-matrix "NUMCOL" max-col )
+	    (iup:attribute-set! run-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)))) ;; min of 20
+      
+      ;; Row labels
+      (for-each (lambda (ind)
+		  (let* ((name (car ind))
+			 (num  (cadr ind))
+			 (key  (conc num ":0")))
+		    (if (not (equal? (iup:attribute run-matrix key) name))
+			(begin
+			  (set! changed #t)
+			  (iup:attribute-set! run-matrix key name)))))
+		row-indices)
+      
+      ;; (print "row-indices: " row-indices " col-indices: " col-indices)
       (if (and (eq? pass-num 0) changed)
 	  (loop 1 #t)) ;; force second pass
-
-    ;; Cell contents
-    (for-each (lambda (entry)
-		;; (print "entry: " entry)
-		(let* ((row-name  (cadr entry))
-		       (col-name  (car entry))
-		       (valuedat  (caddr entry))
-		       (test-id   (list-ref valuedat 0))
-		       (test-name row-name) ;; (list-ref valuedat 1))
-		       (item-path col-name) ;; (list-ref valuedat 2))
-		       (state     (list-ref valuedat 1))
-		       (status    (list-ref valuedat 2))
-		       (value     (gutils:get-color-for-state-status state status))
-		       (row-num   (cadr (assoc row-name row-indices)))
-		       (col-num   (cadr (assoc col-name col-indices)))
-		       (key       (conc row-num ":" col-num)))
-		  (hash-table-set! cell-lookup key test-id)
-		  (if (not (equal? (iup:attribute run-matrix key) (cadr value)))
-		      (begin
-			(set! changed #t)
-			(iup:attribute-set! run-matrix key (cadr value))
-			(iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
-	      tests-mindat)
-    
-    ;; Col labels - do after setting Cell contents so they are accounted for in the size calc.
-
-    (for-each (lambda (ind)
-		(let* ((name (car ind))
-		       (num  (cadr ind))
-		       (key  (conc "0:" num)))
-		  (if (not (equal? (iup:attribute run-matrix key) name))
-		      (begin
-			(set! changed #t)
-			(iup:attribute-set! run-matrix key name)
-			(iup:attribute-set! run-matrix "FITTOTEXT" (conc "C" num))))))
-	      col-indices)
-
+      
+      ;; Cell contents
+      (for-each (lambda (entry)
+		  ;; (print "entry: " entry)
+		  (let* ((row-name  (cadr entry))
+			 (col-name  (car entry))
+			 (valuedat  (caddr entry))
+			 (test-id   (list-ref valuedat 0))
+			 (test-name row-name) ;; (list-ref valuedat 1))
+			 (item-path col-name) ;; (list-ref valuedat 2))
+			 (state     (list-ref valuedat 1))
+			 (status    (list-ref valuedat 2))
+			 (value     (gutils:get-color-for-state-status state status))
+			 (row-num   (cadr (assoc row-name row-indices)))
+			 (col-num   (cadr (assoc col-name col-indices)))
+			 (key       (conc row-num ":" col-num)))
+		    (hash-table-set! cell-lookup key test-id)
+		    (if (not (equal? (iup:attribute run-matrix key) (cadr value)))
+			(begin
+			  (set! changed #t)
+			  (iup:attribute-set! run-matrix key (cadr value))
+			  (iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
+		tests-mindat)
+      
+      ;; Col labels - do after setting Cell contents so they are accounted for in the size calc.
+      
+      (for-each (lambda (ind)
+		  (let* ((name (car ind))
+			 (num  (cadr ind))
+			 (key  (conc "0:" num)))
+		    (if (not (equal? (iup:attribute run-matrix key) name))
+			(begin
+			  (set! changed #t)
+			  (iup:attribute-set! run-matrix key name)
+			  (iup:attribute-set! run-matrix "FITTOTEXT" (conc "C" num))))))
+		col-indices)
+      
       (if (and (eq? pass-num 0) changed)
 	  (loop 1 #t)) ;; force second pass due to column labels changing
-
+      
       ;; (debug:print 0 *default-debug-port* "one-run-updater, changed: " changed " pass-num: " pass-num)
-      (print "one-run-updater, changed: " changed " pass-num: " pass-num)
+      ;; (print "one-run-updater, changed: " changed " pass-num: " pass-num)
       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL")))))
 
 ;;======================================================================
@@ -1512,7 +1535,8 @@ Misc
 			     (dboard:tabdat-layout-update-ok-set! tabdat #f)
 			     ;; (dashboard:update-run-summary-tab)
 			     )
-			   (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)))
+			   ;; (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)
+			   ))
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		     )))
 	 (cell-lookup (make-hash-table))
@@ -1886,7 +1910,15 @@ Misc
          (conc "megatest -set-state-status NOT_STARTED,n/a -run -target " target
                " -runname " runname
                " -testpatt % "
-               " -preclean -clean-cache"))))))
+               " -preclean -clean-cache"))))
+     (iup:menu-item
+      "Clean Complete Run"
+      #:action
+      (lambda (obj)
+        (common:run-a-command
+         (conc "megatest -remove-runs -target " target
+               " -runname " runname
+               " -testpatt % "))))))
    (iup:menu-item
     "Test"
     (iup:menu 
@@ -2010,7 +2042,7 @@ Misc
 					; #:image img1
 					; #:impress img2
 				 #:size  (conc cell-width btn-height)
-				 #:expand  "NO" ;; "HORIZONTAL"
+				 #:expand  "HORIZONTAL"
 				 #:fontsize btn-fontsz
 				 #:action (lambda (obj)
 					    (mark-for-update runs-dat)
@@ -2098,13 +2130,14 @@ Misc
 			  #:orientation "VERTICAL" ;; "HORIZONTAL"
 			  #:value 150
 			  (dboard:runs-tree-browser commondat runs-dat)
-			  (apply iup:hbox
-				 (cons (apply iup:vbox lftlst)
-				       (list 
-					(iup:vbox
-					 ;; the header
-					 (apply iup:hbox (reverse hdrlst))
-					 (apply iup:hbox (reverse bdylst)))))))
+			  (iup:split
+			   ;; left most block, including row names
+			   (apply iup:vbox lftlst)
+			   ;; right hand block, including cells
+			   (iup:vbox
+			    ;; the header
+			    (apply iup:hbox (reverse hdrlst))
+			    (apply iup:hbox (reverse bdylst)))))
 			 controls
 			 ))
 	     ;; (data (dboard:tabdat-init (make-d:data)))
@@ -2357,7 +2390,7 @@ Misc
 		   ;; (set! colnum (+ colnum 1))
 		   ))))
 	 run-ids))
-    (print "Updating rundat")
+    ;; (print "Updating rundat")
     (if (dboard:tabdat-keys tabdat) ;; have keys yet?
 	(let* ((num-keys (length (dboard:tabdat-keys tabdat)))
 	       (targpatt (map (lambda (k v)
@@ -2373,7 +2406,7 @@ Misc
 			     "%"))
 	       (testpatt  (or (dboard:tabdat-test-patts tabdat) "%"))
 	       (filtrstr  (conc targpatt "/" runpatt "/" testpatt)))
-	  (print "targpatt: " targpatt " runpatt: " runpatt " testpatt: " testpatt)
+	  ;; (print "targpatt: " targpatt " runpatt: " runpatt " testpatt: " testpatt)
 
 	  (if (not (equal? (dboard:tabdat-last-filter-str tabdat) filtrstr))
 	      (let ((dwg (dboard:tabdat-drawing tabdat)))
@@ -2463,7 +2496,6 @@ Misc
 		 (lambda (fieldname) ;; fields
 		   (let ((all-dat-qrystr (conc "SELECT " timef "," varfn "," valfn " FROM " tablen " WHERE " varfn "='" fieldname "' AND " timef " >= " tstart " AND " timef " <= " tend " ORDER BY " timef " ASC"))
 			 (zeroth-point   (conc "SELECT " timef "," varfn "," valfn " FROM " tablen " WHERE " varfn "='" fieldname "' AND " timef " < " tstart " LIMIT 1")))
-		     (print "all-dat-qrystr: " all-dat-qrystr)
 		     (hash-table-set! res-ht fieldname ;; (fetch-rows (sql db qrystr)))))
 				      (reverse
 				       (sqlite3:fold-row
@@ -2650,7 +2682,8 @@ Misc
 			       (rows-used (make-hash-table)) ;; keep track of what parts of the rows are used here row1 = (obj1 obj2 ...)
 			       ;; (row-height 4)
 			       (run-start  (dboard:min-max < (map db:test-get-event_time testsdat)))
-			       (run-end    (dboard:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat)))
+			       (run-end    (let ((re (dboard:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat))))
+					     (max re (+ 1 run-start)))) ;; use run-start+1 if run-start == run-end so delta is not zero
 			       (timeoffset (- run-start)) ;; (+ fixed-originx canvas-margin) run-start))
 			       (run-duration (- run-end run-start))
 			       (timescale  (/ (- sizex (* 2 canvas-margin))
@@ -2665,7 +2698,7 @@ Misc
 			       (graph-uly  (- (calc-y 0) canvas-margin))
 			       (sec-per-50pt (/ 50 timescale))
 			       )
-			  (print "timeoffset: " timeoffset " timescale: " timescale " run-duration: " (seconds->hr-min-sec run-duration) " width: " width " sec-per-50pt: " sec-per-50pt)
+			  ;; (print "timeoffset: " timeoffset " timescale: " timescale " run-duration: " (seconds->hr-min-sec run-duration) " width: " width " sec-per-50pt: " sec-per-50pt)
 			  ;; (print "timescale: " timescale " timeoffset: " timeoffset " sizex: " sizex " originx: " originx)
 			  (mutex-lock! mtx)
 			  (vg:add-comp-to-lib runslib run-full-name runcomp)
