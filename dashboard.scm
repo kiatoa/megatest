@@ -1287,7 +1287,7 @@ Misc
 					(let* ((drawing (dboard:tabdat-drawing tabdat))
 					       (scalex  (vg:drawing-scalex drawing)))
 					  (dboard:tabdat-view-changed-set! tabdat #t)
-					  (print "step: " step " x: " x " y: " y " dir: " dir " scalex: " scalex)
+					  ;; (print "step: " step " x: " x " y: " y " dir: " dir " scalex: " scalex)
 					  (vg:drawing-scalex-set! drawing
 								  (+ scalex
 								     (if (> step 0)
@@ -1924,7 +1924,7 @@ Misc
          (conc "megatest -remove-runs -target " target
                " -runname " runname
                " -testpatt % "))))
-     (iup:menu-item
+     (iup:menu-item ;; RADT => itemize this run lists before merging with v1.61
       "Kill Complete Run"
       #:action
       (lambda (obj)
@@ -2056,7 +2056,7 @@ Misc
 					; #:image img1
 					; #:impress img2
 				 #:size  (conc cell-width btn-height)
-				 #:expand  "NO" ;; "HORIZONTAL"
+				 #:expand  "HORIZONTAL"
 				 #:fontsize btn-fontsz
 				 #:action (lambda (obj)
 					    (mark-for-update runs-dat)
@@ -2144,13 +2144,14 @@ Misc
 			  #:orientation "VERTICAL" ;; "HORIZONTAL"
 			  #:value 150
 			  (dboard:runs-tree-browser commondat runs-dat)
-			  (apply iup:hbox
-				 (cons (apply iup:vbox lftlst)
-				       (list 
-					(iup:vbox
-					 ;; the header
-					 (apply iup:hbox (reverse hdrlst))
-					 (apply iup:hbox (reverse bdylst)))))))
+			  (iup:split
+			   ;; left most block, including row names
+			   (apply iup:vbox lftlst)
+			   ;; right hand block, including cells
+			   (iup:vbox
+			    ;; the header
+			    (apply iup:hbox (reverse hdrlst))
+			    (apply iup:hbox (reverse bdylst)))))
 			 controls
 			 ))
 	     ;; (data (dboard:tabdat-init (make-d:data)))
@@ -2979,7 +2980,7 @@ Misc
     ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
     (cond 
      ((args:get-arg "-test") ;; run-id,test-id
-      (let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-test") ","))))
+      (let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-test") ",")))) ;; RADT couldn't find string->number, though it works
 			(if (> (length d) 1)
 			    d
 			    (list #f #f))))
@@ -2988,7 +2989,7 @@ Misc
 	(if (and (number? run-id)
 		 (number? test-id)
 		 (>= test-id 0))
-	    (examine-test run-id test-id)
+	    (dashboard-tests:examine-test run-id test-id)
 	    (begin
 	      (debug:print 3 *default-log-port* "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
 	      (exit 1)))))
