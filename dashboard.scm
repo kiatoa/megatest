@@ -301,21 +301,19 @@ Misc
   rowsused       ;; hash of lists covering what areas used - replace with quadtree
   hierdat        ;; put hierarchial sorted list here
   tests          ;; hash of id => testdat
-  tests-by-name  ;; hash of testfullname => testdat
+  ((tests-by-name (make-hash-table)) : hash-table) ;; hash of testfullname => testdat
   key-vals
-  ((last-update 0) : fixnum) ;; last query to db got records from before last-update
-  data-changed
+  ((last-update   0)                 : fixnum) ;; last query to db got records from before last-update
+  ((data-changed  #f)                : boolean)
+  ((run-data-offset  0)              : number)      ;; get only 100 items per call, set back to zero when received less that 100 items
   (db-path #f)
   )
 
-(define (dboard:rundat-make-init #!key (run #f)(key-vals #f)(tests #f)(last-update -100));; -100 is before time began
+(define (dboard:rundat-make-init #!key (run #f)(key-vals #f)(tests #f));; -100 is before time began
   (make-dboard:rundat 
    run: run
    tests: (or tests (make-hash-table))
-   tests-by-name: (make-hash-table)
    key-vals: key-vals 
-   last-update: last-update
-   data-changed: #t
    )) 
 
 (define (dboard:rundat-copy-tests-to-by-name rundat)
@@ -474,7 +472,8 @@ Misc
 ;;    NOTE: Yes, this is used
 ;;
 (define (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)
-  (let* ((states      (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
+  (let* ((num-to-get  20)
+	 (states      (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
 	 (statuses    (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)))
 	 (sort-info   (get-curr-sort))
 	 (sort-by     (vector-ref sort-info 1))
@@ -483,12 +482,10 @@ Misc
 			  'testname
 			  'itempath))
 	 ;; note: the rundat is normally created in "update-rundat". 
-	 (run-dat    (let ((rec (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f)))
-			(if rec 
-			    rec
-			    (let ((rd (dboard:rundat-make-init run: run key-vals: key-vals)))
-			      (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id rd)
-			      rd))))
+	 (run-dat    (or (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f)
+			 (let ((rd (dboard:rundat-make-init run: run key-vals: key-vals)))
+			   (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id rd)
+			   rd)))
 	 ;; (prev-tests  (dboard:rundat-tests prev-dat)) ;; (vector-ref prev-dat 1))
 	 (last-update (dboard:rundat-last-update run-dat)) ;; (vector-ref prev-dat 3))
 	 (db-path     (or (dboard:rundat-db-path run-dat)
@@ -499,7 +496,8 @@ Misc
 	 (tmptests    (if (or (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
 			      (>= (file-modification-time db-path) last-update))
 			  (rmt:get-tests-for-run run-id testnamepatt states statuses  ;; run-id testpatt states statuses
-						 #f #f                                ;; offset limit 
+						 (dboard:rundat-run-data-offset run-dat)
+						 num-to-get
 						 (dboard:tabdat-hide-not-hide tabdat) ;; no-in
 						 sort-by                              ;; sort-by
 						 sort-order                           ;; sort-order
@@ -516,6 +514,16 @@ Misc
 			   ht)
 			 (dboard:rundat-tests run-dat)))
 	 (start-time (current-seconds)))
+
+    ;; to limit the amount of data transferred each cycle use limit of num-to-get and offset
+    (dboard:rundat-run-data-offset-set! 
+     run-dat 
+     (if (< (length tmptests) num-to-get)
+	 0
+	 (let ((newval (+ num-to-get (dboard:rundat-run-data-offset run-dat))))
+	   ;; (print "Incremental get, offset=" (dboard:rundat-run-data-offset run-dat) " retrieved: " (length tmptests) " newval: " newval)
+	   newval)))
+     
     (for-each 
      (lambda (tdat)
        (let ((test-id (db:test-get-id tdat))
@@ -525,7 +533,15 @@ Misc
 	     (hash-table-delete! tests-ht test-id)
 	     (hash-table-set! tests-ht test-id tdat))))
      tmptests)
-    (dboard:rundat-last-update-set! run-dat (- (current-seconds) 2)) ;; go back two seconds in time to ensure all changes are captured.
+    
+    ;; set last-update to 0 if still getting data incrementally
+
+    (if (> (dboard:rundat-run-data-offset run-dat) 0)
+	(begin
+	  ;; (print "run-data-offset: " (dboard:rundat-run-data-offset run-dat) ", setting last-update to 0")
+	  (dboard:rundat-last-update-set! run-dat 0))
+	(dboard:rundat-last-update-set! run-dat (- (current-seconds) 2))) ;; go back two seconds in time to ensure all changes are captured.
+
     ;; (debug:print-info 0 *default-log-port* "tests-ht: " (hash-table-keys tests-ht))
     tests-ht))
 
@@ -586,6 +602,7 @@ Misc
 		 ;;  (dboard:get-tests-dat tabdat run-id last-update))
 		 (all-test-ids (hash-table-keys tests-ht))
 		 (num-tests    (length all-test-ids)))
+	    ;; (print "run-struct: " run-struct)
 	    ;; NOTE: bubble-up also sets the global (dboard:tabdat-item-test-names tabdat)
 	    ;; (tests       (bubble-up tmptests priority: bubble-type))
 	    ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
@@ -593,11 +610,11 @@ Misc
 	    ;; Not sure this is needed?
 	    (let* ((newmaxtests (max num-tests maxtests))
 		   (last-update (- (current-seconds) 10))
-		   (run-struct  (dboard:rundat-make-init
-				 run:         run 
-				 tests:       tests-ht
-				 key-vals:    key-vals
-				 last-update: last-update))
+		   (run-struct  (or run-struct
+				    (dboard:rundat-make-init
+				     run:         run 
+				     tests:       tests-ht
+				     key-vals:    key-vals)))
 		   (new-res     (if (null? all-test-ids) res (cons run-struct res)))
 		   (elapsed-time (- (current-seconds) start-time)))
 	      (if (null? all-test-ids)
@@ -609,7 +626,9 @@ Misc
 		    (if (> elapsed-time 2)(print "WARNING: timed out in update-testdat " elapsed-time "s"))
 		    (dboard:tabdat-allruns-set! tabdat new-res)
 		    maxtests)
-		  (loop (car tal)(cdr tal) new-res newmaxtests))))))
+		  (if (> (dboard:rundat-run-data-offset run-struct) 0)
+		      (loop run tal new-res newmaxtests) ;; not done getting data for this run
+		      (loop (car tal)(cdr tal) new-res newmaxtests)))))))
     (dboard:tabdat-filters-changed-set! tabdat #f)
     (dboard:update-tree tabdat runs-hash header tb)))
 
@@ -2197,10 +2216,10 @@ Misc
 
 (define *last-recalc-ended-time* 0)
 
-(define (dashboard:been-changed)
+(define (dashboard:been-changed tabdat)
   (> (file-modification-time (dboard:tabdat-dbfpath tabdat)) (dboard:tabdat-last-db-update tabdat)))
 
-(define (dashboard:set-db-update-time)
+(define (dashboard:set-db-update-time tabdat)
   (dboard:tabdat-last-db-update-set! tabdat (file-modification-time (dboard:tabdat-dbfpath tabdat))))
 
 (define (dashboard:recalc modtime please-update-buttons last-db-update-time)
