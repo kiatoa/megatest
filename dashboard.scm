@@ -1137,6 +1137,30 @@ Misc
 	(dboard:tabdat-run-name-set! tabdat curr-runname))
     (dashboard:update-run-command tabdat)))
 
+;; used by run-controls
+;;
+(define (dashboard:update-tree-selector tabdat #!key (action-proc #f))
+  (let* ((tb            (dboard:tabdat-runs-tree tabdat))
+	 (runconf-targs (common:get-runconfig-targets))
+	 (db-target-dat (rmt:get-targets))
+	 (header        (vector-ref db-target-dat 0))
+	 (db-targets    (vector-ref db-target-dat 1))
+	 (munge-target  (lambda (x)            ;; create a target vector from a string. Pad with na if needed.
+			  (take (append (string-split x "/")
+					(make-list (length header) "na"))
+				(length header))))
+	 (all-targets   (append (list (munge-target (string-intersperse 
+						     (map (lambda (x) "%") header)
+						     "/")))
+				(map vector->list db-targets)
+				(map munge-target
+				     runconf-targs)
+				)))
+    (for-each
+     (lambda (target)
+       (tree:add-node tb "Runs" target)) ;; (append key-vals (list run-name))
+     all-targets)))
+
 (define (dashboard:run-controls commondat tabdat #!key (tab-num #f))
   (let* ((targets       (make-hash-table))
 	 (test-records  (make-hash-table))
@@ -1157,32 +1181,40 @@ Misc
     (set! sorted-testnames (tests:sort-by-priority-and-waiton test-records))
     
     ;; refer to (dboard:tabdat-keys tabdat), (dboard:tabdat-dbkeys tabdat) for keys
-    (iup:vbox
-     (dcommon:command-execution-control tabdat)
-     (iup:split
-      #:orientation "VERTICAL" ;; "HORIZONTAL"
-      #:value 200
-;; 
-;;       (iup:split
-;;        #:value 300
+    (let* ((result
+	    (iup:vbox
+	     (dcommon:command-execution-control tabdat)
+	     (iup:split
+	      #:orientation "VERTICAL" ;; "HORIZONTAL"
+	      #:value 200
+	      ;; 
+	     ;;       (iup:split
+	     ;;        #:value 300
 
-       ;; Target, testpatt, state and status input boxes
-       ;;
-       (iup:vbox
-	;; Command to run, placed over the top of the canvas
-	(dcommon:command-action-selector commondat tabdat tab-num: tab-num)
-	(dcommon:command-runname-selector commondat tabdat tab-num: tab-num)
-	(dcommon:command-testname-selector commondat tabdat update-keyvals)) ;;  key-listboxes))
-       
-       (dcommon:command-tests-tasks-canvas tabdat test-records sorted-testnames tests-draw-state))
-       
+	     ;; Target, testpatt, state and status input boxes
+	     ;;
+	     (iup:vbox
+	      ;; Command to run, placed over the top of the canvas
+	      (dcommon:command-action-selector commondat tabdat tab-num: tab-num)
+	      (dboard:runs-tree-browser commondat tabdat)
+	      (dcommon:command-runname-selector commondat tabdat tab-num: tab-num)
+	      (dcommon:command-testname-selector commondat tabdat update-keyvals))
+	     ;;  key-listboxes))
+	     (dcommon:command-tests-tasks-canvas tabdat test-records sorted-testnames tests-draw-state))))
+	   (tb (dboard:tabdat-runs-tree tabdat)))
+      (dboard:commondat-add-updater 
+       commondat 
+       (lambda ()
+	 (dashboard:update-tree-selector tabdat))
+       tab-num: tab-num)
+      result)))
+
  ;;(iup:frame
  ;; #:title "Logs" ;; To be replaced with tabs
  ;; (let ((logs-tb (iup:textbox #:expand "YES"
  ;;				   #:multiline "YES")))
  ;;	 (dboard:tabdat-logs-textbox-set! tabdat logs-tb)
  ;;	 logs-tb))
-      )))
 
 (define (dboard:runs-tree-browser commondat tabdat)
   (let* ((tb      (iup:treebox
