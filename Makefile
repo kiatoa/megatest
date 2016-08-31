@@ -10,7 +10,7 @@ SRCFILES = common.scm items.scm launch.scm \
    client.scm gutils.scm synchash.scm daemon.scm mt.scm dcommon.scm \
    tree.scm ezsteps.scm lock-queue.scm sdb.scm \
    rmt.scm api.scm tdb.scm rpc-transport.scm \
-   portlogger.scm archive.scm env.scm vg.scm
+   portlogger.scm archive.scm env.scm
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
@@ -18,7 +18,7 @@ dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv
 json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
 spiffy-directory-listing ssax sxml-serializer sxml-modifications iup canvas-draw sqlite3
 
-GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm 
+GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm vg.scm
 
 OFILES   = $(SRCFILES:%.scm=%.o)
 GOFILES  = $(GUISRCF:%.scm=%.o)
