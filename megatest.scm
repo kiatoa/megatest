@@ -38,7 +38,7 @@
 (declare (uses genexample))
 (declare (uses daemon))
 (declare (uses db))
-(declare (uses dcommon))
+;; (declare (uses dcommon))
 
 (declare (uses tdb))
 (declare (uses mt))
