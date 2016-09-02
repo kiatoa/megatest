@@ -2430,7 +2430,8 @@ Misc
 			     (yoff     (- minval lly)) ;;  minval))
 			     (deltaval (- maxval minval))
 			     (yscale   (/ delta-y (if (zero? deltaval) 1 deltaval)))
-			     (yfunc    (lambda (y)(+ lly (* yscale (- y minval)))))) ;; (lambda (y)(* (+ y yoff) yscale))))
+			     (yfunc    (lambda (y)(+ lly (* yscale (- y minval))))) ;; (lambda (y)(* (+ y yoff) yscale))))
+                             (graph-color (vg:generate-color)))
 			;; (print (car cf) "; maxval: " maxval " minval: " minval " deltaval: " deltaval " yscale: " yscale)
 			(vg:add-obj-to-comp
 			 cmp 
@@ -2441,24 +2442,24 @@ Misc
 			(fold 
 			 (lambda (next prev)  ;; #(time ? val) #(time ? val)
 			   (if prev
-			       (let* ((yval       (vector-ref prev 2))
-                                      (yval-next  (vector-ref next 2))
-				      (last-tval  (tfn   (vector-ref prev 0)))
-				      (last-yval  (yfunc yval)) ;; (+ lly (* yscale (vector-ref prev 2))))
-                                      (next-yval  (yfunc yval-next))
-				      (curr-tval  (tfn   (vector-ref next 0))))
+			       (let* ((yval        (vector-ref prev 2))
+                                      (yval-next   (vector-ref next 2))
+				      (last-tval   (tfn   (vector-ref prev 0)))
+				      (last-yval   (yfunc yval)) ;; (+ lly (* yscale (vector-ref prev 2))))
+                                      (next-yval   (yfunc yval-next))
+				      (curr-tval   (tfn   (vector-ref next 0))))
 				 (if (>= curr-tval last-tval)
                                      (begin
                                        (vg:add-obj-to-comp
                                         cmp 
                                         ;;(vg:make-rect-obj last-tval lly curr-tval last-yval ;; (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
                                         (vg:make-line-obj last-tval last-yval curr-tval last-yval
-                                                          line-color: stdcolor))
+                                                          line-color: graph-color))
                                        (vg:add-obj-to-comp
                                         cmp 
                                         ;;(vg:make-rect-obj last-tval lly curr-tval last-yval ;; (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
                                         (vg:make-line-obj curr-tval last-yval curr-tval next-yval
-                                                 line-color: stdcolor)))         
+                                                 line-color: graph-color)))         
 				     (print "ERROR: curr-tval is not > last-tval; curr-tval " curr-tval ", last-tval " last-tval))))
 			   next)
 			 ;; for init create vector tstart,0
