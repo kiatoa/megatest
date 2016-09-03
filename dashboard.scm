@@ -1158,24 +1158,21 @@ Misc
      )))
 
 (define (dboard:xor-ui-update tabdat)
-  (print "BB> ARGH0")
   (let* ((mode-flag (dboard:tabdat-mode-flag tabdat))
          (current-mode (mode-flag))
          (xor-src-runid-label  (dboard:tabdat-xor-src-runid-label tabdat))
          (xor-dest-runid-label (dboard:tabdat-xor-dest-runid-label tabdat))
-         (curr-run-id          (begin (print "BB> ARGH1") (dboard:tabdat-curr-run-id tabdat)))
-         (prev-run-id          (begin (print "BB> ARGH2") (dboard:tabdat-prev-run-id tabdat)))
-         (curr-runname (begin   (print "BB> ARGH3") (if curr-run-id
+         (curr-run-id          (dboard:tabdat-curr-run-id tabdat))
+         (prev-run-id          (dboard:tabdat-prev-run-id tabdat))
+         (curr-runname (if curr-run-id
                            (rmt:get-run-name-from-id curr-run-id)
-                           "None")))
-         (prev-runname (begin   (print "BB> ARGH4") (if prev-run-id
+                           "None"))
+         (prev-runname (if prev-run-id
                            (rmt:get-run-name-from-id prev-run-id)
-                           "None")))
+                           "None"))
          )
     
     (print "BB> xor-ui-update HELLO" )
-    (print "BB> xor-src-runid-label="xor-src-runid-label)
-    (print "BB> xor-dest-runid-label="xor-dest-runid-label)
     (print "BB> curr-runname="curr-runname)
     (print "BB> prev-runname="prev-runname)
     (print "BB> current-mode="current-mode)
@@ -1187,11 +1184,7 @@ Misc
        (iup:attribute-set! xor-src-runid-label "TITLE" (conc " SRC: "curr-runname"  "))
        (iup:attribute-set! xor-dest-runid-label "TITLE" (conc "DEST: "prev-runname"  ")))
       (else (print "BB> WHA?"))
-      )
-    (print "BB> after case")
-    
-
-    ))
+      )))
 
 (define (dboard:runs-tree-browser commondat tabdat)
   (let* ((tb      (iup:treebox
@@ -1506,17 +1499,24 @@ Misc
       ;; (print "one-run-updater, changed: " changed " pass-num: " pass-num)
       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL")))))
 
+
+
+
 (define (dashboard:xor-two-runs-updater commondat tabdat tb cell-lookup run-matrix )
+  (print "BB> HeLLooo from xor-two-runs-updater")
   (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
          (prev-run-id       (dboard:tabdat-prev-run-id tabdat))
 	 (curr-run-id       (dboard:tabdat-curr-run-id tabdat))
 	 (last-update  0) ;; fix me - have to create and store a rundat record for this
-	 (curr-tests-dat    (dboard:get-tests-dat tabdat curr-run-id last-update)) ;; does query to get run info
-         (prev-tests-dat    (dboard:get-tests-dat tabdat prev-run-id last-update)) ;; does query to get run info
+	 (dest-tests-dat    (dboard:get-tests-dat tabdat curr-run-id last-update)) ;; does query to get run info
+         (src-tests-dat    (dboard:get-tests-dat tabdat prev-run-id last-update)) ;; does query to get run info
 
          ;;; STOPPED HERE
-         (tests-mindat (dcommon:minimize-test-data curr-tests-dat))  ;; reduces data for display
+         (dest-tests-mindat (dcommon:minimize-test-data dest-tests-dat))  ;; reduces data for display
+         (src-tests-mindat (dcommon:minimize-test-data src-tests-dat))  ;; reduces data for display
+         ;;(tests-mindat dest-tests-mindat)
+         (tests-mindat (dcommon:xor-tests-mindat src-tests-mindat dest-tests-mindat)) ;; TODO: flags for common, modified, new -- like meld
 	 (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
 	 (row-indices  (cadr indices))
 	 (col-indices  (car indices))
@@ -1733,6 +1733,7 @@ Misc
 
     (iup:vbox
      (iup:split
+      #:value 150
       (iup:vbox
        tb)
       run-matrix)
