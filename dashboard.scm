@@ -1172,18 +1172,14 @@ Misc
                            "None"))
          )
     
-    (print "BB> xor-ui-update HELLO" )
-    (print "BB> curr-runname="curr-runname)
-    (print "BB> prev-runname="prev-runname)
-    (print "BB> current-mode="current-mode)
     (case current-mode
       ((view-one-run)
        (iup:attribute-set! xor-src-runid-label "TITLE" "")
        (iup:attribute-set! xor-dest-runid-label "TITLE" ""))
       ((xor-two-runs)
-       (iup:attribute-set! xor-src-runid-label "TITLE" (conc " SRC: "curr-runname"  "))
-       (iup:attribute-set! xor-dest-runid-label "TITLE" (conc "DEST: "prev-runname"  ")))
-      (else (print "BB> WHA?"))
+       (iup:attribute-set! xor-src-runid-label "TITLE" (conc " SRC: "prev-runname"  "))
+       (iup:attribute-set! xor-dest-runid-label "TITLE" (conc "DEST: "curr-runname"  ")))
+      (else (print "BB> should never arrive here"))
       )))
 
 (define (dboard:runs-tree-browser commondat tabdat)
@@ -1214,9 +1210,7 @@ Misc
 
                                 (dboard:tabdat-run-name-set! tabdat curr-runname)
 
-                                (print "BB> before xor-ui-update")
                                 (dboard:xor-ui-update tabdat)
-                                (print "BB> after xor-ui-update")
 				(dboard:tabdat-view-changed-set! tabdat #t))
 			      (debug:print-error 5 *default-log-port* "tree-path->run-id returned non-number " run-id))))
 		      "treebox"))
@@ -1690,8 +1684,7 @@ Misc
                                  "temp-button-2"))
                               )))
              (set! xor-two-runs-button temp-button)
-             temp-button)
-
+              temp-button)
            (let ((temp-label
                   (iup:label "" #:size "125x15" #:fontsize "10" )))
              (dboard:tabdat-xor-src-runid-label-set! tabdat temp-label)
@@ -1700,13 +1693,8 @@ Misc
            (let ((temp-label
                   (iup:label "" #:size "125x15" #:fontsize "10")))
              (dboard:tabdat-xor-dest-runid-label-set! tabdat temp-label)
-             temp-label
-             )
-
-           
-           )
-          )
-
+             temp-label)))
+         
          (run-matrix (iup:matrix
 		      #:expand "YES"
 		      #:click-cb
@@ -1733,8 +1721,7 @@ Misc
     (iup:vbox
      (iup:split
       #:value 150
-      (iup:vbox
-       tb)
+      tb
       run-matrix)
      mode-selector)
     ))
