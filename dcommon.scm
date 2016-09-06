@@ -277,7 +277,7 @@
 	(let* ((test-id    (db:test-get-id hed)) ;; look at the tests-dat spec for locations
 	       (test-name  (db:test-get-testname hed))
 	       (item-path  (db:test-get-item-path hed))
-	       (state      (db:test-get-status hed))
+	       (state      (db:test-get-state hed))
 	       (status     (db:test-get-status hed))
 	       (newitem    (list test-name item-path (list test-id state status))))
 	  (if (null? tal)
@@ -316,16 +316,18 @@
   (let* ((src-hash (dcommon:tests-mindat->hash src-tests-mindat))
          (dest-hash (dcommon:tests-mindat->hash dest-tests-mindat))
          (all-keys
-          (sort 
+          (reverse (sort 
            (delete-duplicates
             (append (hash-table-keys src-hash) (hash-table-keys dest-hash)))
-           (lambda (a b)
-             (if (= -1 (string-compare3 (car a) (car b)))
-                 #t
-                 (if (= -1 (string-compare3 (cdr a) (cdr b)))
-                     #t
-                     #f))))))
-    (pretty-print all-keys)
+
+           (lambda (a b) 
+             (cond
+              ((< 0 (string-compare3 (car a) (car b))) #t)
+              ((> 0 (string-compare3 (car a) (car b))) #f)
+              ((< 0 (string-compare3 (cdr a) (cdr b))) #t)
+              (else #f)))
+
+           ))))
     (map ;; TODO: rename xor to delta globally in dcommon and dashboard
      (lambda (key)
        (let* ((test-name (car key))
@@ -345,11 +347,11 @@
 
               (dest-complete
                (and dest-value dest-state dest-status
-                    (equal? dest-state "COMPLETE")
+                    (equal? dest-state "COMPLETED")
                     (not (member dest-status incomplete-statuses))))
               (src-complete
                (and src-value src-state src-status
-                    (equal? src-state "COMPLETE")
+                    (equal? src-state "COMPLETED")
                     (not (member src-status incomplete-statuses))))
               (status-compare-result (dcommon:status-compare3 src-status dest-status))
               (xor-new-item
@@ -367,7 +369,7 @@
                 ((and
                   (equal? src-state dest-state)
                   (equal? src-status dest-status))
-                 (list dest-test-id  dest-state (conc "CLEAN:" dest-status) )) 
+                 (list dest-test-id  (conc "CLEAN") (conc "CLEAN-" dest-status) )) 
                 ;;    better or worse: pass > warn > waived > skip > fail > abort
                 ;;     pass > warn > waived > skip > fail > abort
                 

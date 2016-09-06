@@ -43,6 +43,11 @@
     ;;		  (equal? status "WAIVED"))
     ;;	      (list "255 172 13" status)
     ;;	      (list "223 33 49"  status)))) ;; greenish orangeish redish
+
+    ((CLEAN)       (list "60  235 63" status))
+    ((DIRTY-BETTER)     (list "160  255 153" status))
+    ((DIRTY-WORSE)      (list "165 42  42" status))
+    ((BOTH-BAD)         (list "253 33 49" state))
     ((LAUNCHED)         (list "101 123 142"  state))
     ((CHECK)            (list "255 100 50"   state))
     ((REMOTEHOSTSTART)  (list "50 130 195"   state))

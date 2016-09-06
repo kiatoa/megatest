@@ -1503,7 +1503,6 @@ Misc
 
 
 (define (dashboard:xor-two-runs-updater commondat tabdat tb cell-lookup run-matrix )
-  (print "BB> HeLLooo from xor-two-runs-updater")
   (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
          (prev-run-id       (dboard:tabdat-prev-run-id tabdat))
