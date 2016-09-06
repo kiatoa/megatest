@@ -88,6 +88,7 @@
 	  (setenv "MT_RUNNAME" runname)
 	  (debug:print-error 0 *default-log-port* "no value for runname for id " run-id)))
     (setenv "MT_RUN_AREA_HOME" *toppath*)
+    (setenv "MT_TESTSUITENAME" (common:get-testsuite-name))
     ;; if a testname and itempath are available set the remaining appropriate variables
     (if testname (setenv "MT_TEST_NAME" testname))
     (if itempath (setenv "MT_ITEMPATH"  itempath))

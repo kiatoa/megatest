@@ -14,7 +14,7 @@
 ;;======================================================================
 
 (require-extension (srfi 18) extras tcp)
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking z3)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking z3 typed-records)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -77,14 +77,16 @@
 			 )))
 	  dbdat))))
 
+(defstruct db:dbdat db path writeable)
+
 (define (db:dbdat-get-db dbdat)
-  (if (pair? dbdat)
-      (car dbdat)
+  (if (db:dbdat? dbdat)
+      (db:dbdat-db dbdat)
       dbdat))
 
 (define (db:dbdat-get-path dbdat)
-  (if (pair? dbdat)
-      (cdr dbdat)
+  (if (db:dbdat? dbdat)
+      (db:dbdat-path dbdat)
       #f))
 
 ;; mod-read:
@@ -171,7 +173,7 @@
 
 ;; open an sql database inside a file lock
 ;;
-;; returns: db existed-prior-to-opening
+;; returns: db:dbdat record <db existed-prior-to-opening
 ;;
 (define (db:lock-create-open fname initproc)
   ;; (if (file-exists? fname)
@@ -185,17 +187,25 @@
 	 (file-write   (if file-exists
 			   (file-write-access? fname)
 			   dir-writable )))
-    (if file-write ;; dir-writable
-	(let (;; (lock    (obtain-dot-lock fname 1 5 10))
-	      (db      (sqlite3:open-database fname)))
-	  (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-	  (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
-	  (if (not file-exists)(initproc db))
-	  ;; (release-dot-lock fname)
-	  db)
-	(begin
-	  (debug:print 2 *default-log-port* "WARNING: opening db in non-writable dir " fname)
-	  (sqlite3:open-database fname))))) ;; )
+    (make-db:dbdat
+     db:
+     (if file-write ;; dir-writable or db writeable
+	 (let (;; (lock    (obtain-dot-lock fname 1 5 10))
+	       (db      (sqlite3:open-database fname)))
+	   (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
+	   (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
+	   (if (and initproc (not file-exists))
+	       (initproc db))
+	   ;; (release-dot-lock fname)
+	   db)
+	 (begin
+	   (debug:print 2 *default-log-port* "WARNING: opening db in non-writable dir " fname)
+	   (sqlite3:open-database 
+	    (if file-exists
+		fname
+		":memory:"))))
+     writeable: file-write
+     )))
 
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
@@ -242,7 +252,7 @@
 		 )
 	    (if (and dbexists (not write-access))
 		(set! *db-write-access* #f)) ;; only unset so other db's also can use this control
-	    (dbr:dbstruct-set-rundb!  dbstruct (cons db dbpath))
+	    (dbr:dbstruct-set-rundb!  dbstruct db) ;; (cons db dbpath))
 	    (dbr:dbstruct-set-inuse!  dbstruct #t)
 	    (dbr:dbstruct-set-olddb!  dbstruct olddb)
 	    ;; (dbr:dbstruct-set-run-id! dbstruct run-id)
@@ -298,9 +308,11 @@
 ;; Open the classic megatest.db file in toppath
 ;;
 (define (db:open-megatest-db)
-  (let* ((dbpath       (conc *toppath* "/megatest.db"))
+  (let* ((dbfile       (conc *toppath* "/megatest.db"))
+	 (dbpath       *toppath*)
+	 (dir-writable (file-write-access? dbpath))
 	 (dbexists     (file-exists? dbpath))
-	 (db           (db:lock-create-open dbpath
+	 (db           (db:lock-create-open dbfile
 					    (lambda (db)
 					      (db:initialize-main-db db)
 					      (db:initialize-run-id-db db))))

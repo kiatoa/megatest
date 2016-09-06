@@ -754,6 +754,7 @@
 		    (debug:print-error 0 *default-log-port* "you are not in a megatest area!")
 		    (exit 1)))
 	      (setenv "MT_RUN_AREA_HOME" *toppath*)
+	      (setenv "MT_TESTSUITENAME" (common:get-testsuite-name))
 	      ;; the seed read is done, now read runconfigs, cache it then read megatest.config one more time and cache it
 	      (let* ((keys         (rmt:get-keys))
 		     (key-vals     (keys:target->keyval keys target))
@@ -799,9 +800,10 @@
     ;; additional house keeping
     (let* ((linktree (or (getenv "MT_LINKTREE")
 			 (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f))))
-      (if linktree
+      (if (string? linktree)
 	  (begin
-	    (if (not (file-exists? linktree))
+	    (if (and (not (file-exists? linktree))
+		     (file-write-access? (pathname-directory linktree)))
 		(begin
 		  (handle-exceptions
 		   exn
@@ -810,6 +812,7 @@
 		     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 		     (exit 1))
 		   (create-directory linktree #t))))
+	    ;; now create the lt link in MT_RUN_AREA_HOME
 	    (handle-exceptions
 	     exn
 	     (begin
@@ -817,13 +820,16 @@
 	       (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn)))
 	     (let ((tlink (conc *toppath* "/lt")))
 	       (if (not (file-exists? tlink))
-		   (create-symbolic-link linktree tlink)))))
+		   (if (file-write-access? *toppath*)
+		       (create-symbolic-link linktree tlink))))))
 	  (begin
 	    (debug:print-error 0 *default-log-port* "linktree not defined in [setup] section of megatest.config")
 	    )))
     (if (and *toppath*
 	     (directory-exists? *toppath*))
-	(setenv "MT_RUN_AREA_HOME" *toppath*)
+	(begin
+	  (setenv "MT_RUN_AREA_HOME" *toppath*)
+	  (setenv "MT_TESTSUITENAME" (common:get-testsuite-name)))
 	(begin
 	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")))
     *toppath*))

@@ -131,7 +131,9 @@
 ;;======================================================================
 
 (define (mt:process-triggers run-id test-id newstate newstatus)
-  (let* ((test-dat      (rmt:get-test-info-by-id run-id test-id)))
+  (let* ((test-dat      (rmt:get-test-info-by-id run-id test-id))
+	 (target        (rmt:get-target run-id))
+	 (run-name      (rmt:get-run-name-from-id run-id)))
     (if test-dat
 	(let* ((test-rundir   ;; (rmt:sdb-qry 'getstr ;; (filedb:get-path *fdb*
 		(db:test-get-rundir test-dat)) ;; ) ;; )
@@ -145,6 +147,8 @@
 		   (directory? test-rundir))
 	      (call-with-environment-variables
 	       (list (cons "MT_TEST_NAME" test-name)
+		     (cons "MT_RUNNAME"   run-name)
+		     (cons "MT_TARGET"    target)
 		     (cons "MT_TEST_RUN_DIR" test-rundir)
 		     (cons "MT_ITEMPATH"     (db:test-get-item-path test-dat)))
 	       (lambda ()

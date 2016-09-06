@@ -78,35 +78,40 @@
 (define (tasks:open-db #!key (numretries 4))
   (if *task-db*
       *task-db*
-      (handle-exceptions
-       exn
-       (if (> numretries 0)
-	   (begin
-	     (print-call-chain (current-error-port))
-	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 *default-log-port* " exn=" (condition->list exn))
-	     (thread-sleep! 1)
-	     (tasks:open-db numretries (- numretries 1)))
-	   (begin
-	     (print-call-chain (current-error-port))
-	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 *default-log-port* " exn=" (condition->list exn))))
-       (let* ((dbpath       (tasks:get-task-db-path))
-	      (dbfile       (conc dbpath "/monitor.db"))
+      (let* ((dbpath       (tasks:get-task-db-path))
+	     (dbfile       (conc dbpath "/monitor.db")))
+	(handle-exceptions
+	 exn
+	 ;; (if (> numretries 0)
+	 (begin
+	   (print-call-chain (current-error-port))
+	   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print 0 *default-log-port* " exn=" (condition->list exn))
+	   (debug:print 0 *default-log-port* "ERROR: fatal problem accessing file: " dbfile)
+	   (exit 1))
+;; 	     (thread-sleep! 1)
+;; 	     (tasks:open-db numretries (- numretries 1)))
+;; 	   (begin
+;; 	     (print-call-chain (current-error-port))
+;; 	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+;; 	     (debug:print 0 *default-log-port* " exn=" (condition->list exn))))
+       (let* (
 	      (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
-	      (exists       (file-exists? dbpath))
+	      (exists       (file-exists? dbfile))
 	      (write-access (file-write-access? dbpath))
-	      (mdb          (cond ;; what the hek is *toppath* doing here?
-			     ((and (string? *toppath*)(file-write-access? *toppath*))
-			      (sqlite3:open-database dbfile))
-			     ((file-read-access? dbpath)    (sqlite3:open-database dbfile))
-			     (else (sqlite3:open-database ":memory:")))) ;; (never-give-up-open-db dbpath))
+	      (mdb          (db:lock-create-open dbfile #f))
+	      (db           (db:dbdat-db mdb))
+	      ;; (cond 
+	      ;;   	     ;; if db exists and readable or directory writeable, open the real db
+	      ;;   	     ((or (and dbpath write-access)(and dbpath exists))
+	      ;;   	      (sqlite3:open-database dbfile))
+	      ;;   	     (else (sqlite3:open-database ":memory:")))) ;; (never-give-up-open-db dbpath))
 	      (handler      (make-busy-timeout 36000)))
 	 (if (and exists
 		  (not write-access))
 	     (set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
-	 (sqlite3:set-busy-handler! mdb handler)
-	 (db:set-sync mdb) ;; (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
+	 (sqlite3:set-busy-handler! db handler)
+	 (db:set-sync db) ;; (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
 	 ;;  (if (or (and (not exists)
 	 ;; 	      (file-write-access? *toppath*))
 	 ;; 	 (not (file-read-access? dbpath)))
@@ -125,14 +130,14 @@
          ;;                        params TEXT,
          ;;                        creation_time TIMESTAMP,
          ;;                        execution_time TIMESTAMP);")
-	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
+	 (sqlite3:execute db "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
                                 pid INTEGER,
                                 start_time TIMESTAMP,
                                 last_update TIMESTAMP,
                                 hostname TEXT,
                                 username TEXT,
                                CONSTRAINT monitors_constraint UNIQUE (pid,hostname));")
-	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY,
+	 (sqlite3:execute db "CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY,
                                   pid INTEGER,
                                   interface TEXT,
                                   hostname TEXT,
@@ -146,7 +151,7 @@
                                   transport TEXT,
                                   run_id INTEGER);")
 	 ;;                               CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
-	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
+	 (sqlite3:execute db "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
                                   server_id INTEGER,
                                   pid INTEGER,
                                   hostname TEXT,
@@ -156,8 +161,8 @@
                                 CONSTRAINT clients_constraint UNIQUE (pid,hostname));")
 	       
 	       ;))
-	 (set! *task-db* (cons mdb dbpath))
-	 *task-db*))))
+	 (set! *task-db* mdb) ;; (db:dbdat(cons mdb dbpath))
+	 *task-db*)))))
 
 ;;======================================================================
 ;; Server and client management
@@ -341,7 +346,7 @@
      (sqlite3:for-each-row
       (lambda (id interface port pubport transport pid hostname)
 	(set! res (vector id interface port pubport transport pid hostname)))
-      mdb
+      (db:dbdat-db mdb)
       ;; removed:
       ;; strftime('%s','now')-heartbeat < 10 AND mt_version = ?
       "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
@@ -354,7 +359,7 @@
     (sqlite3:for-each-row
      (lambda (id)
        (set! res id))
-     mdb ;; NEEDS dbprep ADDED
+     (db:dbdat-db mdb) ;; NEEDS dbprep ADDED
      "SELECT id FROM servers WHERE run_id=? AND (state = 'running' OR (state = 'dbprep' AND  (strftime('%s','now') - start_time) < 60));" run-id)
     res))
 
@@ -363,7 +368,7 @@
     (sqlite3:for-each-row
      (lambda (id)
        (set! res id))
-     mdb ;; NEEDS dbprep ADDED
+     (db:dbdat-db mdb) ;; NEEDS dbprep ADDED
      "SELECT id FROM servers WHERE run_id=? AND state = 'running';" run-id)
     res))
 
@@ -406,7 +411,7 @@
      (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id)
        ;;                       0  1     2         3      4     5          6        7     8          9          10        11     12
        (set! res (cons (vector id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id) res)))
-     mdb
+     (db:dbdat-db mdb)
      "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update,transport,run_id 
         FROM servers WHERE state NOT LIKE 'defunct%' ORDER BY start_time DESC;")
     res))
@@ -417,7 +422,7 @@
      (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id)
        ;;                       0  1     2         3      4     5          6        7     8          9          10        11     12
        (set! res (cons (vector id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id) res)))
-     mdb
+     (db:dbdat-db mdb)
      "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update,transport,run_id 
         FROM servers WHERE run_id=? AND state NOT LIKE 'defunct%' ORDER BY start_time DESC;"
      run-id)
@@ -455,7 +460,8 @@
 ;;======================================================================
 
 (define (tasks:remove-monitor-record mdb)
-  (sqlite3:execute mdb "DELETE FROM monitors WHERE pid=? AND hostname=?;"
+  (sqlite3:execute (db:dbdat-db mdb)
+		   "DELETE FROM monitors WHERE pid=? AND hostname=?;"
 		   (current-process-id)
 		   (get-host-name)))
 
@@ -464,7 +470,7 @@
     (sqlite3:for-each-row
      (lambda (a . rem)
        (set! res (cons (apply vector a rem) res)))
-     mdb
+     (db:dbdat-db mdb)
      "SELECT id,pid,strftime('%m/%d/%Y %H:%M',datetime(start_time,'unixepoch'),'localtime'),strftime('%m/%d/%Y %H:%M:%S',datetime(last_update,'unixepoch'),'localtime'),hostname,username FROM monitors ORDER BY last_update ASC;")
     (reverse res)
     ))
@@ -487,7 +493,7 @@
 ;; update the last_update field with the current time and
 ;; if any monitors appear dead, remove them
 (define (tasks:monitors-update mdb)
-  (sqlite3:execute mdb "UPDATE monitors SET last_update=strftime('%s','now') WHERE pid=? AND hostname=?;"
+  (sqlite3:execute (db:dbdat-db mdb) "UPDATE monitors SET last_update=strftime('%s','now') WHERE pid=? AND hostname=?;"
 			  (current-process-id)
 			  (get-host-name))
   (let ((deadlist '()))
@@ -495,9 +501,9 @@
      (lambda (id pid host last-update delta)
        (print "Going to delete stale record for monitor with pid " pid " on host " host " last updated " delta " seconds ago")
        (set! deadlist (cons id deadlist)))
-     mdb 
+     (db:dbdat-db mdb)
      "SELECT id,pid,hostname,last_update,strftime('%s','now')-last_update AS delta FROM monitors WHERE delta > 700;")
-    (sqlite3:execute mdb (conc "DELETE FROM monitors WHERE id IN ('" (string-intersperse (map conc deadlist) "','") "');")))
+    (sqlite3:execute (db:dbdat-db mdb) (conc "DELETE FROM monitors WHERE id IN ('" (string-intersperse (map conc deadlist) "','") "');")))
   )
 (define (tasks:register-monitor db port)
   (let* ((pid (current-process-id))
@@ -513,7 +519,7 @@
     (sqlite3:for-each-row 
      (lambda (count)
        (set! res count))
-     mdb
+     (db:dbdat-db mdb)
      "SELECT count(id) FROM monitors WHERE last_update < (strftime('%s','now') - 300) AND username=?;"
      (car (user-information (current-user-id))))
     res))

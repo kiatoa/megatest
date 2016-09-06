@@ -529,7 +529,7 @@
     ;; (if res (set-environment-variable "MT_RUNNAME" res)) ;; not sure if this is a good idea. side effect and all ...
     res))
 
-(define (common:args-get-target #!key (split #f))
+(define (common:args-get-target #!key (split #f)(run-dat #f))
   (let* ((keys    (if (hash-table? *configdat*) (keys:config-get-fields *configdat*) '()))
 	 (numkeys (length keys))
 	 (target  (or (args:get-arg "-reqtarg")
