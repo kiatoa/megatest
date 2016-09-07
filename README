@@ -1,0 +1,9 @@
+Megatest 
+
+To build:
+
+1. Install chicken scheme. See utils/Makefile.installall
+
+2. Compile with "make -j install PREFIX=/some/path"
+
+3. To test ....
