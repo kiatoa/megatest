@@ -252,10 +252,10 @@ readline-fix.scm :
 altdb.scm :
 	echo ";; optional alternate db setup" > altdb.scm
 	echo "(define *available-db* (make-hash-table))" >> altdb.scm
-	if  csi -ne '(use mysql-client)';then \
+	if  `csi -ne '(use mysql-client)' > /dev/null 2>&1`;then \
            echo "(use mysql-client)(hash-table-set! *available-db* 'mysql #t)" >> altdb.scm; \
 	fi
-	if csi -ne '(use postgresql)';then \
+	if `csi -ne '(use postgresql)' > /dev/null 2>&1`;then \
 	   echo "(use postgresql)(hash-table-set! *available-db* 'postgresql #t)" >> altdb.scm;\
 	fi
 
