@@ -173,7 +173,7 @@ Misc
   ((last-data-update  0)                 : number)      ;; last time the data in allruns was updated
   (runs-mutex         (make-mutex))                     ;; use to prevent parallel access to draw objects
   ((run-update-times  (make-hash-table)) : hash-table)  ;; update times indexed by run-id
-  (last-test-dat      #f)                               ;; cache last tests dat
+  ((last-test-dat      (make-hash-table)) : hash-table)  ;; cache last tests dat by run-id
   ((run-db-paths      (make-hash-table)) : hash-table)  ;; cache the paths to the run db files
 
   ;; Runs view
@@ -1228,6 +1228,7 @@ Misc
 		      (lambda ()
 			(let* ((run-path (tree:node->path obj id))
 			       (run-id    (tree-path->run-id tabdat (cdr run-path))))
+                          ;; (dboard:tabdat-view-changed-set! tabdat #t) ;; ?? done below when run-id is a number
 			  (dboard:tabdat-target-set! tabdat (cdr run-path)) ;; (print "run-path: " run-path)			    
 			  (dboard:tabdat-layout-update-ok-set! tabdat #f)
 			  (if (number? run-id)
@@ -1429,9 +1430,10 @@ Misc
 			     db-pth)))
 	 (tests-dat    (if (or (not run-id)
 			       (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
+                               (not (hash-table-exists? (dboard:tabdat-last-test-dat tabdat) run-id))
 			       (>= (file-modification-time db-path) last-update))
 			   (dboard:get-tests-dat tabdat run-id last-update)
-			   (dboard:tabdat-last-test-dat  tabdat)))
+			   (hash-table-ref (dboard:tabdat-last-test-dat tabdat) run-id)))
 	 (tests-mindat (dcommon:minimize-test-data tests-dat))
 	 (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
 	 (row-indices  (cadr indices))
@@ -1447,7 +1449,7 @@ Misc
 				     (hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
 				   (vector-ref runs-dat 1))
 			 ht)))
-    (dboard:tabdat-last-test-dat-set! tabdat tests-dat)
+    (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id tests-dat)
     (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- (current-seconds) 10))
     (dboard:tabdat-filters-changed-set! tabdat #f)
     (let loop ((pass-num 0)
@@ -1600,9 +1602,17 @@ Misc
 			       (test-id  (hash-table-ref/default cell-lookup key -1))
 			       (cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id "&")))
 			  (system cmd)))))
-	 (one-run-updater  (lambda ()
-			     (if  (dashboard:database-changed? commondat tabdat)
-				  (dashboard:one-run-updater commondat tabdat tb cell-lookup run-matrix)))))
+	 (one-run-updater  
+          (lambda ()
+            (when (not run-matrix)
+              (print "BB> What?? run-matrix is #f"))
+            (if  (or (dashboard:database-changed? commondat tabdat)
+                     (dboard:tabdat-view-changed tabdat))
+                 (debug:catch-and-dump
+                  (lambda ()
+                    (dashboard:one-run-updater commondat tabdat tb cell-lookup run-matrix))
+                  "dashboard:one-run-updater")
+                 ))))
     (dboard:commondat-add-updater commondat one-run-updater tab-num: tab-num)
     (dboard:tabdat-runs-tree-set! tabdat tb)
     (iup:vbox
@@ -2117,8 +2127,6 @@ Misc
 (define-inline (dashboard:px-between px lx1 lx2)
   (and (< lx1 px)(> lx2 px)))
 
-(define (dashboard:summary-tab-updater commondat tab-num)
-  (if dashboard:update-summary-tab (dashboard:update-summary-tab)))
 ;; can a bar be placed in row "rownum" covering x1 to x2 without overlapping with existing 
 ;; bars? Use num-rows to check that a block will fit from rownum to (+ rownum num-rows)
 ;;
