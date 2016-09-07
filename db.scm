@@ -177,8 +177,8 @@
     (sqlite3:execute db (conc "PRAGMA synchronous = " (or syncprag 1) ";")))) ;; RADT => advantage of PRAGMA here??
 
 ;; open an sql database inside a file lock
-;;
 ;; returns: db existed-prior-to-opening
+;; RA => Returns a db handler; sets the lock if opened in writable mode
 ;;
 (define (db:lock-create-open fname initproc)
   ;; (if (file-exists? fname)
