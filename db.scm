@@ -267,9 +267,9 @@
 ;; This routine creates the db. It is only called if the db is not already ls opened
 ;;
 (define (db:open-main dbstruct) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-  (let ((mdb (dbr:dbstruct-get-main dbstruct)))
-    (if mdb
-	mdb
+  (let ((megatest-db (dbr:dbstruct-get-main dbstruct)))
+    (if megatest-db
+	megatest-db
 	(begin
 	  (mutex-lock! *rundb-mutex*)
 	  (let* ((dbpath       (db:dbfile-path 0))
@@ -367,11 +367,11 @@
 	  (dbr:dbstruct-set-main! dbstruct #f)))))
 
 (define (db:close-run-db dbstruct run-id)
-  (let ((rdb (db:open-rundb dbstruct run-id do-not-open: #t)))
-    (if (and rdb
-	     (sqlite3:database? rdb))
+  (let ((run-db (db:open-rundb dbstruct run-id do-not-open: #t)))
+    (if (and run-db
+	     (sqlite3:database? run-db))
 	(begin
-	  (sqlite3:finalize! rdb)
+	  (sqlite3:finalize! run-db)
 	  (dbr:dbstruct-set-localdb! dbstruct run-id #f)
 	  (dbr:dbstruct-set-inmem! dbstruct #f)))))
 
@@ -707,13 +707,13 @@
 (define (db:multi-db-sync run-ids . options)
   (let* ((toppath  (launch:setup))
 	 (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
-	 (mtdb     (if toppath (db:open-megatest-db)))
+	 (megatest-db     (if toppath (db:open-megatest-db)))
 	 (allow-cleanup (if run-ids #f #t))
 	 (run-ids  (if run-ids 
 		       run-ids
 		       (if toppath (begin
-				     (db:delay-if-busy mtdb)
-				     (db:get-all-run-ids mtdb)))))
+				     (db:delay-if-busy megatest-db)
+				     (db:get-all-run-ids megatest-db)))))
 	 (tdbdat  (tasks:open-db))
 	 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat))))
     
@@ -729,25 +729,25 @@
     ;;
     (if (member 'dejunk options)
 	(begin
-	  (db:delay-if-busy mtdb)
-	  (db:clean-up mtdb)))
+	  (db:delay-if-busy megatest-db)
+	  (db:clean-up megatest-db)))
 
     ;; adjust test-ids to fit into proper range
     ;;
     (if (member 'adj-testids options)
 	(begin
-	  (db:delay-if-busy mtdb)
-	  (db:prep-megatest.db-for-migration mtdb)))
+	  (db:delay-if-busy megatest-db)
+	  (db:prep-megatest.db-for-migration megatest-db)))
 
     ;; sync runs, test_meta etc.
     ;;
     (if (member 'old2new options)
 	(begin
-	  (db:sync-tables (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
+	  (db:sync-tables (db:sync-main-list megatest-db) megatest-db (db:get-db dbstruct #f))
 	  (for-each 
 	   (lambda (run-id)
-	     (db:delay-if-busy mtdb)
-	     (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id))
+	     (db:delay-if-busy megatest-db)
+	     (let ((testrecs (db:get-all-tests-info-by-run-id megatest-db run-id))
 		   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
 	       (debug:print 0 *default-log-port* "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
 	       (db:replace-test-records dbstruct run-id testrecs)
@@ -775,7 +775,7 @@
 	       ;; (db:clean-up frundb)
 	       (if (eq? run-id 0)
 		   (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
-		     (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
+		     (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) megatest-db)
 		     (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f)))
 		     ;; 
 		     ;; Feb 18, 2016: add field last_update to runs table
@@ -815,7 +815,7 @@
 		     )
 		   (begin
 		     ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
-		     (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
+		     (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) megatest-db)
 		     (db:clean-up-rundb (db:get-db fromdb run-id))
 		     ;;
 		     ;; Feb 18, 2016: add field last_update to tests, test_steps and test_data
