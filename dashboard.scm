@@ -544,7 +544,7 @@ Misc
 	(dboard:rundat-last-update-set! run-dat (- (current-seconds) 2))) ;; go back two seconds in time to ensure all changes are captured.
 
     ;; (debug:print-info 0 *default-log-port* "tests-ht: " (hash-table-keys tests-ht))
-    tests-ht))
+    tests-ht)) ;; BB: key test-id, val=test record; 
 
 ;; tmptests   - new tests data
 ;; prev-tests - old tests data
@@ -1358,7 +1358,7 @@ Misc
       (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) path #f)
       #f))
 
-(define (dboard:get-tests-dat tabdat run-id last-update)
+(define (dboard:get-tests-dat tabdat run-id last-update) ;; BB: returns list of test records
   (let* ((tdat (if run-id (rmt:get-tests-for-run run-id 
 					     (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
 					     (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat))  ;; '()
@@ -1425,6 +1425,12 @@ Misc
   (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 	 (run-id       (dboard:tabdat-curr-run-id tabdat))
+	 (runs-hash    (let ((ht (make-hash-table)))
+			 (for-each (lambda (run)
+				     (hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
+				   (vector-ref runs-dat 1))
+			 ht))
+         (run          (hash-table-ref runs-hash run-id))
 	 (last-update  (hash-table-ref/default (dboard:tabdat-run-update-times tabdat) run-id 0))
 	 (db-path      (or (hash-table-ref/default (dboard:tabdat-run-db-paths tabdat) run-id #f)
 			   (let* ((db-dir (tasks:get-task-db-path))
@@ -1435,8 +1441,9 @@ Misc
 			       (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
                                (not (hash-table-exists? (dboard:tabdat-last-test-dat tabdat) run-id))
 			       (>= (file-modification-time db-path) last-update))
-			   (dboard:get-tests-dat tabdat run-id last-update)
+			   (dboard:get-tests-for-run-duplicate tabdat run-id run  last-update) ;; BB: replace with duplicate
 			   (hash-table-ref (dboard:tabdat-last-test-dat tabdat) run-id)))
+         
 	 (tests-mindat (dcommon:minimize-test-data tests-dat))
 	 (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
 	 (row-indices  (cadr indices))
@@ -1447,12 +1454,9 @@ Misc
 	 (numrows      1)
 	 (numcols      1)
 	 (changed      #f)
-	 (runs-hash    (let ((ht (make-hash-table)))
-			 (for-each (lambda (run)
-				     (hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
-				   (vector-ref runs-dat 1))
-			 ht)))
-    (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id tests-dat)
+         )
+    ;; BB: could potentially remove following if get-tests-dat-duplicate is fast enough
+    (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id tests-dat) 
     (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- (current-seconds) 10))
     (dboard:tabdat-filters-changed-set! tabdat #f)
     (let loop ((pass-num 0)
