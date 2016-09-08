@@ -78,7 +78,7 @@ $(OFILES) $(GOFILES) : common_records.scm
 %.o : %.scm
 	csc $(CSCOPTS) -c $<
 
-$(PREFIX)/bin/.$(ARCHSTR)/mtest : mtest utils/mk_wrapper
+$(PREFIX)/bin/.$(ARCHSTR)/mtest : mtest
 	@echo Installing to PREFIX=$(PREFIX)
 	$(INSTALL) mtest $(PREFIX)/bin/.$(ARCHSTR)/mtest
 	utils/mk_wrapper $(PREFIX) mtest $(PREFIX)/bin/megatest
@@ -87,14 +87,14 @@ $(PREFIX)/bin/.$(ARCHSTR)/mtest : mtest utils/mk_wrapper
 $(PREFIX)/bin/.$(ARCHSTR)/ndboard : ndboard
 	$(INSTALL) ndboard $(PREFIX)/bin/.$(ARCHSTR)/ndboard
 
-$(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard utils/mk_wrapper
+$(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard
 	utils/mk_wrapper $(PREFIX) ndboard $(PREFIX)/bin/newdashboard
 	chmod a+x $(PREFIX)/bin/newdashboard
 
 $(PREFIX)/bin/.$(ARCHSTR)/mdboard : multi-dboard
 	$(INSTALL) multi-dboard $(PREFIX)/bin/.$(ARCHSTR)/mdboard
 
-$(PREFIX)/bin/mdboard : $(PREFIX)/bin/.$(ARCHSTR)/mdboard  utils/mk_wrapper
+$(PREFIX)/bin/mdboard : $(PREFIX)/bin/.$(ARCHSTR)/mdboard
 	utils/mk_wrapper $(PREFIX) mdboard $(PREFIX)/bin/mdboard
 	chmod a+x $(PREFIX)/bin/mdboard
 
@@ -144,7 +144,7 @@ deploytarg/nbfind : utils/nbfind
 
 
 # install dashboard as dboard so wrapper script can be called dashboard
-$(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
+$(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES)
 	utils/mk_wrapper $(PREFIX) dboard $(PREFIX)/bin/dashboard
 	chmod a+x $(PREFIX)/bin/dashboard
 	$(INSTALL) dboard $(PREFIX)/bin/.$(ARCHSTR)/dboard
@@ -252,10 +252,10 @@ readline-fix.scm :
 altdb.scm :
 	echo ";; optional alternate db setup" > altdb.scm
 	echo "(define *available-db* (make-hash-table))" >> altdb.scm
-	if  `csi -ne '(use mysql-client)' > /dev/null 2>&1`;then \
+	if  csi -ne '(use mysql-client)';then \
            echo "(use mysql-client)(hash-table-set! *available-db* 'mysql #t)" >> altdb.scm; \
 	fi
-	if `csi -ne '(use postgresql)' > /dev/null 2>&1`;then \
+	if csi -ne '(use postgresql)';then \
 	   echo "(use postgresql)(hash-table-set! *available-db* 'postgresql #t)" >> altdb.scm;\
 	fi
 
