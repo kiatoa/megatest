@@ -26,27 +26,6 @@ fi
 # fi
 # echo "exec $prefix/bin/.\$(lsb_release -sr)/$cmd \"\$@\"" >> $target
 echo "#!/bin/bash" > $target
-
-if [[ $cmd =~ dboard ]]; then
-    cat >> $target <<'EOF'
-
-# check that $DISPLAY is set
-if [[ -z $DISPLAY ]]; then
-   echo 'ERROR: $DISPLAY environment variable is not set; megatest dashboard requires X display address to be set in $DISPLAY.'
-   exit 1
-fi
-
-# check that $DISPLAY is proper
-if [[ -x $(which xdpyinfo  2>/dev/null) ]]; then
-  if ! xdpyinfo -display "$DISPLAY" &>/dev/null; then
-    echo 'ERROR: megatest dashboard cannot open display "'$DISPLAY'".  Please check $DISPLAY environment variable.'
-    exit 1
-  fi
-fi
-EOF
-
-fi
-
 echo "lsbr=\$(lsb_release -sr)" >> $target
 echo "if [[ -e \$lsbr ]];then source \$lsbr;fi" >> $target
 echo "exec $prefix/bin/.\$lsbr/$cmd \"\$@\"" >> $target
