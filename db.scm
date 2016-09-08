@@ -861,6 +861,8 @@
     ))
 
 ;; keeping it around for debugging purposes only
+;; idb = incoming db
+;;
 (define (open-run-close-no-exception-handling  proc idb . params)
   (debug:print-info 11 *default-log-port* "open-run-close-no-exception-handling START given a db=" (if idb "yes " "no ") ", params=" params)
   (if (or *db-write-access*
