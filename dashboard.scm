@@ -101,26 +101,15 @@ Misc
 ;; data common to all tabs goes here
 ;;
 (defstruct dboard:commondat
-  curr-tab-num
-  please-update  
-  tabdats
-  update-mutex
-  updaters 
-  updating
+  ((curr-tab-num   0)                 : number)
+  ((tabdats        (make-hash-table)) : hash-table)
+  ;; ((update-mutex   (make-mutex))      : mutex)
+  (update-mutex   (make-mutex))
+  ((updaters       (make-hash-table)) : hash-table)
+  ((updating       #f)                : boolean)
   uidat ;; needs to move to tabdat at some time
-  hide-not-hide-tabs
+  ((hide-not-hide-tabs #f)            : boolean)
   )
-
-(define (dboard:commondat-make)
-  (make-dboard:commondat
-   curr-tab-num:         0
-   tabdats:              (make-hash-table)
-   please-update:        #t
-   update-mutex:         (make-mutex)
-   updaters:             (make-hash-table)
-   updating:             #f
-   hide-not-hide-tabs:   #f
-   ))
 
 (define (dboard:common-get-tabdat commondat #!key (tab-num #f))
   (hash-table-ref/default 
@@ -173,6 +162,7 @@ Misc
   ((last-data-update  0)                 : number)      ;; last time the data in allruns was updated
   (runs-mutex         (make-mutex))                     ;; use to prevent parallel access to draw objects
   ((run-update-times  (make-hash-table)) : hash-table)  ;; update times indexed by run-id
+  ((please-update     #t)                : boolean)     ;; was in commondat.
   (last-test-dat      #f)                               ;; cache last tests dat
   ((run-db-paths      (make-hash-table)) : hash-table)  ;; cache the paths to the run db files
 
@@ -472,7 +462,7 @@ Misc
 ;;    NOTE: Yes, this is used
 ;;
 (define (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)
-  (let* ((num-to-get  20)
+  (let* ((num-to-get  100)
 	 (states      (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
 	 (statuses    (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)))
 	 (sort-info   (get-curr-sort))
@@ -919,9 +909,12 @@ Misc
   (dboard:tabdat-filters-changed-set! tabdat #t)
   (set-bg-on-filter commondat tabdat))
 
-(define (mark-for-update tabdat)
+(define (mark-for-update update-mutex tabdat)
+  (mutex-lock! update-mutex)
   (dboard:tabdat-filters-changed-set! tabdat #t)
-  (dboard:tabdat-last-db-update-set! tabdat 0))
+  (dboard:tabdat-last-db-update-set! tabdat 0)
+  (dboard:tabdat-please-update-set! tabdat #t)
+  (mutex-unlock! update-mutex))
 
 ;;======================================================================
 ;; R U N C O N T R O L
@@ -1217,7 +1210,8 @@ Misc
  ;;	 logs-tb))
 
 (define (dboard:runs-tree-browser commondat tabdat)
-  (let* ((tb      (iup:treebox
+  (let* ((update-mutex (dboard:commondat-update-mutex commondat))
+	 (tb      (iup:treebox
 		   #:value 0
 		   #:name "Runs"
 		   #:expand "YES"
@@ -1228,10 +1222,11 @@ Misc
 		      (lambda ()
 			(let* ((run-path (tree:node->path obj id))
 			       (run-id    (tree-path->run-id tabdat (cdr run-path))))
-			  (dboard:tabdat-target-set! tabdat (cdr run-path)) ;; (print "run-path: " run-path)			    
+			  (dboard:tabdat-target-set! tabdat (cdr run-path))
 			  (dboard:tabdat-layout-update-ok-set! tabdat #f)
 			  (if (number? run-id)
 			      (begin
+				(mark-for-update update-mutex tabdat)
 				(dboard:tabdat-curr-run-id-set! tabdat run-id)
 				(dboard:tabdat-view-changed-set! tabdat #t))
 			      (debug:print-error 5 *default-log-port* "tree-path->run-id returned non-number " run-id))))
@@ -1385,6 +1380,8 @@ Misc
 	(cadr res)
 	#f)))
 
+;; generic update of tree with targets, runs
+;;
 (define (dboard:update-tree tabdat runs-hash runs-header tb)
   (let* ((run-ids (sort (filter number? (hash-table-keys runs-hash))
 			(lambda (a b)
@@ -1416,7 +1413,9 @@ Misc
 			;; (set! colnum (+ colnum 1))
 			))))
 	      run-ids)))
-  
+
+;; Updater for the run summary view
+;;
 (define (dashboard:one-run-updater commondat tabdat tb cell-lookup run-matrix)
   (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
@@ -1429,6 +1428,7 @@ Misc
 			     db-pth)))
 	 (tests-dat    (if (or (not run-id)
 			       (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
+			       (dboard:tabdat-please-update tabdat)
 			       (>= (file-modification-time db-path) last-update))
 			   (dboard:get-tests-dat tabdat run-id last-update)
 			   (dboard:tabdat-last-test-dat  tabdat)))
@@ -1567,7 +1567,8 @@ Misc
 ;; This is the Run Summary tab
 ;; 
 (define (dashboard:one-run commondat tabdat #!key (tab-num #f))
-  (let* ((tb      (iup:treebox
+  (let* ((update-mutex (dboard:commondat-update-mutex commondat))
+	 (tb      (iup:treebox
 		   #:value 0
 		   #:name "Runs"
 		   #:expand "YES"
@@ -1581,6 +1582,7 @@ Misc
 			       (run-id   (tree-path->run-id tabdat (cdr run-path))))
 			  (if (number? run-id)
 			      (begin
+				(mark-for-update update-mutex tabdat)
 				(dboard:tabdat-curr-run-id-set! tabdat run-id)
 				(dboard:tabdat-layout-update-ok-set! tabdat #f)
 				;; (dashboard:update-run-summary-tab)
@@ -1601,8 +1603,8 @@ Misc
 			       (cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id "&")))
 			  (system cmd)))))
 	 (one-run-updater  (lambda ()
-			     (if  (dashboard:database-changed? commondat tabdat)
-				  (dashboard:one-run-updater commondat tabdat tb cell-lookup run-matrix)))))
+			     ;; (if  (dashboard:database-changed? commondat tabdat)
+			     (dashboard:one-run-updater commondat tabdat tb cell-lookup run-matrix))));; )
     (dboard:commondat-add-updater commondat one-run-updater tab-num: tab-num)
     (dboard:tabdat-runs-tree-set! tabdat tb)
     (iup:vbox
@@ -1616,7 +1618,8 @@ Misc
 ;;======================================================================
 
 (define (dboard:make-controls commondat tabdat)
-  (let ((btn-fontsz  (dboard:tabdat-runs-btn-fontsz tabdat)))
+  (let ((btn-fontsz  (dboard:tabdat-runs-btn-fontsz tabdat))
+	(update-mutex (dboard:commondat-update-mutex commondat)))
     (iup:hbox
      (iup:vbox
       (iup:frame 
@@ -1628,7 +1631,7 @@ Misc
 		      #:action (lambda (obj unk val)
 				 (debug:catch-and-dump
 				  (lambda ()
-				    (mark-for-update tabdat)
+				    (mark-for-update update-mutex tabdat)
 				    (update-search commondat tabdat "test-name" val))
 				  "make-controls")))
 	 (iup:hbox
@@ -1637,7 +1640,7 @@ Misc
 					     (exit))
 		      #:expand "NO" #:size "40x15")
 	  (iup:button "Refresh"   #:action (lambda (obj)
-					     (mark-for-update tabdat))
+					     (mark-for-update update-mutex tabdat))
 		      #:expand "NO" #:size "40x15")
 	  (iup:button "Collapse"  #:action (lambda (obj)
 					     (debug:catch-and-dump 
@@ -1654,7 +1657,7 @@ Misc
 								    (hash-table-delete! *collapsed* tname))
 								  (hash-table-keys *collapsed*))
 							(iup:attribute-set! obj "TITLE" "Collapse"))))
-						(mark-for-update tabdat))
+						(mark-for-update update-mutex tabdat))
 					      "make-controls collapse button"))
 		      #:expand "NO" #:size "40x15")))
 	(iup:vbox
@@ -1674,7 +1677,7 @@ Misc
 					 #:dropdown "YES"
 					 #:action (lambda (obj val index lbstate)
 						    (set! *tests-sort-reverse* index)
-						    (mark-for-update tabdat))))
+						    (mark-for-update update-mutex tabdat))))
 		(default-cmd (car (list-ref *tests-sort-type-index* *tests-sort-reverse*))))
 	   (iuplistbox-fill-list sort-lb cmds-list selected-item: default-cmd)
 	   
@@ -1684,7 +1687,7 @@ Misc
 					#:action (lambda (obj)
 						   (dboard:tabdat-hide-empty-runs-set! tabdat (not (dboard:tabdat-hide-empty-runs tabdat)))
 						   (iup:attribute-set! obj "TITLE" (if (dboard:tabdat-hide-empty-runs tabdat) "+HideE" "-HideE"))
-						   (mark-for-update tabdat))))
+						   (mark-for-update update-mutex tabdat))))
 	   (set! hide (iup:button "Hide"
 				  #:expand "NO" #:size "40x15" ;; #:expand "HORIZONTAL"
 				  #:action (lambda (obj)
@@ -1692,14 +1695,14 @@ Misc
 					     ;; (iup:attribute-set! obj "TITLE" (if (dboard:tabdat-hide-not-hide tabdat) "HideTests" "NotHide"))
 					     (iup:attribute-set! hide "BGCOLOR" sel-color)
 					     (iup:attribute-set! show "BGCOLOR" nonsel-color)
-					     (mark-for-update tabdat))))
+					     (mark-for-update update-mutex tabdat))))
 	   (set! show (iup:button "Show"
 				  #:expand "NO" #:size "40x15" ;; #:expand "HORIZONTAL"
 				  #:action (lambda (obj)
 					     (dboard:tabdat-hide-not-hide-set! tabdat #f) ;; (not (dboard:tabdat-hide-not-hide tabdat)))
 					     (iup:attribute-set! show "BGCOLOR" sel-color)
 					     (iup:attribute-set! hide "BGCOLOR" nonsel-color)
-					     (mark-for-update tabdat))))
+					     (mark-for-update update-mutex tabdat))))
 	   (iup:attribute-set! hide "BGCOLOR" sel-color)
 	   (iup:attribute-set! show "BGCOLOR" nonsel-color)
 	   ;; (dboard:tabdat-hide-not-hide-button-set! tabdat hideit) ;; never used, can eliminate ...
@@ -1717,7 +1720,7 @@ Misc
 			   #:fontsize btn-fontsz ;; "10"
 			   #:expand "HORIZONTAL"
 			   #:action   (lambda (obj val)
-					(mark-for-update tabdat)
+					(mark-for-update update-mutex tabdat)
 					(if (eq? val 1)
 					    (hash-table-set! (dboard:tabdat-status-ignore-hash tabdat) status #t)
 					    (hash-table-delete! (dboard:tabdat-status-ignore-hash tabdat) status))
@@ -1730,7 +1733,7 @@ Misc
 			   #:fontsize btn-fontsz
 			   #:expand "HORIZONTAL"
 			   #:action   (lambda (obj val)
-					(mark-for-update tabdat)
+					(mark-for-update update-mutex tabdat)
 					(if (eq? val 1)
 					    (hash-table-set! (dboard:tabdat-state-ignore-hash tabdat) state #t)
 					    (hash-table-delete! (dboard:tabdat-state-ignore-hash tabdat) state))
@@ -1741,7 +1744,7 @@ Misc
 					       (oldmax   (string->number (iup:attribute obj "MAX")))
 					       (maxruns  (dboard:tabdat-tot-runs tabdat)))
 					   (dboard:tabdat-start-run-offset-set! tabdat val)
-					   (mark-for-update tabdat)
+					   (mark-for-update update-mutex tabdat)
 					   (debug:print 6 *default-log-port* "(dboard:tabdat-start-run-offset tabdat) " (dboard:tabdat-start-run-offset tabdat) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
 					   (iup:attribute-set! obj "MAX" (* maxruns 10))))
 		     #:expand "HORIZONTAL"
@@ -1862,7 +1865,8 @@ Misc
 	 (i               0)
 	 (btn-height      (dboard:tabdat-runs-btn-height runs-dat))
 	 (btn-fontsz      (dboard:tabdat-runs-btn-fontsz runs-dat))
-	 (cell-width      (dboard:tabdat-runs-cell-width runs-dat)))
+	 (cell-width      (dboard:tabdat-runs-cell-width runs-dat))
+	 (update-mutex    (dboard:commondat-update-mutex commondat)))
     ;; controls (along bottom)
     ;; (set! controls (dboard:make-controls commondat runs-dat))
     
@@ -1875,7 +1879,7 @@ Misc
 							   (iup:label x #:size (conc 40 btn-height) #:fontsize btn-fontsz #:expand "NO") ;; "HORIZONTAL")
 							   (iup:textbox #:size (conc 35 btn-height) #:fontsize btn-fontsz #:value "%" #:expand "NO" ;; "HORIZONTAL"
 									#:action (lambda (obj unk val)
-										   (mark-for-update runs-dat)
+										   (mark-for-update update-mutex runs-dat)
 										   (update-search commondat runs-dat x val))))))
 					(set! i (+ i 1))
 					res))
@@ -1890,7 +1894,7 @@ Misc
 										       (let ((val (string->number (iup:attribute obj "VALUE")))
 											     (oldmax  (string->number (iup:attribute obj "MAX")))
 											     (newmax  (* 10 (length (dboard:tabdat-all-test-names runs-dat)))))
-											 (dboard:commondat-please-update-set! commondat #t)
+											  (mark-for-update update-mutex tabdat)
 											 (dboard:tabdat-start-test-offset-set! runs-dat (inexact->exact (round (/ val 10))))
 											 (debug:print 6 *default-log-port* "(dboard:tabdat-start-test-offset runs-dat) " (dboard:tabdat-start-test-offset runs-dat) " val: " val " newmax: " newmax " oldmax: " oldmax)
 											 (if (< val 10)
@@ -1911,7 +1915,7 @@ Misc
 				 #:expand  "HORIZONTAL"
 				 #:fontsize btn-fontsz
 				 #:action (lambda (obj)
-					    (mark-for-update runs-dat)
+					    (mark-for-update update-mutex runs-dat)
 					    (toggle-hide testnum (dboard:commondat-uidat commondat)))))) ;; (iup:attribute obj "TITLE"))))
 	  (vector-set! lftcol testnum labl)
 	  (loop (+ testnum 1)(cons labl res))))))
@@ -2017,7 +2021,7 @@ Misc
 					   (dboard:commondat-curr-tab-num-set! commondat curr)
 					   (let* ((tab-num (dboard:commondat-curr-tab-num commondat))
 						  (tabdat  (dboard:common-get-tabdat commondat tab-num: tab-num)))
-					     (dboard:commondat-please-update-set! commondat #t)
+					     (mark-for-update update-mutex tabdat)
 					     (dboard:tabdat-layout-update-ok-set! tabdat #t)))
 					 "tabchangepos"))
 		    (dashboard:summary commondat stats-dat tab-num: 0)
@@ -2108,8 +2112,8 @@ Misc
 (define (dashboard:database-changed? commondat tabdat)
   (let* ((run-update-time (current-seconds))
 	 (modtime         (dashboard:get-youngest-run-db-mod-time tabdat)) ;; NOTE: ensure this is tabdat!! 
-	 (recalc          (dashboard:recalc modtime (dboard:commondat-please-update commondat) (dboard:tabdat-last-db-update tabdat))))
-     (dboard:commondat-please-update-set! commondat #f)
+	 (recalc          (dashboard:recalc modtime (dboard:tabdat-please-update tabdat) (dboard:tabdat-last-db-update tabdat))))
+     (dboard:tabdat-please-update-set! tabdat #f)
      recalc))
 
 ;; point inside line
@@ -2758,7 +2762,7 @@ Misc
 
 (define (main)
   (if (not (args:get-arg "-skip-version-check"))(common:exit-on-version-changed))
-  (let* ((commondat       (dboard:commondat-make)))
+  (let* ((commondat       (make-dboard:commondat)))
     ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
     (cond 
      ((args:get-arg "-test") ;; run-id,test-id
