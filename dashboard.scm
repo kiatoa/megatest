@@ -1609,8 +1609,8 @@ Misc
             (if  (or (dashboard:database-changed? commondat tabdat)
                      (dboard:tabdat-view-changed tabdat))
                  (debug:catch-and-dump
-                  (lambda ()
-                    (dashboard:one-run-updater commondat tabdat tb cell-lookup run-matrix))
+                  (lambda () ;; check that run-matrix is initialized before calling the updater
+		    (if run-matrix (dashboard:one-run-updater commondat tabdat tb cell-lookup run-matrix)))
                   "dashboard:one-run-updater")
                  ))))
     (dboard:commondat-add-updater commondat one-run-updater tab-num: tab-num)
