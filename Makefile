@@ -78,7 +78,7 @@ $(OFILES) $(GOFILES) : common_records.scm
 %.o : %.scm
 	csc $(CSCOPTS) -c $<
 
-$(PREFIX)/bin/.$(ARCHSTR)/mtest : mtest
+$(PREFIX)/bin/.$(ARCHSTR)/mtest : mtest utils/mk_wrapper
 	@echo Installing to PREFIX=$(PREFIX)
 	$(INSTALL) mtest $(PREFIX)/bin/.$(ARCHSTR)/mtest
 	utils/mk_wrapper $(PREFIX) mtest $(PREFIX)/bin/megatest
@@ -87,14 +87,14 @@ $(PREFIX)/bin/.$(ARCHSTR)/mtest : mtest
 $(PREFIX)/bin/.$(ARCHSTR)/ndboard : ndboard
 	$(INSTALL) ndboard $(PREFIX)/bin/.$(ARCHSTR)/ndboard
 
-$(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard
+$(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard utils/mk_wrapper
 	utils/mk_wrapper $(PREFIX) ndboard $(PREFIX)/bin/newdashboard
 	chmod a+x $(PREFIX)/bin/newdashboard
 
 $(PREFIX)/bin/.$(ARCHSTR)/mdboard : multi-dboard
 	$(INSTALL) multi-dboard $(PREFIX)/bin/.$(ARCHSTR)/mdboard
 
-$(PREFIX)/bin/mdboard : $(PREFIX)/bin/.$(ARCHSTR)/mdboard
+$(PREFIX)/bin/mdboard : $(PREFIX)/bin/.$(ARCHSTR)/mdboard  utils/mk_wrapper
 	utils/mk_wrapper $(PREFIX) mdboard $(PREFIX)/bin/mdboard
 	chmod a+x $(PREFIX)/bin/mdboard
 
@@ -144,7 +144,7 @@ deploytarg/nbfind : utils/nbfind
 
 
 # install dashboard as dboard so wrapper script can be called dashboard
-$(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES)
+$(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 	utils/mk_wrapper $(PREFIX) dboard $(PREFIX)/bin/dashboard
 	chmod a+x $(PREFIX)/bin/dashboard
 	$(INSTALL) dboard $(PREFIX)/bin/.$(ARCHSTR)/dboard
