@@ -102,7 +102,7 @@ Misc
 ;; data common to all tabs goes here
 ;;
 (defstruct dboard:commondat
-  curr-tab-num
+  ((curr-tab-num 0) : number)
   please-update  
   tabdats
   update-mutex
@@ -1427,106 +1427,118 @@ Misc
   (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 	 (run-id       (dboard:tabdat-curr-run-id tabdat))
-	 (last-update  (hash-table-ref/default (dboard:tabdat-run-update-times tabdat) run-id 0))
-	 (db-path      (or (hash-table-ref/default (dboard:tabdat-run-db-paths tabdat) run-id #f)
-			   (let* ((db-dir (tasks:get-task-db-path))
-				  (db-pth (conc db-dir "/" run-id ".db")))
-			     (hash-table-set! (dboard:tabdat-run-db-paths tabdat) run-id db-pth)
-			     db-pth)))
-	 (tests-dat    (if (or (not run-id)
-			       (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
-                               (not (hash-table-exists? (dboard:tabdat-last-test-dat tabdat) run-id))
-			       (>= (file-modification-time db-path) last-update))
-			   (dboard:get-tests-dat tabdat run-id last-update)
-			   (hash-table-ref (dboard:tabdat-last-test-dat tabdat) run-id)))
-	 (tests-mindat (dcommon:minimize-test-data tests-dat))
-	 (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
-	 (row-indices  (cadr indices))
-	 (col-indices  (car indices))
-	 (max-row      (if (null? row-indices) 1 (common:max (map cadr row-indices))))
-	 (max-col      (if (null? col-indices) 1 (common:max (map cadr col-indices))))
-	 (max-visible  (max (- (dboard:tabdat-num-tests tabdat) 15) 3)) ;; (dboard:tabdat-num-tests tabdat) is proportional to the size of the window
-	 (numrows      1)
-	 (numcols      1)
-	 (changed      #f)
-	 (runs-hash    (let ((ht (make-hash-table)))
+         (runs-hash    (let ((ht (make-hash-table)))
 			 (for-each (lambda (run)
 				     (hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
 				   (vector-ref runs-dat 1))
 			 ht)))
-    (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id tests-dat)
-    (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- (current-seconds) 10))
-    (dboard:tabdat-filters-changed-set! tabdat #f)
-    (let loop ((pass-num 0)
-	       (changed  #f))
-      ;; Update the runs tree
-      (dboard:update-tree tabdat runs-hash runs-header tb)
-      
-      (if (eq? pass-num 1)
-	  (begin ;; big reset
-	    (iup:attribute-set! run-matrix "CLEARVALUE" "ALL") ;; NOTE: Was CONTENTS
-	    (iup:attribute-set! run-matrix "CLEARATTRIB" "CONTENTS")
-	    (iup:attribute-set! run-matrix "RESIZEMATRIX" "YES")
-	    (iup:attribute-set! run-matrix "NUMCOL" max-col )
-	    (iup:attribute-set! run-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)))) ;; min of 20
-      
-      ;; Row labels
-      (for-each (lambda (ind)
-		  (let* ((name (car ind))
-			 (num  (cadr ind))
-			 (key  (conc num ":0")))
-		    (if (not (equal? (iup:attribute run-matrix key) name))
-			(begin
-			  (set! changed #t)
-			  (iup:attribute-set! run-matrix key name)))))
-		row-indices)
-      
-      ;; (print "row-indices: " row-indices " col-indices: " col-indices)
-      (if (and (eq? pass-num 0) changed)
-	  (loop 1 #t)) ;; force second pass
-      
-      ;; Cell contents
-      (for-each (lambda (entry)
-		  ;; (print "entry: " entry)
-		  (let* ((row-name  (cadr entry))
-			 (col-name  (car entry))
-			 (valuedat  (caddr entry))
-			 (test-id   (list-ref valuedat 0))
-			 (test-name row-name) ;; (list-ref valuedat 1))
-			 (item-path col-name) ;; (list-ref valuedat 2))
-			 (state     (list-ref valuedat 1))
-			 (status    (list-ref valuedat 2))
-			 (value     (gutils:get-color-for-state-status state status))
-			 (row-num   (cadr (assoc row-name row-indices)))
-			 (col-num   (cadr (assoc col-name col-indices)))
-			 (key       (conc row-num ":" col-num)))
-		    (hash-table-set! cell-lookup key test-id)
-		    (if (not (equal? (iup:attribute run-matrix key) (cadr value)))
-			(begin
-			  (set! changed #t)
-			  (iup:attribute-set! run-matrix key (cadr value))
-			  (iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
-		tests-mindat)
-      
-      ;; Col labels - do after setting Cell contents so they are accounted for in the size calc.
-      
-      (for-each (lambda (ind)
-		  (let* ((name (car ind))
-			 (num  (cadr ind))
-			 (key  (conc "0:" num)))
-		    (if (not (equal? (iup:attribute run-matrix key) name))
-			(begin
-			  (set! changed #t)
-			  (iup:attribute-set! run-matrix key name)
-			  (iup:attribute-set! run-matrix "FITTOTEXT" (conc "C" num))))))
-		col-indices)
-      
-      (if (and (eq? pass-num 0) changed)
-	  (loop 1 #t)) ;; force second pass due to column labels changing
-      
-      ;; (debug:print 0 *default-debug-port* "one-run-updater, changed: " changed " pass-num: " pass-num)
-      ;; (print "one-run-updater, changed: " changed " pass-num: " pass-num)
-      (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL")))))
+    (dboard:update-tree tabdat runs-hash runs-header tb)
+    (if run-id
+        (let* (
+               
+               (last-update  (hash-table-ref/default (dboard:tabdat-run-update-times tabdat) run-id 0))
+               (db-path      (or (hash-table-ref/default (dboard:tabdat-run-db-paths tabdat) run-id #f)
+                                 (let* ((db-dir (tasks:get-task-db-path))
+                                        (db-pth (conc db-dir "/" run-id ".db")))
+                                   (hash-table-set! (dboard:tabdat-run-db-paths tabdat) run-id db-pth)
+                                   db-pth)))
+               (tests-dat    (if (or (not run-id)
+                                     (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
+                                     (not (hash-table-exists? (dboard:tabdat-last-test-dat tabdat) run-id))
+                                     (>= (file-modification-time db-path) last-update))
+                                 (dboard:get-tests-dat tabdat run-id last-update)
+                                 (hash-table-ref (dboard:tabdat-last-test-dat tabdat) run-id)))
+               (tests-mindat (dcommon:minimize-test-data tests-dat))
+               (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
+               (row-indices  (cadr indices))
+               (col-indices  (car indices))
+               (max-row      (if (null? row-indices) 1 (common:max (map cadr row-indices))))
+               (max-col      (if (null? col-indices) 1 (common:max (map cadr col-indices))))
+               (max-visible  (max (- (dboard:tabdat-num-tests tabdat) 15) 3)) ;; (dboard:tabdat-num-tests tabdat) is proportional to the size of the window
+               (numrows      1)
+               (numcols      1)
+               (changed      #f)
+               )
+          (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id tests-dat)
+          (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- (current-seconds) 10))
+          (dboard:tabdat-filters-changed-set! tabdat #f)
+          (let loop ((pass-num 0)
+                     (changed  #f))
+            ;; Update the runs tree
+            (dboard:update-tree tabdat runs-hash runs-header tb)
+            
+            (if (eq? pass-num 1)
+                (begin ;; big reset
+                  (iup:attribute-set! run-matrix "CLEARVALUE" "ALL") ;; NOTE: Was CONTENTS
+                  (iup:attribute-set! run-matrix "CLEARATTRIB" "CONTENTS")
+                  (iup:attribute-set! run-matrix "RESIZEMATRIX" "YES")))
+
+            (if (> max-col (string->number (iup:attribute run-matrix "NUMCOL")))
+                (iup:attribute-set! run-matrix "NUMCOL" max-col ))
+
+            (let ((effective-max-row (if (< max-row max-visible) max-visible max-row)))
+              (if (> effective-max-row (string->number (iup:attribute run-matrix "NUMLIN")))
+                (iup:attribute-set! run-matrix "NUMLIN" effective-max-row )))
+            
+            ;; Row labels
+            (for-each (lambda (ind)
+                        (let* ((name (car ind))
+                               (num  (cadr ind))
+                               (key  (conc num ":0")))
+                          (if (not (equal? (iup:attribute run-matrix key) name))
+                              (begin
+                                (set! changed #t)
+                                (iup:attribute-set! run-matrix key name)))))
+                      row-indices)
+            ;; (print "row-indices: " row-indices " col-indices: " col-indices)
+            (if (and (eq? pass-num 0) changed)
+                (loop 1 #t)) ;; force second pass
+            
+            ;; Cell contents
+            (for-each (lambda (entry)
+                        ;; (print "entry: " entry)
+                        (let* ((row-name  (cadr entry))
+                               (col-name  (car entry))
+                               (valuedat  (caddr entry))
+                               (test-id   (list-ref valuedat 0))
+                               (test-name row-name) ;; (list-ref valuedat 1))
+                               (item-path col-name) ;; (list-ref valuedat 2))
+                               (state     (list-ref valuedat 1))
+                               (status    (list-ref valuedat 2))
+                               (value     (gutils:get-color-for-state-status state status))
+                               (row-num   (cadr (assoc row-name row-indices)))
+                               (col-num   (cadr (assoc col-name col-indices)))
+                               (key       (conc row-num ":" col-num)))
+                          (hash-table-set! cell-lookup key test-id)
+                          (if (not (equal? (iup:attribute run-matrix key) (cadr value)))
+                              (begin
+                                (set! changed #t)
+                                (iup:attribute-set! run-matrix key (cadr value))
+                                (iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
+                      tests-mindat)
+            
+            ;; Col labels - do after setting Cell contents so they are accounted for in the size calc.
+            
+            (for-each (lambda (ind)
+                        (let* ((name (car ind))
+                               (num  (cadr ind))
+                               (key  (conc "0:" num)))
+                          (if (not (equal? (iup:attribute run-matrix key) name))
+                              (begin
+                                (set! changed #t)
+                                (iup:attribute-set! run-matrix key name)
+                                (if (<= num max-col)
+                                    (iup:attribute-set! run-matrix "FITTOTEXT" (conc "C" num)))))))
+                      col-indices)
+            
+            (if (and (eq? pass-num 0) changed)
+                (loop 1 #t)) ;; force second pass due to column labels changing
+            
+            ;; (debug:print 0 *default-log-port* "one-run-updater, changed: " changed " pass-num: " pass-num)
+            ;; (print "one-run-updater, changed: " changed " pass-num: " pass-num)
+            (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
+
+  )
 
 ;;======================================================================
 ;; S U M M A R Y 
@@ -1611,8 +1623,6 @@ Misc
 	 (one-run-updater  
           (lambda ()
 	    (mutex-lock! update-mutex)
-            (when (not run-matrix)
-              (print "BB> What?? run-matrix is #f"))
             (if  (or (dashboard:database-changed? commondat tabdat)
                      (dboard:tabdat-view-changed tabdat))
                  (debug:catch-and-dump
@@ -2839,8 +2849,10 @@ Misc
 			      ;; (dashboard:run-update commondat)
 			      ) "update buttons once"))
 	  (th2 (make-thread iup:main-loop "Main loop")))
+
       (thread-start! th1)
       (thread-start! th2)
       (thread-join! th2))))
 
 (main)
+
