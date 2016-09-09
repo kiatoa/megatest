@@ -570,15 +570,17 @@ Misc
 ;;
 (define (update-rundat tabdat runnamepatt numruns testnamepatt keypatts)
   (let* (
-         ;(allruns     (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
-         (allruns (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
+         (allruns     (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
+         ;;(allruns-tree (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
+         (allruns-tree    (rmt:get-runs "%" #f "0" '()))
 	 (header      (db:get-header allruns))
-	 (runs        (db:get-rows   allruns))
+	 (runs        (db:get-rows   allruns)) ;; RA => Filtered as per runpatt selected
+         (runs-tree   (db:get-rows   allruns-tree)) ;; RA => Returns complete list of runs
 	 (start-time  (current-seconds))
 	 (runs-hash   (let ((ht (make-hash-table)))
 			 (for-each (lambda (run)
 				     (hash-table-set! ht (db:get-value-by-header run header "id") run))
-				   runs) ;; (vector-ref runs-dat 1))
+				   runs-tree) ;; (vector-ref runs-dat 1))
 			 ht))
 	 (tb          (dboard:tabdat-runs-tree tabdat)))
     (dboard:tabdat-header-set! tabdat header)
