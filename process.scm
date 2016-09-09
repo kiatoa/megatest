@@ -15,15 +15,15 @@
 
 (use regex)
 (declare (unit process))
-(declare (uses common))
+;;(declare (uses common))
 
-(define (conservative-read port)
+(define (process:conservative-read port)
   (let loop ((res ""))
     (if (not (eof-object? (peek-char port)))
 	(loop (conc res (read-char port)))
 	res)))
-    
-(define (cmd-run-with-stderr->list cmd . params)
+
+(define (process:cmd-run-with-stderr->list cmd . params)
   ;; (print "Called with cmd=" cmd ", proc=" proc ", params=" params)
 ;;  (handle-exceptions
 ;;   exn
@@ -36,7 +36,7 @@
 				      (process* cmd params))))
        (let loop ((curr (read-line fh))
 		  (result  '()))
-	 (let ((errstr (conservative-read fhe)))
+	 (let ((errstr (process:conservative-read fhe)))
 	   (if (not (string=? errstr ""))
 	       (set! result (append result (list errstr)))))
        (if (not (eof-object? curr))
@@ -48,13 +48,13 @@
 	     (close-output-port fho)
 	     result))))) ;; )
 
-(define (cmd-run-proc-each-line cmd proc . params)
+(define (process:cmd-run-proc-each-line cmd proc . params)
   ;; (print "Called with cmd=" cmd ", proc=" proc ", params=" params)
   (handle-exceptions
    exn
    (begin
      (print "ERROR:  Failed to run command: " cmd " " (string-intersperse params " "))
-     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
      (print "exn=" (condition->list exn))
      #f)
    (let-values (((fh fho pid) (if (null? params)
@@ -71,13 +71,13 @@
 	     (close-output-port fho)
 	     result))))))
 
-(define (cmd-run-proc-each-line-alt cmd proc)
+(define (process:cmd-run-proc-each-line-alt cmd proc)
   (let* ((fh (open-input-pipe cmd))
          (res (port-proc->list fh proc))
          (status (close-input-pipe fh)))
     (if (eq? status 0) res #f)))
 
-(define (cmd-run->list cmd)
+(define (process:cmd-run->list cmd)
   (let* ((fh (open-input-pipe cmd))
          (res (port->list fh))
          (status (close-input-pipe fh)))
@@ -106,7 +106,7 @@
 ;; "find / -print 2&>1 > findall.log"
 (define (run-n-wait cmdline #!key (params #f)(print-cmd #f))
   (if print-cmd 
-      (debug:print 0 
+      (debug:print 0 *default-log-port* 
 		   (if (string? print-cmd)
 		       print-cmd
 		       "")
@@ -149,7 +149,23 @@
    (let-values (((rpid exit-type exit-signal)(process-wait pid #t)))
        (and (number? rpid)
 	    (equal? rpid pid)))))
-	 
+
+(define (process:alive-on-host? host pid)
+  (let ((cmd (conc "ssh " host " ps -o pid= -p " pid)))
+    (handle-exceptions
+     exn
+     #f ;; anything goes wrong - assume the process in NOT running.
+     (with-input-from-pipe 
+      cmd
+      (lambda ()
+	(let loop ((inl (read-line)))
+	  (if (eof-object? inl)
+	      #f
+	      (let* ((clean-str (string-substitute "^[^\\d]*([0-9]+)[^\\d]*$" "\\1" inl))
+		     (innum     (string->number clean-str)))
+		(and innum
+		     (eq? pid innum))))))))))
+
 (define (process:get-sub-pids pid)
   (with-input-from-pipe
    (conc "pstree -A -p " pid) ;; | tr 'a-z\\-+`()\\.' ' ' " pid)

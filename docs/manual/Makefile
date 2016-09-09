@@ -1,6 +1,6 @@
 
 ASCPATH = $(shell which asciidoc)
-EXEPATH = $(shell realpath $(ASCPATH))
+EXEPATH = $(shell readlink -f $(ASCPATH))
 BINPATH = $(shell dirname $(EXEPATH))
 DISPATH = $(shell dirname $(BINPATH))
 

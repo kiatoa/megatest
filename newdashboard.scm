@@ -69,7 +69,7 @@ Misc
       (print help)
       (exit)))
 
-(if (not (launch:setup-for-run))
+(if (not (launch:setup))
     (begin
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
@@ -263,7 +263,7 @@ Misc
 
 (define (tree-path->test-id path)
   (if (not (null? path))
-      (hash-table-ref/default (dboard:data-get-path-test-ids *data*) path #f)
+      (hash-table-ref/default (dboard:data-path-test-ids *data*) path #f)
       #f))
 
 (define (test-panel window-id)
@@ -347,7 +347,7 @@ Misc
 			     (test-update window-id testdat run-info-matrix test-info-matrix test-run-matrix meta-dat-matrix steps-matrix data-matrix))))
 
     ;; Set the updater in updaters
-    (hash-table-set! (dboard:data-get-updaters *data*) window-id updater)
+    (hash-table-set! (dboard:data-updaters *data*) window-id updater)
     ;; 
     (for-each
      (lambda (mat)
@@ -449,13 +449,13 @@ Misc
 		      (let* ((run-path (tree:node->path obj id))
 			     (test-id  (tree-path->test-id (cdr run-path))))
 			(if test-id
-			    (hash-table-set! (dboard:data-get-curr-test-ids *data*)
+			    (hash-table-set! (dboard:data-curr-test-ids *data*)
 					     window-id test-id))
 			(print "path: " (tree:node->path obj id) " test-id: " test-id))))))
      (iup:attribute-set! tb "VALUE" "0")
      (iup:attribute-set! tb "NAME" "Runs")
      ;;(iup:attribute-set! tb "ADDEXPANDED" "NO")
-     (dboard:data-set-tests-tree! *data* tb)
+     (dboard:data-tests-tree-set! *data* tb)
      tb)
    (test-panel window-id)))
 
@@ -464,10 +464,10 @@ Misc
   ;; get test-id
   ;; then get test record
   (if testdat
-      (let* ((test-id      (hash-table-ref/default (dboard:data-get-curr-test-ids *data*) window-id #f))
+      (let* ((test-id      (hash-table-ref/default (dboard:data-curr-test-ids *data*) window-id #f))
 	     (test-data    (hash-table-ref/default testdat test-id #f))
 	     (run-id       (dbr:test-run_id test-data))
-	     (targ/runname (hash-table-ref/default (dboard:data-get-run-keys *data*) 
+	     (targ/runname (hash-table-ref/default (dboard:data-run-keys *data*) 
 						   run-id
 						   '()))
 	     (target       (if (null? targ/runname) "" (string-intersperse (reverse (cdr (reverse targ/runname))) "/")))
@@ -564,7 +564,7 @@ Misc
     (iup:attribute-set! runs-matrix "RESIZEMATRIX" "YES")
     (iup:attribute-set! runs-matrix "WIDTH0" "100")
 
-    (dboard:data-set-runs-matrix! *data* runs-matrix)
+    (dboard:data-runs-matrix-set! *data* runs-matrix)
     (iup:hbox
      (iup:frame 
       #:title "Runs browser"
@@ -613,7 +613,7 @@ Misc
 	 (nextmintime (current-milliseconds))
 	 (my-window-id *current-window-id*))
     (set! *current-window-id* (+ 1 *current-window-id*))
-    (dboard:data-set-runs! *data* data) ;; make this data available to the rest of the application
+    (dboard:data-runs-set! *data* data) ;; make this data available to the rest of the application
     (iup:show (main-panel my-window-id))
     ;; Yes, running iup:show will pop up a new panel
     ;; (iup:show (main-panel my-window-id))
@@ -627,9 +627,9 @@ Misc
 				    (changes   (dcommon:run-update keys data runname keypatts testpatt states statuses 'full my-window-id))
 				    (endtime   (current-milliseconds)))
 			       (set! nextmintime (+ endtime (* 2 (- endtime starttime))))
-			       (debug:print 11 "CHANGE(S): " (car changes) "..."))
-			     (debug:print-info 11 "Server overloaded"))))))
+			       (debug:print 11 *default-log-port* "CHANGE(S): " (car changes) "..."))
+			     (debug:print-info 11 *default-log-port* "Server overloaded"))))))
 
-(dboard:data-set-updaters! *data* (make-hash-table))
+(dboard:data-updaters-set! *data* (make-hash-table))
 (newdashboard *dbstruct-local*)    
 (iup:main-loop)

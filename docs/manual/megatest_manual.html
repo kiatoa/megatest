@@ -799,9 +799,50 @@ writing a suite of tests and tasks for implementing continuous build
 for software, design engineering or process control (via owlfs for
 example) without being specialized for any specific problem
 space. Megatest in of itself does not know what constitutes a PASS or
-FAIL of a test. In most cases megatest is best used in conjunction
-with logpro or a similar tool to parse, analyze and decide on the test
-outcome.</p></div>
+FAIL of a test or task. In most cases megatest is best used in
+conjunction with logpro or a similar tool to parse, analyze and decide
+on the test outcome.</p></div>
+<div class="ulist"><ul>
+<li>
+<p>
+Self-checking -Repeatable strive for directed or self-checking test
+   as opposed to delta based tests
+</p>
+</li>
+<li>
+<p>
+Traceable - environment variables, host OS and other possibly influential
+   variables are captured and kept recorded.
+</p>
+</li>
+<li>
+<p>
+Immutable - once this test is run it cannot be easily overwritten or
+   accidentally modified.
+</p>
+</li>
+<li>
+<p>
+Repeatable - this test result can be recreated in the future
+</p>
+</li>
+<li>
+<p>
+Relocatable - the testsuite or automation area can be checked out and the tests run anywhere
+</p>
+</li>
+<li>
+<p>
+Encapsulated - the area where the tests run are self-contained and all inputs
+   and outputs to the process can be found in the run areas.
+</p>
+</li>
+<li>
+<p>
+Deployable - anyone on the team, at any site, at any time can run the flow
+</p>
+</li>
+</ul></div>
 </div>
 <div class="sect2">
 <h3 id="_megatest_architecture">Megatest Architecture</h3>
@@ -1095,6 +1136,21 @@ sudo netstat -tulpn</pre>
 <h2 id="_megatest_config_file_settings">Megatest Config File Settings</h2>
 <div class="sectionbody">
 <div class="sect2">
+<h3 id="_disk_space_checks">Disk Space Checks</h3>
+<div class="paragraph"><p>Some parameters you can put in the [setup] section of megatest.config:</p></div>
+<div class="listingblock">
+<div class="content monospaced">
+<pre># minimum space required in a run disk
+minspace 10000000
+
+# minimum space required in dbdir:
+dbdir-space-required 100000
+
+# script that takes path as parameter and returns number of bytes available:
+free-space-script check-space.sh</pre>
+</div></div>
+</div>
+<div class="sect2">
 <h3 id="_trim_trailing_spaces">Trim trailing spaces</h3>
 <div class="listingblock">
 <div class="content monospaced">
@@ -1102,7 +1158,9 @@ sudo netstat -tulpn</pre>
 </div></div>
 </div>
 <div class="sect2">
-<h3 id="_submit_jobs_to_host_types_based_on_test_name_2">Submit jobs to Host Types based on Test Name</h3>
+<h3 id="_job_submission_control">Job Submission Control</h3>
+<div class="sect3">
+<h4 id="_submit_jobs_to_host_types_based_on_test_name_2">Submit jobs to Host Types based on Test Name</h4>
 <div class="listingblock">
 <div class="title">In megatest.config</div>
 <div class="content monospaced">
@@ -1116,10 +1174,11 @@ runfirst/sum% remote
 
 [jobtools]
 launcher bsub
-# if defined and not "no" flexi-launcher will bypass launcher unless there is no
-# match.
+# if defined and not "no" flexi-launcher will bypass launcher unless
+# there is no host-type match.
 flexi-launcher yes</pre>
 </div></div>
+</div>
 <div class="sect3">
 <h4 id="_host_types">host-types</h4>
 <div class="paragraph"><p>List of host types and the commandline to run a job on that host type.</p></div>
@@ -1137,8 +1196,9 @@ flexi-launcher yes</pre>
 <pre>runfirst/sum% remote</pre>
 </div></div>
 </div>
-<div class="sect3">
-<h4 id="_miscellaneous_setup_items">Miscellaneous Setup Items</h4>
+</div>
+<div class="sect2">
+<h3 id="_miscellaneous_setup_items">Miscellaneous Setup Items</h3>
 <div class="paragraph"><p>Attempt to rerun tests in "STUCK/DEAD", "n/a", "ZERO_ITEMS" states.</p></div>
 <div class="listingblock">
 <div class="title">In megatest.config</div>
@@ -1146,15 +1206,115 @@ flexi-launcher yes</pre>
 <pre>[setup]
 reruns 5</pre>
 </div></div>
-</div>
 <div class="sect3">
 <h4 id="_run_time_limit">Run time limit</h4>
 <div class="listingblock">
 <div class="content monospaced">
 <pre>[setup]
-runtimelim 1h 2m 3s  # this will automatically kill the test if it runs for more than 1h 2m and 3s</pre>
+# this will automatically kill the test if it runs for more than 1h 2m and 3s
+runtimelim 1h 2m 3s</pre>
 </div></div>
 </div>
+<div class="sect3">
+<h4 id="_tests_browser_view">Tests browser view</h4>
+<div class="paragraph"><p>The tests browser (see the Run Control tab on the dashboard) has two views for displaying the tests.</p></div>
+<div class="olist arabic"><ol class="arabic">
+<li>
+<p>
+Dot (graphviz) based tree
+</p>
+</li>
+<li>
+<p>
+No dot, plain listing
+</p>
+</li>
+</ol></div>
+<div class="paragraph"><p>The default is the graphviz based tree but if your tests don&#8217;t view
+well in that mode then use "nodot" to turn it off.</p></div>
+<div class="listingblock">
+<div class="content monospaced">
+<pre>[setup]
+nodot</pre>
+</div></div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_database_settings">Database settings</h3>
+<table class="tableblock frame-topbot grid-all"
+style="
+width:70%;
+">
+<caption class="title">Table 1. Database config settings in [setup] section of megatest.config</caption>
+<col style="width:14%;">
+<col style="width:28%;">
+<col style="width:28%;">
+<col style="width:28%;">
+<thead>
+<tr>
+<th class="tableblock halign-center valign-top" >Var                       </th>
+<th class="tableblock halign-left valign-top" > Purpose            </th>
+<th class="tableblock halign-left valign-top" > Valid values            </th>
+<th class="tableblock halign-left valign-top" > Comments</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">delay-on-busy</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Prevent concurrent access issues</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">yes|no or not defined</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Default=no, may help on some network file systems, may slow things down also.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">daemonize</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Daemonize the server on start</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">yes|no or not defined</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Default=no</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">faststart</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">All direct file access to sqlite db files</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">yes|no or not defined</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Default=yes, suggest no for central automated systems and yes for interactive use</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">homehost</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Start servers on this host</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">&lt;hostname&gt;</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Defaults to local host</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">hostname</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Hostname to bind to</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">&lt;hostname&gt;|-</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">On multi-homed hosts allows binding to specific hostname</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">lowport</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Start searching for a port at this portnum</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">32768</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced"></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">required</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Server required</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">yes|no or not defined</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Default=no, force start of server always</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">server-query-threshold</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Start server when queries take longer than this</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">number in milliseconds</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Default=300</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">timeout</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">http api timeout</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">number in hours</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Default is 1 minute, do not change</p></td>
+</tr>
+</tbody>
+</table>
 </div>
 </div>
 </div>
@@ -1179,13 +1339,11 @@ user is responsible for setting STATE and STATUS</p></div>
 </div>
 <div class="sect2">
 <h3 id="_requirements_section">Requirements section</h3>
-<div class="sect3">
-<h4 id="_header_2">Header</h4>
 <div class="listingblock">
+<div class="title">Header</div>
 <div class="content monospaced">
 <pre>[requirements]</pre>
 </div></div>
-</div>
 <div class="sect3">
 <h4 id="_wait_on_other_tests">Wait on Other Tests</h4>
 <div class="listingblock">
@@ -1220,6 +1378,21 @@ was historically called "itemwait" mode. The terms "itemwait" and
 mode itemmatch</pre>
 </div></div>
 </div>
+</div>
+<div class="sect2">
+<h3 id="_overriding_enviroment_variables">Overriding Enviroment Variables</h3>
+<div class="paragraph"><p>Override variables before starting the test. Can include files (perhaps generated by megatest -envdelta or similar).</p></div>
+<div class="listingblock">
+<div class="content monospaced">
+<pre>[pre-launch-env-vars]
+VAR1 value1
+
+# Get some generated settings
+[include ../generated-vars.config]
+
+# Use this trick to unset variables
+#{scheme (unsetenv "FOOBAR")}</pre>
+</div></div>
 </div>
 <div class="sect2">
 <h3 id="_itemmap_handling">Itemmap Handling</h3>
@@ -1293,7 +1466,7 @@ waiton A B
 
 [itemmap]
 A (\d+)/aa aa/\1
-B (\d+)/bb bb/\1</pre>
+B (\d+)/bb</pre>
 </div></div>
 <div class="listingblock">
 <div class="title">Testconfig for Test D</div>
@@ -1319,14 +1492,15 @@ itemmap (\d+)/res \1/bb</pre>
 # With a toplevel test you may wish to generate your list
 # of tests to run dynamically
 #
-# waiton #{shell get-valid-tests-to-run.sh}</pre>
+waiton #{shell get-valid-tests-to-run.sh}</pre>
 </div></div>
 </div>
 <div class="sect3">
 <h4 id="_run_time_limit_2">Run time limit</h4>
 <div class="listingblock">
 <div class="content monospaced">
-<pre>runtimelim 1h 2m 3s  # this will automatically kill the test if it runs for more than 1h 2m and 3s</pre>
+<pre>[requirements]
+runtimelim 1h 2m 3s  # this will automatically kill the test if it runs for more than 1h 2m and 3s</pre>
 </div></div>
 </div>
 <div class="sect3">
@@ -1490,49 +1664,52 @@ archive0 /mfs/myarchive-data/adisk1</pre>
 </div>
 </div>
 <div class="sect1">
+<h2 id="_handling_environment_variables">Handling Environment Variables</h2>
+<div class="sectionbody">
+<div class="paragraph"><p>It is often necessary to capture and or manipulate environment
+variables. Megatest has some facilities built in to help.</p></div>
+<div class="sect2">
+<h3 id="_capture_variables">Capture variables</h3>
+<div class="listingblock">
+<div class="title">Commands</div>
+<div class="content monospaced">
+<pre># capture the current enviroment into a db called envdat.db under
+# the context "before"
+megatest -envcap before
+
+# capture the current environment into a db called startup.db with
+# context "after"
+megatest -envcap after startup.db
+
+# write the diff from before to after
+megatest -envdelta before-after -dumpmode bash</pre>
+</div></div>
+<div class="paragraph"><p>Dump modes include bash, csh and config. You can include config data
+into megatest.config or runconfigs.config.</p></div>
+<div class="listingblock">
+<div class="title">Example of generating and using config data</div>
+<div class="content monospaced">
+<pre>megatest -envcap original
+# do some stuff here
+megatest -envcap munged
+megatest -envdelta original-munged -dumpmode ini -o modified.config</pre>
+</div></div>
+<div class="paragraph"><p>Then in runconfigs.config</p></div>
+<div class="listingblock">
+<div class="title">Example of using modified.config in a testconfig</div>
+<div class="content monospaced">
+<pre>cat testconfig
+
+[pre-launch-env-vars]
+[include modified.config]</pre>
+</div></div>
+</div>
+</div>
+</div>
+<div class="sect1">
 <h2 id="_programming_api">Programming API</h2>
 <div class="sectionbody">
 <div class="paragraph"><p>These routines can be called from the megatest repl.</p></div>
-<table class="tableblock frame-topbot grid-all"
-style="
-width:70%;
-">
-<caption class="title">Table 1. API Server Management Calls</caption>
-<col style="width:14%;">
-<col style="width:28%;">
-<col style="width:28%;">
-<col style="width:28%;">
-<thead>
-<tr>
-<th class="tableblock halign-center valign-top" >API Call                  </th>
-<th class="tableblock halign-left valign-top" > Purpose comments   </th>
-<th class="tableblock halign-left valign-top" > Returns                 </th>
-<th class="tableblock halign-left valign-top" > Comments</th>
-</tr>
-</thead>
-<tfoot>
-<tr>
-<td class="tableblock halign-center valign-top" ><p class="tableblock">(rmt:login        run-id)</p></td>
-<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Verify the the version, testsuite area etc. are correct.</p></td>
-<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">#( #t "successful login" )</p></td>
-<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced"></p></td>
-</tr>
-</tfoot>
-<tbody>
-<tr>
-<td class="tableblock halign-center valign-top" ><p class="tableblock">(rmt:start-server run-id)</p></td>
-<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced"></p></td>
-<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">#( success/fail   n/a )</p></td>
-<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced"></p></td>
-</tr>
-<tr>
-<td class="tableblock halign-center valign-top" ><p class="tableblock">(rmt:kill-server  run-id)</p></td>
-<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced"></p></td>
-<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">#( success/fail   n/a )</p></td>
-<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Works only if the server is still reachable</p></td>
-</tr>
-</tbody>
-</table>
 <table class="tableblock frame-topbot grid-all"
 style="
 width:70%;
@@ -1658,8 +1835,7 @@ A second glossary term
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br>
-Last updated
- 2015-09-10 21:54:17 MST
+Last updated 2016-08-20 20:32:22 MST
 </div>
 </div>
 </body>

@@ -75,12 +75,12 @@
    exn
    (if (> remtries 0)
        (begin
-	 (debug:print 0 "WARNING: exception on lock-queue:set-state. Trying again in 30 seconds.")
-	 (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	 (debug:print 0 *default-log-port* "WARNING: exception on lock-queue:set-state. Trying again in 30 seconds.")
+	 (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 	 (thread-sleep! 30)
 	 (lock-queue:set-state dbdat test-id newstate remtries: (- remtries 1)))
        (begin
-	 (debug:print 0 "ERROR:  Failed to set lock state for test with id " test-id ", error: " ((condition-property-accessor 'exn 'message) exn) ", giving up.")
+	 (debug:print-error 0 *default-log-port* " Failed to set lock state for test with id " test-id ", error: " ((condition-property-accessor 'exn 'message) exn) ", giving up.")
 	 #f))
    (sqlite3:execute (lock-queue:db-dat-get-db dbdat) "UPDATE queue SET state=? WHERE test_id=?;"
 		    newstate
@@ -93,13 +93,13 @@
    exn
    (if (> remtries 0)
        (begin
-	 (debug:print 0 "WARNING: exception on lock-queue:any-younger. Removing lockdb and trying again in 5 seconds.")
-	 (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	 (debug:print 0 *default-log-port* "WARNING: exception on lock-queue:any-younger. Removing lockdb and trying again in 5 seconds.")
+	 (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 	 (thread-sleep! 5)
          (lock-queue:delete-lock-db dbdat)
 	 (lock-queue:any-younger? dbdat mystart test-id remtries: (- remtries 1)))
        (begin
-	 (debug:print 0 "ERROR:  Failed to find younger locks for test with id " test-id ", error: " ((condition-property-accessor 'exn 'message) exn) ", giving up.")
+	 (debug:print-error 0 *default-log-port* " Failed to find younger locks for test with id " test-id ", error: " ((condition-property-accessor 'exn 'message) exn) ", giving up.")
 	 #f))
    (let ((res #f))
      (sqlite3:for-each-row
@@ -121,8 +121,8 @@
 	   (handle-exceptions
 	    exn
 	    (begin
-	      (debug:print 0 "WARNING: failed to get queue lock. Removing lock db and returning fail") ;; Will try again in a few seconds")
-	      (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	      (debug:print 0 *default-log-port* "WARNING: failed to get queue lock. Removing lock db and returning fail") ;; Will try again in a few seconds")
+	      (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 	      (thread-sleep! 10)
 	      ;; (if (> count 0)	
 	      ;;  #f ;; (lock-queue:get-lock dbdat test-id count: (- count 1)) - give up on retries 
@@ -153,8 +153,8 @@
     (handle-exceptions
      exn
      (begin
-       (debug:print 0 "WARNING: Failed to release queue lock. Will try again in few seconds")
-       (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+       (debug:print 0 *default-log-port* "WARNING: Failed to release queue lock. Will try again in few seconds")
+       (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
        (thread-sleep! (/ count 10))
        (if (> count 0)
 	   (begin
@@ -173,13 +173,13 @@
      (sqlite3:finalize! (lock-queue:db-dat-get-db dbdat)))))
 
 (define (lock-queue:steal-lock dbdat test-id #!key (count 10))
-  (debug:print-info 0 "Attempting to steal lock at " (lock-queue:db-dat-get-path dbdat))
+  (debug:print-info 0 *default-log-port* "Attempting to steal lock at " (lock-queue:db-dat-get-path dbdat))
   (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 "lock-queue:steal-lock; waiting on journal")
   (handle-exceptions
    exn
    (begin
-     (tadebug:print 0 "WARNING: Failed to steal queue lock. Will try again in few seconds")
-     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+     (debug:print 0 *default-log-port* "WARNING: Failed to steal queue lock. Will try again in few seconds")
+     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
      (thread-sleep! 10)
      (if (> count 0)
 	 (lock-queue:steal-lock dbdat test-id count: (- count 1))
@@ -199,8 +199,8 @@
     (handle-exceptions
      exn
      (begin
-       (debug:print 0 "WARNING: Failed to find out if it is ok to skip the wait queue. Will try again in few seconds")
-       (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+       (debug:print 0 *default-log-port* "WARNING: Failed to find out if it is ok to skip the wait queue. Will try again in few seconds")
+       (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
        (print-call-chain (current-error-port))
        (thread-sleep! 10)
        (if (> count 0)
@@ -208,7 +208,7 @@
 	     (sqlite3:finalize! db)
 	     (lock-queue:wait-turn fname test-id count: (- count 1)))
 	   (begin
-	     (debug:print 0 "Giving up calls to lock-queue:wait-turn for test-id " test-id " at path " fname ", printing call chain")
+	     (debug:print 0 *default-log-port* "Giving up calls to lock-queue:wait-turn for test-id " test-id " at path " fname ", printing call chain")
 	     (print-call-chain (current-error-port))
 	     #f)))
      ;; wait 10 seconds and then check to see if someone is already updating the html

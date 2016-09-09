@@ -47,7 +47,7 @@
 ;; THIS CODE TO BE REMOVED
 ;;
 (define (open-test-db work-area) 
-  (debug:print-info 11 "open-test-db " work-area)
+  (debug:print-info 11 *default-log-port* "open-test-db " work-area)
   (if (and work-area 
 	   (directory? work-area)
 	   (file-read-access? work-area))
@@ -58,7 +58,7 @@
 				   exn
 				   (begin
 				     (print-call-chain (current-error-port))
-				     (debug:print 2 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
+				     (debug:print 2 *default-log-port* "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
 						  ((condition-property-accessor 'exn 'message) exn))
 				     (set! dbexists #f) ;; must force re-creation of tables, more tom-foolery
 				     (sqlite3:open-database ":memory:")) ;; open an in-memory db to allow readonly access 
@@ -78,16 +78,16 @@
 	(if (not dbexists)
 	    (begin
 	      (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
-	      (debug:print-info 11 "Initialized test database " dbpath)
+	      (debug:print-info 11 *default-log-port* "Initialized test database " dbpath)
 	      (tdb:testdb-initialize db)))
 	;; (sqlite3:execute db "PRAGMA synchronous = 0;")
-	(debug:print-info 11 "open-test-db END (sucessful)" work-area)
+	(debug:print-info 11 *default-log-port* "open-test-db END (sucessful)" work-area)
 	;; now let's test that everything is correct
 	(handle-exceptions
 	 exn
 	 (begin
 	   (print-call-chain (current-error-port))
-	   (debug:print 0 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test or remove the file " 
+	   (debug:print-error 0 *default-log-port* "problem accessing test db " work-area ", you probably should clean and re-run this test or remove the file " 
 			dbpath ".\n  "
 			((condition-property-accessor 'exn 'message) exn))
 	   #f)
@@ -97,7 +97,7 @@
 	db)
       ;; no work-area or not readable - create a placeholder to fake rest of world out
       (let ((baddb (sqlite3:open-database ":memory:")))
- 	(debug:print-info 11 "open-test-db END (unsucessful)" work-area)
+ 	(debug:print-info 11 *default-log-port* "open-test-db END (unsucessful)" work-area)
  	;; provide an in-mem db (this is dangerous!)
  	(tdb:testdb-initialize baddb)
  	baddb)))
@@ -107,7 +107,7 @@
   (let* ((test-path (if work-area
 			work-area
 			(rmt:test-get-rundir-from-test-id test-id))))
-    (debug:print 3 "TEST PATH: " test-path)
+    (debug:print 3 *default-log-port* "TEST PATH: " test-path)
     (open-test-db test-path)))
 
 ;; find and open the testdat.db file for an existing test
@@ -115,7 +115,7 @@
   (let* ((test-path (if work-area
 			work-area
 			(db:test-get-rundir-from-test-id dbstruct run-id test-id))))
-    (debug:print 3 "TEST PATH: " test-path)
+    (debug:print 3 *default-log-port* "TEST PATH: " test-path)
     (open-test-db test-path)))
 
 ;; find and open the testdat.db file for an existing test
@@ -127,7 +127,7 @@
     (apply proc tdb params)))
 
 (define (tdb:testdb-initialize db)
-  (debug:print 11 "db:testdb-initialize START")
+  (debug:print 11 *default-log-port* "db:testdb-initialize START")
   (sqlite3:with-transaction
    db
    (lambda ()
@@ -173,7 +173,7 @@
               val TEXT,
               ackstate INTEGER DEFAULT 0,
               CONSTRAINT metadat_constraint UNIQUE (var));"))))
-  (debug:print 11 "db:testdb-initialize END"))
+  (debug:print 11 *default-log-port* "db:testdb-initialize END"))
 
 ;; This routine moved to db:read-test-data
 ;;
@@ -210,7 +210,19 @@
   (let loop ((lin (read-line)))
     (if (not (eof-object? lin))
 	(begin
-	  (debug:print 4 lin)
+	  (debug:print 4 *default-log-port* lin)
+	  (rmt:csv->test-data run-id test-id lin)
+	  (loop (read-line)))))
+  ;; roll up the current results.
+  ;; FIXME: Add the status too 
+  (rmt:test-data-rollup run-id test-id #f))
+
+;; NOTE: Run this local with #f for db !!!
+(define (tdb:load-logpro-data run-id test-id)
+  (let loop ((lin (read-line)))
+    (if (not (eof-object? lin))
+	(begin
+	  (debug:print 4 *default-log-port* lin)
 	  (rmt:csv->test-data run-id test-id lin)
 	  (loop (read-line)))))
   ;; roll up the current results.
@@ -236,13 +248,13 @@
   (let ((res (make-hash-table)))
     (for-each 
      (lambda (step)
-       (debug:print 6 "step=" step)
+       (debug:print 6 *default-log-port* "step=" step)
        (let ((record (hash-table-ref/default 
 		      res 
 		      (tdb:step-get-stepname step) 
 		      ;;        stepname                start end status Duration  Logfile 
 		      (vector (tdb:step-get-stepname step) ""   "" ""     ""        ""))))
-	 (debug:print 6 "record(before) = " record 
+	 (debug:print 6 *default-log-port* "record(before) = " record 
 		      "\nid:       " (tdb:step-get-id step)
 		      "\nstepname: " (tdb:step-get-stepname step)
 		      "\nstate:    " (tdb:step-get-state step)
@@ -260,7 +272,7 @@
 	    (vector-set! record 3 (tdb:step-get-status step))
 	    (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
 					(endt   (any->number (vector-ref record 2))))
-				    (debug:print 4 "record[1]=" (vector-ref record 1) 
+				    (debug:print 4 *default-log-port* "record[1]=" (vector-ref record 1) 
 						 ", startt=" startt ", endt=" endt
 						 ", get-status: " (tdb:step-get-status step))
 				    (if (and (number? startt)(number? endt))
@@ -273,7 +285,7 @@
 	    (vector-set! record 3 (tdb:step-get-status step))
 	    (vector-set! record 4 (tdb:step-get-event_time step))))
 	 (hash-table-set! res (tdb:step-get-stepname step) record)
-	 (debug:print 6 "record(after)  = " record 
+	 (debug:print 6 *default-log-port* "record(after)  = " record 
 		      "\nid:       " (tdb:step-get-id step)
 		      "\nstepname: " (tdb:step-get-stepname step)
 		      "\nstate:    " (tdb:step-get-state step)
@@ -297,13 +309,13 @@
   (let ((res (make-hash-table)))
     (for-each 
      (lambda (step)
-       (debug:print 6 "step=" step)
+       (debug:print 6 *default-log-port* "step=" step)
        (let ((record (hash-table-ref/default 
 		      res 
 		      (tdb:step-get-stepname step) 
 		      ;;        stepname                start end status    
 		      (vector (tdb:step-get-stepname step) ""   "" ""     "" ""))))
-	 (debug:print 6 "record(before) = " record 
+	 (debug:print 6 *default-log-port* "record(before) = " record 
 		      "\nid:       " (tdb:step-get-id step)
 		      "\nstepname: " (tdb:step-get-stepname step)
 		      "\nstate:    " (tdb:step-get-state step)
@@ -321,7 +333,7 @@
 	    (vector-set! record 3 (tdb:step-get-status step))
 	    (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
 					(endt   (any->number (vector-ref record 2))))
-				    (debug:print 4 "record[1]=" (vector-ref record 1) 
+				    (debug:print 4 *default-log-port* "record[1]=" (vector-ref record 1) 
 						 ", startt=" startt ", endt=" endt
 						 ", get-status: " (tdb:step-get-status step))
 				    (if (and (number? startt)(number? endt))
@@ -334,7 +346,7 @@
 	    (vector-set! record 3 (tdb:step-get-status step))
 	    (vector-set! record 4 (tdb:step-get-event_time step))))
 	 (hash-table-set! res (tdb:step-get-stepname step) record)
-	 (debug:print 6 "record(after)  = " record 
+	 (debug:print 6 *default-log-port* "record(after)  = " record 
 		      "\nid:       " (tdb:step-get-id step)
 		      "\nstepname: " (tdb:step-get-stepname step)
 		      "\nstate:    " (tdb:step-get-state step)
@@ -385,5 +397,5 @@
 	  (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
 			   cpuload diskfree minutes)
 	  (sqlite3:finalize! tdb))
-	(debug:print 2 "Can't update testdat.db for test " test-id " read-only or non-existant"))))
+	(debug:print 2 *default-log-port* "Can't update testdat.db for test " test-id " read-only or non-existant"))))
     

@@ -8,8 +8,6 @@
 #  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 #  PURPOSE.
 
-# make PREFIX=/mfs/pkgs/chicken/chicken-core all
-
 help :
 	@echo You may need to do the following setup first:
 	@echo
@@ -20,7 +18,11 @@ help :
 	@echo   -- nb// adding monodevelop gets more packages of which some might be needed...
 	@echo sudo apt-get install libmotif3
 	@echo
+	@echo Set up your PATH, setting it in the Makefile does not work as expected
+	@echo export PATH=$(PREFIX)/bin:\$$PATH
+	@echo
 	@echo For IUP set IUPBRANCH, currently $(IUPBRANCH)
+	@echo         set IUPCONFIG, currently $(IUPCONFIG) - look in https://www.kiatoa.com/fossils/iuplib for .inc files
 	@echo You are using PREFIX=$(PREFIX)
 	@echo You are using PROXY="$(PROXY)"
 	@echo If needed set PROXY to host.dom:port
@@ -29,7 +31,7 @@ help :
 	@echo To make all do: make all
 	@echo   make minimal: make nogui
 	@echo 
-	@echo Note: might need to do CSC_OPTIONS='-C "-fPIC"' make
+	@echo Note: If compiling on amd64 do CSC_OPTIONS=\'-C "-fPIC"\' make all IUPCONFIG=
 
 FPIC=-C "-fPIC"
 
@@ -44,20 +46,23 @@ PROXY=
 # http://code.call-cc.org/dev-snapshots/2015/06/07/chicken-4.10.0rc1.tar.gz
 # http://code.call-cc.org/releases/4.10.0/chicken-4.10.0.tar.gz
 # Select version of chicken, sqlite3 etc
-CHICKEN_VERSION=4.10.0
+# CHICKEN_VERSION=4.10.0
+CHICKEN_VERSION=4.11.0rc2
 SQLITE3_VERSION=3090200
 # http://www.sqlite.org/2014/sqlite-autoconf-3080500.tar.gz
 # http://www.sqlite.org/2015/sqlite-autoconf-3081101.tar.gz
 # Override IUPBRANCH to use other than trunk
-IUPBRANCH=iup-3.15
+IUPBRANCH=trunk
+IUPCONFIG=ubuntu-15.04.inc
+# iup-3.15
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
      dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
-     json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
+     json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars pathname-expand \
      spiffy-directory-listing ssax sxml-serializer sxml-modifications sql-de-lite \
      srfi-19 refdb ini-file sparse-vectors z3 call-with-environment-variables hahn linenoise \
-     crypt
+     crypt parley
 
 #
 # Derived variables
@@ -75,7 +80,7 @@ PATH:=$(PREFIX)/bin:$(PATH)
 LIBPATH=$(PREFIX)/lib$(ADDITIONAL_LIBPATH)
 LD_LIBRARY_PATH=$(LIBPATH)
 CHICKEN_INSTALL=$(PREFIX)/bin/chicken-install
-CHICKEN_EGG_DIR=$(PREFIX)/lib/chicken/6
+CHICKEN_EGG_DIR=$(PREFIX)/lib/chicken/8
 
 VPATH=$(CHICKEN_EGG_DIR):$(PWD)/eggflags
 
@@ -95,21 +100,22 @@ endif
 
 CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
 CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS) -C \"-fPIC\""
-# CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
+# CSC_OPTIONS=-I $(PREFIX)/include -L $(CSCLIBS)
 
 nogui : base mutils
 
-all : nogui libiup $(PREFIX)/lib/sqlite3.so
+#all : nogui libiup $(PREFIX)/lib/sqlite3.so
+all : nogui libiup
 
 base : chkn eggs 
 
 # stuff needed for Kiatoa and Megatest from matts miscellaneous stash
 #   NOTE TO SELF: eggifying these would be great...
 mutils : base logprobin $(PREFIX)/bin/hs \
-        $(PREFIX)/lib/chicken/7/mutils.so \
-        $(PREFIX)/lib/chicken/7/dbi.so \
-        $(PREFIX)/lib/chicken/7/stml.so \
-        $(PREFIX)/lib/chicken/7/margs.so
+        $(PREFIX)/lib/chicken/8/mutils.so \
+        $(PREFIX)/lib/chicken/8/dbi.so \
+        $(PREFIX)/lib/chicken/8/stml.so \
+        $(PREFIX)/lib/chicken/8/margs.so
 
 chkn : $(CHICKEN_INSTALL)
 
@@ -143,10 +149,11 @@ $(PREFIX)/setup-chicken4x.csh : $(EGGFLAGS)
 	(echo "setenv PATH $(PREFIX):'$$'PATH" > $(PREFIX)/setup-chicken4x.csh)
 	(echo "setenv LD_LIBRARY_PATH $(LD_LIBRARY_PATH)" >> $(PREFIX)/setup-chicken4x.csh)
 
+# NOTE: the touch chicken-core/chicken.scm compensates for the time stamp from the tar file
 chicken-core/chicken.scm : chicken-$(CHICKEN_VERSION).tar.gz
 	tar xf chicken-$(CHICKEN_VERSION).tar.gz
 	ln -sf chicken-$(CHICKEN_VERSION) chicken-core
-
+	if [[ -e chicken-core/chicken.scm ]];then touch chicken-core/chicken.scm;fi
 
 chicken-4.9.0rc1.tar.gz : 
 	wget http://code.call-cc.org/dev-snapshots/2014/04/17/chicken-4.9.0rc1.tar.gz
@@ -159,6 +166,9 @@ chicken-4.10.0rc1.tar.gz :
 
 chicken-4.10.0.tar.gz :
 	wget http://code.call-cc.org/releases/4.10.0/chicken-4.10.0.tar.gz
+
+chicken-4.11.0rc2.tar.gz : 
+	wget http://code.call-cc.org/dev-snapshots/2016/04/28/chicken-4.11.0rc2.tar.gz
 
 # git clone git://code.call-cc.org/chicken-core
 # git clone http://code.call-cc.org/git/chicken-core.git
@@ -180,7 +190,7 @@ sqlite-autoconf-$(SQLITE3_VERSION)/config.log : sqlite-autoconf-$(SQLITE3_VERSIO
 $(PREFIX)/bin/sqlite3 : sqlite-autoconf-$(SQLITE3_VERSION)/config.log
 	cd sqlite-autoconf-$(SQLITE3_VERSION);./configure --prefix=$(PREFIX);make;make install
 
-$(PREFIX)/lib/sqlite3.so : $(PREFIX)/bin/sqlite3
+$(CHICKEN_EGG_DIR)/sqlite3.so : $(PREFIX)/bin/sqlite3
 	CSC_OPTIONS="-I$(PREFIX)/include -L$(PREFIX)/lib" $(CHICKEN_INSTALL) $(PROX) sqlite3
 
 #======================================================================
@@ -188,6 +198,8 @@ $(PREFIX)/lib/sqlite3.so : $(PREFIX)/bin/sqlite3
 #======================================================================
 
 # https://github.com/nanomsg/nanomsg/releases/download/0.6-beta/nanomsg-0.6-beta.tar.gz
+# https://github.com/nanomsg/nanomsg/releases/download/0.8-beta/nanomsg-0.8-beta.tar.gz
+
 nanomsg-0.6-beta.tar.gz :
 	wget http://download.nanomsg.org/nanomsg-0.6-beta.tar.gz
 
@@ -215,16 +227,16 @@ opensrc/histstore/histstore.scm : opensrc.fossil
 	mkdir -p opensrc
 	cd opensrc;if [ -e .fslckout ];then fossil update; else fossil open ../opensrc.fossil; fi
 
-$(PREFIX)/lib/chicken/7/mutils.so : opensrc/histstore/histstore.scm
+$(PREFIX)/lib/chicken/8/mutils.so : opensrc/histstore/histstore.scm
 	cd opensrc/mutils;chicken-install
 
-$(PREFIX)/lib/chicken/7/dbi.so : opensrc/dbi/dbi.scm
+$(PREFIX)/lib/chicken/8/dbi.so : opensrc/dbi/dbi.scm
 	cd opensrc/dbi;chicken-install
 
-$(PREFIX)/lib/chicken/7/margs.so : opensrc/margs/margs.scm
+$(PREFIX)/lib/chicken/8/margs.so : opensrc/margs/margs.scm
 	cd opensrc/margs;chicken-install
 
-opensrc/histstore/hs : opensrc/histstore/histstore.scm chkn eggs $(PREFIX)/lib/sqlite3.so 
+opensrc/histstore/hs : opensrc/histstore/histstore.scm chkn eggs $(CHICKEN_EGG_DIR)/sqlite3.so 
 	cd opensrc/histstore;$(PREFIX)/bin/csc histstore.scm -o hs
 
 $(PREFIX)/bin/hs : opensrc/histstore/hs 
@@ -243,11 +255,11 @@ stml/requirements.scm : stml/requirements.scm.template
 	cp stml/install.cfg.template      stml/install.cfg
 	cp stml/requirements.scm.template stml/requirements.scm
 
-$(PREFIX)/lib/chicken/7/stml.so : stml/requirements.scm
+$(PREFIX)/lib/chicken/8/stml.so : stml/requirements.scm
 	cd stml;make
 
 #======================================================================
-# I U P 
+# F F C A L L (Used by IUP)
 #======================================================================
 
 ffcall.fossil :
@@ -262,24 +274,57 @@ ffcall/README : ffcall.fossil
 $(PREFIX)/lib/libavcall.a : ffcall/README
 	cd ffcall;./configure --prefix=$(PREFIX) --enable-shared && make CC="gcc -fPIC" && make install
 
+#======================================================================
+# I U P 
+#======================================================================
+
 iuplib.fossil :
 	fossil clone http://www.kiatoa.com/fossils/iuplib iuplib.fossil
 
-iup/installall.sh : iuplib.fossil
-	mkdir -p iup
-	cd iup && if [ -e installall.sh ];then fossil update $(IUPBRANCH); else fossil open ../iuplib.fossil;fossil update $(IUPBRANCH); fi
+cd-5.9_Linux26g4_64_lib.tar.gz :
+	wget -c http://sourceforge.net/projects/canvasdraw/files/5.9/Linux%20Libraries/cd-5.9_Linux26g4_64_lib.tar.gz/download
+	mv download cd-5.9_Linux26g4_64_lib.tar.gz
 
-iup/alldone : iup/installall.sh $(PREFIX)/include/iup.h $(PREFIX)/lib/libiup.so
-	cd iup && ./makeall.sh
+iup-3.17_Linux26g4_64_lib.tar.gz :
+	wget -c http://sourceforge.net/projects/iup/files/3.17/Linux%20Libraries/iup-3.17_Linux26g4_64_lib.tar.gz/download
+	mv download iup-3.17_Linux26g4_64_lib.tar.gz
+
+im-3.10_Linux26g4_64_lib.tar.gz :
+	wget -c http://sourceforge.net/projects/imtoolkit/files/3.10/Linux%20Libraries/im-3.10_Linux26g4_64_lib.tar.gz/download
+	mv download im-3.10_Linux26g4_64_lib.tar.gz
+
+lua-5.3.2_Linux26g4_64_lib.tar.gz :
+	wget -c http://sourceforge.net/projects/luabinaries/files/5.3.2/Linux%20Libraries/lua-5.3.2_Linux26g4_64_lib.tar.gz/download
+	mv download lua-5.3.2_Linux26g4_64_lib.tar.gz
+
+iup/installall.sh : $(PREFIX)/lib/libiup.so \
+                       cd-5.9_Linux26g4_64_lib.tar.gz \
+                       iup-3.17_Linux26g4_64_lib.tar.gz \
+                       im-3.10_Linux26g4_64_lib.tar.gz \
+		       lua-5.3.2_Linux26g4_64_lib.tar.gz	# iuplib.fossil
+	mkdir -p iup
+	pwd
+	tar -xzvf cd-5.9_Linux26g4_64_lib.tar.gz -C iup/
+	tar -xzvf im-3.10_Linux26g4_64_lib.tar.gz -C iup/
+	tar -xzvf iup-3.17_Linux26g4_64_lib.tar.gz -C iup/
+	mkdir -p $(PREFIX)/include/ $(PREFIX)/lib/
+	cp iup/include/* $(PREFIX)/include/
+	cp iup/*.so $(PREFIX)/lib/
+	cp iup/*.a $(PREFIX)/lib/
+
+#	cd iup && if [ -e makeall.sh ];then fossil update $(IUPBRANCH); else fossil open ../iuplib.fossil;fossil update $(IUPBRANCH); fi
+
+iup/alldone :  $(PREFIX)/include/iup.h $(PREFIX)/lib/libiup.so # iup/makeall.sh
+#	cd iup && ./makeall.sh $(IUPCONFIG)
 
 $(PREFIX)/lib/libiup.so $(PREFIX)/include/iup.h : iup/installall.sh iup/alldone
-	cd iup && ./installall.sh
+#	cd iup && ./makeall.sh $(IUPCONFIG)
 
 # $(PREFIX)/lib/libiup.so : iup/iup/alldone
 #	touch -c $(PREFIX)/lib/libiup.so
 
 $(CHICKEN_EGG_DIR)/iup.so : $(PREFIX)/lib/libiup.so  $(PREFIX)/lib/libavcall.a 
-	LD_LIBRARY_PATH=$(LD_LIBRARY_PATH) CSC_OPTIONS=$(CSC_OPTIONS) $(CHICKEN_INSTALL) $(PROX) -D no-library-checks iup
+	LD_LIBRARY_PATH=$(LD_LIBRARY_PATH) CSC_OPTIONS=$(CSC_OPTIONS) $(CHICKEN_INSTALL) $(PROX) -D no-library-checks -feature disable-iup-web iup
 
 # -feature disable-iup-web
 
