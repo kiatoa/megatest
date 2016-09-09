@@ -70,7 +70,7 @@
 				  (vector-ref block 2))) ;; disk-path
 			       existing-blocks)))
     (or (common:get-disk-with-most-free-space candidate-disks dused)
-	(archive:allocate-new-archive-block testname itempath))))
+	(archive:allocate-new-archive-block #f #f #f)))) ;; BROKEN. testname itempath))))
 
 ;; allocate a new archive area
 ;;
@@ -117,11 +117,11 @@
 
     (if (not archive-dir) ;; no archive disk found, this is fatal
 	(begin
-	  (debug:print 0 "FATAL: No archive disks found. Please add disks with at least " min-space " MB space to the [archive-disks] section of megatest.config")
-	  (debug:print 0 "       use [archive] minspace to specify minimum available space")
-	  (debug:print 0 "   disks: " (string-intersperse (map cadr (archive:get-archive-disks)) "\n         "))
+	  (debug:print 0 *default-log-port* "FATAL: No archive disks found. Please add disks with at least " min-space " MB space to the [archive-disks] section of megatest.config")
+	  (debug:print 0 *default-log-port* "       use [archive] minspace to specify minimum available space")
+	  (debug:print 0 *default-log-port* "   disks: " (string-intersperse (map cadr (archive:get-archive-disks)) "\n         "))
 	  (exit 1))
-	(debug:print-info 0 "Using path " archive-dir " for archiving"))
+	(debug:print-info 0 *default-log-port* "Using path " archive-dir " for archiving"))
 
     ;; from the test info bin the path to the test by stem
     ;;
@@ -153,11 +153,11 @@
 	 
  	 (cond
 	  (toplevel/children
-	   (debug:print 0 "WARNING: cannot archive " test-name " with id " test-id " as it is a toplevel test with children"))
+	   (debug:print 0 *default-log-port* "WARNING: cannot archive " test-name " with id " test-id " as it is a toplevel test with children"))
 	  ((not (file-exists? test-path))
-	   (debug:print 0 "WARNING: Cannot archive " test-name "/" item-path " as path " test-path " does not exist"))
+	   (debug:print 0 *default-log-port* "WARNING: Cannot archive " test-name "/" item-path " as path " test-path " does not exist"))
 	  (else
-	   (debug:print 0
+	   (debug:print 0 *default-log-port*
 			"From test-dat=" test-dat " derived the following:\n"
 			"test-partial-path  = " test-partial-path "\n"
 			"test-path          = " test-path "\n"
@@ -171,7 +171,7 @@
     ;; for each disk-group
     (for-each 
      (lambda (disk-group)
-       (debug:print 0 "Processing disk-group " disk-group)
+       (debug:print 0 *default-log-port* "Processing disk-group " disk-group)
        (let* ((test-paths (hash-table-ref disk-groups disk-group))
 	      ;; ((string-intersperse (map cadr (rmt:get-key-val-pairs 1)) "-")
 	      (bup-init-params  (list "-d" archive-dir "init"))
@@ -187,15 +187,15 @@
 	 (if (not (file-exists? (conc archive-dir "/HEAD")))
 	     (begin
 	       ;; replace this with jobrunner stuff enventually
-	       (debug:print-info 0 "Init bup in " archive-dir)
+	       (debug:print-info 0 *default-log-port* "Init bup in " archive-dir)
 	       ;; (mutex-lock! bup-mutex)
 	       (run-n-wait bup-exe params: bup-init-params print-cmd: print-prefix)
 	       ;; (mutex-unlock! bup-mutex)
 	       ))
-	 (debug:print-info 0 "Indexing data to be archived")
+	 (debug:print-info 0 *default-log-port* "Indexing data to be archived")
 	 ;; (mutex-lock! bup-mutex)
 	 (run-n-wait bup-exe params: bup-index-params print-cmd: print-prefix)
-	 (debug:print-info 0 "Archiving data with bup")
+	 (debug:print-info 0 *default-log-port* "Archiving data with bup")
 	 (run-n-wait bup-exe params: bup-save-params print-cmd: print-prefix)
 	 ;; (mutex-unlock! bup-mutex)
 	 (for-each
@@ -256,7 +256,7 @@
 	     (let* ((base (pathname-directory prev-test-physical-path))
 		    (dirn (pathname-file      prev-test-physical-path))
 		    (newn (conc base "/." dirn)))
-	       (debug:print 0 "ERROR: the old directory " prev-test-physical-path ", still exists! Moving it to " newn)
+	       (debug:print-error 0 *default-log-port* "the old directory " prev-test-physical-path ", still exists! Moving it to " newn)
 	       (rename-file prev-test-physical-path newn)))
 
 	 (if (and archive-path ;; no point in proceeding if there is no actual archive
@@ -278,15 +278,15 @@
 		      (new-test-path       (if (vector? new-test-dat )
 					       (db:test-rundir new-test-dat)
 					       (begin
-						 (debug:print 0 "ERROR: unable to get data for run-id=" run-id ", test-id=" test-id)
+						 (debug:print-error 0 *default-log-port* "unable to get data for run-id=" run-id ", test-id=" test-id)
 						 (exit 1))))
 		      ;; new-test-path won't work - must use best-disk instead? Nope, new-test-path but tack on /..
 		      (bup-restore-params  (list "-d" archive-path "restore" "-C" (conc new-test-path "/..") archive-internal-path)))
-		 (debug:print-info 0 "Restoring archived data to " new-test-physical-path " from archive in " archive-path " ... " archive-internal-path)
+		 (debug:print-info 0 *default-log-port* "Restoring archived data to " new-test-physical-path " from archive in " archive-path " ... " archive-internal-path)
 		 ;; (mutex-lock! bup-mutex)
 		 (run-n-wait bup-exe params: bup-restore-params print-cmd: #f)
 		 ;; (mutex-unlock! bup-mutex)
 		 (mt:test-set-state-status-by-id run-id test-id "COMPLETED" #f #f)))
-	     (debug:print 0 "ERROR: No archive path in the record for run-id=" run-id " test-id=" test-id))))
+	     (debug:print-error 0 *default-log-port* "No archive path in the record for run-id=" run-id " test-id=" test-id))))
      (filter vector? tests))))
 	 

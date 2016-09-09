@@ -13,8 +13,8 @@
 ;;
 ;;======================================================================
 
-(use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3 call-with-environment-variables)
-(use defstruct)
+(use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3 call-with-environment-variables csv)
+(use typed-records pathname-expand)
 
 (import (prefix base64 base64:))
 (import (prefix sqlite3 sqlite3:))
@@ -58,6 +58,25 @@
 ;;                       0           1              2              3
 (defstruct launch:einf (pid #t)(exit-status #t)(exit-code #t)(rollup-status 0))
 
+;; return (conc status ": " comment) from the final section so that
+;;   the comment can be set in the step record in launch.scm
+;;
+(define (launch:load-logpro-dat run-id test-id stepname)
+  (let ((cname (conc stepname ".dat")))
+    (if (file-exists? cname)
+	(let* ((dat  (read-config cname #f #f))
+	       (csvr (db:logpro-dat->csv dat stepname))
+	       (csvt (let-values (( (fmt-cell fmt-record fmt-csv) (make-format ",")))
+				 (fmt-csv (map list->csv-record csvr))))
+	       (status (configf:lookup dat "final" "exit-status"))
+	       (msg     (configf:lookup dat "final" "message")))
+	  (rmt:csv->test-data run-id test-id csvt)
+	  (cond
+	   ((equal? status "PASS") "PASS") ;; skip the message part if status is pass
+	   (status (conc (configf:lookup dat "final" "exit-status") ": " (if msg msg "no message")))
+	   (else #f)))
+	#f)))
+
 (define (launch:runstep ezstep run-id test-id exit-info m tal testconfig)
   (let* ((stepname       (car ezstep))  ;; do stuff to run the step
 	 (stepinfo       (cadr ezstep))
@@ -67,6 +86,7 @@
 	 (script         "") ; "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!\
 	 (logpro-file    (conc stepname ".logpro"))
 	 (html-file      (conc stepname ".html"))
+	 (dat-file       (conc stepname ".dat"))
 	 (tconfig-logpro (configf:lookup testconfig "logpro" stepname))
 	 (logpro-used    (file-exists? logpro-file)))
 
@@ -81,7 +101,7 @@
 	  (set! logpro-used #t)))
     
     ;; NB// can safely assume we are in test-area directory
-    (debug:print 4 "ezsteps:\n stepname: " stepname " stepinfo: " stepinfo " stepparts: " stepparts
+    (debug:print 4 *default-log-port* "ezsteps:\n stepname: " stepname " stepinfo: " stepinfo " stepparts: " stepparts
 		 " stepparms: " stepparms " stepcmd: " stepcmd)
     
     ;; ;; first source the previous environment
@@ -93,7 +113,7 @@
     ;; call the command using mt_ezstep
     ;; (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "x") " " stepcmd))
     
-    (debug:print 4 "script: " script)
+    (debug:print 4 *default-log-port* "script: " script)
     (rmt:teststep-set-status! run-id test-id stepname "start" "-" #f #f)
     ;; now launch the actual process
     (call-with-environment-variables 
@@ -114,7 +134,7 @@
 			     (thread-sleep! 2)
 			     (processloop (+ i 1))))
 		       )))))
-    (debug:print-info 0 "step " stepname " completed with exit code " (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
+    (debug:print-info 0 *default-log-port* "step " stepname " completed with exit code " (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
     ;; now run logpro if needed
     (if logpro-used
 	(let ((pid (process-run (conc "logpro " logpro-file " " (conc stepname ".html") " < " stepname ".log"))))
@@ -130,21 +150,27 @@
 			    (begin
 			      (thread-sleep! 2)
 			      (processloop (+ i 1)))))
-	    (debug:print-info 0 "logpro for step " stepname " exited with code " (launch:einf-exit-code exit-info))))) ;; (vector-ref exit-info 2)))))
+	    (debug:print-info 0 *default-log-port* "logpro for step " stepname " exited with code " (launch:einf-exit-code exit-info))))) ;; (vector-ref exit-info 2)))))
     
     (let ((exinfo (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
-	  (logfna (if logpro-used (conc stepname ".html") "")))
-      (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
-    (if logpro-used
-	(rmt:test-set-log! run-id test-id (conc stepname ".html")))
+	  (logfna (if logpro-used (conc stepname ".html") ""))
+	  (comment #f))
+      (if logpro-used
+	  (let ((datfile (conc stepname ".dat")))
+	    ;; load the .dat file into the test_data table if it exists
+	    (if (file-exists? datfile)
+		(set! comment (launch:load-logpro-dat run-id test-id stepname)))
+	    (rmt:test-set-log! run-id test-id (conc stepname ".html"))))
+      (rmt:teststep-set-status! run-id test-id stepname "end" exinfo comment logfna))
     ;; set the test final status
     (let* ((process-exit-status (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
 	   (this-step-status (cond
-			      ((and (eq? process-exit-status 2) logpro-used) 'warn)  ;; logpro 2 = warnings
-			      ((and (eq? process-exit-status 3) logpro-used) 'check) ;; logpro 3 = check
-			      ((and (eq? process-exit-status 4) logpro-used) 'waived) ;; logpro 4 = abort			      
-			      ((and (eq? process-exit-status 5) logpro-used) 'abort) ;; logpro 4 = abort
-			      ((eq? process-exit-status 0)                   'pass)  ;; logpro 0 = pass
+			      ((and (eq? process-exit-status 2) logpro-used) 'warn)   ;; logpro 2 = warnings
+			      ((and (eq? process-exit-status 3) logpro-used) 'check)  ;; logpro 3 = check
+			      ((and (eq? process-exit-status 4) logpro-used) 'waived) ;; logpro 4 = waived
+			      ((and (eq? process-exit-status 5) logpro-used) 'abort)  ;; logpro 5 = abort
+			      ((and (eq? process-exit-status 6) logpro-used) 'skip)   ;; logpro 6 = skip
+			      ((eq? process-exit-status 0)                   'pass)   ;; logpro 0 = pass
 			      (else 'fail)))
 	   (overall-status   (cond
 			      ((eq? (launch:einf-rollup-status exit-info) 2) 'warn) ;; rollup-status (vector-ref exit-info 3)
@@ -160,9 +186,8 @@
 	    (cond
 	     ((null? tal) ;; more to run?
 	      "COMPLETED")
-	     (else "RUNNING")))
-	   )
-      (debug:print 4 "Exit value received: " (launch:einf-exit-code exit-info) " logpro-used: " logpro-used 
+	     (else "RUNNING"))))
+      (debug:print 4 *default-log-port* "Exit value received: " (launch:einf-exit-code exit-info) " logpro-used: " logpro-used 
 		   " this-step-status: " this-step-status " overall-status: " overall-status 
 		   " next-status: " next-status " rollup-status: "  (launch:einf-rollup-status exit-info)) ;; (vector-ref exit-info 3))
       (case next-status
@@ -178,11 +203,23 @@
 	 (tests:test-set-status! run-id test-id next-state "CHECK" 
 				 (if (eq? this-step-status 'check) "Logpro check found" #f)
 				 #f))
+	((waived)
+	 (launch:einf-rollup-status-set! exit-info 4) ;; (vector-set! exit-info 3 3) ;; rollup-status
+	 ;; NB// test-set-status! does rdb calls under the hood
+	 (tests:test-set-status! run-id test-id next-state "WAIVED" 
+				 (if (eq? this-step-status 'check) "Logpro waived found" #f)
+				 #f))
 	((abort)
-	 (launch:einf-rollup-status-set! exit-info 4) ;; (vector-set! exit-info 3 4) ;; rollup-status
+	 (launch:einf-rollup-status-set! exit-info 5) ;; (vector-set! exit-info 3 4) ;; rollup-status
 	 ;; NB// test-set-status! does rdb calls under the hood
 	 (tests:test-set-status! run-id test-id next-state "ABORT" 
 				 (if (eq? this-step-status 'abort) "Logpro abort found" #f)
+				 #f))
+	((skip)
+	 (launch:einf-rollup-status-set! exit-info 6) ;; (vector-set! exit-info 3 4) ;; rollup-status
+	 ;; NB// test-set-status! does rdb calls under the hood
+	 (tests:test-set-status! run-id test-id next-state "SKIP" 
+				 (if (eq? this-step-status 'skip) "Logpro skip found" #f)
 				 #f))
 	((pass)
 	 (tests:test-set-status! run-id test-id next-state "PASS" #f #f))
@@ -192,10 +229,166 @@
 	 )))
     logpro-used))
 
+(define (launch:manage-steps run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m)
+  ;; (let-values
+  ;;  (((pid exit-status exit-code)
+  ;;    (run-n-wait fullrunscript)))
+  ;; (tests:test-set-status! test-id "RUNNING" "n/a" #f #f)
+  ;; Since we should have a clean slate at this time there is no need to do 
+  ;; any of the other stuff that tests:test-set-status! does. Let's just 
+  ;; force RUNNING/n/a
+
+  ;; (thread-sleep! 0.3)
+  (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
+  (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "RUNNING")
+  ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
+
+  ;; if there is a runscript do it first
+  (if fullrunscript
+      (let ((pid (process-run fullrunscript)))
+	(rmt:test-set-top-process-pid run-id test-id pid)
+	(let loop ((i 0))
+	  (let-values
+	   (((pid-val exit-status exit-code) (process-wait pid #t)))
+	   (mutex-lock! m)
+	   (launch:einf-pid-set!           exit-info  pid)         ;; (vector-set! exit-info 0 pid)
+	   (launch:einf-exit-status-set!   exit-info  exit-status) ;; (vector-set! exit-info 1 exit-status)
+	   (launch:einf-exit-code-set!     exit-info  exit-code)   ;; (vector-set! exit-info 2 exit-code)
+	   (launch:einf-rollup-status-set! exit-info  exit-code)   ;; (vector-set! exit-info 3 exit-code)  ;; rollup status
+	   (mutex-unlock! m)
+	   (if (eq? pid-val 0)
+	       (begin
+		 (thread-sleep! 2)
+		 (loop (+ i 1)))
+	       )))))
+  ;; then, if runscript ran ok (or did not get called)
+  ;; do all the ezsteps (if any)
+  (if ezsteps
+      (let* ((testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
+	      ;; NOTE: it is tempting to turn off force-create of testconfig but dynamic
+	      ;;       ezstep names need a full re-eval here.
+	      (tests:get-testconfig test-name tconfigreg #t force-create: #t)) ;; 'return-procs)))
+	     (ezstepslst (if (hash-table? testconfig)
+			     (hash-table-ref/default testconfig "ezsteps" '())
+			     #f)))
+	(if testconfig
+	    (hash-table-set! *testconfigs* test-name testconfig) ;; cached for lazy reads later ...
+	    (begin
+	      (launch:setup)
+	      (debug:print 0 *default-log-port* "WARNING: no testconfig found for " test-name " in search path:\n  "
+			   (string-intersperse (tests:get-tests-search-path *configdat*) "\n  "))))
+	;; after all that, still no testconfig? Time to abort
+	(if (not testconfig)
+	    (begin
+	      (debug:print-error 0 *default-log-port* "Failed to resolve megatest.config, runconfigs.config and testconfig issues. Giving up now")
+	      (exit 1)))
+	(if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
+	;; if ezsteps was defined then we are sure to have at least one step but check anyway
+	(if (not (> (length ezstepslst) 0))
+	    (debug:print-error 0 *default-log-port* "ezsteps defined but ezstepslst is zero length")
+	    (let loop ((ezstep (car ezstepslst))
+		       (tal    (cdr ezstepslst))
+		       (prevstep #f))
+	      ;; check exit-info (vector-ref exit-info 1)
+	      (if (launch:einf-exit-status exit-info) ;; (vector-ref exit-info 1)
+		  (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig))
+			(stepname    (car ezstep)))
+		    ;; if logpro-used read in the stepname.dat file
+		    (if (and logpro-used (file-exists? (conc stepname ".dat")))
+			(launch:load-logpro-dat run-id test-id stepname))
+		    (if (steprun-good? logpro-used (launch:einf-exit-code exit-info))
+			(if (not (null? tal))
+			    (loop (car tal) (cdr tal) stepname))
+			(debug:print 4 *default-log-port* "WARNING: step " (car ezstep) " failed. Stopping")))
+		  (debug:print 4 *default-log-port* "WARNING: a prior step failed, stopping at " ezstep)))))))
+
+(define (launch:monitor-job run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m work-area runtlim misc-flags)
+  (let* ((start-seconds (current-seconds))
+	 (calc-minutes  (lambda ()
+			  (inexact->exact 
+			   (round 
+			    (- 
+			     (current-seconds) 
+			     start-seconds)))))
+	 (kill-tries 0))
+    ;; (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area)
+    ;; (tests:set-full-meta-info test-id run-id (calc-minutes) work-area)
+    (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
+    (let loop ((minutes   (calc-minutes))
+	       (cpu-load  (get-cpu-load))
+	       (disk-free (get-df (current-directory))))
+      (let ((new-cpu-load (let* ((load  (get-cpu-load))
+				 (delta (abs (- load cpu-load))))
+			    (if (> delta 0.6) ;; don't bother updating with small changes
+				load
+				#f)))
+	    (new-disk-free (let* ((df    (get-df (current-directory)))
+				  (delta (abs (- df disk-free))))
+			     (if (> delta 200) ;; ignore changes under 200 Meg
+				 df
+				 #f))))
+	(set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
+			    (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
+						(time-exceeded (> run-seconds runtlim)))
+					   (if time-exceeded
+					       (begin
+						 (debug:print-info 0 *default-log-port* "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
+						 #t)
+					       #f)))))
+	(tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f)
+	(if kill-job? 
+	    (begin
+	      (mutex-lock! m)
+	      ;; NOTE: The pid can change as different steps are run. Do we need handshaking between this
+	      ;;       section and the runit section? Or add a loop that tries three times with a 1/4 second
+	      ;;       between tries?
+	      (let* ((pid1 (launch:einf-pid exit-info)) ;; (vector-ref exit-info 0))
+		     (pid2 (rmt:test-get-top-process-pid run-id test-id))
+		     (pids (delete-duplicates (filter number? (list pid1 pid2)))))
+		(if (not (null? pids))
+		    (begin
+		      (for-each
+		       (lambda (pid)
+			 (handle-exceptions
+			  exn
+			  (begin
+			    (debug:print-info 0 *default-log-port* "Unable to kill process with pid " pid ", possibly already killed.")
+			    (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn)))
+			  (debug:print 0 *default-log-port* "WARNING: Request received to kill job " pid) ;;  " (attempt # " kill-tries ")")
+			  (debug:print-info 0 *default-log-port* "Signal mask=" (signal-mask))
+			  ;; (if (process:alive? pid)
+			  ;;     (begin
+			  (map (lambda (pid-num)
+				 (process-signal pid-num signal/term))
+			       (process:get-sub-pids pid))
+			  (thread-sleep! 5)
+			  ;; (if (process:process-alive? pid)
+			  (map (lambda (pid-num)
+				 (handle-exceptions
+				  exn
+				  #f
+				  (process-signal pid-num signal/kill)))
+			       (process:get-sub-pids pid))))
+		       ;;    (debug:print-info 0 *default-log-port* "not killing process " pid " as it is not alive"))))
+		       pids)
+		      (tests:test-set-status! run-id test-id "KILLED"  "KILLED" (args:get-arg "-m") #f))
+		    (begin
+		      (debug:print-error 0 *default-log-port* "Nothing to kill, pid1=" pid1 ", pid2=" pid2)
+		      (tests:test-set-status! run-id test-id "KILLED"  "FAILED TO KILL" (args:get-arg "-m") #f)
+		      )))
+	      (mutex-unlock! m)
+	      ;; no point in sticking around. Exit now.
+	      (exit)))
+	(if (hash-table-ref/default misc-flags 'keep-going #f)
+	    (begin
+	      (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
+	      (if (hash-table-ref/default misc-flags 'keep-going #f)  ;; keep originals for cpu-load and disk-free unless they change more than the allowed delta
+		  (loop (calc-minutes) (or new-cpu-load cpu-load) (or new-disk-free disk-free)))))))
+    (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f))) ;; NOTE: Checking twice for keep-going is intentional
+
 (define (launch:execute encoded-cmd)
-  
-   (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
-	  (tconfigreg (tests:get-all)))
+     (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
+	    (tconfigreg (tests:get-all)))
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
@@ -231,8 +424,7 @@
                                                    (file-execute-access? fulln))
                                               fulln
                                               runscript))))) ;; assume it is on the path
-	       ;; (rollup-status 0)
-	       )
+	       ) ;; (rollup-status 0)
 
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
@@ -240,14 +432,14 @@
 		    (> count 10))
 		(change-directory top-path)
 		(begin
-		  (debug:print 0 "INFO: Not starting job yet - directory " top-path " not found")
+		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " top-path " not found")
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
 
 	  (let ((sighand (lambda (signum)
 			   ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
 			   (if (eq? signum signal/stop)
-			 (debug:print 0 "ERROR: attempt to STOP process. Exiting."))
+			       (debug:print-error 0 *default-log-port* "attempt to STOP process. Exiting."))
 			   (set! *time-to-exit* #t)
 			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
 			   (let ((th1 (make-thread (lambda ()
@@ -257,38 +449,40 @@
 						     (exit 1))))
 				 (th2 (make-thread (lambda ()
 						     (thread-sleep! 2)
-						     (debug:print 0 "Done")
+						     (debug:print 0 *default-log-port* "Done")
 						     (exit 4)))))
 			     (thread-start! th2)
 			     (thread-start! th1)
 			     (thread-join! th2)))))
 	    (set-signal-handler! signal/int sighand)
 	    (set-signal-handler! signal/term sighand)
-	    (set-signal-handler! signal/stop sighand))
+	    ) ;; (set-signal-handler! signal/stop sighand)
 	  
-	  ;; (set-signal-handler! signal/int (lambda ()
-					    
 	  ;; Do not run the test if it is REMOVING, RUNNING, KILLREQ or REMOTEHOSTSTART,
 	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
 	  ;;
-	  (let ((test-info (rmt:get-testinfo-state-status run-id test-id)))
+	  (let* ((test-info (rmt:get-test-info-by-id run-id test-id))
+		 (test-host (db:test-get-host        test-info))
+		 (test-pid  (db:test-get-process_id  test-info)))
 	    (cond
 	     ((member (db:test-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
-	      (debug:print 0 "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
+	      (debug:print 0 *default-log-port* "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
 	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")) ;; prime it for running
 	     ((not (member (db:test-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
-	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a"))
+	      (if (process:alive-on-host? test-host test-pid)
+		  (debug:print-error 0 *default-log-port* "test state is "  (db:test-state test-info) " and process " test-pid " is still running on host " test-host ", cannot proceed")
+		  (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")))
 	     (else ;; (member (db:test-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ"))
-	      (debug:print 0 "ERROR: test state is " (db:test-state test-info) ", cannot proceed")
+	      (debug:print-error 0 *default-log-port* "test state is " (db:test-state test-info) ", cannot proceed")
 	      (exit))))
 	  
-	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
+	  (debug:print 2 *default-log-port* "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
 	  (set! keys       (rmt:get-keys))
 	  ;; (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals) ;; these may be needed by the launching process
 	  ;; one of these is defunct/redundant ...
-	  (if (not (launch:setup-for-run force: #t))
+	  (if (not (launch:setup force: #t))
 	      (begin
-		(debug:print 0 "Failed to setup, exiting") 
+		(debug:print 0 *default-log-port* "Failed to setup, exiting") 
 		;; (sqlite3:finalize! db)
 		;; (sqlite3:finalize! tdb)
 		(exit 1)))
@@ -297,7 +491,7 @@
 	  ;; NOTE: Current order is to process runconfigs *before* setting the MT_ vars. This 
 	  ;;       seems non-ideal but could well break stuff
 	  ;;    BUG? BUG? BUG?
-
+	  
 	  (let ((rconfig (full-runconfigs-read))) ;; (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target))))
 	    ;; (setup-env-defaults (conc *toppath* "/runconfigs.config") run-id (make-hash-table) keyvals target)
 	    ;; (set-run-config-vars run-id keyvals target) ;; (db:get-target db run-id))
@@ -309,7 +503,7 @@
 				      (if (and (string? var)(string? val))
 					  (begin
 					    (setenv var (config:eval-string-in-environment val))) ;; val)
-					  (debug:print 0 "ERROR: bad variable spec, " var "=" val))))
+					  (debug:print-error 0 *default-log-port* "bad variable spec, " var "=" val))))
 				  (configf:get-section rconfig section)))
 		      (list "default" target)))
 
@@ -319,7 +513,7 @@
 		    (> count 10))
 		(change-directory work-area)
 		(begin
-		  (debug:print 0 "INFO: Not starting job yet - directory " work-area " not found")
+		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " work-area " not found")
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
 
@@ -329,13 +523,13 @@
 	  ;; clobbers things from the official sources such as megatest.config and runconfigs.config
 	  (if (string? set-vars)
 	      (let ((varpairs (string-split set-vars ",")))
-		(debug:print 4 "varpairs: " varpairs)
+		(debug:print 4 *default-log-port* "varpairs: " varpairs)
 		(map (lambda (varpair)
 		       (let ((varval (string-split varpair "=")))
 			 (if (eq? (length varval) 2)
 			     (let ((var (car varval))
 				   (val (cadr varval)))
-			       (debug:print 1 "Adding pre-var/val " var " = " val " to the environment")
+			       (debug:print 1 *default-log-port* "Adding pre-var/val " var " = " val " to the environment")
 			       (setenv var val)))))
 		     varpairs)))
 	  (for-each
@@ -345,7 +539,7 @@
 	       (if val
 		   (setenv var val)
 		   (begin
-		     (debug:print 0 "ERROR: required variable " var " does not have a valid value. Exiting")
+		     (debug:print-error 0 *default-log-port* "required variable " var " does not have a valid value. Exiting")
 		     (exit)))))
 	     (list 
 	      (list  "MT_TEST_RUN_DIR" work-area)
@@ -374,7 +568,7 @@
 	  ;; (tests:set-full-meta-info test-id run-id 0 work-area)
 	  (tests:set-full-meta-info #f test-id run-id 0 work-area 10)
 
-	  (thread-sleep! 0.3) ;; NFS slowness has caused grief here
+	  ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
@@ -387,159 +581,27 @@
 	  ;; so this is a good place to remove the records for 
 	  ;; any previous runs
 	  ;; (db:test-remove-steps db run-id testname itemdat)
-	  
+	  ;; 
 	  (let* ((m            (make-mutex))
 		 (kill-job?    #f)
 		 (exit-info    (make-launch:einf pid: #t exit-status: #t exit-code: #t rollup-status: 0)) ;; pid exit-status exit-code (i.e. process was successfully run) rollup-status
 		 (job-thread   #f)
-		 (keep-going   #t)
+		 ;; (keep-going   #t)
+		 (misc-flags   (let ((ht (make-hash-table)))
+				 (hash-table-set! ht 'keep-going #t)
+				 ht))
 		 (runit        (lambda ()
-				 ;; (let-values
-				 ;;  (((pid exit-status exit-code)
-				 ;;    (run-n-wait fullrunscript)))
-				 ;; (tests:test-set-status! test-id "RUNNING" "n/a" #f #f)
-				 ;; Since we should have a clean slate at this time there is no need to do 
-				 ;; any of the other stuff that tests:test-set-status! does. Let's just 
-				 ;; force RUNNING/n/a
-				 
-
-				 ;; (thread-sleep! 0.3)
-				 (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
-				 (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "RUNNING")
-				 ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
-
-				 ;; if there is a runscript do it first
-				 (if fullrunscript
-				     (let ((pid (process-run fullrunscript)))
-				       (rmt:test-set-top-process-pid run-id test-id pid)
-				       (let loop ((i 0))
-					 (let-values
-					  (((pid-val exit-status exit-code) (process-wait pid #t)))
-					  (mutex-lock! m)
-					  (launch:einf-pid-set!           exit-info  pid)         ;; (vector-set! exit-info 0 pid)
-					  (launch:einf-exit-status-set!   exit-info  exit-status) ;; (vector-set! exit-info 1 exit-status)
-					  (launch:einf-exit-code-set!     exit-info  exit-code)   ;; (vector-set! exit-info 2 exit-code)
-					  (launch:einf-rollup-status-set! exit-info  exit-code)   ;; (vector-set! exit-info 3 exit-code)  ;; rollup status
-					  (mutex-unlock! m)
-					  (if (eq? pid-val 0)
-					      (begin
-						(thread-sleep! 2)
-						(loop (+ i 1)))
-					      )))))
-				 ;; then, if runscript ran ok (or did not get called)
-				 ;; do all the ezsteps (if any)
-				 (if ezsteps
-				     (let* ((testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
-					     ;; NOTE: it is tempting to turn off force-create of testconfig but dynamic
-					     ;;       ezstep names need a full re-eval here.
-					     (tests:get-testconfig test-name tconfigreg #t force-create: #t)) ;; 'return-procs)))
-					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '())))
-				       (hash-table-set! *testconfigs* test-name testconfig) ;; cached for lazy reads later ...
-				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
-				       ;; if ezsteps was defined then we are sure to have at least one step but check anyway
-				       (if (not (> (length ezstepslst) 0))
-					   (debug:print 0 "ERROR: ezsteps defined but ezstepslst is zero length")
-					   (let loop ((ezstep (car ezstepslst))
-						      (tal    (cdr ezstepslst))
-						      (prevstep #f))
-					     ;; check exit-info (vector-ref exit-info 1)
-					     (if (launch:einf-exit-status exit-info) ;; (vector-ref exit-info 1)
-						 (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig)))
-						   (if (and (steprun-good? logpro-used (launch:einf-exit-code exit-info))
-							    (not (null? tal)))
-						       (loop (car tal) (cdr tal) stepname)))
-						 (debug:print 4 "WARNING: a prior step failed, stopping at " ezstep))))))))
+				 (launch:manage-steps run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m)))
 		 (monitorjob   (lambda ()
-				 (let* ((start-seconds (current-seconds))
-					(calc-minutes  (lambda ()
-							 (inexact->exact 
-							  (round 
-							   (- 
-							    (current-seconds) 
-							    start-seconds)))))
-					(kill-tries 0))
-				   ;; (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area)
-				   ;; (tests:set-full-meta-info test-id run-id (calc-minutes) work-area)
-				   (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
-				   (let loop ((minutes   (calc-minutes))
-					      (cpu-load  (get-cpu-load))
-					      (disk-free (get-df (current-directory))))
-				     (let ((new-cpu-load (let* ((load  (get-cpu-load))
-								(delta (abs (- load cpu-load))))
-							   (if (> delta 0.6) ;; don't bother updating with small changes
-							       load
-							       #f)))
-					   (new-disk-free (let* ((df    (get-df (current-directory)))
-								 (delta (abs (- df disk-free))))
-							    (if (> delta 200) ;; ignore changes under 200 Meg
-								df
-								#f))))
-				       (set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
-							   (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
-									       (time-exceeded (> run-seconds runtlim)))
-									  (if time-exceeded
-									      (begin
-										(debug:print-info 0 "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
-										#t)
-									      #f)))))
-				       (tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f)
-				       (if kill-job? 
-					   (begin
-					     (mutex-lock! m)
-					     ;; NOTE: The pid can change as different steps are run. Do we need handshaking between this
-					     ;;       section and the runit section? Or add a loop that tries three times with a 1/4 second
-					     ;;       between tries?
-					     (let* ((pid1 (launch:einf-pid exit-info)) ;; (vector-ref exit-info 0))
-						    (pid2 (rmt:test-get-top-process-pid run-id test-id))
-						    (pids (delete-duplicates (filter number? (list pid1 pid2)))))
-					       (if (not (null? pids))
-						   (begin
-						     (for-each
-						      (lambda (pid)
-							(handle-exceptions
-							 exn
-							 (begin
-							   (debug:print-info 0 "Unable to kill process with pid " pid ", possibly already killed.")
-							   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn)))
-							 (debug:print 0 "WARNING: Request received to kill job " pid) ;;  " (attempt # " kill-tries ")")
-							 (debug:print-info 0 "Signal mask=" (signal-mask))
-							 ;; (if (process:alive? pid)
-							 ;;     (begin
-							 (map (lambda (pid-num)
-								(process-signal pid-num signal/term))
-							      (process:get-sub-pids pid))
-							 (thread-sleep! 5)
-							 ;; (if (process:process-alive? pid)
-							 (map (lambda (pid-num)
-								(handle-exceptions
-								 exn
-								 #f
-								 (process-signal pid-num signal/kill)))
-							      (process:get-sub-pids pid))))
-							 ;;    (debug:print-info 0 "not killing process " pid " as it is not alive"))))
-						      pids)
-						     (tests:test-set-status! run-id test-id "KILLED"  "KILLED" (args:get-arg "-m") #f))
-						   (begin
-						     (debug:print 0 "ERROR: Nothing to kill, pid1=" pid1 ", pid2=" pid2)
-						     (tests:test-set-status! run-id test-id "KILLED"  "FAILED TO KILL" (args:get-arg "-m") #f)
-						     )))
-					     (mutex-unlock! m)
-					     ;; no point in sticking around. Exit now.
-					     (exit)))
-				       (if keep-going
-					   (begin
-					     (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
-					     (if keep-going    ;; keep originals for cpu-load and disk-free unless they change more than the allowed delta
-						 (loop (calc-minutes) (or new-cpu-load cpu-load) (or new-disk-free disk-free)))))))
-				   (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)))) ;; NOTE: Checking twice for keep-going is intentional
+				 (launch:monitor-job  run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m work-area runtlim misc-flags)))
 		 (th1          (make-thread monitorjob "monitor job"))
 		 (th2          (make-thread runit "run job")))
 	    (set! job-thread th2)
 	    (thread-start! th1)
 	    (thread-start! th2)
 	    (thread-join! th2)
-	    (debug:print-info 0 "Megatest exectute of test " test-name ", item path " item-path " complete. Notifying the db ...")
-	    (set! keep-going #f)
+	    (debug:print-info 0 *default-log-port* "Megatest exectute of test " test-name ", item path " item-path " complete. Notifying the db ...")
+	    (hash-table-set! misc-flags 'keep-going #f)
 	    (thread-join! th1)
 	    (thread-sleep! 1)       ;; givbe thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.
 	    (mutex-lock! m)
@@ -561,8 +623,11 @@
 				     ((eq? (launch:einf-rollup-status exit-info) 2)	     ;;	(vector-ref exit-info 3)
 				      ;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
 				      (if (equal? (db:test-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
-				     (else "FAIL")))) ;; (db:test-status testinfo)))
-		    (debug:print-info 1 "Test exited in state=" (db:test-state testinfo) ", setting state/status based on exit code of " (launch:einf-exit-status exit-info) " and rollup-status of " (launch:einf-rollup-status exit-info))
+				     ((eq? (launch:einf-rollup-status exit-info) 3) "CHECK")
+				     ((eq? (launch:einf-rollup-status exit-info) 4) "WAIVED")
+				     ((eq? (launch:einf-rollup-status exit-info) 5) "ABORT")
+				     ((eq? (launch:einf-rollup-status exit-info) 6) "SKIP"))))
+		    (debug:print-info 1 *default-log-port* "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (launch:einf-exit-status exit-info) " and rollup-status of " (launch:einf-rollup-status exit-info))
 		    (tests:test-set-status! run-id 
 					    test-id 
 					    new-state
@@ -575,109 +640,192 @@
 	      (if (not (equal? item-path ""))
 		  (tests:summarize-items run-id test-id test-name #f))
 	      (tests:summarize-test run-id test-id)  ;; don't force - just update if no
-	      )
+	      (rmt:update-run-stats run-id (rmt:get-raw-run-stats run-id)))
 	    (mutex-unlock! m)
-	    (debug:print 2 "Output from running " fullrunscript ", pid " (launch:einf-pid exit-info) " in work area " 
+	    (debug:print 2 *default-log-port* "Output from running " fullrunscript ", pid " (launch:einf-pid exit-info) " in work area " 
 			 work-area ":\n====\n exit code " (launch:einf-exit-code exit-info) "\n" "====\n")
 	    (if (not (launch:einf-exit-status exit-info))
 		(exit 4)))))))
-
-;; set up the very basics needed for doing anything here.
-(define (launch:setup-for-run #!key (force #f))
-  ;; would set values for KEYS in the environment here for better support of env-override but 
-  ;; have chicken/egg scenario. need to read megatest.config then read it again. Going to 
-  ;; pass on that idea for now
-  ;; special case
-  (if (or force (not (hash-table? *configdat*)))  ;; no need to re-open on every call
-      (begin
-	(set! *configinfo* (or (if (get-environment-variable "MT_CMDINFO") ;; we are inside a test - do not reprocess configs
-				   (let ((alistconfig (conc (get-environment-variable "MT_LINKTREE") "/"
-							    (get-environment-variable "MT_TARGET")   "/"
-							    (get-environment-variable "MT_RUNNAME")  "/"
-							    ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
-				     (if (file-exists? alistconfig)
-					 (list (configf:read-alist alistconfig)
-					       (get-environment-variable "MT_RUN_AREA_HOME"))
-					 #f))
-				   #f) ;; no config cached - give up
-			       (let ((runname (or (args:get-arg "-runname")(args:get-arg ":runname"))))
-				 (if runname (setenv "MT_RUNNAME" runname))
-				 (find-and-read-config 
-				  (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
-				  environ-patt: "env-override"
-				  given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
-				  pathenvvar: "MT_RUN_AREA_HOME"))))
-	(set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
-	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
-	(let* ((tmptransport (configf:lookup *configdat* "server" "transport"))
-	       (transport    (if tmptransport (string->symbol tmptransport) 'http)))
-	  (if (member transport '(http rpc nmsg))
-	      (set! *transport-type* transport)
-	      (begin
-		(debug:print 0 "ERROR: Unrecognised transport " transport)
-		(exit))))
-	(let ((linktree (configf:lookup *configdat* "setup" "linktree"))) ;; link tree is critical
-	  (if linktree
-	      (if (not (file-exists? linktree))
-		  (begin
-		    (handle-exceptions
-		     exn
-		     (begin
-		       (debug:print 0 "ERROR: Something went wrong when trying to create linktree dir at " linktree)
-		       (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-		       (exit 1))
-		     (create-directory linktree #t))))
-	      (begin
-		(debug:print 0 "ERROR: linktree not defined in [setup] section of megatest.config")
-		(exit 1)))
-	  (if linktree
-	      (let ((dbdir (conc linktree "/.db")))
-		(handle-exceptions
-		 exn
-		 (begin
-		   (debug:print 0 "ERROR: failed to create the " dbdir " area for your database files")
-		   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn)))
-		 (if (not (directory-exists? dbdir))(create-directory dbdir)))
-		(setenv "MT_LINKTREE" linktree))
-	      (begin
-		(debug:print 0 "ERROR: linktree is required in your megatest.config [setup] section")
-		(exit 1)))
-	  (if (and *toppath*
-		   (directory-exists? *toppath*))
-	      (setenv "MT_RUN_AREA_HOME" *toppath*)
-	      (begin
-		(debug:print 0 "ERROR: failed to find the top path to your Megatest area.")
-		(exit 1)))
-	  )))
-  *toppath*)
 
 (define (launch:cache-config)
   ;; if we have a linktree and -runtests and -target and the directory exists dump the config
   ;; to megatest-(current-seconds).cfg and symlink it to megatest.cfg
   (if (and *configdat* 
 	   (or (args:get-arg "-run")
-	       (args:get-arg "-runtests")))
+	       (args:get-arg "-runtests")
+	       (args:get-arg "-execute")))
       (let* ((linktree (get-environment-variable "MT_LINKTREE"))
 	     (target   (common:args-get-target))
 	     (runname  (or (args:get-arg "-runname")
-			   (args:get-arg ":runname")))
+			   (args:get-arg ":runname")
+			   (getenv "MT_RUNNAME")))
 	     (fulldir  (conc linktree "/"
 			     target "/"
 			     runname)))
-	(debug:print-info 0 "Have -runtests with target=" target ", runname=" runname ", fulldir=" fulldir ", testpatt=" (or (args:get-arg "-testpatt") "%"))
-	(if (file-exists? linktree) ;; can't proceed without linktree
+	(if (and linktree (file-exists? linktree)) ;; can't proceed without linktree
 	    (begin
+	      (debug:print-info 0 *default-log-port* "Have -run with target=" target ", runname=" runname ", fulldir=" fulldir ", testpatt=" (or (args:get-arg "-testpatt") "%"))
 	      (if (not (file-exists? fulldir))
 		  (create-directory fulldir #t)) ;; need to protect with exception handler 
 	      (if (and target
 		       runname
 		       (file-exists? fulldir))
 		  (let ((tmpfile  (conc fulldir "/.megatest.cfg." (current-seconds)))
-			(targfile (conc fulldir "/.megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
-		    (debug:print-info 0 "Caching megatest.config in " fulldir "/.megatest.cfg")
-		    (configf:write-alist *configdat* tmpfile)
-		    (system (conc "ln -sf " tmpfile " " targfile))
-		    )))))))
+			(targfile (conc fulldir "/.megatest.cfg-"  megatest-version "-" megatest-fossil-hash))
+			(rconfig  (conc fulldir "/.runconfig." megatest-version "-" megatest-fossil-hash)))
+		    (if (file-exists? rconfig) ;; only cache megatest.config AFTER runconfigs has been cached
+			(begin
+			  (debug:print-info 0 *default-log-port* "Caching megatest.config in " tmpfile)
+			  (configf:write-alist *configdat* tmpfile)
+			  (system (conc "ln -sf " tmpfile " " targfile))))
+		    )))
+	    (debug:print-info 1 *default-log-port* "No linktree yet, no caching configs.")))))
+
+
+;; gather available information, if legit read configs in this order:
+;;
+;;   if have cache;
+;;      read it a return it
+;;   else
+;;     megatest.config     (do not cache)
+;;     runconfigs.config   (cache if all vars avail)
+;;     megatest.config     (cache if all vars avail)
+;;   returns:
+;;     *toppath*
+;;   side effects:
+;;     sets; *configdat*    (megatest.config info)
+;;           *runconfigdat* (runconfigs.config info)
+;;           *configstatus* (status of the read data)
+;;
+(define (launch:setup-new #!key (force #f))
+  (let* ((toppath  (or *toppath* (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
+	 (runname  (common:args-get-runname))
+	 (target   (common:args-get-target))
+	 (linktree (common:get-linktree))
+	 (sections (if target (list "default" target) #f)) ;; for runconfigs
+	 (mtconfig (or (args:get-arg "-config") "megatest.config")) ;; allow overriding megatest.config 
+	 (rundir   (if (and runname target linktree)(conc linktree "/" target "/" runname) #f))
+	 (mtcachef (and rundir (conc rundir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
+	 (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
+	 (cancreate (and rundir (file-exists? rundir)(file-write-access? rundir))))
+    ;; (print "runname: " runname " target: " target " mtcachef: " mtcachef " rccachef: " rccachef)
+    (set! *toppath* toppath) ;; This is needed when we are running as a test using CMDINFO as a datasource
+    (cond
+     ;; data was read and cached and available in *configstatus*, toppath has already been set
+     ((eq? *configstatus* 'fulldata)
+      *toppath*)
+     ;; if mtcachef exists just read it, however we need to assume toppath is available in $MT_RUN_AREA_HOME
+     ((and mtcachef (file-exists? mtcachef) (get-environment-variable "MT_RUN_AREA_HOME"))
+      (set! *configdat*    (configf:read-alist mtcachef))
+      (set! *runconfigdat* (configf:read-alist rccachef))
+      (set! *configinfo*   (list *configdat*  (get-environment-variable "MT_RUN_AREA_HOME")))
+      (set! *configstatus* 'fulldata)
+      (set! *toppath*      (get-environment-variable "MT_RUN_AREA_HOME"))
+      *toppath*)
+     ;; we have all the info needed to fully process runconfigs and megatest.config
+     (mtcachef              
+      (let* ((first-pass    (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect
+			             mtconfig
+				     environ-patt: "env-override"
+				     given-toppath: toppath
+				     pathenvvar: "MT_RUN_AREA_HOME"))
+	     (first-rundat  (let ((toppath (if toppath 
+					       toppath
+					       (car first-pass))))
+			      (read-config ;; (conc toppath "/runconfigs.config")
+			       (conc (if (string? toppath)
+					 toppath
+					 (get-environment-variable "MT_RUN_AREA_HOME"))
+				     "/runconfigs.config")
+			       *runconfigdat* #t 
+			       sections: sections))))
+	(set! *runconfigdat* first-rundat)
+	(if first-pass  ;; 
+	    (begin
+	      (set! *configdat*  (car first-pass))
+	      (set! *configinfo* first-pass)
+	      (set! *toppath*    (or toppath (cadr first-pass))) ;; use the gathered data unless already have it
+	      (set! toppath      *toppath*)
+	      (if (not *toppath*)
+		  (begin
+		    (debug:print-error 0 *default-log-port* "you are not in a megatest area!")
+		    (exit 1)))
+	      (setenv "MT_RUN_AREA_HOME" *toppath*)
+	      ;; the seed read is done, now read runconfigs, cache it then read megatest.config one more time and cache it
+	      (let* ((keys         (rmt:get-keys))
+		     (key-vals     (keys:target->keyval keys target))
+		     (linktree     (or (getenv "MT_LINKTREE")
+				       (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f)))
+		     (second-pass  (find-and-read-config
+				    mtconfig
+				    environ-patt: "env-override"
+				    given-toppath: toppath
+				    pathenvvar: "MT_RUN_AREA_HOME"))
+		     (runconfigdat (begin     ;; this read of the runconfigs will see any adjustments made by re-reading megatest.config
+				     (for-each (lambda (kt)
+						 (setenv (car kt) (cadr kt)))
+					       key-vals)
+				     (read-config (conc toppath "/runconfigs.config") *runconfigdat* #t 
+						  sections: sections))))
+		(if cancreate (configf:write-alist runconfigdat rccachef))
+		(set! *runconfigdat* runconfigdat)
+		(if cancreate (configf:write-alist *configdat* mtcachef))
+		(if cancreate (set! *configstatus* 'fulldata))))
+	    ;; no configs found? should not happen but let's try to recover gracefully, return an empty hash-table
+	    (set! *configdat* (make-hash-table))
+	    )))
+     ;; else read what you can and set the flag accordingly
+     (else
+      (let* ((cfgdat   (find-and-read-config 
+			(or (args:get-arg "-config") "megatest.config")
+			environ-patt: "env-override"
+			given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
+			pathenvvar: "MT_RUN_AREA_HOME")))
+	(if cfgdat
+	    (let* ((toppath  (or (get-environment-variable "MT_RUN_AREA_HOME")(cadr cfgdat)))
+		   (rdat     (read-config (conc toppath
+						"/runconfigs.config") *runconfigdat* #t sections: sections)))
+	      (set! *configinfo*   cfgdat)
+	      (set! *configdat*    (car cfgdat))
+	      (set! *runconfigdat* rdat)
+	      (set! *toppath*      toppath)
+	      (set! *configstatus* 'partial))
+	    (begin
+	      (debug:print-error 0 *default-log-port* "No " mtconfig " file found. Giving up.")
+	      (exit 2))))))
+    ;; additional house keeping
+    (let* ((linktree (or (getenv "MT_LINKTREE")
+			 (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f))))
+      (if linktree
+	  (begin
+	    (if (not (file-exists? linktree))
+		(begin
+		  (handle-exceptions
+		   exn
+		   (begin
+		     (debug:print-error 0 *default-log-port* "Something went wrong when trying to create linktree dir at " linktree)
+		     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+		     (exit 1))
+		   (create-directory linktree #t))))
+	    (handle-exceptions
+	     exn
+	     (begin
+	       (debug:print-error 0 *default-log-port* "Something went wrong when trying to create link to linktree at " *toppath*)
+	       (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn)))
+	     (let ((tlink (conc *toppath* "/lt")))
+	       (if (not (file-exists? tlink))
+		   (create-symbolic-link linktree tlink)))))
+	  (begin
+	    (debug:print-error 0 *default-log-port* "linktree not defined in [setup] section of megatest.config")
+	    )))
+    (if (and *toppath*
+	     (directory-exists? *toppath*))
+	(setenv "MT_RUN_AREA_HOME" *toppath*)
+	(begin
+	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")))
+    *toppath*))
+
+(define launch:setup launch:setup-new)
 
 (define (get-best-disk confdat testconfig)
   (let* ((disks   (or (and testconfig (hash-table-ref/default testconfig "disks" #f))
@@ -689,8 +837,8 @@
 	  (if res
 	      (cdr res)
 	      (begin
-		(if (common:low-noise-print 20 "no valid disks")
-		    (debug:print 0 "ERROR: No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists!"))
+		(if (common:low-noise-print 20 "No valid disks or no disk with enough space")
+		    (debug:print-error 0 *default-log-port* "No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists and has enough space!\n    You can change minspace in the [setup] section of megatest.config. Current setting is: " minspace))
 		(exit 1)))))))
 
 ;; Desired directory structure:
@@ -741,10 +889,10 @@
     ;;                                                 rundir   shortdir
     (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path)
 
-    (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
+    (debug:print 2 *default-log-port* "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
 	(begin
-	  (debug:print 0 "WARNING: linktree did not exist! Creating it now at " linktree)
+	  (debug:print 0 *default-log-port* "WARNING: linktree did not exist! Creating it now at " linktree)
 	  (create-directory linktree #t))) ;; (system (conc "mkdir -p " linktree))))
     ;; create the directory for the tests dir links, this is needed no matter what...
     (if (and (not (directory-exists? lnkbase))
@@ -752,7 +900,7 @@
 	(handle-exceptions
 	 exn
 	 (begin
-	   (debug:print "ERROR: Problem creating linktree base at " lnkbase)
+	   (debug:print-error 0 *default-log-port* "Problem creating linktree base at " lnkbase)
 	   (print-error-message exn (current-error-port)))
 	 (create-directory lnkbase #t)))
     
@@ -767,11 +915,11 @@
     ;; level
     (if (not not-iterated) ;; i.e. iterated
 	(let ((iterated-parent  (pathname-directory (conc lnkpath "/" item-path))))
-	  (debug:print-info 2 "Creating iterated parent " iterated-parent)
+	  (debug:print-info 2 *default-log-port* "Creating iterated parent " iterated-parent)
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 0 "ERROR:  Failed to create directory " iterated-parent ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	     (debug:print-error 0 *default-log-port* " Failed to create directory " iterated-parent ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	     (exit 1))
 	   (create-directory iterated-parent #t))))
 
@@ -779,7 +927,7 @@
 	(handle-exceptions
 	 exn
 	 (begin
-	   (debug:print 0 "ERROR:  Failed to remove symlink " lnkpath ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	   (debug:print-error 0 *default-log-port* " Failed to remove symlink " lnkpath ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	   (exit 1))
 	 (delete-file lnkpath)))
 
@@ -788,7 +936,7 @@
 	(handle-exceptions
 	 exn
 	 (begin
-	   (debug:print 0 "ERROR:  Failed to create symlink " lnkpath ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	   (debug:print-error 0 *default-log-port* " Failed to create symlink " lnkpath ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	   (exit 1))
 	 (create-symbolic-link toptest-path lnkpath)))
     
@@ -809,14 +957,15 @@
 	  ;; NB// Was this for the test or for the parent in an iterated test?
 	  (rmt:general-call 'test-set-rundir-shortdir run-id lnkpath 
 			    (if (file-exists? lnkpath)
-				(resolve-pathname lnkpath)
+				;; (resolve-pathname lnkpath)
+				(common:nice-path lnkpath)
 				lnkpath)
 			    testname "")
 	  ;; (rmt:general-call 'test-set-rundir run-id lnkpath testname "") ;; toptest-path)
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
 	      (begin
-		(debug:print-info 2 "Creating " toptest-path " and link " lnkpath)
+		(debug:print-info 2 *default-log-port* "Creating " toptest-path " and link " lnkpath)
 		(handle-exceptions
 		 exn
 		 #f ;; don't care to catch and deal with errors here for now.
@@ -827,15 +976,15 @@
     ;; been created. Now, if this is an iterated test the real test dir must be created
     (if (not not-iterated) ;; this is an iterated test
 	(begin ;; (let ((lnktarget (conc lnkpath "/" item-path)))
-	  (debug:print 2 "Setting up sub test run area")
-	  (debug:print 2 " - creating run area in " test-path)
+	  (debug:print 2 *default-log-port* "Setting up sub test run area")
+	  (debug:print 2 *default-log-port* " - creating run area in " test-path)
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 0 "ERROR:  Failed to create directory " test-path ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	     (debug:print-error 0 *default-log-port* " Failed to create directory " test-path ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	     (exit 1))
 	   (create-directory test-path #t))
-	  (debug:print 2 
+	  (debug:print 2 *default-log-port* 
 		       " - creating link from: " test-path "\n"
 		       "                   to: " lnktarget)
 
@@ -843,7 +992,7 @@
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 0 "ERROR:  Failed to re-create link " lnktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	     (debug:print-error 0 *default-log-port* " Failed to re-create link " lnktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	     (exit))
 	   (if (symbolic-link? lnktarget)     (delete-file lnktarget))
 	   (if (not (file-exists? lnktarget)) (create-symbolic-link test-path lnktarget)))))
@@ -865,11 +1014,11 @@
 				   " >> " test-path "/mt_launch.log 2>> " test-path "/mt_launch.log")))
 		 (status (system cmd)))
 	    (if (not (eq? status 0))
-		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))
+		(debug:print 2 *default-log-port* "ERROR: problem with running \"" cmd "\"")))
 	  (list lnkpathf lnkpath ))
 	(if (and test-src-path (> remtries 0))
 	    (begin
-	      (debug:print 0 "ERROR: Failed to create work area at " test-path " with link at " lnktarget ", remaining attempts " remtries)
+	      (debug:print-error 0 *default-log-port* "Failed to create work area at " test-path " with link at " lnktarget ", remaining attempts " remtries)
 	      ;; 
 	      (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat remtries: (- remtries 1)))
 	    (list #f #f)))))
@@ -947,7 +1096,7 @@
     (if (and (args:get-arg "-preclean") ;; user has requested to preclean for this run
 	     (not (member (db:test-rundir testinfo)(list "n/a" "/tmp/badname")))) ;; n/a is a placeholder and thus not a read dir
 	(begin
-	  (debug:print-info 0 "attempting to preclean directory " (db:test-rundir testinfo) " for test " test-name "/" item-path)
+	  (debug:print-info 0 *default-log-port* "attempting to preclean directory " (db:test-rundir testinfo) " for test " test-name "/" item-path)
 	  (runs:remove-test-directory testinfo 'remove-data-only))) ;; remove data only, do not perturb the record
 
     ;; prevent overlapping actions - set to LAUNCHED as early as possible
@@ -959,11 +1108,11 @@
 	(let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
 	  (set! toptest-work-area (cadr dat))
-	  (debug:print-info 2 "Using work area " work-area))
+	  (debug:print-info 2 *default-log-port* "Using work area " work-area))
 	(begin
 	  (set! work-area (conc test-path "/tmp_run"))
 	  (create-directory work-area #t)
-	  (debug:print 0 "WARNING: No disk work area specified - running in the test directory under tmp_run")))
+	  (debug:print 0 *default-log-port* "WARNING: No disk work area specified - running in the test directory under tmp_run")))
     (set! cmdparms (base64:base64-encode 
 		    (z3:encode-buffer 
 		     (with-output-to-string
@@ -1001,13 +1150,13 @@
       (set! fullcmd (append launcher (list remote-megatest "-m" test-sig "-execute" cmdparms) debug-param)))
      ;; (set! fullcmd (append launcher (list remote-megatest test-sig "-execute" cmdparms))))
      (else
-      (if (not useshell)(debug:print 0 "WARNING: internal launching will not work well without \"useshell yes\" in your [jobtools] section"))
+      (if (not useshell)(debug:print 0 *default-log-port* "WARNING: internal launching will not work well without \"useshell yes\" in your [jobtools] section"))
       (set! fullcmd (append (list remote-megatest "-m" test-sig "-execute" cmdparms) debug-param (list (if useshell "&" ""))))))
     ;; (set! fullcmd (list remote-megatest test-sig "-execute" cmdparms (if useshell "&" "")))))
     (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
-    (debug:print 1 "Launching " work-area)
+    (debug:print 1 *default-log-port* "Launching " work-area)
     ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
-    (debug:print 4 "fullcmd: " fullcmd)
+    (debug:print 4 *default-log-port* "fullcmd: " fullcmd)
     (let* ((commonprevvals (alist->env-vars
 			    (hash-table-ref/default *configdat* "env-override" '())))
 	   (testprevvals   (alist->env-vars
@@ -1024,7 +1173,7 @@
 	   ;; Launchwait defaults to true, must override it to turn off wait
 	   (launchwait     (if (equal? (configf:lookup *configdat* "setup" "launchwait") "no") #f #t))
 	   (launch-results (apply (if launchwait
-				      cmd-run-with-stderr->list
+				      process:cmd-run-with-stderr->list
 				      process-run)
 				  (if useshell
 				      (let ((cmdstr (string-intersperse fullcmd " ")))
@@ -1044,8 +1193,8 @@
 	      (apply print launch-results)
 	      (print "NOTE: launched \"" fullcmd "\"\n  but did not wait for it to proceed. Add the following to megatest.config \n[setup]\nlaunchwait yes\n  if you have problems with this"))
 	  #:append))
-      (debug:print 2 "Launching completed, updating db")
-      (debug:print 2 "Launch results: " launch-results)
+      (debug:print 2 *default-log-port* "Launching completed, updating db")
+      (debug:print 2 *default-log-port* "Launch results: " launch-results)
       (if (not launch-results)
           (begin
             (print "ERROR: Failed to run " (string-intersperse fullcmd " ") ", exiting now")

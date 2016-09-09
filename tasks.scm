@@ -27,15 +27,15 @@
 ;;
 (define (tasks:wait-on-journal path n #!key (remove #f)(waiting-msg #f))
   (if (not (string? path))
-      (debug:print 0 "ERROR: Called tasks:wait-on-journal with path=" path " (not a string)")
+      (debug:print-error 0 *default-log-port* "Called tasks:wait-on-journal with path=" path " (not a string)")
       (let ((fullpath (conc path "-journal")))
 	(handle-exceptions
 	 exn
 	 (begin
 	   (print-call-chain (current-error-port))
-	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-	   (debug:print 0 " exn=" (condition->list exn))
-	   (debug:print 0 "tasks:wait-on-journal failed. Continuing on, you can ignore this call-chain")
+	   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print 0 *default-log-port* " exn=" (condition->list exn))
+	   (debug:print 0 *default-log-port* "tasks:wait-on-journal failed. Continuing on, you can ignore this call-chain")
 	   #t) ;; if stuff goes wrong just allow it to move on
 	 (let loop ((journal-exists (file-exists? fullpath))
 		    (count          n)) ;; wait ten times ...
@@ -43,7 +43,7 @@
 	       (begin
 		 (if (and waiting-msg
 			  (eq? (modulo n 30) 0))
-		     (debug:print 0 waiting-msg))
+		     (debug:print 0 *default-log-port* waiting-msg))
 		 (if (> count 0)
 		     (begin
 		       (thread-sleep! 1)
@@ -61,7 +61,7 @@
     (handle-exceptions
      exn
      (begin
-       (debug:print 0 "ERROR: Couldn't create path to " dbdir)
+       (debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
        (exit 1))
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     dbdir))
@@ -83,14 +83,14 @@
        (if (> numretries 0)
 	   (begin
 	     (print-call-chain (current-error-port))
-	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 " exn=" (condition->list exn))
+	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+	     (debug:print 0 *default-log-port* " exn=" (condition->list exn))
 	     (thread-sleep! 1)
 	     (tasks:open-db numretries (- numretries 1)))
 	   (begin
 	     (print-call-chain (current-error-port))
-	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 " exn=" (condition->list exn))))
+	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+	     (debug:print 0 *default-log-port* " exn=" (condition->list exn))))
        (let* ((dbpath       (tasks:get-task-db-path))
 	      (dbfile       (conc dbpath "/monitor.db"))
 	      (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
@@ -288,7 +288,7 @@
 (define (tasks:server-am-i-the-server? mdb run-id)
   (let* ((all    (tasks:server-get-servers-vying-for-run-id mdb run-id))
 	 (first  (if (null? all)
-		     #f;; (begin (debug:print 0 "ERROR: no servers listed, should be at least one by now.") 
+		     #f;; (begin (debug:print-error 0 *default-log-port* "no servers listed, should be at least one by now.") 
 		       ;;      (sqlite3:finalize! mdb)
 		       ;;      (exit 1))
 		     (car (db:get-rows all)))))
@@ -298,7 +298,7 @@
 	       (hostname (db:get-value-by-header first header "hostname"))
 	       (pid      (db:get-value-by-header first header "pid"))
 	       (priority (db:get-value-by-header first header "priority")))
-	  ;; (debug:print 0 "INFO: am-i-the-server got record " first)
+	  ;; (debug:print 0 *default-log-port* "INFO: am-i-the-server got record " first)
 	  ;; for now a basic check. add tiebreaking by priority later
 	  (if (and (equal? hostname (get-host-name))
 		   (equal? pid      (current-process-id)))
@@ -328,16 +328,16 @@
      exn
      (begin
        (print-call-chain (current-error-port))
-       (debug:print 0 "WARNING: tasks:get-server db access error.")
-       (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-       (debug:print 0 " for run " run-id)
+       (debug:print 0 *default-log-port* "WARNING: tasks:get-server db access error.")
+       (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+       (debug:print 0 *default-log-port* " for run " run-id)
        (print-call-chain (current-error-port))
        (if (> retries 0)
 	   (begin
-	     (debug:print 0 " trying call to tasks:get-server again in 10 seconds")
+	     (debug:print 0 *default-log-port* " trying call to tasks:get-server again in 10 seconds")
 	     (thread-sleep! 10)
 	     (tasks:get-server mdb run-id retries: (- retries 0)))
-	   (debug:print 0 "10 tries of tasks:get-server all crashed and burned. Giving up and returning \"no server found\"")))
+	   (debug:print 0 *default-log-port* "10 tries of tasks:get-server all crashed and burned. Giving up and returning \"no server found\"")))
      (sqlite3:for-each-row
       (lambda (id interface port pubport transport pid hostname)
 	(set! res (vector id interface port pubport transport pid hostname)))
@@ -368,18 +368,18 @@
     res))
 
 (define (tasks:need-server run-id)
-  (configf:lookup *configdat* "server" "required"))
+  (equal? (configf:lookup *configdat* "server" "required") "yes"))
 
 ;; 	(maxqry (cdr (rmt:get-max-query-average run-id)))
 ;; 	(threshold   (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "10"))))
 ;;     (cond
 ;;      (forced 
 ;;       (if (common:low-noise-print 60 run-id "server required is set")
-;; 	  (debug:print-info 0 "Server required is set, starting server for run-id " run-id "."))
+;; 	  (debug:print-info 0 *default-log-port* "Server required is set, starting server for run-id " run-id "."))
 ;;       #t)
 ;;      ((> maxqry threshold)
 ;;       (if (common:low-noise-print 60 run-id "Max query time execeeded")
-;; 	  (debug:print-info 0 "Max avg query time of " maxqry "ms exceeds limit of " threshold "ms, server needed for run-id " run-id "."))
+;; 	  (debug:print-info 0 *default-log-port* "Max avg query time of " maxqry "ms exceeds limit of " threshold "ms, server needed for run-id " run-id "."))
 ;;       #t)
 ;;      (else
 ;;       #f))))
@@ -394,7 +394,7 @@
 	       (< delay-time delay-max-tries))
 	  (begin
 	    (if (common:low-noise-print 60 "tasks:start-and-wait-for-server" run-id)
-		(debug:print 0 "Try starting server for run-id " run-id))
+		(debug:print 0 *default-log-port* "Try starting server for run-id " run-id))
 	    (thread-sleep! (/ (random 2000) 1000))
 	    (server:kind-run run-id)
 	    (thread-sleep! (min delay-time 1))
@@ -426,7 +426,7 @@
 ;; no elegance here ...
 ;;
 (define (tasks:kill-server hostname pid)
-  (debug:print-info 0 "Attempting to kill server process " pid " on host " hostname)
+  (debug:print-info 0 *default-log-port* "Attempting to kill server process " pid " on host " hostname)
   (setenv "TARGETHOST" hostname)
   (setenv "TARGETHOST_LOGF" "server-kills.log")
   (system (conc "nbfake kill " pid))
@@ -443,10 +443,10 @@
 	      (pid      (vector-ref sdat 5))
 	      (server-id (vector-ref sdat 0)))
 	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "killed")
-	  (debug:print-info 0 "Killing server " server-id " for run-id " run-id " on host " hostname " with pid " pid)
+	  (debug:print-info 0 *default-log-port* "Killing server " server-id " for run-id " run-id " on host " hostname " with pid " pid)
 	  (tasks:kill-server hostname pid)
 	  (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id tag) )
-	(debug:print-info 0 "No server found for run-id " run-id ", nothing to kill"))
+	(debug:print-info 0 *default-log-port* "No server found for run-id " run-id ", nothing to kill"))
     ;; (sqlite3:finalize! tdb)
     ))
     
@@ -521,7 +521,7 @@
 ;; 
 (define (tasks:start-monitor db mdb)
   (if (> (tasks:get-num-alive-monitors mdb) 2) ;; have two running, no need for more
-      (debug:print-info 1 "Not starting monitor, already have more than two running")
+      (debug:print-info 1 *default-log-port* "Not starting monitor, already have more than two running")
       (let* ((megatestdb     (conc *toppath* "/megatest.db"))
 	     (monitordbf     (conc (db:dbfile-path #f) "/monitor.db"))
 	     (last-db-update 0)) ;; (file-modification-time megatestdb)))
@@ -531,7 +531,7 @@
 	  ;; if the db has been modified we'd best look at the task queue
 	  (let ((modtime (file-modification-time megatestdbpath )))
 	    (if (> modtime last-db-update)
-		(tasks:process-queue db mdb last-db-update megatestdb next-touch))
+		(tasks:process-queue db)) ;; BROKEN. mdb last-db-update megatestdb next-touch))
 	    ;; WARNING: Possible race conditon here!!
 	    ;; should this update be immediately after the task-get-action call above?
 	    (if (> (current-seconds) next-touch)
@@ -550,6 +550,17 @@
 ;; NOTE: It might be good to add one more layer of checking to ensure
 ;;       that no task gets run in parallel.
 
+;; id INTEGER PRIMARY KEY,
+;; action TEXT DEFAULT '',
+;; owner TEXT,
+;; state TEXT DEFAULT 'new',
+;; target TEXT DEFAULT '',
+;; name TEXT DEFAULT '',
+;; testpatt TEXT DEFAULT '',
+;; keylock TEXT,
+;; params TEXT,
+;; creation_time TIMESTAMP DEFAULT (strftime('%s','now')),
+;; execution_time TIMESTAMP);
 
 
 ;; register a task
@@ -646,6 +657,23 @@
 	      ;;   state IN " statesstr " AND 
 	      ;;   action IN " actionsstr 
 	      " ORDER BY creation_time DESC;"))
+       res))))
+
+(define (tasks:get-last dbstruct target runname)
+  (let ((res #f))
+    (db:with-db
+     dbstruct #f #f
+     (lambda (db)
+       (sqlite3:for-each-row
+	(lambda (id . rem)
+	  (set! res (apply vector id rem)))
+	db
+	(conc "SELECT id,action,owner,state,target,name,testpatt,keylock,params,creation_time,execution_time 
+                  FROM tasks_queue 
+ 	       WHERE  
+	        target = ? AND name =?
+	       ORDER BY creation_time DESC LIMIT 1;")
+	target runname)
        res))))
 
 ;; remove tasks given by a string of numbers comma separated
@@ -749,8 +777,8 @@
   (let ((records    (rmt:tasks-find-task-queue-records target run-name testpatt "running" "run-tests"))
 	(hostpid-rx (regexp "\\s+(\\w+)\\s+(\\d+)$"))) ;; host pid is at end of param string
     (if (null? records)
-	(debug:print 0 "No run launching processes found for " target " / " run-name " with testpatt " (or testpatt "* no testpatt specified! *"))
-	(debug:print 0 "Found " (length records) " run(s) to kill."))
+	(debug:print 0 *default-log-port* "No run launching processes found for " target " / " run-name " with testpatt " (or testpatt "* no testpatt specified! *"))
+	(debug:print 0 *default-log-port* "Found " (length records) " run(s) to kill."))
     (for-each 
      (lambda (record)
        (let* ((param-key (list-ref record 8))
@@ -758,15 +786,15 @@
 	 (if match-dat
 	     (let ((hostname  (cadr match-dat))
 		   (pid       (string->number (caddr match-dat))))
-	       (debug:print 0 "Sending SIGINT to process " pid " on host " hostname)
+	       (debug:print 0 *default-log-port* "Sending SIGINT to process " pid " on host " hostname)
 	       (if (equal? (get-host-name) hostname)
 		   (if (process:alive? pid)
 		       (begin
 			 (handle-exceptions
 			  exn
 			  (begin
-			    (debug:print 0 "Kill of process " pid " on host " hostname " failed.")
-			    (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+			    (debug:print 0 *default-log-port* "Kill of process " pid " on host " hostname " failed.")
+			    (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 			    #t)
 			  (process-signal pid signal/int)
 			  (thread-sleep! 5)
@@ -780,7 +808,7 @@
 		     (if old-targethost (setenv "TARGETHOST" old-targethost))
 		     (unsetenv "TARGETHOST")
 		     (unsetenv "TARGETHOST_LOGF"))))
-	     (debug:print 0 "ERROR: no record or improper record for " target "/" run-name " in tasks_queue in main.db"))))
+	     (debug:print-error 0 *default-log-port* "no record or improper record for " target "/" run-name " in tasks_queue in main.db"))))
      records)))
 
 ;; (define (tasks:start-run dbstruct mdb task)

@@ -10,6 +10,8 @@ tags first,single
 reviewed 09/10/2011, by Matt
 
 [triggers]
-NOT_STARTED/ xterm -e bash -s -- 
-RUNNING/ xterm -e bash -s -- 
+# NOT_STARTED/ xterm -e bash -s -- 
+NOT_STARTED/   echo "trigger: exit_0, NOT_STARTED/" > $MT_RUN_AREA_HOME/triggers_$MT_RUN_NAME.dat
+RUNNING/       echo "trigger: exit_0, RUNNING/" >> $MT_RUN_AREA_HOME/triggers_$MT_RUN_NAME.dat
+
 

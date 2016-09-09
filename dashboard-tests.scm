@@ -237,7 +237,7 @@
 (define (submegatest-panel dbstruct keydat testdat runname testconfig)
   (let* ((subarea (configf:lookup testconfig "setup" "submegatest"))
 	 (area-exists (and subarea (file-exists? subarea))))
-    (debug:print-info 0 "Megatest subarea=" subarea ", area-exists=" area-exists)
+    ;; (debug:print-info 0 *default-log-port* "Megatest subarea=" subarea ", area-exists=" area-exists)
     (if subarea
 	(iup:frame 
 	 #:title "Megatest Run Info" ; #:expand "YES"
@@ -425,7 +425,7 @@
 	 (request-update #t))
     (if (not testdat)
 	(begin
-	  (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
+	  (debug:print 2 *default-log-port* "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
 	(let* (;; (run-id        (if testdat (db:test-run_id testdat) #f))
 	       (test-registry (tests:get-all))
@@ -442,7 +442,7 @@
 				  (db:test-rundir testdat)
 				  logfile))
 	       ;; (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
-	       (teststeps     (if testdat (tests:get-compressed-steps #f run-id test-id) '()))
+	       (teststeps     (if testdat (tests:get-compressed-steps run-id test-id) '()))
 	       (testfullname  (if testdat (db:test-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-testname testdat) "n/a"))
 	       ;; (tests:get-testconfig testdat testname 'return-procs))
@@ -512,18 +512,18 @@
 						    ;; NOTE: BUG HIDER, try to eliminate this exception handler
 						    (handle-exceptions
 						     exn 
-						     (debug:print-info 0 "test db access issue in examine test for run-id " run-id ", test-id " test-id ": " ((condition-property-accessor 'exn 'message) exn))
+						     (debug:print-info 0 *default-log-port* "test db access issue in examine test for run-id " run-id ", test-id " test-id ": " ((condition-property-accessor 'exn 'message) exn))
 						     (rmt:get-test-info-by-id run-id test-id )))))
-			       ;; (debug:print-info 0 "need-update= " need-update " curr-mod-time = " curr-mod-time)
+			       ;; (debug:print-info 0 *default-log-port* "need-update= " need-update " curr-mod-time = " curr-mod-time)
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (tests:get-compressed-steps #f run-id test-id))
+				 (set! teststeps    (tests:get-compressed-steps run-id test-id))
 				 (set! logfile      (conc (db:test-rundir testdat) "/" (db:test-final_logf testdat)))
 				 (set! rundir       ;; (filedb:get-path *fdb* 
 				       (db:test-rundir testdat)) ;; )
 				 (set! testfullname (db:test-fullname testdat))
-				 ;; (debug:print 0 "INFO: teststeps=" (intersperse teststeps "\n    "))
+				 ;; (debug:print 0 *default-log-port* "INFO: teststeps=" (intersperse teststeps "\n    "))
 				 
 				 ;; I don't see why this was implemented this way. Please comment it ...
 				 ;; (if (eq? curr-mod-time db-mod-time) ;; do only once if same
@@ -576,12 +576,8 @@
 			      lbl))
 	       (store-button store-label)
 	       (command-proc (lambda (command-text-box)
-			       (let* ((cmd     (iup:attribute command-text-box "VALUE"))
-				      (fullcmd (conc (dtests:get-pre-command)
-						     cmd 
-						     (dtests:get-post-command))))
-				 (debug:print-info 02 "Running command: " fullcmd)
-				 (common:without-vars fullcmd "MT_.*"))))
+			       (let* ((cmd     (iup:attribute command-text-box "VALUE")))
+				 (common:run-a-command cmd))))
 	       (command-text-box (iup:textbox
 				  #:expand "HORIZONTAL"
 				  #:font "Courier New, -10"
@@ -597,14 +593,14 @@
 	;; 								       (fullcmd (conc (dtests:get-pre-command)
 	;; 										      cmd 
 	;; 										      (dtests:get-post-command))))
-	;; 								  (debug:print-info 02 "Running command: " fullcmd)
+	;; 								  (debug:print-info 02 *default-log-port* "Running command: " fullcmd)
 	;; 								  (common:without-vars fullcmd "MT_.*")))))
 	       (kill-jobs (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
 			     (conc "megatest -target " keystring " -runname "  runname 
 				   " -set-state-status KILLREQ,n/a -testpatt %/% "
-				   " -state RUNNING"))))
+				   " -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))
 	       (run-test  (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
@@ -612,6 +608,7 @@
 				   " -run -testpatt " (conc testname "/" (if (equal? item-path "")
 									"%" 
 									item-path))
+				   " -clean-cache"
 				   ))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
@@ -630,6 +627,7 @@
 						      " -run -preclean -testpatt " (conc testname "/" (if (equal? item-path "")
 											   "%" 
 											   item-path))
+						      " -clean-cache"
 						      )))
 				       (common:without-vars
 					(conc (dtests:get-pre-command)
@@ -692,9 +690,9 @@
 							    #:font   "Courier New, -8"
 							    #:expand "YES"
 							    #:scrollbar "YES"
-							    #:numcol 6
-							    #:numlin 30
-							    #:numcol-visible 6
+							    #:numcol 7
+							    #:numlin 100
+							    #:numcol-visible 7
 							    #:numlin-visible 5
 							    #:click-cb (lambda (obj lin col status)
 									 ;; (if (equal? col 6)
@@ -719,6 +717,7 @@
 					 (iup:attribute-set! steps-matrix "WIDTH4" "50")
 					 (iup:attribute-set! steps-matrix "0:5" "Duration")
 					 (iup:attribute-set! steps-matrix "0:6" "Log File")
+					 (iup:attribute-set! steps-matrix "0:7" "Comment")
 					 (iup:attribute-set! steps-matrix "ALIGNMENT1" "ALEFT")
 					 ;; (iup:attribute-set! steps-matrix "FIXTOTEXT" "C1")
 					 (iup:attribute-set! steps-matrix "RESIZEMATRIX" "YES")
@@ -741,7 +740,7 @@
 					  (hash-table-set! widgets "Test Data"
 							   (lambda (testdat) ;; 
 							     (let* ((currval (iup:attribute test-data "VALUE")) ;; "TITLE"))
-								    (fmtstr  "~10a~10a~10a~10a~7a~7a~6a~6a~a") ;; category,variable,value,expected,tol,units,type,comment
+								    (fmtstr  "~10a~10a~10a~10a~7a~7a~6a~7a~a") ;; category,variable,value,expected,tol,units,type,comment
 								    (newval  (string-intersperse 
 									      (append
 									       (list 

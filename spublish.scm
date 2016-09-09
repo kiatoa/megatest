@@ -8,7 +8,7 @@
 ;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 ;;  PURPOSE.
 
-(use defstruct)
+(use typed-records)
 
 ;; (use ssax)
 ;; (use sxml-serializer)
@@ -22,8 +22,8 @@
 (use srfi-18)
 (use format)
 
-(require-library ini-file)
-(import (prefix ini-file ini:))
+;; (require-library ini-file)
+;; (import (prefix ini-file ini:))
 
 (use sql-de-lite srfi-1 posix regex regex-case srfi-69)
 ;; (import (prefix sqlite3 sqlite3:))
@@ -117,7 +117,7 @@ Version: " megatest-fossil-hash)) ;; "
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 2 "ERROR: problem accessing db " dbpath
+	     (debug:print 2 *default-log-port* "ERROR: problem accessing db " dbpath
 			  ((condition-property-accessor 'exn 'message) exn))
 	     (exit 1))
 	   (call-with-database
@@ -140,7 +140,7 @@ Version: " megatest-fossil-hash)) ;; "
 	  (exit 1)))
        (if (not(file-exists? dest-dir-path))
 	(begin
-	  (print "ERROR: target directory "  target-dir " does not exists." )
+	  (print "ERROR: target directory " dest-dir-path " does not exists." )
 	  (exit 1)))
 
     (spublish:db-do
@@ -167,6 +167,27 @@ Version: " megatest-fossil-hash)) ;; "
       (thread-start! th2)
       (thread-join! th1))
     (cons #t "Successfully saved data")))
+
+;; copy directory to dest, validation is done BEFORE calling this
+;;
+
+(define (spublish:tar configdat submitter target-dir dest-dir comment)
+  (let ((dest-dir-path (conc target-dir "/" dest-dir)))
+       (if (not(file-exists? dest-dir-path))
+	(begin
+	  (print "ERROR: target directory " dest-dir-path " does not exists." )
+	  (exit 1)))
+    ;;(print dest-dir-path )
+    (spublish:db-do
+     configdat
+     (lambda (db)
+       (spublish:register-action db "tar" submitter dest-dir-path comment)))
+       (change-directory dest-dir-path)
+       (process-wait (process-run "/bin/tar" (list "xf" "-")))
+       (print "Data copied to " dest-dir-path) 
+
+        (cons #t "Successfully saved data")))
+
 
 (define (spublish:validate target-dir targ-mk)
   (let* ((normal-path (normalize-pathname targ-mk))
@@ -331,8 +352,8 @@ Version: " megatest-fossil-hash)) ;; "
 
 (define (spublish:load-config exe-dir exe-name)
   (let* ((fname   (conc exe-dir "/." exe-name ".config")))
-    (ini:property-separator-patt " *  *")
-    (ini:property-separator #\space)
+    ;; (ini:property-separator-patt " *  *")
+    ;; (ini:property-separator #\space)
     (if (file-exists? fname)
 	;; (ini:read-ini fname)
 	(read-config fname #f #t)
@@ -377,11 +398,21 @@ Version: " megatest-fossil-hash)) ;; "
 	       (exit 1)))
 	 (if (directory? src-path)
 	     (begin
-	       (print "ERROR: source file is a directory, this is not supported yet.")
+              (print "ERROR: source file is a directory, this is not supported yet.")
 	       (exit 1)))
-	 (print "publishing " src-path-in " to " target-dir)
-         (spublish:validate     target-dir dest-dir)
-	 (spublish:cp configdat user src-path target-dir targ-file dest-dir msg)))
+	     (print "publishing " src-path-in " to " target-dir)
+             (spublish:validate     target-dir dest-dir)
+	     (spublish:cp configdat user src-path target-dir targ-file dest-dir msg)))
+      ((tar)
+        (if (< (length args) 1)
+          (begin 
+	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (exit 1)))
+        (let* ((dst-dir (car args))
+               (msg         (or (args:get-arg "-m") "")))
+               (spublish:validate     target-dir  dst-dir)
+               (spublish:tar configdat user target-dir dst-dir msg)))
+ 
       ((mkdir)
         (if (< (length args) 1)
           (begin 
@@ -402,12 +433,15 @@ Version: " megatest-fossil-hash)) ;; "
                (link-name (cadr args))  
                (sub-path (string-reverse (string-join (cdr (string-split (string-reverse link-name) "/")) "/"))) 
                (msg         (or (args:get-arg "-m") "")))
-               (if(not (equal? sub-path link-name))
+               (if (> (string-length(string-trim sub-path)) 0)
                 (begin 
                   (print "attempting to create directory " sub-path " in " target-dir)
-                    (spublish:validate     target-dir sub-path)
- 
-                  (spublish:mkdir configdat user target-dir sub-path msg)))
+                  (spublish:validate     target-dir sub-path)
+                  (print (conc target-dir "/" sub-path ) )
+                  (print (directory-exists?(conc target-dir "/" sub-path )))
+                  (if (directory-exists?(conc target-dir "/" sub-path ))
+                   (print "Target Directory " (conc target-dir sub-path ) " exist!!")
+                  (spublish:mkdir configdat user target-dir sub-path msg))))
 
                (print "attempting to create link " link-name " in " target-dir)
                (spublish:ln configdat user target-dir targ-link link-name msg)))
@@ -503,6 +537,6 @@ Version: " megatest-fossil-hash)) ;; "
      ((null? rema)(print spublish:help))
      ((>= (length rema) 2)
       (apply spublish:process-action configdat (car rema)(cdr rema)))
-     (else (print "ERROR: Unrecognised command. Try \"spublish help\"")))))
+     (else (print "ERROR: Unrecognised command2. Try \"spublish help\"")))))
 
 (main)

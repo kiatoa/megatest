@@ -8,7 +8,7 @@
 ;;  PURPOSE.
 
 (declare (unit margs))
-(declare (uses common))
+;; (declare (uses common))
 
 (define args:arg-hash (make-hash-table))
 

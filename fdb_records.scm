@@ -1,7 +1,7 @@
 ;; Single record for managing a filedb
 ;; make-vector-record "Filedb record" filedb fdb db dbpath pathcache idcache partcache
 ;; Filedb record
-(use defstruct)
+(use typed-records)
 (defstruct filedb:fdb db dbpath pathcache idcache partcache db! dbpath! pathcache! idcache! partcache!)
 
 ;; BB: following replaced by defstruct filedb:fdb --

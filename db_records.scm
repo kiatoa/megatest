@@ -15,7 +15,7 @@
 ;; Accessors for a dbstruct
 ;;
 
-(use defstruct)
+(use typed-records)
 
 (defstruct dbr:dbstruct main strdb path local rundb inmem mtime rtime stime inuse refdb locdbs olddb rundb-path)
 
@@ -210,6 +210,7 @@
 (define-inline (tdb:step-get-status          vec)    (vector-ref  vec 4))
 (define-inline (tdb:step-get-event_time      vec)    (vector-ref  vec 5))
 (define-inline (tdb:step-get-logfile         vec)    (vector-ref  vec 6))
+(define-inline (tdb:step-get-comment         vec)    (vector-ref  vec 7))
 (define-inline (tdb:step-set-id!             vec val)(vector-set! vec 0 val))
 (define-inline (tdb:step-set-test_id!        vec val)(vector-set! vec 1 val))
 (define-inline (tdb:step-set-stepname!       vec val)(vector-set! vec 2 val))
@@ -217,6 +218,7 @@
 (define-inline (tdb:step-set-status!         vec val)(vector-set! vec 4 val))
 (define-inline (tdb:step-set-event_time!     vec val)(vector-set! vec 5 val))
 (define-inline (tdb:step-set-logfile!        vec val)(vector-set! vec 6 val))
+(define-inline (tdb:step-set-comment!        vec vak)(vector-set! vec 7 val))
 
 
 ;; The steps table

@@ -10,7 +10,7 @@ IPADDR   := "-"
 RUNID    := 1
 SERVER    = 
 DEBUG     = 1
-LOGGING   = 
+LOGGING   = -log logs/$(RUNNAME)
 ROWS      = 20
 
 OS  = $(shell grep ID /etc/*-release|cut -d= -f2)
@@ -23,7 +23,7 @@ TARGET     = "ubuntu/nfs/none"
 
 all : build unit test1 test2 test3 test4 test5 test6 test7 test8 test9
 
-unit : basicserver.log runs.log misc.log
+unit : basicserver.log runs.log misc.log tests.log
 
 rel : 
 	cd release;dashboard -rows 25 &
@@ -182,7 +182,7 @@ fullprep : cleanprep
 	cd fullrun;$(BINPATH)/dashboard -rows 15 &
 
 dashboard : cleanprep
-	cd fullrun && $(BINPATH)/dashboard -rows $(ROWS) &
+	cd fullrun && $(BINPATH)/dashboard -skip-version-check -rows $(ROWS) &
 
 newdashboard : cleanprep
 	cd fullrun && $(BINPATH)/newdashboard &
