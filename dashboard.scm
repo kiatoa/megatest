@@ -10,6 +10,7 @@
 ;;======================================================================
 
 (use format)
+
 (require-library iup)
 (import (prefix iup iup:))
 
@@ -178,7 +179,7 @@ Misc
   ((last-data-update  0)                 : number)      ;; last time the data in allruns was updated
   (runs-mutex         (make-mutex))                     ;; use to prevent parallel access to draw objects
   ((run-update-times  (make-hash-table)) : hash-table)  ;; update times indexed by run-id
-  (last-test-dat      #f)                               ;; cache last tests dat
+  ((last-test-dat      (make-hash-table)) : hash-table)  ;; cache last tests dat by run-id
   ((run-db-paths      (make-hash-table)) : hash-table)  ;; cache the paths to the run db files
 
   ;; Runs view
@@ -573,14 +574,18 @@ Misc
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 ;;
 (define (update-rundat tabdat runnamepatt numruns testnamepatt keypatts)
-  (let* ((allruns     (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
+  (let* (
+         (allruns     (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
+         ;;(allruns-tree (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
+         (allruns-tree    (rmt:get-runs "%" #f "0" '()))
 	 (header      (db:get-header allruns))
-	 (runs        (db:get-rows   allruns))
+	 (runs        (db:get-rows   allruns)) ;; RA => Filtered as per runpatt selected
+         (runs-tree   (db:get-rows   allruns-tree)) ;; RA => Returns complete list of runs
 	 (start-time  (current-seconds))
 	 (runs-hash   (let ((ht (make-hash-table)))
 			 (for-each (lambda (run)
 				     (hash-table-set! ht (db:get-value-by-header run header "id") run))
-				   runs) ;; (vector-ref runs-dat 1))
+				   runs-tree) ;; (vector-ref runs-dat 1))
 			 ht))
 	 (tb          (dboard:tabdat-runs-tree tabdat)))
     (dboard:tabdat-header-set! tabdat header)
@@ -1233,6 +1238,7 @@ Misc
 		      (lambda ()
 			(let* ((run-path (tree:node->path obj id))
 			       (run-id    (tree-path->run-id tabdat (cdr run-path))))
+                          ;; (dboard:tabdat-view-changed-set! tabdat #t) ;; ?? done below when run-id is a number
 			  (dboard:tabdat-target-set! tabdat (cdr run-path)) ;; (print "run-path: " run-path)			    
 			  (dboard:tabdat-layout-update-ok-set! tabdat #f)
 			  (if (number? run-id)
@@ -1434,9 +1440,10 @@ Misc
 			     db-pth)))
 	 (tests-dat    (if (or (not run-id)
 			       (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
+                               (not (hash-table-exists? (dboard:tabdat-last-test-dat tabdat) run-id))
 			       (>= (file-modification-time db-path) last-update))
 			   (dboard:get-tests-dat tabdat run-id last-update)
-			   (dboard:tabdat-last-test-dat  tabdat)))
+			   (hash-table-ref (dboard:tabdat-last-test-dat tabdat) run-id)))
 	 (tests-mindat (dcommon:minimize-test-data tests-dat))
 	 (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
 	 (row-indices  (cadr indices))
@@ -1452,7 +1459,7 @@ Misc
 				     (hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
 				   (vector-ref runs-dat 1))
 			 ht)))
-    (dboard:tabdat-last-test-dat-set! tabdat tests-dat)
+    (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id tests-dat)
     (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- (current-seconds) 10))
     (dboard:tabdat-filters-changed-set! tabdat #f)
     (let loop ((pass-num 0)
@@ -1572,7 +1579,8 @@ Misc
 ;; This is the Run Summary tab
 ;; 
 (define (dashboard:one-run commondat tabdat #!key (tab-num #f))
-  (let* ((tb      (iup:treebox
+  (let* ((update-mutex (dboard:commondat-update-mutex commondat))
+	 (tb      (iup:treebox
 		   #:value 0
 		   #:name "Runs"
 		   #:expand "YES"
@@ -1605,9 +1613,20 @@ Misc
 			       (test-id  (hash-table-ref/default cell-lookup key -1))
 			       (cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id "&")))
 			  (system cmd)))))
-	 (one-run-updater  (lambda ()
-			     (if  (dashboard:database-changed? commondat tabdat)
-				  (dashboard:one-run-updater commondat tabdat tb cell-lookup run-matrix)))))
+	 (one-run-updater  
+          (lambda ()
+	    (mutex-lock! update-mutex)
+            (when (not run-matrix)
+              (print "BB> What?? run-matrix is #f"))
+            (if  (or (dashboard:database-changed? commondat tabdat)
+                     (dboard:tabdat-view-changed tabdat))
+                 (debug:catch-and-dump
+                  (lambda () ;; check that run-matrix is initialized before calling the updater
+		    (if run-matrix 
+			(dashboard:one-run-updater commondat tabdat tb cell-lookup run-matrix)))
+                  "dashboard:one-run-updater")
+                 )
+	    (mutex-unlock! update-mutex))))
     (dboard:commondat-add-updater commondat one-run-updater tab-num: tab-num)
     (dboard:tabdat-runs-tree-set! tabdat tb)
     (iup:vbox
@@ -2133,8 +2152,6 @@ Misc
 
 ;;Not reference anywhere
 ;;
-(define (dashboard:summary-tab-updater commondat tab-num)
-  (if dashboard:update-summary-tab (dashboard:update-summary-tab)))
 ;; can a bar be placed in row "rownum" covering x1 to x2 without overlapping with existing 
 ;; bars? Use num-rows to check that a block will fit from rownum to (+ rownum num-rows)
 ;;
