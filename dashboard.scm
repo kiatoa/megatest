@@ -172,6 +172,7 @@ Misc
   ((numruns          (string->number (or (args:get-arg "-cols") "8")))                 : number)      ;; 
   ((tot-runs          0)                 : number)
   ((last-data-update  0)                 : number)      ;; last time the data in allruns was updated
+  ((last-runs-update  0)                 : number)      ;; last time we pulled the runs info to update the tree
   (runs-mutex         (make-mutex))                     ;; use to prevent parallel access to draw objects
   ((run-update-times  (make-hash-table)) : hash-table)  ;; update times indexed by run-id
   ((last-test-dat      (make-hash-table)) : hash-table)  ;; cache last tests dat by run-id
@@ -569,10 +570,11 @@ Misc
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 ;;
 (define (update-rundat tabdat runnamepatt numruns testnamepatt keypatts)
-  (let* (
-         (allruns     (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
+  (let* ((keys             (rmt:get-keys))
+	 (last-runs-update (dboard:tabdat-last-runs-update tabdat))
+         (allruns          (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
          ;;(allruns-tree (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
-         (allruns-tree    (rmt:get-runs "%" #f "0" '()))
+         (allruns-tree    (rmt:get-runs-by-patt keys "%" #f #f #f #f last-runs-update));;'("id" "runname")
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns)) ;; RA => Filtered as per runpatt selected
          (runs-tree   (db:get-rows   allruns-tree)) ;; RA => Returns complete list of runs
@@ -583,6 +585,7 @@ Misc
 				   runs-tree) ;; (vector-ref runs-dat 1))
 			 ht))
 	 (tb          (dboard:tabdat-runs-tree tabdat)))
+    (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
     (dboard:tabdat-header-set! tabdat header)
     ;; 
     ;; trim runs to only those that are changing often here
@@ -1268,6 +1271,9 @@ Misc
 						     (begin
 						       (dashboard:run-times-tab-run-data-updater commondat tabdat tab-num)
 						       (dboard:tabdat-last-data-update-set! tabdat now-time)
+						       ;; this is threadified to return control to the gui for a redraw.
+						       ;; it relies on the running-layout flag to prevent overlapping 
+						       ;; calls.
 						       (thread-start! (make-thread
 								       (lambda ()
 									 (dboard:tabdat-running-layout-set! tabdat #t)
@@ -1400,7 +1406,9 @@ Misc
 				 (time-b   (db:get-value-by-header record-b runs-header "event_time")))
 			    (< time-a time-b)))))
          (changed      #f)
-	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f)))
+	 (last-runs-update  (dboard:tabdat-last-runs-update tabdat))
+	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update)))
+    (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
     (for-each (lambda (run-id)
 		(let* ((run-record (hash-table-ref/default runs-hash run-id #f))
 		       (key-vals   (map (lambda (key)(db:get-value-by-header run-record runs-header key))
@@ -1424,7 +1432,8 @@ Misc
 	      run-ids)))
   
 (define (dashboard:one-run-updater commondat tabdat tb cell-lookup run-matrix)
-  (let* ((runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
+  (let* ((last-runs-update  (dboard:tabdat-last-runs-update tabdat))
+	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 	 (run-id       (dboard:tabdat-curr-run-id tabdat))
          (runs-hash    (let ((ht (make-hash-table)))
@@ -1459,6 +1468,7 @@ Misc
                (numcols      1)
                (changed      #f)
                )
+    (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
           (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id tests-dat)
           (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- (current-seconds) 10))
           (dboard:tabdat-filters-changed-set! tabdat #f)
@@ -2243,7 +2253,8 @@ Misc
 ;; run times tab data updater
 ;;
 (define (dashboard:run-times-tab-run-data-updater commondat tabdat tab-num)
-  (let* ((runs-dat      (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
+  (let* ((last-runs-update (dboard:tabdat-last-runs-update tabdat))
+         (runs-dat      (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
 	 (runs-header   (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 	 (runs-hash     (let ((ht (make-hash-table)))
 			  (for-each (lambda (run)
@@ -2261,6 +2272,7 @@ Misc
 	 (num-runs      (length (hash-table-keys runs-hash)))
 	 (update-start-time (current-seconds))
 	 (inc-mode      #f))
+    (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
     ;; fill in the tree
     (if (and tb 
 	     (not inc-mode))
@@ -2849,8 +2861,7 @@ Misc
 			      ;; (dashboard:run-update commondat)
 			      ) "update buttons once"))
 	  (th2 (make-thread iup:main-loop "Main loop")))
-
-      (thread-start! th1)
+      ;; (thread-start! th1)
       (thread-start! th2)
       (thread-join! th2))))
 

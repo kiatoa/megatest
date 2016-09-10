@@ -942,7 +942,7 @@
 	  (refresh-runs-list (lambda ()
 			       (if (dashboard:database-changed? commondat tabdat)
 				   (let* ((target        (dboard:tabdat-target-string tabdat))
-					  (runs-for-targ (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" target #f #f #f))
+					  (runs-for-targ (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" target #f #f #f 0))
 					  (runs-header   (vector-ref runs-for-targ 0))
 					  (runs-dat      (vector-ref runs-for-targ 1))
 					  (run-names     (cons default-run-name 
