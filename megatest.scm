@@ -1910,9 +1910,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (import readline)
 	      (import apropos)
 	      ;; (import (prefix sqlite3 sqlite3:)) ;; doesn't work ...
-	      ;; (include "readline-fix.scm")
+	      (include "readline-fix.scm")
 
-	      (if #t ;; *use-new-readline*
+	      (if *use-new-readline*
 		  (begin
 		    (install-history-file (get-environment-variable "HOME") ".megatest_history") ;;  [homedir] [filename] [nlines])
 		    (current-input-port (make-readline-port "megatest> ")))
