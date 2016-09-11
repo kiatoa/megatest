@@ -2127,8 +2127,8 @@ Misc
 			      (set! tab-num (+ tab-num 1))
 			      (set! result (append result (list tab-content)))))))))
 		 (sort (hash-table-keys views-cfgdat) (lambda (a b)
-							(let ((order-a (or (any-number (configf:lookup views-cfgdat a "order")) 999))
-							      (order-b (or (any-number (configf:lookup views-cfgdat b "order")) 999)))
+							(let ((order-a (or (any->number (configf:lookup views-cfgdat a "order")) 999))
+							      (order-b (or (any->number (configf:lookup views-cfgdat b "order")) 999)))
 							  (> order-a order-b)))))
 		result))
 	     (tabs (apply iup:tabs
