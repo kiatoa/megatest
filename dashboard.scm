@@ -1588,6 +1588,65 @@ Misc
       (dcommon:run-stats commondat tabdat tab-num: tab-num)))))
 
 ;;======================================================================
+;;  H A N D L E   U S E R   C O N T R I B U T E D   V I E W S
+;;======================================================================
+
+(define (dboard:add-external-tab commondat view-name views-cfgdat tabs tab-num)
+  (let* ((success #t) ;; at any stage of the process set this flag to #f to skip downstream steps. Intention here is to recover gracefully if user provided tabs fail to load.
+	 (source  (configf:lookup views-cfgdat view-name "source"))
+	 (viewgen (configf:lookup views-cfgdat view-name "viewgen"))
+	 (updater (configf:lookup views-cfgdat view-name "updater"))
+	 (result-child #f))
+    (if (and (file-exists? source)
+	     (file-read-access? source))
+	(handle-exceptions
+	 exn
+	 (begin
+	   (print-call-chain)
+	   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print 0 *default-log-port* "ERROR: failed to load " source ", try loading in the repl: megatest -repl")
+	   (set! success #f))
+	 (load source))
+	(begin
+	  (debug:print 0 *default-log-port* "ERROR: cannot find file to load: \"" source "\" for user view " view-name)))
+    ;; now run the user supplied definition for the tab view
+    (if success
+	(handle-exceptions
+	 exn
+	 (begin
+	   (print-call-chain)
+	   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print 0 *default-log-port* "ERROR: failed call procedure " viewgen
+			", with; tab-num=" tab-num ", view-name=" view-name
+			", and views-cfgdat and megatest configdat as parameters. To debug try loading in the repl: megatest -repl")
+	   (set! success #f))
+	 (print "Adding tab " view-name " with proc " viewgen)
+	 ;; (iup:child-add! tabs
+	 (set! result-child 
+	       ((eval (string->symbol viewgen)) tabs tab-num view-name views-cfgdat *configdat*))))
+    ;; and finally set the updater
+    (if success
+	(dboard:commondat-add-updater commondat
+				      (lambda ()
+					(handle-exceptions
+					 exn
+					 (begin
+					   (print-call-chain)
+					   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+					   (debug:print 0 *default-log-port* "ERROR: failed call procedure \"" updater
+							"\", with; tabnum=" tabnum ", view-name=" view-name
+							", and views-cfgdat and megatest configdat as parameters. To debug try loading in the repl: megatest -repl")
+					   (set! success #f))
+					 (debug:print 4 *default-log-port* "Running updater for tab " view-name " with proc " updater " and tab-num: " tab-num)
+					 ((eval (string->symbol updater)) tabs tab-num view-name views-cfgdat *configdat*)))
+				      tab-num: tab-num))
+    (if success
+	(begin
+	  ;; (iup:attribute-set! tabs (conc "TABTITLE" tab-num) view-name)
+	  (dboard:common-set-tabdat! commondat tab-num (dboard:tabdat-make-data))))
+    result-child))
+
+;;======================================================================
 ;; R U N
 ;;======================================================================
 ;;
@@ -2045,27 +2104,53 @@ Misc
 			    (apply iup:hbox (reverse bdylst)))))
 			 controls
 			 ))
+	     (views-cfgdat (common:load-views-config))
+	     (additional-tabnames '())
+	     (tab-start-num       5)   ;; DON'T FORGET TO UPDATE THIS WHEN CHANGING THE STANDARD TABS BELOW
 	     ;; (data (dboard:tabdat-init (make-d:data)))
-	     (tabs (iup:tabs
-		    #:tabchangepos-cb (lambda (obj curr prev)
-					(debug:catch-and-dump
-					 (lambda ()
-					   (let* ((tab-num (dboard:commondat-curr-tab-num commondat))
-						  (tabdat  (dboard:common-get-tabdat commondat tab-num: tab-num)))
-					     (dboard:tabdat-layout-update-ok-set! tabdat #f))
-					   (dboard:commondat-curr-tab-num-set! commondat curr)
-					   (let* ((tab-num (dboard:commondat-curr-tab-num commondat))
-						  (tabdat  (dboard:common-get-tabdat commondat tab-num: tab-num)))
-					     (dboard:commondat-please-update-set! commondat #t)
-					     (dboard:tabdat-layout-update-ok-set! tabdat #t)))
-					 "tabchangepos"))
-		    (dashboard:summary commondat stats-dat tab-num: 0)
-		    runs-view
-		    (dashboard:one-run commondat onerun-dat tab-num: 2)
-		    ;; (dashboard:new-view db data new-view-dat tab-num: 3)
-		    (dashboard:run-controls commondat runcontrols-dat tab-num: 3)
-		    (dashboard:run-times commondat runtimes-dat tab-num: 4)
-		    )))
+	     (additional-views 	;; process views-dat
+	      (let ((tab-num tab-start-num)
+		    (result  '()))
+		(for-each
+		 (lambda (view-name)
+		   (debug:print 0 *default-log-port* "Adding view " view-name)
+		   (let* ((cfgtype (configf:lookup views-cfgdat view-name "type"))) ;; what type of view?
+		     (if (not (string? cfgtype))
+			 (debug:print-info 0 *default-log-port* "WARNING: view \"" view-name
+				     "\" is missing needed sections. Please consult the documenation and update ~/.mtviews.config or " *toppath* "/.mtviews.config")
+			 (case (string->symbol cfgtype)
+			   ;; user supplied source for a tab
+			   ;;
+			   ((external)
+			    (let ((tab-content (dboard:add-external-tab commondat view-name views-cfgdat #f tab-num))) ;; was tabs
+			      (set! additional-tabnames (cons (cons tab-num view-name) additional-tabnames))
+			      (set! tab-num (+ tab-num 1))
+			      (set! result (append result (list tab-content)))))))))
+		 (sort (hash-table-keys views-cfgdat) (lambda (a b)
+							(let ((order-a (or (any-number (configf:lookup views-cfgdat a "order")) 999))
+							      (order-b (or (any-number (configf:lookup views-cfgdat b "order")) 999)))
+							  (> order-a order-b)))))
+		result))
+	     (tabs (apply iup:tabs
+			  #:tabchangepos-cb (lambda (obj curr prev)
+					      (debug:catch-and-dump
+					       (lambda ()
+						 (let* ((tab-num (dboard:commondat-curr-tab-num commondat))
+							(tabdat  (dboard:common-get-tabdat commondat tab-num: tab-num)))
+						   (dboard:tabdat-layout-update-ok-set! tabdat #f))
+						 (dboard:commondat-curr-tab-num-set! commondat curr)
+						 (let* ((tab-num (dboard:commondat-curr-tab-num commondat))
+							(tabdat  (dboard:common-get-tabdat commondat tab-num: tab-num)))
+						   (dboard:commondat-please-update-set! commondat #t)
+						   (dboard:tabdat-layout-update-ok-set! tabdat #t)))
+					       "tabchangepos"))
+			  (dashboard:summary commondat stats-dat tab-num: 0)
+			  runs-view
+			  (dashboard:one-run commondat onerun-dat tab-num: 2)
+			  ;; (dashboard:new-view db data new-view-dat tab-num: 3)
+			  (dashboard:run-controls commondat runcontrols-dat tab-num: 3)
+			  (dashboard:run-times commondat runtimes-dat tab-num: 4)
+			  additional-views)))
 	;; (set! (iup:callback tabs tabchange-cb:) (lambda (a b c)(print "SWITCHED TO TAB: " a " " b " " c)))
 	(iup:attribute-set! tabs "TABTITLE0" "Summary")
 	(iup:attribute-set! tabs "TABTITLE1" "Runs")
@@ -2074,6 +2159,13 @@ Misc
 	(iup:attribute-set! tabs "TABTITLE4" "Run Times")
 	;; (iup:attribute-set! tabs "TABTITLE3" "New View")
 	;; (iup:attribute-set! tabs "TABTITLE4" "Run Control")
+
+	;; set the tab names for user added tabs
+	(for-each
+	 (lambda (tab-info)
+	   (iup:attribute-set! tabs (conc "TABTITLE" (car tab-info)) (cdr tab-info)))
+	 additional-tabnames)
+	
 	(iup:attribute-set! tabs "BGCOLOR" "190 190 190")
 	;; make the iup tabs object available (for changing color for example)
 	(dboard:commondat-hide-not-hide-tabs-set! commondat tabs)
@@ -2083,6 +2175,7 @@ Misc
 	(dboard:common-set-tabdat! commondat 2 onerun-dat)
 	(dboard:common-set-tabdat! commondat 3 runcontrols-dat)
 	(dboard:common-set-tabdat! commondat 4 runtimes-dat)
+
 	(iup:vbox
 	 tabs
 	 ;; controls
