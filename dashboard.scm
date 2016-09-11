@@ -1623,7 +1623,7 @@ Misc
 	 (print "Adding tab " view-name " with proc " viewgen)
 	 ;; (iup:child-add! tabs
 	 (set! result-child 
-	       ((eval (string->symbol viewgen)) tabs tab-num view-name views-cfgdat *configdat*))))
+	       ((eval (string->symbol viewgen)) commondat tabs tab-num view-name views-cfgdat *configdat*))))
     ;; and finally set the updater
     (if success
 	(dboard:commondat-add-updater commondat
@@ -1638,7 +1638,7 @@ Misc
 							", and views-cfgdat and megatest configdat as parameters. To debug try loading in the repl: megatest -repl")
 					   (set! success #f))
 					 (debug:print 4 *default-log-port* "Running updater for tab " view-name " with proc " updater " and tab-num: " tab-num)
-					 ((eval (string->symbol updater)) tabs tab-num view-name views-cfgdat *configdat*)))
+					 ((eval (string->symbol updater)) commondat tabs tab-num view-name views-cfgdat *configdat*)))
 				      tab-num: tab-num))
     (if success
 	(begin
