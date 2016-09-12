@@ -38,7 +38,7 @@
 (declare (uses genexample))
 (declare (uses daemon))
 (declare (uses db))
-(declare (uses dcommon))
+;; (declare (uses dcommon))
 
 (declare (uses tdb))
 (declare (uses mt))
@@ -1911,6 +1911,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (import apropos)
 	      ;; (import (prefix sqlite3 sqlite3:)) ;; doesn't work ...
 	      (include "readline-fix.scm")
+
 	      (if *use-new-readline*
 		  (begin
 		    (install-history-file (get-environment-variable "HOME") ".megatest_history") ;;  [homedir] [filename] [nlines])
