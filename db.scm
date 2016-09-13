@@ -2286,20 +2286,22 @@
 		  (sqlite3:for-each-row
 		   (lambda (id testname item-path state status)
 		     ;;                      id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
-		     (set! res (cons (vector id run-id testname state status -1         ""     -1      -1       ""    "-"  item-path -1           "-"         "-") res)))
+		     ;;(set! res (cons (vector id run-id testname state status -1         ""     -1      -1       ""    "-"  item-path -1           "-"         "-") res)))
+		     (cons (make-db:test-rec id: id testname: testname item-path: item-path state: state status: status) res))
 		   db 
 		   qry
 		   run-id)))
     res))
 
 (define (db:get-testinfo-state-status dbstruct run-id test-id)
-  (let ((res            #f))
+  (let ((res            '()))
     (db:with-db dbstruct run-id #f
 		(lambda (db)
 		  (sqlite3:for-each-row
 		   (lambda (run-id testname item-path state status)
 		     ;; id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
-		     (set! res (vector test-id run-id testname state status -1 "" -1 -1 "" "-" item-path -1 "-" "-")))
+		     ;;(set! res (vector test-id run-id testname state status -1 "" -1 -1 "" "-" item-path -1 "-" "-")))
+		     (cons (make-db:test-rec run_id: run-id testname: testname item-path: item-path state: state status: status) res))
 		   db 
 		   "SELECT run_id,testname,item_path,state,status FROM tests WHERE id=?;" 
 		   test-id)))
