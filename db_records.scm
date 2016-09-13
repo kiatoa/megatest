@@ -66,25 +66,41 @@
   (hash-table-set! (dbr:dbstruct-get-locdbs v) run-id db))
 
 
-(define (make-db:test)(make-vector 20))
-(define-inline (db:test-get-id           vec) (vector-ref vec 0))
-(define-inline (db:test-get-run_id       vec) (vector-ref vec 1))
-(define-inline (db:test-get-testname     vec) (vector-ref vec 2))
-(define-inline (db:test-get-state        vec) (vector-ref vec 3))
-(define-inline (db:test-get-status       vec) (vector-ref vec 4))
-(define-inline (db:test-get-event_time   vec) (vector-ref vec 5))
-(define-inline (db:test-get-host         vec) (vector-ref vec 6))
-(define-inline (db:test-get-cpuload      vec) (vector-ref vec 7))
-(define-inline (db:test-get-diskfree     vec) (vector-ref vec 8))
-(define-inline (db:test-get-uname        vec) (vector-ref vec 9))
-;; (define-inline (db:test-get-rundir       vec) (sdb:qry 'getstr (vector-ref vec 10)))
-(define-inline (db:test-get-rundir       vec) (vector-ref vec 10))
-(define-inline (db:test-get-item-path    vec) (vector-ref vec 11))
-(define-inline (db:test-get-run_duration vec) (vector-ref vec 12))
-(define-inline (db:test-get-final_logf   vec) (vector-ref vec 13))
-(define-inline (db:test-get-comment      vec) (vector-ref vec 14))
-(define-inline (db:test-get-process_id   vec) (vector-ref vec 16))
-(define-inline (db:test-get-archived     vec) (vector-ref vec 17))
+(defstruct db:test-rec (id -1): number
+					(run_id -1) : number 
+					(testname "") : string
+					(state "") : string
+					(status "") : string
+					(event_time -1) : number
+					(host "") : string
+					(cpuload -1) : number
+					(diskfree -1) : number
+					(uname "") : string
+					(rundir "") : string
+					(item-path "") : string
+					(run_duration -1) : number
+					(final_log "") : string
+					(comment "") : string
+					(process_id -1) : number
+					(archived #f) : boolean)
+
+(define db:test-get-id 			  db:test-rec-id)
+(define db:test-get-run_id 		  db:test-rec-run_id)
+(define db:test-get-testname      db:test-rec-testname)
+(define db:test-get-state         db:test-rec-state)
+(define db:test-get-status        db:test-rec-status)
+(define db:test-get-event_time    db:test-rec-event_time)
+(define db:test-get-host          db:test-rec-host)
+(define db:test-get-cpuload       db:test-rec-cpuload)
+(define db:test-get-diskfree      db:test-rec-diskfree)
+(define db:test-get-uname         db:test-rec-uname)
+(define db:test-get-rundir        db:test-rec-rundir)
+(define db:test-get-item-path     db:test-rec-itempath)
+(define db:test-get-run_duration  db:test-rec-run_duration)
+(define db:test-get-final_logf    db:test-rec-final_log)
+(define db:test-get-comment       db:test-rec-comment)
+(define db:test-get-process_id    db:test-rec-process_id)
+(define db:test-get-archived      db:test-rec-archived)
 
 ;; (define-inline (db:test-get-pass_count   vec) (vector-ref vec 15))
 ;; (define-inline (db:test-get-fail_count   vec) (vector-ref vec 16))
