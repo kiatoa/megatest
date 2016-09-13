@@ -112,6 +112,7 @@ Misc
   hide-not-hide-tabs
   )
 
+
 (define (dboard:commondat-make)
   (make-dboard:commondat
    curr-tab-num:         0
@@ -213,6 +214,7 @@ Misc
 						         
   ;; Selector variables				         
   curr-run-id                                           ;; current row to display in Run summary view
+  prev-run-id                                           ;; previous runid selected before current runid was selected (used in xor-two-runs runs summary mode
   curr-test-ids                                         ;; used only in dcommon:run-update which is used in newdashboard
   ((filters-changed  #f)                  : boolean)    ;; to to indicate that the user changed filters for this tab
   ((last-filter-str  "")                  : string)      ;; conc the target runname and testpatt for a signature of changed filters
@@ -245,6 +247,15 @@ Misc
   ((xadj               0)                 : number)     ;; x slider number (if using canvas)
   ((yadj               0)                 : number)     ;; y slider number (if using canvas)
 
+  ;; runs-summary tab state
+  ((runs-summary-modes '((one-run . "Show One Run") (xor-two-runs . "XOR Two Runs")) )   : list)
+  ((runs-summary-mode-buttons '())               : list)
+  ((runs-summary-mode  'one-run)            : symbol)
+  ((runs-summary-mode-change-callbacks '()) : list)
+  (runs-summary-source-runname-label #f)
+  (runs-summary-dest-runname-label #f)
+  ;; runs summary view
+  
   tests-tree       ;; used in newdashboard
   )
 
@@ -1225,28 +1236,33 @@ Misc
  ;;	 logs-tb))
 
 (define (dboard:runs-tree-browser commondat tabdat)
-  (let* ((tb      (iup:treebox
-		   #:value 0
-		   #:name "Runs"
-		   #:expand "YES"
-		   #:addexpanded "NO"
-		   #:selection-cb
-		   (lambda (obj id state)
-		     (debug:catch-and-dump
-		      (lambda ()
-			(let* ((run-path (tree:node->path obj id))
-			       (run-id    (tree-path->run-id tabdat (cdr run-path))))
-                          ;; (dboard:tabdat-view-changed-set! tabdat #t) ;; ?? done below when run-id is a number
-			  (dboard:tabdat-target-set! tabdat (cdr run-path)) ;; (print "run-path: " run-path)			    
-			  (dboard:tabdat-layout-update-ok-set! tabdat #f)
-			  (if (number? run-id)
-			      (begin
-				(dboard:tabdat-curr-run-id-set! tabdat run-id)
-				(dboard:tabdat-view-changed-set! tabdat #t))
-			      (debug:print-error 5 *default-log-port* "tree-path->run-id returned non-number " run-id))))
-		      "treebox"))
-		   ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
-		   )))
+  (let* ((tb
+          (iup:treebox
+           #:value 0
+           #:name "Runs"
+           #:expand "YES"
+           #:addexpanded "NO"
+           #:selection-cb
+           (lambda (obj id state)
+             (debug:catch-and-dump
+              (lambda ()
+                (let* ((run-path (tree:node->path obj id))
+                       (run-id    (tree-path->run-id tabdat (cdr run-path))))
+                  ;; (dboard:tabdat-view-changed-set! tabdat #t) ;; ?? done below when run-id is a number
+                  (dboard:tabdat-target-set! tabdat (cdr run-path)) ;; (print "run-path: " run-path)			    
+                  (dboard:tabdat-layout-update-ok-set! tabdat #f)
+                  (if (number? run-id)
+                      (begin
+                        ;; capture last two in tabdat.
+                        (dboard:tabdat-prev-run-id-set!
+                         tabdat
+                         (dboard:tabdat-curr-run-id tabdat))
+                        (dboard:tabdat-curr-run-id-set! tabdat run-id)
+                        (dboard:tabdat-view-changed-set! tabdat #t))
+                      (debug:print-error 5 *default-log-port* "tree-path->run-id returned non-number " run-id))))
+              "treebox"))
+           ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
+           )))
     (dboard:tabdat-runs-tree-set! tabdat tb)
     tb))
 
@@ -1431,7 +1447,8 @@ Misc
 			))))
 	      run-ids)))
   
-(define (dashboard:one-run-updater commondat tabdat tb cell-lookup run-matrix)
+(define (dashboard:runs-summary-updater commondat tabdat tb cell-lookup run-matrix)
+  (dboard:runs-summary-control-panel-updater tabdat)
   (let* ((last-runs-update  (dboard:tabdat-last-runs-update tabdat))
 	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
@@ -1457,8 +1474,12 @@ Misc
                                      (>= (file-modification-time db-path) last-update))
                                  (dboard:get-tests-dat tabdat run-id last-update)
                                  (hash-table-ref (dboard:tabdat-last-test-dat tabdat) run-id)))
-               (tests-mindat (dcommon:minimize-test-data tests-dat))
-               (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
+               (matrix-content
+                (case (dboard:tabdat-runs-summary-mode tabdat) 
+                  ((one-run) (dcommon:minimize-test-data tests-dat))
+                  ((xor-two-runs) (dcommon:minimize-test-data tests-dat))
+                  (else (dcommon:minimize-test-data tests-dat))))
+               (indices      (common:sparse-list-generate-index matrix-content)) ;;  proc: set-cell))
                (row-indices  (cadr indices))
                (col-indices  (car indices))
                (max-row      (if (null? row-indices) 1 (common:max (map cadr row-indices))))
@@ -1525,7 +1546,7 @@ Misc
                                 (set! changed #t)
                                 (iup:attribute-set! run-matrix key (cadr value))
                                 (iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
-                      tests-mindat)
+                      matrix-content)
             
             ;; Col labels - do after setting Cell contents so they are accounted for in the size calc.
             
@@ -1544,8 +1565,8 @@ Misc
             (if (and (eq? pass-num 0) changed)
                 (loop 1 #t)) ;; force second pass due to column labels changing
             
-            ;; (debug:print 0 *default-log-port* "one-run-updater, changed: " changed " pass-num: " pass-num)
-            ;; (print "one-run-updater, changed: " changed " pass-num: " pass-num)
+            ;; (debug:print 0 *default-log-port* "runs-summary-updater, changed: " changed " pass-num: " pass-num)
+            ;; (print "runs-summary-updater, changed: " changed " pass-num: " pass-num)
             (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
 
   )
@@ -1646,6 +1667,89 @@ Misc
 	  (dboard:common-set-tabdat! commondat tab-num (dboard:tabdat-make-data))))
     result-child))
 
+
+
+(define (dboard:runs-summary-buttons-updater tabdat)
+  (let loop ((buttons-left (dboard:tabdat-runs-summary-mode-buttons tabdat))
+             (modes-left (dboard:tabdat-runs-summary-modes tabdat)))
+    (if (or (null? buttons-left) (null? modes-left))
+        #t
+        (let* ((this-button (car buttons-left))
+               (mode-item (car modes-left))
+               (this-mode (car mode-item))
+               (sel-color    "180 100 100")
+               (nonsel-color "170 170 170")
+               (current-mode (dboard:tabdat-runs-summary-mode tabdat)))
+          (if (eq? this-mode current-mode)
+              (iup:attribute-set! this-button "BGCOLOR" sel-color)
+              (iup:attribute-set! this-button "BGCOLOR" nonsel-color))
+          (loop (cdr buttons-left) (cdr modes-left))))))
+
+(define (dboard:runs-summary-xor-labels-updater tabdat)
+  (let ((source-runname-label (dboard:tabdat-runs-summary-source-runname-label tabdat))
+        (dest-runname-label (dboard:tabdat-runs-summary-dest-runname-label tabdat))
+        (mode (dboard:tabdat-runs-summary-mode tabdat)))
+    (when (and source-runname-label dest-runname-label)
+      (case mode
+        ((xor-two-runs)
+         (let* ((curr-run-id          (dboard:tabdat-curr-run-id tabdat))
+                (prev-run-id          (dboard:tabdat-prev-run-id tabdat))
+                (curr-runname (if curr-run-id
+                                  (rmt:get-run-name-from-id curr-run-id)
+                                  "None"))
+                (prev-runname (if prev-run-id
+                                  (rmt:get-run-name-from-id prev-run-id)
+                                  "None")))
+           (iup:attribute-set! source-runname-label "TITLE" (conc " SRC: "prev-runname"  "))
+           (iup:attribute-set! dest-runname-label "TITLE" (conc "DEST: "curr-runname"  "))))
+        (else
+         (iup:attribute-set! source-runname-label "TITLE" "")
+         (iup:attribute-set! dest-runname-label "TITLE" ""))))))
+
+(define (dboard:runs-summary-control-panel-updater tabdat)
+  (dboard:runs-summary-xor-labels-updater tabdat)
+  (dboard:runs-summary-buttons-updater tabdat))
+
+
+;; setup buttons and callbacks to switch between modes in runs summary tab
+;;
+(define (dashboard:runs-summary-control-panel tabdat)
+  (let* ((summary-buttons ;; build buttons
+          (map
+           (lambda (mode-item)
+             (let* ((this-mode (car mode-item))
+                    (this-mode-label (cdr mode-item)))
+               (iup:button this-mode-label
+                           #:action
+                           (lambda (obj)
+                             (debug:catch-and-dump
+                              (lambda ()
+                                (dboard:tabdat-runs-summary-mode-set! tabdat this-mode)
+                                (dboard:runs-summary-control-panel-updater tabdat))
+                              "runs summary control panel updater")))))
+           (dboard:tabdat-runs-summary-modes tabdat)))
+         (summary-buttons-hbox (apply iup:hbox summary-buttons))
+         (xor-runname-labels-hbox
+          (iup:hbox
+           (let ((temp-label
+                  (iup:label "" #:size "125x15" #:fontsize "10" )))
+             (dboard:tabdat-runs-summary-source-runname-label-set! tabdat temp-label)
+             temp-label
+             )
+           (let ((temp-label
+                  (iup:label "" #:size "125x15" #:fontsize "10")))
+             (dboard:tabdat-runs-summary-dest-runname-label-set! tabdat temp-label)
+             temp-label))))
+    (dboard:tabdat-runs-summary-mode-buttons-set! tabdat summary-buttons)
+
+    ;; maybe wrap in a frame
+    (let ((res (iup:vbox summary-buttons-hbox xor-runname-labels-hbox )))
+      (dboard:runs-summary-control-panel-updater tabdat)
+      res
+      )))
+
+
+
 ;;======================================================================
 ;; R U N
 ;;======================================================================
@@ -1654,7 +1758,7 @@ Misc
 
 ;; This is the Run Summary tab
 ;; 
-(define (dashboard:one-run commondat tabdat #!key (tab-num #f))
+(define (dashboard:runs-summary commondat tabdat #!key (tab-num #f))
   (let* ((update-mutex (dboard:commondat-update-mutex commondat))
 	 (tb      (iup:treebox
 		   #:value 0
@@ -1670,13 +1774,17 @@ Misc
 			       (run-id   (tree-path->run-id tabdat (cdr run-path))))
 			  (if (number? run-id)
 			      (begin
+                                (dboard:tabdat-prev-run-id-set!
+                                 tabdat
+                                 (dboard:tabdat-curr-run-id tabdat))
+
 				(dboard:tabdat-curr-run-id-set! tabdat run-id)
 				(dboard:tabdat-layout-update-ok-set! tabdat #f)
 				;; (dashboard:update-run-summary-tab)
 				)
 			      ;; (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)
 			      )))
-		      "selection-cb in one-run")
+		      "selection-cb in runs-summary")
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		     )))
 	 (cell-lookup (make-hash-table))
@@ -1689,7 +1797,7 @@ Misc
 			       (test-id  (hash-table-ref/default cell-lookup key -1))
 			       (cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id "&")))
 			  (system cmd)))))
-	 (one-run-updater  
+	 (runs-summary-updater  
           (lambda ()
 	    (mutex-lock! update-mutex)
             (if  (or (dashboard:database-changed? commondat tabdat)
@@ -1697,29 +1805,34 @@ Misc
                  (debug:catch-and-dump
                   (lambda () ;; check that run-matrix is initialized before calling the updater
 		    (if run-matrix 
-			(dashboard:one-run-updater commondat tabdat tb cell-lookup run-matrix)))
-                  "dashboard:one-run-updater")
+			(dashboard:runs-summary-updater commondat tabdat tb cell-lookup run-matrix)))
+                  "dashboard:runs-summary-updater")
                  )
-	    (mutex-unlock! update-mutex))))
-    (dboard:commondat-add-updater commondat one-run-updater tab-num: tab-num)
+	    (mutex-unlock! update-mutex)))
+         (runs-summary-control-panel (dashboard:runs-summary-control-panel tabdat))
+         )
+    (dboard:commondat-add-updater commondat runs-summary-updater tab-num: tab-num)
+    (dboard:commondat-add-updater commondat runs-summary-updater tab-num: tab-num)
     (dboard:tabdat-runs-tree-set! tabdat tb)
     (iup:vbox
      (iup:split
+      #:value 200
       tb
       run-matrix)
-     (dboard:make-controls commondat tabdat))))
+     (dboard:make-controls commondat tabdat extra-widget: runs-summary-control-panel))))
 
 ;;======================================================================
 ;; R U N S 
 ;;======================================================================
 
-(define (dboard:make-controls commondat tabdat)
+(define (dboard:make-controls commondat tabdat #!key (extra-widget #f) )
   (let ((btn-fontsz  (dboard:tabdat-runs-btn-fontsz tabdat)))
     (iup:hbox
      (iup:vbox
       (iup:frame 
        #:title "filter test and items"
-       (iup:hbox
+       (iup:vbox
+        (iup:hbox
 	(iup:vbox
 	 (iup:textbox #:size "120x15" #:fontsize "10" #:value "%"
 		      #:expand "NO"
@@ -1774,6 +1887,7 @@ Misc
 						    (set! *tests-sort-reverse* index)
 						    (mark-for-update tabdat))))
 		(default-cmd (car (list-ref *tests-sort-type-index* *tests-sort-reverse*))))
+                
 	   (iuplistbox-fill-list sort-lb cmds-list selected-item: default-cmd)
 	   
 	   (set! hide-empty (iup:button "HideEmpty"
@@ -1801,10 +1915,21 @@ Misc
 	   (iup:attribute-set! hide "BGCOLOR" sel-color)
 	   (iup:attribute-set! show "BGCOLOR" nonsel-color)
 	   ;; (dboard:tabdat-hide-not-hide-button-set! tabdat hideit) ;; never used, can eliminate ...
-	   (iup:vbox
-	    (iup:hbox hide show)
-	    hide-empty sort-lb)))
-	)))
+           (iup:vbox
+            (iup:hbox hide show)
+            sort-lb))) 
+	)
+
+        ;; insert extra widget here
+        (if extra-widget
+            extra-widget
+            (iup:hbox)) ;; empty widget
+
+        
+
+        
+        )))
+
      (iup:frame 
       #:title "state/status filter"
       (iup:vbox
@@ -1846,7 +1971,7 @@ Misc
 		     #:max (* 10 (length (dboard:tabdat-allruns tabdat)))
 		     #:min 0
 		     #:step 0.01)))
-					;(iup:button "inc rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (+ (dboard:tabdat-num-tests tabdat) 1))))
+     ;;(iup:button "inc rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (+ (dboard:tabdat-num-tests tabdat) 1))))
 					;(iup:button "dec rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (if (> (dboard:tabdat-num-tests tabdat) 0)(- (dboard:tabdat-num-tests tabdat) 1) 0))))
      )))
 
@@ -2146,7 +2271,7 @@ Misc
 					       "tabchangepos"))
 			  (dashboard:summary commondat stats-dat tab-num: 0)
 			  runs-view
-			  (dashboard:one-run commondat onerun-dat tab-num: 2)
+			  (dashboard:runs-summary commondat onerun-dat tab-num: 2)
 			  ;; (dashboard:new-view db data new-view-dat tab-num: 3)
 			  (dashboard:run-controls commondat runcontrols-dat tab-num: 3)
 			  (dashboard:run-times commondat runtimes-dat tab-num: 4)

@@ -106,6 +106,20 @@
 	      (apply print params)
 	      )))))
 
+;; Brandon's debug printer shortcut (indulge me :)
+(define (BB> . in-args)
+  (let* ((stack (get-call-chain))
+         (location #f))
+    (for-each
+     (lambda (frame)
+       (let* ((this-loc (vector-ref frame 0))
+              (this-func (cadr (string-split this-loc " "))))
+         (if (equal? this-func "BB>")
+             (set! location this-loc))))
+     stack)
+    (let ((dp-args (append (list 0 *default-log-port* location"   "  ) in-args)))
+      (apply debug:print dp-args))))
+
 (define (debug:print-error n e . params)
   ;; normal print
   (if (debug:debug-mode n)
