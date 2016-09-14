@@ -66,23 +66,23 @@
   (hash-table-set! (dbr:dbstruct-get-locdbs v) run-id db))
 
 
-(defstruct db:test-rec (id -1): number
-					(run_id -1) : number 
-					(testname "") : string
-					(state "") : string
-					(status "") : string
-					(event_time -1) : number
-					(host "") : string
-					(cpuload -1) : number
-					(diskfree -1) : number
-					(uname "") : string
-					(rundir "") : string
-					(item-path "") : string
-					(run_duration -1) : number
-					(final_log "") : string
-					(comment "") : string
-					(process_id -1) : number
-					(archived #f) : boolean)
+(defstruct db:test ((id -1) : number)
+					((run_id -1) : number) 
+					((testname "") : string)
+					((state "") : string)
+					((status "") : string)
+					((event_time -1) : number)
+					((host "") : string)
+					((cpuload -1) : number)
+					((diskfree -1) : number)
+					((uname "") : string)
+					((rundir "") : string)
+					((item-path "") : string)
+					((run_duration -1) : number)
+					((final_log "") : string)
+					((comment "") : string)
+					((process_id -1) : number)
+					((archived #f) : boolean))
 
 (define db:test-get-id 			  db:test-rec-id)
 (define db:test-get-run_id 		  db:test-rec-run_id)
