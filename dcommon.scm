@@ -311,7 +311,7 @@
      ((> (length mem1) (length mem2)) 1)
      (else -1))))
      
-(define (dcommon:xor-tests-mindat src-tests-mindat dest-tests-mindat)
+(define (dcommon:xor-tests-mindat src-tests-mindat dest-tests-mindat #!key (hide-clean #f))
   (let* ((src-hash (dcommon:tests-mindat->hash src-tests-mindat))
          (dest-hash (dcommon:tests-mindat->hash dest-tests-mindat))
          (all-keys
@@ -327,75 +327,87 @@
               (else #f)))
 
            ))))
-    (map ;; TODO: rename xor to delta globally in dcommon and dashboard
-     (lambda (key)
-       (let* ((test-name (car key))
-              (item-path (cdr key))
+    (let ((res
+           (map ;; TODO: rename xor to delta globally in dcommon and dashboard
+            (lambda (key)
+              (let* ((test-name (car key))
+                     (item-path (cdr key))
 
-              (dest-value (hash-table-ref/default dest-hash key #f)) ;; (list test-id state status)
-              (dest-test-id  (if dest-value (list-ref dest-value 0) #f))
-              (dest-state    (if dest-value (list-ref dest-value 1) #f))
-              (dest-status   (if dest-value (list-ref dest-value 2) #f))
+                     (dest-value (hash-table-ref/default dest-hash key #f)) ;; (list test-id state status)
+                     (dest-test-id  (if dest-value (list-ref dest-value 0) #f))
+                     (dest-state    (if dest-value (list-ref dest-value 1) #f))
+                     (dest-status   (if dest-value (list-ref dest-value 2) #f))
 
-              (src-value     (hash-table-ref/default src-hash key #f))   ;; (list test-id state status)
-              (src-test-id   (if src-value (list-ref src-value 0) #f))
-              (src-state     (if src-value (list-ref src-value 1) #f))
-              (src-status    (if src-value (list-ref src-value 2) #f))
+                     (src-value     (hash-table-ref/default src-hash key #f))   ;; (list test-id state status)
+                     (src-test-id   (if src-value (list-ref src-value 0) #f))
+                     (src-state     (if src-value (list-ref src-value 1) #f))
+                     (src-status    (if src-value (list-ref src-value 2) #f))
 
-              (incomplete-statuses '("DELETED" "INCOMPLETE" "STUCK/DEAD" "N/A")) ;; if any of these statuses apply, treat test as incomplete
+                     (incomplete-statuses '("DELETED" "INCOMPLETE" "STUCK/DEAD" "N/A")) ;; if any of these statuses apply, treat test as incomplete
 
-              (dest-complete
-               (and dest-value dest-state dest-status
-                    (equal? dest-state "COMPLETED")
-                    (not (member dest-status incomplete-statuses))))
-              (src-complete
-               (and src-value src-state src-status
-                    (equal? src-state "COMPLETED")
-                    (not (member src-status incomplete-statuses))))
-              (status-compare-result (dcommon:status-compare3 src-status dest-status))
-              (xor-new-item
-               (cond
-                ;; complete, for this case means: state=compelte AND status not in ( deleted uncomplete stuck/dead n/a )
-                ;; neither complete -> bad
+                     (dest-complete
+                      (and dest-value dest-state dest-status
+                           (equal? dest-state "COMPLETED")
+                           (not (member dest-status incomplete-statuses))))
+                     (src-complete
+                      (and src-value src-state src-status
+                           (equal? src-state "COMPLETED")
+                           (not (member src-status incomplete-statuses))))
+                     (status-compare-result (dcommon:status-compare3 src-status dest-status))
+                     (xor-new-item
+                      (cond
+                       ;; complete, for this case means: state=compelte AND status not in ( deleted uncomplete stuck/dead n/a )
+                       ;; neither complete -> bad
 
-                ;; src !complete, dest complete -> better
-                ((and (not dest-complete) (not src-complete))
-                 (list dest-test-id "BOTH-BAD" "BOTH-INCOMPLETE"))
-                ((not dest-complete)
-                 (list src-test-id "DIFF-MISSING" "DEST-INCOMPLETE"))  
-                ((not src-complete)
-                 (list dest-test-id "DIFF-NEW" "SRC-INCOMPLETE"))      
-                ((and
-                  (equal? src-state dest-state)
-                  (equal? src-status dest-status))
-                 (list dest-test-id  (conc "CLEAN") (conc "CLEAN-" dest-status) )) 
-                ;;    better or worse: pass > warn > waived > skip > fail > abort
-                ;;     pass > warn > waived > skip > fail > abort
-                
-                ((= 1 status-compare-result) ;; src is better, dest is worse
-                 (list dest-test-id "DIRTY-WORSE" (conc src-status "->" dest-status)))
-                (else
-                 (list dest-test-id "DIRTY-BETTER" (conc src-status "->" dest-status)))
-                 )))
-         (list test-name item-path  xor-new-item)))
-     all-keys)))
+                       ;; src !complete, dest complete -> better
+                       ((and (not dest-complete) (not src-complete))
+                        (list dest-test-id "BOTH-BAD" "BOTH-INCOMPLETE"))
+                       ((not dest-complete)
+                        (list src-test-id "DIFF-MISSING" "DEST-INCOMPLETE"))  
+                       ((not src-complete)
+                        (list dest-test-id "DIFF-NEW" "SRC-INCOMPLETE"))      
+                       ((and
+                         (equal? src-state dest-state)
+                         (equal? src-status dest-status))
+                        (list dest-test-id  (conc "CLEAN") (conc "CLEAN-" dest-status) )) 
+                       ;;    better or worse: pass > warn > waived > skip > fail > abort
+                       ;;     pass > warn > waived > skip > fail > abort
+                       
+                       ((= 1 status-compare-result) ;; src is better, dest is worse
+                        (list dest-test-id "DIRTY-WORSE" (conc src-status "->" dest-status)))
+                       (else
+                        (list dest-test-id "DIRTY-BETTER" (conc src-status "->" dest-status)))
+                       )))
+                (list test-name item-path  xor-new-item)))
+            all-keys)))
+      ;;(BB> "hide-clean="hide-clean)
+      (if hide-clean
+          (filter
+           (lambda (item)
+             ;;(print item)
+             (not
+              (equal?
+               "CLEAN"
+               (list-ref (list-ref item 2) 1))))
+           res)
+          res))))
 
 (define (dcommon:examine-xterm run-id test-id)
   (let* ((testdat (rmt:get-test-info-by-id run-id test-id)))
     (if (not testdat)
-	(begin
-	  (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
-	  (exit 1))
+        (begin
+          (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
+          (exit 1))
         (let*
             ((rundir        (if testdat 
-				(db:test-get-rundir testdat)
-				  logfile))
+                                (db:test-get-rundir testdat)
+                                logfile))
              (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
              (xterm      (lambda ()
                            (if (directory-exists? rundir)
                                (let* ((shell (if (get-environment-variable "SHELL") 
-                                                (conc "-e " (get-environment-variable "SHELL"))
-                                                ""))
+                                                 (conc "-e " (get-environment-variable "SHELL"))
+                                                 ""))
                                       (command (conc "cd " rundir 
                                                      ";mt_xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
                                  (print "Command =" command)
@@ -413,17 +425,17 @@
 ;; Table of keys
 (define (dcommon:keys-matrix rawconfig)
   (let* ((curr-row-num 1)
-	 (key-vals     (configf:section-vars rawconfig "fields"))
-	 (keys-matrix  (iup:matrix
-			#:alignment1 "ALEFT"
-			#:expand "YES" ;; "HORIZONTAL" ;; "VERTICAL"
-			;; #:scrollbar "YES"
-			#:numcol 1
-			#:numlin (length key-vals)
-			#:numcol-visible 1
-			#:numlin-visible (length key-vals)
-			#:click-cb (lambda (obj lin col status)
-				     (print "obj: " obj " lin: " lin " col: " col " status: " status)))))
+         (key-vals     (configf:section-vars rawconfig "fields"))
+         (keys-matrix  (iup:matrix
+                        #:alignment1 "ALEFT"
+                        #:expand "YES" ;; "HORIZONTAL" ;; "VERTICAL"
+                        ;; #:scrollbar "YES"
+                        #:numcol 1
+                        #:numlin (length key-vals)
+                        #:numcol-visible 1
+                        #:numlin-visible (length key-vals)
+                        #:click-cb (lambda (obj lin col status)
+                                     (print "obj: " obj " lin: " lin " col: " col " status: " status)))))
     ;; (iup:attribute-set! keys-matrix "0:0" "Run Keys")
     (iup:attribute-set! keys-matrix "WIDTH0" 0)
     (iup:attribute-set! keys-matrix "0:1" "Key Name")
@@ -442,14 +454,14 @@
 ;; Section to table
 (define (dcommon:section-matrix rawconfig sectionname varcolname valcolname #!key (title #f))
   (let* ((curr-row-num    1)
-	 (key-vals        (configf:section-vars rawconfig sectionname))
-	 (section-matrix  (iup:matrix
-			   #:alignment1 "ALEFT"
-			   #:expand "YES" ;; "HORIZONTAL"
-			   #:numcol 1
-			   #:numlin (length key-vals)
-			   #:numcol-visible 1
-			   #:numlin-visible (min 10 (length key-vals))
+         (key-vals        (configf:section-vars rawconfig sectionname))
+         (section-matrix  (iup:matrix
+                           #:alignment1 "ALEFT"
+                           #:expand "YES" ;; "HORIZONTAL"
+                           #:numcol 1
+                           #:numlin (length key-vals)
+                           #:numcol-visible 1
+                           #:numlin-visible (min 10 (length key-vals))
 			   #:scrollbar "YES")))
     (iup:attribute-set! section-matrix "0:0" varcolname)
     (iup:attribute-set! section-matrix "0:1" valcolname)
