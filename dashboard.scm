@@ -248,7 +248,7 @@ Misc
   ((yadj               0)                 : number)     ;; y slider number (if using canvas)
 
   ;; runs-summary tab state
-  ((runs-summary-modes '((one-run . "Show One Run") (xor-two-runs . "XOR Two Runs")) )   : list)
+  ((runs-summary-modes '((one-run . "Show One Run") (xor-two-runs . "XOR Two Runs") (xor-two-runs-hide-clean . "XOR; Hide Clean")) )   : list)
   ((runs-summary-mode-buttons '())               : list)
   ((runs-summary-mode  'one-run)            : symbol)
   ((runs-summary-mode-change-callbacks '()) : list)
@@ -1475,13 +1475,14 @@ Misc
          (tests-mindat (dcommon:minimize-test-data tests-dat)))  ;; reduces data for display
     tests-mindat))
 
-(define (dashboard:runs-summary-xor-matrix-content tabdat runs-hash)
+(define (dashboard:runs-summary-xor-matrix-content tabdat runs-hash #!key (hide-clean #f))
   (let* ((src-run-id (dboard:tabdat-prev-run-id tabdat))
          (dest-run-id (dboard:tabdat-curr-run-id tabdat)))
     (if (and src-run-id dest-run-id)
         (dcommon:xor-tests-mindat 
          (dashboard:run-id->tests-mindat src-run-id tabdat runs-hash)
-         (dashboard:run-id->tests-mindat dest-run-id tabdat runs-hash))
+         (dashboard:run-id->tests-mindat dest-run-id tabdat runs-hash)
+         hide-clean: hide-clean)
         #f)))
 
 (define (dashboard:runs-summary-updater commondat tabdat tb cell-lookup run-matrix)
@@ -1502,6 +1503,7 @@ Misc
                 (case (dboard:tabdat-runs-summary-mode tabdat) 
                   ((one-run) (dashboard:run-id->tests-mindat run-id tabdat runs-hash))
                   ((xor-two-runs) (dashboard:runs-summary-xor-matrix-content tabdat runs-hash))
+                  ((xor-two-runs-hide-clean) (dashboard:runs-summary-xor-matrix-content tabdat runs-hash hide-clean: #t))
                   (else (dashboard:run-id->tests-mindat run-id tabdat runs-hash)))))
           (when matrix-content
             (let* ((indices      (common:sparse-list-generate-index matrix-content)) ;;  proc: set-cell))
@@ -1716,7 +1718,7 @@ Misc
         (mode (dboard:tabdat-runs-summary-mode tabdat)))
     (when (and source-runname-label dest-runname-label)
       (case mode
-        ((xor-two-runs)
+        ((xor-two-runs xor-two-runs-hide-clean)
          (let* ((curr-run-id          (dboard:tabdat-curr-run-id tabdat))
                 (prev-run-id          (dboard:tabdat-prev-run-id tabdat))
                 (curr-runname (if curr-run-id
