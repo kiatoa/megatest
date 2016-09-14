@@ -1839,7 +1839,6 @@ Misc
          (runs-summary-control-panel (dashboard:runs-summary-control-panel tabdat))
          )
     (dboard:commondat-add-updater commondat runs-summary-updater tab-num: tab-num)
-    (dboard:commondat-add-updater commondat runs-summary-updater tab-num: tab-num)
     (dboard:tabdat-runs-tree-set! tabdat tb)
     (iup:vbox
      (iup:split
