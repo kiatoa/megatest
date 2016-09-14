@@ -1300,3 +1300,20 @@
 			  (loop (car tal)(cdr tal))))))))
 	fallback-launcher)))
   
+;;======================================================================
+;; D A S H B O A R D   U S E R   V I E W S
+;;======================================================================
+
+;; first read ~/views.config if it exists, then read $MTRAH/views.config if it exists
+;;
+(define (common:load-views-config)
+  (let* ((view-cfgdat    (make-hash-table))
+	 (home-cfgfile   (conc (get-environment-variable "HOME") "/.mtviews.config"))
+	 (mthome-cfgfile (conc *toppath* "/.mtviews.config")))
+    (if (file-exists? mthome-cfgfile)
+	(read-config mthome-cfgfile view-cfgdat #t))
+    ;; we load the home dir file AFTER the MTRAH file so the user can clobber settings when running the dashboard in read-only areas
+    (if (file-exists? home-cfgfile)
+	(read-config home-cfgfile view-cfgdat #t))
+    view-cfgdat))
+

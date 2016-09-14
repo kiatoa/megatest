@@ -1971,7 +1971,7 @@
 ;; Use: (db:get-value-by-header (db:get-header runinfo)(db:get-rows runinfo))
 ;;  to extract info from the structure returned
 ;;
-(define (db:get-runs-by-patt dbstruct keys runnamepatt targpatt offset limit fields) ;; test-name)
+(define (db:get-runs-by-patt dbstruct keys runnamepatt targpatt offset limit fields last-update) ;; test-name)
   (let* ((tmp      (runs:get-std-run-fields keys (or fields '("id" "runname" "state" "status" "owner" "event_time"))))
 	 (keystr   (car tmp))
 	 (header   (cadr tmp))
@@ -1991,7 +1991,11 @@
 			(debug:print-error 0 *default-log-port* "searching for runs with no pattern set for " fulkey)
 			(exit 6)))))
 	      keyvals)
-    (set! qry-str (conc "SELECT " keystr " FROM runs WHERE state != 'deleted' AND runname " runwildtype " ? " key-patt " ORDER BY event_time "
+    (set! qry-str (conc "SELECT " keystr " FROM runs WHERE state != 'deleted' AND runname " runwildtype " ? " key-patt 
+			(if last-update
+			       (conc " AND last_update >= " last-update " ")
+			       " ")
+			" ORDER BY event_time "
 			(if limit  (conc " LIMIT " limit)   "")
 			(if offset (conc " OFFSET " offset) "")
 			";"))
