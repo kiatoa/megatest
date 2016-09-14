@@ -65,8 +65,8 @@
 (define (dbr:dbstruct-set-localdb! v run-id db)
   (hash-table-set! (dbr:dbstruct-get-locdbs v) run-id db))
 
-
-(defstruct db:test ((id -1) : number)
+(require-extension typed-records)
+(defstruct db:test-rec ((id -1) : number)
 					((run_id -1) : number) 
 					((testname "") : string)
 					((state "") : string)
