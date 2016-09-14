@@ -1850,7 +1850,7 @@ Misc
 					;(iup:button "dec rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (if (> (dboard:tabdat-num-tests tabdat) 0)(- (dboard:tabdat-num-tests tabdat) 1) 0))))
      )))
 
-(define (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt)
+(define (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt item-test-path)
   (iup:menu 
    (iup:menu-item
     "Run"
@@ -1859,7 +1859,7 @@ Misc
       (conc "Rerun " testpatt)
       #:action
       (lambda (obj)
-        ;;(print "buttndat: " buttndat " run-id: " run-id " test-id: " test-id " target: " target " runname: " runname " test-name: " test-name " testpatt: " testpatt)
+        ;; (print "buttndat: " buttndat " run-id: " run-id " test-id: " test-id " target: " target " runname: " runname " test-name: " test-name " testpatt: " testpatt "item-path : " item-path)
 	(common:run-a-command
 	 (conc "megatest -run -target " target
 	       " -runname " runname
@@ -1887,32 +1887,32 @@ Misc
     "Test"
     (iup:menu 
      (iup:menu-item
-      (conc "Rerun " test-name)
+      (conc "Rerun " item-test-path)
       #:action
       (lambda (obj)
 	(common:run-a-command
 	 (conc "megatest -set-state-status NOT_STARTED,n/a -run -target " target
                " -runname " runname
-	       " -testpatt " test-name
+	       " -testpatt " item-test-path
 	       " -preclean -clean-cache"))))
      (iup:menu-item
-      (conc "Kill " test-name)
+      (conc "Kill " item-test-path)
       #:action
       (lambda (obj)
         ;; (rmt:test-set-state-status-by-id run-id test-id "KILLREQ" #f #f)
 	(common:run-a-command
 	 (conc "megatest -set-state-status KILLREQ,n/a -target " target
                " -runname " runname
-	       " -testpatt " test-name
+	       " -testpatt " item-test-path 
 	       " -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))
      (iup:menu-item
-      (conc "Clean " test-name)
+      (conc "Clean "item-test-path)
       #:action
       (lambda (obj)
 	(common:run-a-command
 	 (conc "megatest -remove-runs -target " target
                " -runname " runname
-	       " -testpatt " test-name))))
+	       " -testpatt " item-test-path))))
      (iup:menu-item
       "Start xterm"
       #:action
@@ -2066,8 +2066,12 @@ Misc
 								 (if (member tpatt '("0" 0)) ;; known bad historical value - remove in 2017
 								     "%"
 								     tpatt))
-							       "%"))))
-					 (iup:show (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt) ;; popup-menu
+							       "%")))
+                                              (item-path (db:test-get-item-path (rmt:get-test-info-by-id run-id test-id)))
+                                              (item-test-path (conc test-name "/" (if (equal? item-path "")
+									"%" 
+									item-path))))
+					 (iup:show (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt item-test-path) ;; popup-menu
 						   #:x 'mouse
 						   #:y 'mouse
 						   #:modal? "NO")
