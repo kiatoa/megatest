@@ -1817,13 +1817,46 @@ Misc
 	 (cell-lookup (make-hash-table))
 	 (run-matrix (iup:matrix
 		      #:expand "YES"
+                      #:menudrop_cb #f
 		      #:click-cb
+                      
 		      (lambda (obj lin col status)
-			(let* ((toolpath (car (argv)))
-			       (key      (conc lin ":" col))
-			       (test-id  (hash-table-ref/default cell-lookup key -1))
-			       (cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id "&")))
-			  (system cmd)))))
+                        (debug:catch-and-dump
+                         (lambda ()
+                           (let* ((toolpath (car (argv)))
+                                  (key      (conc lin ":" col))
+                                  (test-id  (begin (BB> "key="key) (hash-table-ref/default cell-lookup key -1)))
+                                  (run-id   (dboard:tabdat-curr-run-id tabdat))
+                                  (run-info (rmt:get-run-info run-id))
+                                  (target   (rmt:get-target run-id))
+                                  (runname  (db:get-value-by-header (db:get-rows run-info)
+                                                                    (db:get-header run-info) "runname"))
+                                  (test-name (db:test-get-testname (rmt:get-test-info-by-id run-id test-id)))
+                                  (testpatt  (let ((tlast (rmt:tasks-get-last target runname)))
+                                                (if tlast
+                                                    (let ((tpatt (tasks:task-get-testpatt tlast)))
+                                                      (if (member tpatt '("0" 0)) ;; known bad historical value - remove in 2017
+                                                          "%"
+                                                          tpatt))
+                                                    "%")))
+                                  (status-chars (char-set->list (string->char-set status)))
+                                  (testpanel-cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id "&")))
+                             (BB> "testpanel-cmd="testpanel-cmd "  status="status)
+                             (BB> "test-id="test-id )
+                             ;;(BB> " run-id="run-id)
+                          
+                             (when (member #\1 status-chars) ;; 1 is left mouse button
+                               (system testpanel-cmd))
+                             (when (member #\2 status-chars) ;; 2 is middle mouse button
+                               
+                               (BB> "mmb- test-name="test-name" testpatt="testpatt)
+                               (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt) ;; popup-menu
+                                         #:x 'mouse
+                                         #:y 'mouse
+                                         #:modal? "NO")
+                               )
+                            
+                          )) "runs-summary-click-callback"))))
 	 (runs-summary-updater  
           (lambda ()
 	    (mutex-lock! update-mutex)
@@ -2001,7 +2034,7 @@ Misc
 					;(iup:button "dec rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (if (> (dboard:tabdat-num-tests tabdat) 0)(- (dboard:tabdat-num-tests tabdat) 1) 0))))
      )))
 
-(define (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt)
+(define (dashboard:popup-menu  run-id test-id target runname test-name testpatt)
   (iup:menu 
    (iup:menu-item
     "Run"
@@ -2218,7 +2251,7 @@ Misc
 								     "%"
 								     tpatt))
 							       "%"))))
-					 (iup:show (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt) ;; popup-menu
+					 (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt) ;; popup-menu
 						   #:x 'mouse
 						   #:y 'mouse
 						   #:modal? "NO")
