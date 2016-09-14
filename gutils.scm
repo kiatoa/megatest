@@ -50,5 +50,12 @@
     ((KILLREQ)          (list "39 82 206"    state))
     ((KILLED)           (list "234 101 17"   state))
     ((NOT_STARTED)      (list "240 240 240"  state))
+    ;; for xor mode below
+    ;;
+    ((CLEAN)       (list "60  235 63" status))
+    ((DIRTY-BETTER)     (list "160  255 153" status))
+    ((DIRTY-WORSE)      (list "165 42  42" status))
+    ((BOTH-BAD)         (list "180 33 49" status))
+
     (else               (list "192 192 192"  state))))
 
