@@ -2287,7 +2287,7 @@
 		   (lambda (id testname item-path state status)
 		     ;;                      id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
 		     ;;(set! res (cons (vector id run-id testname state status -1         ""     -1      -1       ""    "-"  item-path -1           "-"         "-") res)))
-		     (cons (make-db:test-rec id: id testname: testname item-path: item-path state: state status: status) res))
+		     (cons (make-db:test-rec id: id testname: testname item_path: item-path state: state status: status) res))
 		   db 
 		   qry
 		   run-id)))
@@ -2301,7 +2301,7 @@
 		   (lambda (run-id testname item-path state status)
 		     ;; id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
 		     ;;(set! res (vector test-id run-id testname state status -1 "" -1 -1 "" "-" item-path -1 "-" "-")))
-		     (cons (make-db:test-rec run_id: run-id testname: testname item-path: item-path state: state status: status) res))
+		     (cons (make-db:test-rec run_id: run-id testname: testname item_path: item-path state: state status: status) res))
 		   db 
 		   "SELECT run_id,testname,item_path,state,status FROM tests WHERE id=?;" 
 		   test-id)))
@@ -2572,8 +2572,12 @@
     (sqlite3:for-each-row
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum archived)
        ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14     15        16
-       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum archived)
-		       res)))
+       ;;(set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum archived)
+       (cons (make-db:test-rec id: id run-id: run-id testname: testname state: state status: status event_time: event-time
+       		host: host cpuload: cpuload diskfree: diskfree uname: uname rundir: rundir item_path: item-path
+       		run_duration: run-duration final_logf: final-logf comment: comment shortdir: shortdir 
+       		attemptnum: attemptnum archived: archived )
+		       res))
      db
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE state != 'DELETED' AND run_id=?;")
      run-id)
@@ -2649,7 +2653,12 @@
        (sqlite3:for-each-row ;; attemptnum added to hold pid of top process (not Megatest) controlling a test
 	(lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)
 	  ;;             0    1       2      3      4        5       6      7        8     9     10      11          12          13           14         15          16
-	  (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)))
+	  ;;(set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)))
+	  (cons (make-db:test-rec id: id run-id: run-id testname: testname state: state status: status event_time: event-time
+       		host: host cpuload: cpuload diskfree: diskfree uname: uname rundir: rundir item_path: item-path
+       		run_duration: run-duration final_logf: final-logf comment: comment shortdir: shortdir 
+       		attemptnum: attemptnum archived: archived )
+		       res))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
 	test-id)
@@ -2683,7 +2692,7 @@
      (let ((res #f))
        (sqlite3:for-each-row
 	(lambda (a . b)
-	  (set! res (apply vector a b)))
+	  (print a));;set! res (apply vector a b)))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE testname=? AND item_path=?;")
 	test-name item-path)
