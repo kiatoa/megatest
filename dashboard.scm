@@ -474,7 +474,9 @@ Misc
 ;;    NOTE: Yes, this is used
 ;;
 (define (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)
-  (let* ((num-to-get  100)
+  (let* ((num-to-get  (let ((n (configf:lookup *configdat* "dashboard" "num-to-get")))
+			(if n (string->number n)
+			    30)))
 	 (states      (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
 	 (statuses    (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)))
 	 (sort-info   (get-curr-sort))
@@ -516,7 +518,7 @@ Misc
 			   ht)
 			 (dboard:rundat-tests run-dat)))
 	 (start-time (current-seconds)))
-
+    ;; (dashboard:set-db-update-time tabdat) ;; indicate that we did read the db at this time
     ;; to limit the amount of data transferred each cycle use limit of num-to-get and offset
     (dboard:rundat-run-data-offset-set! 
      run-dat 
@@ -1455,7 +1457,7 @@ Misc
                                      (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
                                      (not (hash-table-exists? (dboard:tabdat-last-test-dat tabdat) run-id))
                                      (>= (file-modification-time db-path) last-update))
-                                 (dboard:get-tests-dat tabdat run-id last-update)
+                                 (dboard:get-tests-dat tabdat run-id 0) ;; last-update) ;; DO NOT USE last-update yet. Need to redesign this to use dboard:get-tests-for-run-duplicate
                                  (hash-table-ref (dboard:tabdat-last-test-dat tabdat) run-id)))
                (tests-mindat (dcommon:minimize-test-data tests-dat))
                (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
