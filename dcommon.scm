@@ -413,6 +413,7 @@
 				    (max-col-vis  (if (> max-col 10) 10 max-col))
 				    (numrows      1)
 				    (numcols      1))
+			       (dashboard:set-db-update-time tabdat)
 			       (iup:attribute-set! stats-matrix "CLEARVALUE" "CONTENTS")
 			       (iup:attribute-set! stats-matrix "NUMCOL" max-col )
 			       (iup:attribute-set! stats-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20

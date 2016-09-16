@@ -170,7 +170,7 @@ Misc
   ((not-done-runs   '())                 : list)        ;; list of runs not yet drawn
   (header            #f)                                ;; header for decoding the run records
   (keys              #f)                                ;; keys for this run (i.e. target components)
-  ((numruns          (string->number (or (args:get-arg "-cols") "8")))                 : number)      ;; 
+  ((numruns          (string->number (or (args:get-arg "-cols") "10")))                 : number)      ;; 
   ((tot-runs          0)                 : number)
   ((last-data-update  0)                 : number)      ;; last time the data in allruns was updated
   ((last-runs-update  0)                 : number)      ;; last time we pulled the runs info to update the tree
@@ -485,7 +485,9 @@ Misc
 ;;    NOTE: Yes, this is used
 ;;
 (define (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)
-  (let* ((num-to-get  20)
+  (let* ((num-to-get  (let ((n (configf:lookup *configdat* "dashboard" "num-to-get")))
+			(if n (string->number n)
+			    30)))
 	 (states      (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
 	 (statuses    (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)))
 	 (sort-info   (get-curr-sort))
@@ -527,7 +529,7 @@ Misc
 			   ht)
 			 (dboard:rundat-tests run-dat)))
 	 (start-time (current-seconds)))
-
+    ;; (dashboard:set-db-update-time tabdat) ;; indicate that we did read the db at this time
     ;; to limit the amount of data transferred each cycle use limit of num-to-get and offset
     (dboard:rundat-run-data-offset-set! 
      run-dat 
@@ -939,7 +941,7 @@ Misc
   (set-bg-on-filter commondat tabdat))
 
 (define (mark-for-update tabdat)
-  (dboard:tabdat-filters-changed-set! tabdat #t)
+  ;; (dboard:tabdat-filters-changed-set! tabdat #t)
   (dboard:tabdat-last-db-update-set! tabdat 0))
 
 ;;======================================================================
@@ -1472,7 +1474,7 @@ Misc
                                      (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
                                      (not (hash-table-exists? (dboard:tabdat-last-test-dat tabdat) run-id))
                                      (>= (file-modification-time db-path) last-update))
-                                 (dboard:get-tests-dat tabdat run-id last-update)
+                                 (dboard:get-tests-dat tabdat run-id 0) ;; last-update) ;; DO NOT USE last-update yet. Need to redesign this to use dboard:get-tests-for-run-duplicate
                                  (hash-table-ref (dboard:tabdat-last-test-dat tabdat) run-id)))
                (matrix-content
                 (case (dboard:tabdat-runs-summary-mode tabdat) 
@@ -1968,14 +1970,14 @@ Misc
 					   (debug:print 6 *default-log-port* "(dboard:tabdat-start-run-offset tabdat) " (dboard:tabdat-start-run-offset tabdat) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
 					   (iup:attribute-set! obj "MAX" (* maxruns 10))))
 		     #:expand "HORIZONTAL"
-		     #:max (* 10 (length (dboard:tabdat-allruns tabdat)))
+		     #:max (* 10 (max (hash-table-size (dboard:tabdat-allruns-by-id tabdat)) 10))
 		     #:min 0
 		     #:step 0.01)))
      ;;(iup:button "inc rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (+ (dboard:tabdat-num-tests tabdat) 1))))
 					;(iup:button "dec rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (if (> (dboard:tabdat-num-tests tabdat) 0)(- (dboard:tabdat-num-tests tabdat) 1) 0))))
      )))
 
-(define (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt)
+(define (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt item-test-path)
   (iup:menu 
    (iup:menu-item
     "Run"
@@ -1984,7 +1986,7 @@ Misc
       (conc "Rerun " testpatt)
       #:action
       (lambda (obj)
-        ;;(print "buttndat: " buttndat " run-id: " run-id " test-id: " test-id " target: " target " runname: " runname " test-name: " test-name " testpatt: " testpatt)
+        ;; (print "buttndat: " buttndat " run-id: " run-id " test-id: " test-id " target: " target " runname: " runname " test-name: " test-name " testpatt: " testpatt "item-path : " item-path)
 	(common:run-a-command
 	 (conc "megatest -run -target " target
 	       " -runname " runname
@@ -2012,32 +2014,32 @@ Misc
     "Test"
     (iup:menu 
      (iup:menu-item
-      (conc "Rerun " test-name)
+      (conc "Rerun " item-test-path)
       #:action
       (lambda (obj)
 	(common:run-a-command
 	 (conc "megatest -set-state-status NOT_STARTED,n/a -run -target " target
                " -runname " runname
-	       " -testpatt " test-name
+	       " -testpatt " item-test-path
 	       " -preclean -clean-cache"))))
      (iup:menu-item
-      (conc "Kill " test-name)
+      (conc "Kill " item-test-path)
       #:action
       (lambda (obj)
         ;; (rmt:test-set-state-status-by-id run-id test-id "KILLREQ" #f #f)
 	(common:run-a-command
 	 (conc "megatest -set-state-status KILLREQ,n/a -target " target
                " -runname " runname
-	       " -testpatt " test-name
+	       " -testpatt " item-test-path 
 	       " -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))
      (iup:menu-item
-      (conc "Clean " test-name)
+      (conc "Clean "item-test-path)
       #:action
       (lambda (obj)
 	(common:run-a-command
 	 (conc "megatest -remove-runs -target " target
                " -runname " runname
-	       " -testpatt " test-name))))
+	       " -testpatt " item-test-path))))
      (iup:menu-item
       "Start xterm"
       #:action
@@ -2191,8 +2193,12 @@ Misc
 								 (if (member tpatt '("0" 0)) ;; known bad historical value - remove in 2017
 								     "%"
 								     tpatt))
-							       "%"))))
-					 (iup:show (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt) ;; popup-menu
+							       "%")))
+                                              (item-path (db:test-get-item-path (rmt:get-test-info-by-id run-id test-id)))
+                                              (item-test-path (conc test-name "/" (if (equal? item-path "")
+									"%" 
+									item-path))))
+					 (iup:show (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt item-test-path) ;; popup-menu
 						   #:x 'mouse
 						   #:y 'mouse
 						   #:modal? "NO")
@@ -2545,7 +2551,7 @@ Misc
 	  (update-rundat tabdat
 			 runpatt
 			 ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") 
-			 10  ;; (dboard:tabdat-numruns tabdat)
+			 (dboard:tabdat-numruns tabdat)
 			 testpatt ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
 			 ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
 			 
