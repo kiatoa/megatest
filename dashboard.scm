@@ -667,78 +667,7 @@ Misc
     (dboard:update-tree tabdat runs-hash header tb)))
 
 
-(define (update-rundat-test tabdat runnamepatt numruns testnamepatt keypatts)
-  (let* ((keys             (rmt:get-keys))
-	 (last-runs-update (dboard:tabdat-last-runs-update tabdat))
-         (allruns          (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
-         ;;(allruns-tree (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
-         (allruns-tree    (rmt:get-runs-by-patt keys "%" #f #f #f #f last-runs-update));;'("id" "runname")
-	 (header      (db:get-header allruns))
-	 (runs        (db:get-rows   allruns)) ;; RA => Filtered as per runpatt selected
-         (runs-tree   (db:get-rows   allruns-tree)) ;; RA => Returns complete list of runs
-	 (start-time  (current-seconds))
-	 (runs-hash   (dashboard:get-runs-hash tabdat))
-         ;; (runs-hash (let ((ht (make-hash-table)))
-	 ;;        	 (for-each (lambda (run)
-	 ;;        		     (hash-table-set! ht (db:get-value-by-header run header "id") run))
-	 ;;        		   runs-tree) ;; (vector-ref runs-dat 1))
-	 ;;        	 ht))
-	 (tb          (dboard:tabdat-runs-tree tabdat)))
-    (BB> "update-rundat: runs-hash="(hash-table->alist runs-hash))
-    (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
-    (dboard:tabdat-header-set! tabdat header)
-    ;; 
-    ;; trim runs to only those that are changing often here
-    ;; 
-    (if (null? runs)
-	(begin
-	  (dboard:tabdat-allruns-set! tabdat '())
-	  (dboard:tabdat-all-test-names-set! tabdat '())
-	  (dboard:tabdat-item-test-names-set! tabdat '())
-	  (hash-table-clear! (dboard:tabdat-allruns-by-id tabdat)))
-	(let loop ((run      (car runs))
-		   (tal      (cdr runs))
-		   (res     '())
-		   (maxtests 0))
-	  (let* ((run-id       (db:get-value-by-header run header "id"))
-		 (run-struct   (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f))
-		 (last-update  (if run-struct (dboard:rundat-last-update run-struct) 0))
-		 (key-vals     (rmt:get-key-vals run-id))
-		 (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
-		 ;; GET RID OF dboard:get-tests-dat - it is superceded by dboard:get-tests-for-run-duplicate
-		 ;;  dboard:get-tests-for-run-duplicate - returns a hash table
-		 ;;  (dboard:get-tests-dat tabdat run-id last-update))
-		 (all-test-ids (hash-table-keys tests-ht))
-		 (num-tests    (length all-test-ids)))
-	    ;; (print "run-struct: " run-struct)
-	    ;; NOTE: bubble-up also sets the global (dboard:tabdat-item-test-names tabdat)
-	    ;; (tests       (bubble-up tmptests priority: bubble-type))
-	    ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
-	    ;; (debug:print 0 *default-log-port* "Getting data for run " run-id " with key-vals=" key-vals)
-	    ;; Not sure this is needed?
-	    (let* ((newmaxtests (max num-tests maxtests))
-		   (last-update (- (current-seconds) 10))
-		   (run-struct  (or run-struct
-				    (dboard:rundat-make-init
-				     run:         run 
-				     tests:       tests-ht
-				     key-vals:    key-vals)))
-		   (new-res     (if (null? all-test-ids) res (cons run-struct res)))
-		   (elapsed-time (- (current-seconds) start-time)))
-	      (if (null? all-test-ids)
-		  (hash-table-delete! (dboard:tabdat-allruns-by-id tabdat) run-id)
-		  (hash-table-set!    (dboard:tabdat-allruns-by-id tabdat) run-id run-struct))
-	      (if (or (null? tal)
-		      (> elapsed-time 2)) ;; stop loading data after 5 seconds, on the next call more data *should* be loaded since get-tests-for-run uses last update
-		  (begin
-		    (if (> elapsed-time 2)(print "WARNING: timed out in update-testdat " elapsed-time "s"))
-		    (dboard:tabdat-allruns-set! tabdat new-res)
-		    maxtests)
-		  (if (> (dboard:rundat-run-data-offset run-struct) 0)
-		      (loop run tal new-res newmaxtests) ;; not done getting data for this run
-		      (loop (car tal)(cdr tal) new-res newmaxtests)))))))
-    (dboard:tabdat-filters-changed-set! tabdat #f)
-    (dboard:update-tree tabdat runs-hash header tb)))
+
 
 (define *collapsed* (make-hash-table))
 
