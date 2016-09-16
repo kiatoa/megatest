@@ -1534,7 +1534,7 @@ Misc
          
 
 (define (dashboard:runs-summary-updater commondat tabdat tb cell-lookup run-matrix)
-  ;;(dashboard:do-update-rundat tabdat) ;; TODO: overkill to always run??
+  (dashboard:do-update-rundat tabdat) 
   (dboard:runs-summary-control-panel-updater tabdat)
   (let* ((last-runs-update  (dboard:tabdat-last-runs-update tabdat))
 	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
