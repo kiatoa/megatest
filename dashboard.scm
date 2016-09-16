@@ -510,7 +510,9 @@ Misc
          (last-update
           (if turn-off-query-optimization
               0
-              (hash-table-ref/default (dboard:tabdat-run-update-times tabdat) run-id 0)))
+              (dboard:rundat-last-update run-dat)
+              ;;(hash-table-ref/default (dboard:tabdat-run-update-times tabdat) run-id 0)
+              ))
 
 	 (db-path     (or (dboard:rundat-db-path run-dat)
 			  (let* ((db-dir (tasks:get-task-db-path))
