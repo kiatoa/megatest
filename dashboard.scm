@@ -207,6 +207,10 @@ Misc
   ((layout-update-ok  #t)                : boolean)
   ((compact-layout    #t)                : boolean)
 
+  ;; Run times layout
+  (graph-button-box #f)
+  ((graph-button-dat (make-hash-table)) : hash-table) ;;RA=> Contains all the button ids mapped to field id
+
   ;; Controls used to launch runs etc.
   ((command          "")                 : string)      ;; for run control this is the command being built up
   (command-tb        #f)			         
@@ -249,7 +253,6 @@ Misc
   ((view-changed       #t)                : boolean)   
   ((xadj               0)                 : number)     ;; x slider number (if using canvas)
   ((yadj               0)                 : number)     ;; y slider number (if using canvas)
-
   tests-tree       ;; used in newdashboard
   )
 
@@ -1358,7 +1361,17 @@ Misc
 									 (* scalex -0.02))))))
 				      "wheel-cb"))
 		       )))
-	cnv-obj)))))
+	cnv-obj)
+      (let* ((hb1 (iup:hbox))
+             (buttondat (dboard:tabdat-graph-button-dat tabdat)))
+             ;; (b1 (iup:button "testbutton")))
+        (dboard:tabdat-graph-button-box-set! tabdat hb1)
+        (for-each
+         (lambda (buttondat)
+           (let* ((b1 (iup:button "buttondat-graph-name")))
+           (iup:child-add! b1 hb1))))
+        hb1)
+      ))))
 
 ;;======================================================================
 ;; R U N
@@ -2529,7 +2542,7 @@ Misc
 		 fields)
 		res-ht)
 	      #f)))))
-  
+
 ;; graph data 
 ;;  tsc=timescale, tfn=function; time->x
 ;;
@@ -2568,10 +2581,13 @@ Misc
      (lambda (cf)
        (let* ((alldat  (dboard:graph-read-data (cadr cf) tstart tend)))
 	 (if alldat
+             ;; RA => generate canvas
 	     (for-each
 	      (lambda (fieldn)
 		(let* ((dat     (hash-table-ref alldat fieldn))
-		       (vals    (map (lambda (x)(vector-ref x 2)) dat)))
+		       (vals    (map (lambda (x)(vector-ref x 2)) dat))
+                       (buttondat (tabdat-graph-button-dat)))
+                  ;; Check if the dat is already added in the buttondat table; if not add it
 		  (if (not (null? vals))
 		      (let* ((maxval   (apply max vals))
 			     (minval   (min 0 (apply min vals)))
