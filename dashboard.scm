@@ -493,8 +493,8 @@ Misc
   (let* ((num-to-get  100)
 	 (states      (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
 	 (statuses    (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)))
-         (turn-off-dbfile-timestamp-optimization (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps"))
-         (turn-off-query-optimization (configf:lookup *configdat* "setup" "do-not-use-query-timestamps"))
+         (do-not-use-db-file-timestamps (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")) ;; this still hosts runs-summary-tab
+         (do-not-use-query-timestamps (configf:lookup *configdat* "setup" "do-not-use-query-timestamps")) ;; this no longer troubles runs-summary-tab
 	 (sort-info   (get-curr-sort))
 	 (sort-by     (vector-ref sort-info 1))
 	 (sort-order  (vector-ref sort-info 2))
@@ -508,7 +508,7 @@ Misc
 			   rd)))
 	 ;; (prev-tests  (dboard:rundat-tests prev-dat)) ;; (vector-ref prev-dat 1))
          (last-update
-          (if turn-off-query-optimization
+          (if do-not-use-query-timestamps
               0
               (dboard:rundat-last-update run-dat)
               ;;(hash-table-ref/default (dboard:tabdat-run-update-times tabdat) run-id 0)
@@ -519,7 +519,7 @@ Misc
 				 (db-pth (conc db-dir "/" run-id ".db")))
 			    (dboard:rundat-db-path-set! run-dat db-pth)
 			    db-pth)))
-	 (tmptests    (if (or turn-off-dbfile-timestamp-optimization
+	 (tmptests    (if (or do-not-use-db-file-timestamps
 			      (>= (file-modification-time db-path) last-update))
                           (rmt:get-tests-for-run run-id testnamepatt states statuses  ;; run-id testpatt states statuses
 						 (dboard:rundat-run-data-offset run-dat)
@@ -1498,11 +1498,12 @@ Misc
                                  (res (dashboard:tests-ht->tests-dat tests-ht)) ;; yes, we lose the order by making a hash table and reordering it here for the matrix...  Optimize this if it slows stuff down.
                                  )
                                (BB> "after run-status gtfrd")
-                             (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id res)
-                             (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- (current-seconds) 10))
                              res))
                            (hash-table-ref (dboard:tabdat-last-test-dat tabdat) run-id)))
          (tests-mindat (dcommon:minimize-test-data tests-dat)))  ;; reduces data for display
+    (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
+    (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id tests-dat)
+    (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- (current-seconds) 10))
     (when (not run)
         (BB> "ERROR: NO RUN FOR RUN-ID run-id="run-id)
         (BB> "runs-hash-> " (hash-table->alist runs-hash))
@@ -1569,7 +1570,7 @@ Misc
                    )
 
               
-              (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
+
               
               
               (dboard:tabdat-filters-changed-set! tabdat #f)
