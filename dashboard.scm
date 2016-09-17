@@ -1493,19 +1493,21 @@ Misc
   (let* ((run          (hash-table-ref/default runs-hash run-id #f))
          (key-vals     (rmt:get-key-vals run-id))
          (testnamepatt (or (dboard:tabdat-test-patts tabdat) "%/%"))
-         (tests-dat    (if (or (not run-id)
-                               (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
-                               (not (hash-table-exists? (dboard:tabdat-last-test-dat tabdat) run-id))
-                               )
+         (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
+         (tests-dat    (dashboard:tests-ht->tests-dat tests-ht)) 
+         ;; (tests-dat    (if (or (not run-id)
+         ;;                       (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
+         ;;                       (not (hash-table-exists? (dboard:tabdat-last-test-dat tabdat) run-id))
+         ;;                       )
                            
-                           (begin
-                             (BB> "before run-status gtfrd")
-                             (let* ((tests-ht (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
-                                 (res (dashboard:tests-ht->tests-dat tests-ht)) ;; yes, we lose the order by making a hash table and reordering it here for the matrix...  Optimize this if it slows stuff down.
-                                 )
-                               (BB> "after run-status gtfrd")
-                             res))
-                           (hash-table-ref (dboard:tabdat-last-test-dat tabdat) run-id)))
+         ;;                   (begin
+         ;;                     (BB> "before run-status gtfrd")
+         ;;                     (let* ((tests-ht (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
+         ;;                         (res (dashboard:tests-ht->tests-dat tests-ht)) ;; yes, we lose the order by making a hash table and reordering it here for the matrix...  Optimize this if it slows stuff down.
+         ;;                         )
+         ;;                       (BB> "after run-status gtfrd")
+         ;;                     res))
+         ;;                   (hash-table-ref (dboard:tabdat-last-test-dat tabdat) run-id)))
          (tests-mindat (dcommon:minimize-test-data tests-dat)))  ;; reduces data for display
     (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
     (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id tests-dat)
@@ -1902,8 +1904,8 @@ Misc
 									"%" 
 									item-path)))
                                   (status-chars (char-set->list (string->char-set status)))
-                                  (testpanel-cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id "&")))
-                             (BB> "testpanel-cmd="testpanel-cmd "  status="status)
+                                  (testpanel-cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id " &")))
+                             (BB> "testpanel-cmd=>"testpanel-cmd"<    status=>"status"<")
                              (BB> "test-id="test-id )
                              ;;(BB> " run-id="run-id)
                           
