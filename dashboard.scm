@@ -618,7 +618,6 @@ Misc
 				   runs-tree) ;; (vector-ref runs-dat 1))
 			 ht))
 	 (tb          (dboard:tabdat-runs-tree tabdat)))
-    (BB> "update-rundat: runs-hash="(hash-table->alist runs-hash))
     (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
     (dboard:tabdat-header-set! tabdat header)
     ;; 
@@ -1495,19 +1494,6 @@ Misc
          (testnamepatt (or (dboard:tabdat-test-patts tabdat) "%/%"))
          (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
          (tests-dat    (dashboard:tests-ht->tests-dat tests-ht)) 
-         ;; (tests-dat    (if (or (not run-id)
-         ;;                       (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
-         ;;                       (not (hash-table-exists? (dboard:tabdat-last-test-dat tabdat) run-id))
-         ;;                       )
-                           
-         ;;                   (begin
-         ;;                     (BB> "before run-status gtfrd")
-         ;;                     (let* ((tests-ht (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
-         ;;                         (res (dashboard:tests-ht->tests-dat tests-ht)) ;; yes, we lose the order by making a hash table and reordering it here for the matrix...  Optimize this if it slows stuff down.
-         ;;                         )
-         ;;                       (BB> "after run-status gtfrd")
-         ;;                     res))
-         ;;                   (hash-table-ref (dboard:tabdat-last-test-dat tabdat) run-id)))
          (tests-mindat (dcommon:minimize-test-data tests-dat)))  ;; reduces data for display
     (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
     (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id tests-dat)
@@ -1877,15 +1863,21 @@ Misc
 	 (cell-lookup (make-hash-table))
 	 (run-matrix (iup:matrix
 		      #:expand "YES"
-                      #:menudrop_cb #f
 		      #:click-cb
                       
 		      (lambda (obj lin col status)
                         (debug:catch-and-dump
                          (lambda ()
+
+                           ;; Bummer - we dont have the global get/set api mapped in chicken
+                           ;; (let* ((modkeys (iup:global "MODKEYSTATE")))
+                           ;;   (BB> "modkeys="modkeys))
+
+                           (BB> "click-cb: obj="obj" lin="lin" col="col" status="status)
+                           ;; status is corrupted on Brandon's home machine.  will have to wait until after shutdown to see if it is still broken in PDX SLES
                            (let* ((toolpath (car (argv)))
                                   (key      (conc lin ":" col))
-                                  (test-id  (begin (BB> "key="key) (hash-table-ref/default cell-lookup key -1)))
+                                  (test-id   (hash-table-ref/default cell-lookup key -1))
                                   (run-id   (dboard:tabdat-curr-run-id tabdat))
                                   (run-info (rmt:get-run-info run-id))
                                   (target   (rmt:get-target run-id))
@@ -1905,13 +1897,12 @@ Misc
 									item-path)))
                                   (status-chars (char-set->list (string->char-set status)))
                                   (testpanel-cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id " &")))
-                             (BB> "testpanel-cmd=>"testpanel-cmd"<    status=>"status"<")
-                             (BB> "test-id="test-id )
-                             ;;(BB> " run-id="run-id)
-                          
-                             (when (member #\1 status-chars) ;; 1 is left mouse button
+                             (BB> "status-chars=["status-chars"] status=["status"]")
+                             (cond
+                              ((member #\1 status-chars) ;; 1 is left mouse button
                                (system testpanel-cmd))
-                             (when (member #\2 status-chars) ;; 2 is middle mouse button
+                              
+                              ((member #\2 status-chars) ;; 2 is middle mouse button
                                
                                (BB> "mmb- test-name="test-name" testpatt="testpatt)
                                (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt item-test-path) ;; popup-menu
@@ -1919,8 +1910,16 @@ Misc
                                          #:y 'mouse
                                          #:modal? "NO")
                                )
+                              (else
+                               (BB> "unhandled status in run-summary-click-cb.  Doing right click action. (status is corrupted on Brandon's ubuntu host - bad/buggy  iup install??" )
+                               (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt item-test-path) ;; popup-menu
+                                         #:x 'mouse
+                                         #:y 'mouse
+                                         #:modal? "NO")
+                               )
+                              )
                             
-                          )) "runs-summary-click-callback"))))
+                             )) "runs-summary-click-callback"))))
 	 (runs-summary-updater  
           (lambda ()
 	    (mutex-lock! update-mutex)
@@ -2100,6 +2099,48 @@ Misc
 
 (define (dashboard:popup-menu  run-id test-id target runname test-name testpatt item-test-path)
   (iup:menu 
+   (iup:menu-item
+    "Test Control Panel"
+    #:action
+    (lambda (obj)
+      (let* ((toolpath (car (argv)))
+             (testpanel-cmd
+              (conc toolpath " -test " run-id "," test-id " &")))
+        (system testpanel-cmd)
+        )))
+   
+   (iup:menu-item
+    (conc "View Log (not yet implemented) " item-test-path)
+    )
+   
+   (iup:menu-item
+    (conc "Rerun " item-test-path)
+    #:action
+    (lambda (obj)
+      (common:run-a-command
+       (conc "megatest -set-state-status NOT_STARTED,n/a -run -target " target
+             " -runname " runname
+             " -testpatt " item-test-path
+             " -preclean -clean-cache"))))
+   
+   (iup:menu-item
+    "Start xterm"
+    #:action
+    (lambda (obj)
+      (dcommon:examine-xterm run-id test-id)))
+
+   (iup:menu-item
+    (conc "Kill " item-test-path)
+    #:action
+    (lambda (obj)
+      ;; (rmt:test-set-state-status-by-id run-id test-id "KILLREQ" #f #f)
+      (common:run-a-command
+       (conc "megatest -set-state-status KILLREQ,n/a -target " target
+             " -runname " runname
+             " -testpatt " item-test-path 
+             " -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))
+
+   
    (iup:menu-item
     "Run"
     (iup:menu              
