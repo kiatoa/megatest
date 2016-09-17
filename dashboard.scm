@@ -1450,15 +1450,15 @@ Misc
 	      run-ids)))
 
 (define (dashboard:run-id->tests-mindat run-id tabdat runs-hash)
-  (let* ((run          (hash-table-ref/default runs-hash run-id #f))
+  (let* ((run          (hash-table-ref/default runs-hash run-id #f)) ;; extra
          (last-update  (hash-table-ref/default (dboard:tabdat-run-update-times tabdat) run-id 0))
          (db-path      (or (hash-table-ref/default (dboard:tabdat-run-db-paths tabdat) run-id #f)
                            (let* ((db-dir (tasks:get-task-db-path))
                                   (db-pth (conc db-dir "/" run-id ".db")))
                              (hash-table-set! (dboard:tabdat-run-db-paths tabdat) run-id db-pth)
                              db-pth)))
-         (key-vals     (rmt:get-key-vals run-id))
-         (testnamepatt (or (dboard:tabdat-test-patts tabdat) "%"))
+         (key-vals     (rmt:get-key-vals run-id)) ;; extra
+         (testnamepatt (or (dboard:tabdat-test-patts tabdat) "%")) ;; extra
          
          (tests-dat    (if (or (not run-id)
                                (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
@@ -1466,15 +1466,18 @@ Misc
                                (>= (file-modification-time db-path) last-update))
 
                            (let ((res
-                                  (dboard:get-tests-dat tabdat run-id last-update)
+                                  (dboard:get-tests-dat tabdat run-id 0) ;; "0)" was: "last-update)" ;; NOTE FROM 1.61 --> ;; DO NOT USE last-update yet. Need to redesign this to use dboard:get-tests-for-run-duplicate
                                   ;; TODO: replace above line (get-tests-dat)  with below line (get-tests-for-run-duplicate); above is a list, below is a hash - therein lies the problem.  The minimize-test-data depends on a pre-sorted list as input; hash is by nature unsorted.  and its not a list.
                                   ;;(dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)
                                   ))
-                             (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id res)
-                             (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- (current-seconds) 10))
+
                              res)
                            (hash-table-ref (dboard:tabdat-last-test-dat tabdat) run-id)))
          (tests-mindat (dcommon:minimize-test-data tests-dat)))  ;; reduces data for display
+    (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2)) ;; moved to here to group with other update timestamp recordings
+    (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id tests-dat) ;; moved out of one branch of test-dat let cond
+    (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- (current-seconds) 10)) ;; ditto
+
     tests-mindat))
 
 (define (dashboard:runs-summary-xor-matrix-content tabdat runs-hash)
@@ -1485,7 +1488,7 @@ Misc
          (dashboard:run-id->tests-mindat src-run-id tabdat runs-hash)
          (dashboard:run-id->tests-mindat dest-run-id tabdat runs-hash))
         #f)))
-
+-
 (define (dashboard:runs-summary-updater commondat tabdat tb cell-lookup run-matrix)
   (dboard:runs-summary-control-panel-updater tabdat)
   (let* ((last-runs-update  (dboard:tabdat-last-runs-update tabdat))
@@ -1499,7 +1502,7 @@ Misc
 				   runs)
 			 ht)))
     (dboard:update-tree tabdat runs-hash runs-header tb)
-    (if run-id
+    (if run-id ;; moved matrix-content calculation code to run-id->tests-mindat
         (let* ((matrix-content
                 (case (dboard:tabdat-runs-summary-mode tabdat) 
                   ((one-run) (dashboard:run-id->tests-mindat run-id tabdat runs-hash))
@@ -1518,10 +1521,8 @@ Misc
                    )
 
               
-              (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
               
-              
-              (dboard:tabdat-filters-changed-set! tabdat #f)
+              (dboard:tabdat-filters-changed-set! tabdat #f) ;; refactor coalesces here 
               (let loop ((pass-num 0)
                          (changed  #f))
                 ;; Update the runs tree
