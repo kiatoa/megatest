@@ -490,7 +490,13 @@ Misc
 ;;    NOTE: Yes, this is used
 ;;
 (define (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)
-  (let* ((num-to-get  100)
+  (let* ((num-to-get
+          (let ((num-tests-from-config (configf:lookup *configdat* "setup" "num-tests-to-get")))
+            (if num-tests-from-config
+                (begin
+                  (BB> "override num-tests 100 -> "num-tests-from-config)
+                  (string->number num-tests-from-config))
+                100)))
 	 (states      (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
 	 (statuses    (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)))
          (do-not-use-db-file-timestamps (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")) ;; this still hosts runs-summary-tab
