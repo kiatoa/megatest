@@ -124,19 +124,23 @@ Misc
    hide-not-hide-tabs:   #f
    ))
 
+;; RA => returns the tabdat stored at hashkey passed in commondat-tabdats table (e.g. 0 gives summary)
+;;
 (define (dboard:common-get-tabdat commondat #!key (tab-num #f))
   (hash-table-ref/default 
    (dboard:commondat-tabdats commondat)
-   (or tab-num (dboard:commondat-curr-tab-num commondat))
+   (or tab-num (dboard:commondat-curr-tab-num commondat)) ;; tab-num value is curr-tab-num value in passed commondat
    #f))
 
+;; RA => sets the tabdat passed to the hashkey at commondat:tabdats hash table
+;;
 (define (dboard:common-set-tabdat! commondat tabnum tabdat)
   (hash-table-set!
    (dboard:commondat-tabdats commondat)
    tabnum
    tabdat))
 
-;; gets and calls updater based on curr-tab-num
+;; gets and calls updater list based on curr-tab-num
 (define (dboard:common-run-curr-updaters commondat #!key (tab-num #f))
   (if (dboard:common-get-tabdat commondat tab-num: tab-num) ;; only update if there is a tabdat
       (let* ((tnum     (or tab-num (dboard:commondat-curr-tab-num commondat)))
@@ -144,13 +148,14 @@ Misc
 					       tnum
 					       '())))
 	(debug:print 4 *default-log-port* "Found these updaters: " updaters " for tab-num: " tnum)
-	(for-each
+	(for-each ;; perform the function calls for the complete updaters list
 	 (lambda (updater)
 	   ;; (debug:print 3 *default-log-port* "Running " updater)
 	   (updater))
 	 updaters))))
 
 ;; if tab-num passed in then use it, otherwise look in commondat at curr-tab-num
+;; adds the updater passed in the updaters list at that hashkey
 ;;
 (define (dboard:commondat-add-updater commondat updater #!key (tab-num #f))
   (let* ((tnum          (or tab-num
@@ -170,7 +175,7 @@ Misc
   ((not-done-runs   '())                 : list)        ;; list of runs not yet drawn
   (header            #f)                                ;; header for decoding the run records
   (keys              #f)                                ;; keys for this run (i.e. target components)
-  ((numruns          (string->number (or (args:get-arg "-cols") "8")))                 : number)      ;; 
+  ((numruns          (string->number (or (args:get-arg "-cols") "10")))                 : number)      ;; 
   ((tot-runs          0)                 : number)
   ((last-data-update  0)                 : number)      ;; last time the data in allruns was updated
   ((last-runs-update  0)                 : number)      ;; last time we pulled the runs info to update the tree
@@ -216,7 +221,7 @@ Misc
   curr-run-id                                           ;; current row to display in Run summary view
   prev-run-id                                           ;; previous runid selected before current runid was selected (used in xor-two-runs runs summary mode
   curr-test-ids                                         ;; used only in dcommon:run-update which is used in newdashboard
-  ((filters-changed  #f)                  : boolean)    ;; to to indicate that the user changed filters for this tab
+  ((filters-changed  #t)                  : boolean)    ;; to to indicate that the user changed filters for this tab
   ((last-filter-str  "")                  : string)      ;; conc the target runname and testpatt for a signature of changed filters
   ((hide-empty-runs  #f)                  : boolean)     
   ((hide-not-hide    #t)                  : boolean)     ;; toggle for hide/not hide empty runs
@@ -485,9 +490,17 @@ Misc
 ;;    NOTE: Yes, this is used
 ;;
 (define (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)
-  (let* ((num-to-get  20)
+  (let* ((num-to-get
+          (let ((num-tests-from-config (configf:lookup *configdat* "setup" "num-tests-to-get")))
+            (if num-tests-from-config
+                (begin
+                  (BB> "override num-tests 100 -> "num-tests-from-config)
+                  (string->number num-tests-from-config))
+                100)))
 	 (states      (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
 	 (statuses    (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)))
+         (do-not-use-db-file-timestamps (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")) ;; this still hosts runs-summary-tab
+         (do-not-use-query-timestamps (configf:lookup *configdat* "setup" "do-not-use-query-timestamps")) ;; this no longer troubles runs-summary-tab
 	 (sort-info   (get-curr-sort))
 	 (sort-by     (vector-ref sort-info 1))
 	 (sort-order  (vector-ref sort-info 2))
@@ -500,15 +513,21 @@ Misc
 			   (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id rd)
 			   rd)))
 	 ;; (prev-tests  (dboard:rundat-tests prev-dat)) ;; (vector-ref prev-dat 1))
-	 (last-update (dboard:rundat-last-update run-dat)) ;; (vector-ref prev-dat 3))
+         (last-update
+          (if do-not-use-query-timestamps
+              0
+              (dboard:rundat-last-update run-dat)
+              ;;(hash-table-ref/default (dboard:tabdat-run-update-times tabdat) run-id 0)
+              ))
+
 	 (db-path     (or (dboard:rundat-db-path run-dat)
 			  (let* ((db-dir (tasks:get-task-db-path))
 				 (db-pth (conc db-dir "/" run-id ".db")))
 			    (dboard:rundat-db-path-set! run-dat db-pth)
 			    db-pth)))
-	 (tmptests    (if (or (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
+	 (tmptests    (if (or do-not-use-db-file-timestamps
 			      (>= (file-modification-time db-path) last-update))
-			  (rmt:get-tests-for-run run-id testnamepatt states statuses  ;; run-id testpatt states statuses
+                          (rmt:get-tests-for-run run-id testnamepatt states statuses  ;; run-id testpatt states statuses
 						 (dboard:rundat-run-data-offset run-dat)
 						 num-to-get
 						 (dboard:tabdat-hide-not-hide tabdat) ;; no-in
@@ -552,7 +571,10 @@ Misc
     (if (> (dboard:rundat-run-data-offset run-dat) 0)
 	(begin
 	  ;; (print "run-data-offset: " (dboard:rundat-run-data-offset run-dat) ", setting last-update to 0")
-	  (dboard:rundat-last-update-set! run-dat 0))
+	  ;; (dboard:rundat-last-update-set! run-dat 0)
+          (dboard:rundat-last-update-set! run-dat 0))
+        ;; (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- start-time 3))
+        
 	(dboard:rundat-last-update-set! run-dat (- (current-seconds) 2))) ;; go back two seconds in time to ensure all changes are captured.
 
     ;; (debug:print-info 0 *default-log-port* "tests-ht: " (hash-table-keys tests-ht))
@@ -650,6 +672,9 @@ Misc
 		      (loop (car tal)(cdr tal) new-res newmaxtests)))))))
     (dboard:tabdat-filters-changed-set! tabdat #f)
     (dboard:update-tree tabdat runs-hash header tb)))
+
+
+
 
 (define *collapsed* (make-hash-table))
 
@@ -803,7 +828,6 @@ Misc
 	 (table       (dboard:uidat-get-runsvec uidat))
 	 (coln        0)
 	 (all-test-names (make-hash-table)))
-
     ;; create a concise list of test names
     ;;
     (for-each
@@ -905,6 +929,7 @@ Misc
 			  (iup:attribute-set! button "BGCOLOR" color))
 		      (if (not (equal? curr-title buttontxt))
 			  (iup:attribute-set! button "TITLE"   buttontxt))
+                      ;;(print "RA => testdat " testdat " teststate " teststate " teststatus " teststatus " buttondat " buttondat " curr-color " curr-color  " curr-title " curr-title "buttontxt" buttontxt " title " curr-title )
 		      (vector-set! buttondat 0 run-id)
 		      (vector-set! buttondat 1 color)
 		      (vector-set! buttondat 2 buttontxt)
@@ -939,7 +964,7 @@ Misc
   (set-bg-on-filter commondat tabdat))
 
 (define (mark-for-update tabdat)
-  (dboard:tabdat-filters-changed-set! tabdat #t)
+  ;; (dboard:tabdat-filters-changed-set! tabdat #t)
   (dboard:tabdat-last-db-update-set! tabdat 0))
 
 ;;======================================================================
@@ -1447,32 +1472,36 @@ Misc
 			))))
 	      run-ids)))
 
+(define (dashboard:tests-ht->tests-dat tests-ht)
+  (reverse
+   (sort
+    (hash-table-values tests-ht)
+    (lambda (a b) 
+      (let ((a-test-name  (db:test-get-testname a))
+            (a-item-path  (db:test-get-item-path a))
+            (b-test-name  (db:test-get-testname b))
+            (b-item-path  (db:test-get-item-path b)))
+        (cond
+         ((< 0 (string-compare3 a-test-name b-test-name)) #t)
+         ((> 0 (string-compare3 a-test-name b-test-name)) #f)
+         ((< 0 (string-compare3 a-item-path b-item-path)) #t)
+         (else #f)))))))
+
+
 (define (dashboard:run-id->tests-mindat run-id tabdat runs-hash)
   (let* ((run          (hash-table-ref/default runs-hash run-id #f))
-         (last-update  (hash-table-ref/default (dboard:tabdat-run-update-times tabdat) run-id 0))
-         (db-path      (or (hash-table-ref/default (dboard:tabdat-run-db-paths tabdat) run-id #f)
-                           (let* ((db-dir (tasks:get-task-db-path))
-                                  (db-pth (conc db-dir "/" run-id ".db")))
-                             (hash-table-set! (dboard:tabdat-run-db-paths tabdat) run-id db-pth)
-                             db-pth)))
          (key-vals     (rmt:get-key-vals run-id))
-         (testnamepatt (or (dboard:tabdat-test-patts tabdat) "%"))
-         
-         (tests-dat    (if (or (not run-id)
-                               (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")
-                               (not (hash-table-exists? (dboard:tabdat-last-test-dat tabdat) run-id))
-                               (>= (file-modification-time db-path) last-update))
-
-                           (let ((res
-                                  (dboard:get-tests-dat tabdat run-id last-update)
-                                  ;; TODO: replace above line (get-tests-dat)  with below line (get-tests-for-run-duplicate); above is a list, below is a hash - therein lies the problem.  The minimize-test-data depends on a pre-sorted list as input; hash is by nature unsorted.  and its not a list.
-                                  ;;(dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)
-                                  ))
-                             (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id res)
-                             (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- (current-seconds) 10))
-                             res)
-                           (hash-table-ref (dboard:tabdat-last-test-dat tabdat) run-id)))
+         (testnamepatt (or (dboard:tabdat-test-patts tabdat) "%/%"))
+         (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
+         (tests-dat    (dashboard:tests-ht->tests-dat tests-ht)) 
          (tests-mindat (dcommon:minimize-test-data tests-dat)))  ;; reduces data for display
+    (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
+    (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id tests-dat)
+    (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- (current-seconds) 10))
+    (when (not run)
+        (BB> "ERROR: NO RUN FOR RUN-ID run-id="run-id)
+        (BB> "runs-hash-> " (hash-table->alist runs-hash))
+        )
     tests-mindat))
 
 (define (dashboard:runs-summary-xor-matrix-content tabdat runs-hash #!key (hide-clean #f))
@@ -1485,9 +1514,9 @@ Misc
          hide-clean: hide-clean)
         #f)))
 
-(define (dashboard:runs-summary-updater commondat tabdat tb cell-lookup run-matrix)
-  (dboard:runs-summary-control-panel-updater tabdat)
-  (let* ((last-runs-update  (dboard:tabdat-last-runs-update tabdat))
+
+(define (dashboard:get-runs-hash tabdat)
+  (let* ((last-runs-update  0);;(dboard:tabdat-last-runs-update tabdat))
 	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
          (runs         (vector-ref runs-dat 1))
@@ -1495,8 +1524,25 @@ Misc
          (runs-hash    (let ((ht (make-hash-table)))
 			 (for-each (lambda (run)
 				     (hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
-				   runs)
-			 ht)))
+				   runs) ht)))
+    runs-hash))
+         
+
+(define (dashboard:runs-summary-updater commondat tabdat tb cell-lookup run-matrix)
+  (dashboard:do-update-rundat tabdat) 
+  (dboard:runs-summary-control-panel-updater tabdat)
+  (let* ((last-runs-update  (dboard:tabdat-last-runs-update tabdat))
+	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
+	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
+         (runs         (vector-ref runs-dat 1))
+	 (run-id       (dboard:tabdat-curr-run-id tabdat))
+         (runs-hash (dashboard:get-runs-hash tabdat))
+         ;; (runs-hash    (let ((ht (make-hash-table)))
+	 ;;        	 (for-each (lambda (run)
+	 ;;        		     (hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
+	 ;;        		   runs)
+	 ;;        	 ht))
+         )
     (dboard:update-tree tabdat runs-hash runs-header tb)
     (if run-id
         (let* ((matrix-content
@@ -1518,7 +1564,7 @@ Misc
                    )
 
               
-              (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
+
               
               
               (dboard:tabdat-filters-changed-set! tabdat #f)
@@ -1818,12 +1864,62 @@ Misc
 	 (run-matrix (iup:matrix
 		      #:expand "YES"
 		      #:click-cb
+                      
 		      (lambda (obj lin col status)
-			(let* ((toolpath (car (argv)))
-			       (key      (conc lin ":" col))
-			       (test-id  (hash-table-ref/default cell-lookup key -1))
-			       (cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id "&")))
-			  (system cmd)))))
+                        (debug:catch-and-dump
+                         (lambda ()
+
+                           ;; Bummer - we dont have the global get/set api mapped in chicken
+                           ;; (let* ((modkeys (iup:global "MODKEYSTATE")))
+                           ;;   (BB> "modkeys="modkeys))
+
+                           (BB> "click-cb: obj="obj" lin="lin" col="col" status="status)
+                           ;; status is corrupted on Brandon's home machine.  will have to wait until after shutdown to see if it is still broken in PDX SLES
+                           (let* ((toolpath (car (argv)))
+                                  (key      (conc lin ":" col))
+                                  (test-id   (hash-table-ref/default cell-lookup key -1))
+                                  (run-id   (dboard:tabdat-curr-run-id tabdat))
+                                  (run-info (rmt:get-run-info run-id))
+                                  (target   (rmt:get-target run-id))
+                                  (runname  (db:get-value-by-header (db:get-rows run-info)
+                                                                    (db:get-header run-info) "runname"))
+                                  (test-name (db:test-get-testname (rmt:get-test-info-by-id run-id test-id)))
+                                  (testpatt  (let ((tlast (rmt:tasks-get-last target runname)))
+                                                (if tlast
+                                                    (let ((tpatt (tasks:task-get-testpatt tlast)))
+                                                      (if (member tpatt '("0" 0)) ;; known bad historical value - remove in 2017
+                                                          "%"
+                                                          tpatt))
+                                                    "%")))
+                                  (item-path (db:test-get-item-path (rmt:get-test-info-by-id run-id test-id)))
+                                  (item-test-path (conc test-name "/" (if (equal? item-path "")
+									"%" 
+									item-path)))
+                                  (status-chars (char-set->list (string->char-set status)))
+                                  (testpanel-cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id " &")))
+                             (BB> "status-chars=["status-chars"] status=["status"]")
+                             (cond
+                              ((member #\1 status-chars) ;; 1 is left mouse button
+                               (system testpanel-cmd))
+                              
+                              ((member #\2 status-chars) ;; 2 is middle mouse button
+                               
+                               (BB> "mmb- test-name="test-name" testpatt="testpatt)
+                               (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt item-test-path) ;; popup-menu
+                                         #:x 'mouse
+                                         #:y 'mouse
+                                         #:modal? "NO")
+                               )
+                              (else
+                               (BB> "unhandled status in run-summary-click-cb.  Doing right click action. (status is corrupted on Brandon's ubuntu host - bad/buggy  iup install??" )
+                               (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt item-test-path) ;; popup-menu
+                                         #:x 'mouse
+                                         #:y 'mouse
+                                         #:modal? "NO")
+                               )
+                              )
+                            
+                             )) "runs-summary-click-callback"))))
 	 (runs-summary-updater  
           (lambda ()
 	    (mutex-lock! update-mutex)
@@ -1994,15 +2090,57 @@ Misc
 					   (debug:print 6 *default-log-port* "(dboard:tabdat-start-run-offset tabdat) " (dboard:tabdat-start-run-offset tabdat) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
 					   (iup:attribute-set! obj "MAX" (* maxruns 10))))
 		     #:expand "HORIZONTAL"
-		     #:max (* 10 (length (dboard:tabdat-allruns tabdat)))
+		     #:max (* 10 (max (hash-table-size (dboard:tabdat-allruns-by-id tabdat)) 10))
 		     #:min 0
 		     #:step 0.01)))
      ;;(iup:button "inc rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (+ (dboard:tabdat-num-tests tabdat) 1))))
 					;(iup:button "dec rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (if (> (dboard:tabdat-num-tests tabdat) 0)(- (dboard:tabdat-num-tests tabdat) 1) 0))))
      )))
 
-(define (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt)
+(define (dashboard:popup-menu  run-id test-id target runname test-name testpatt item-test-path)
   (iup:menu 
+   (iup:menu-item
+    "Test Control Panel"
+    #:action
+    (lambda (obj)
+      (let* ((toolpath (car (argv)))
+             (testpanel-cmd
+              (conc toolpath " -test " run-id "," test-id " &")))
+        (system testpanel-cmd)
+        )))
+   
+   (iup:menu-item
+    (conc "View Log (not yet implemented) " item-test-path)
+    )
+   
+   (iup:menu-item
+    (conc "Rerun " item-test-path)
+    #:action
+    (lambda (obj)
+      (common:run-a-command
+       (conc "megatest -set-state-status NOT_STARTED,n/a -run -target " target
+             " -runname " runname
+             " -testpatt " item-test-path
+             " -preclean -clean-cache"))))
+   
+   (iup:menu-item
+    "Start xterm"
+    #:action
+    (lambda (obj)
+      (dcommon:examine-xterm run-id test-id)))
+
+   (iup:menu-item
+    (conc "Kill " item-test-path)
+    #:action
+    (lambda (obj)
+      ;; (rmt:test-set-state-status-by-id run-id test-id "KILLREQ" #f #f)
+      (common:run-a-command
+       (conc "megatest -set-state-status KILLREQ,n/a -target " target
+             " -runname " runname
+             " -testpatt " item-test-path 
+             " -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))
+
+   
    (iup:menu-item
     "Run"
     (iup:menu              
@@ -2010,7 +2148,7 @@ Misc
       (conc "Rerun " testpatt)
       #:action
       (lambda (obj)
-        ;;(print "buttndat: " buttndat " run-id: " run-id " test-id: " test-id " target: " target " runname: " runname " test-name: " test-name " testpatt: " testpatt)
+        ;; (print  " run-id: " run-id " test-id: " test-id " target: " target " runname: " runname " test-name: " test-name " testpatt: " testpatt "item-path : " item-path)
 	(common:run-a-command
 	 (conc "megatest -run -target " target
 	       " -runname " runname
@@ -2033,37 +2171,46 @@ Misc
         (common:run-a-command
          (conc "megatest -remove-runs -target " target
                " -runname " runname
-               " -testpatt % "))))))
+               " -testpatt % "))))
+     (iup:menu-item ;; RADT => itemize this run lists before merging with v1.61
+      "Kill Complete Run"
+      #:action
+      (lambda (obj)
+        (common:run-a-command
+         (conc "megatest -set-state-status KILLREQ,n/a -target " target
+               " -runname " runname
+               " -testpatt % "
+               "  -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))))
    (iup:menu-item
     "Test"
     (iup:menu 
      (iup:menu-item
-      (conc "Rerun " test-name)
+      (conc "Rerun " item-test-path)
       #:action
       (lambda (obj)
 	(common:run-a-command
 	 (conc "megatest -set-state-status NOT_STARTED,n/a -run -target " target
                " -runname " runname
-	       " -testpatt " test-name
+	       " -testpatt " item-test-path
 	       " -preclean -clean-cache"))))
      (iup:menu-item
-      (conc "Kill " test-name)
+      (conc "Kill " item-test-path)
       #:action
       (lambda (obj)
         ;; (rmt:test-set-state-status-by-id run-id test-id "KILLREQ" #f #f)
 	(common:run-a-command
 	 (conc "megatest -set-state-status KILLREQ,n/a -target " target
                " -runname " runname
-	       " -testpatt " test-name
+	       " -testpatt " item-test-path 
 	       " -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))
      (iup:menu-item
-      (conc "Clean " test-name)
+      (conc "Clean "item-test-path)
       #:action
       (lambda (obj)
 	(common:run-a-command
 	 (conc "megatest -remove-runs -target " target
                " -runname " runname
-	       " -testpatt " test-name))))
+	       " -testpatt " item-test-path))))
      (iup:menu-item
       "Start xterm"
       #:action
@@ -2092,7 +2239,7 @@ Misc
 (define (make-dashboard-buttons commondat) ;;  runs-sum-dat new-view-dat)
   (let* ((stats-dat       (dboard:tabdat-make-data))
 	 (runs-dat        (dboard:tabdat-make-data))
-	 (onerun-dat      (dboard:tabdat-make-data))
+	 (onerun-dat      (dboard:tabdat-make-data)) ;; name for run-summary structure 
 	 (runcontrols-dat (dboard:tabdat-make-data))
 	 (runtimes-dat    (dboard:tabdat-make-data))
 	 (nruns           (dboard:tabdat-numruns runs-dat))
@@ -2217,8 +2364,12 @@ Misc
 								 (if (member tpatt '("0" 0)) ;; known bad historical value - remove in 2017
 								     "%"
 								     tpatt))
-							       "%"))))
-					 (iup:show (dashboard:popup-menu buttndat run-id test-id target runname test-name testpatt) ;; popup-menu
+							       "%")))
+                                              (item-path (db:test-get-item-path (rmt:get-test-info-by-id run-id test-id)))
+                                              (item-test-path (conc test-name "/" (if (equal? item-path "")
+									"%" 
+									item-path))))
+					 (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt item-test-path) ;; popup-menu
 						   #:x 'mouse
 						   #:y 'mouse
 						   #:modal? "NO")
@@ -2400,6 +2551,8 @@ Misc
 (define-inline (dashboard:px-between px lx1 lx2)
   (and (< lx1 px)(> lx2 px)))
 
+;;Not reference anywhere
+;;
 ;; can a bar be placed in row "rownum" covering x1 to x2 without overlapping with existing 
 ;; bars? Use num-rows to check that a block will fit from rownum to (+ rownum num-rows)
 ;;
@@ -2571,7 +2724,7 @@ Misc
 	  (update-rundat tabdat
 			 runpatt
 			 ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") 
-			 10  ;; (dboard:tabdat-numruns tabdat)
+			 (dboard:tabdat-numruns tabdat)
 			 testpatt ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
 			 ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
 			 
@@ -2992,32 +3145,107 @@ Misc
 		)))
 	(debug:print 2 *default-log-port* "no tabdat for run-times-tab-updater"))))
 
+(define (tabdat-values tabdat)
+  (let ((allruns (dboard:tabdat-allruns tabdat))
+        (allruns-by-id (dboard:tabdat-allruns-by-id tabdat))
+        (done-runs (dboard:tabdat-done-runs tabdat))
+        (not-done-runs (dboard:tabdat-not-done-runs tabdat))
+        (header  (dboard:tabdat-header  tabdat))
+        (keys (dboard:tabdat-keys tabdat))
+        (numruns (dboard:tabdat-numruns tabdat))
+        (tot-runs (dboard:tabdat-tot-runs tabdat))
+        (last-data-update (dboard:tabdat-last-data-update tabdat))
+        (runs-mutex (dboard:tabdat-runs-mutex tabdat))
+        (run-update-times (dboard:tabdat-run-update-times tabdat))
+        (last-test-dat (dboard:tabdat-last-test-dat tabdat))
+        (run-db-paths (dboard:tabdat-run-db-paths tabdat))
+        (buttondat (dboard:tabdat-buttondat tabdat))
+        (item-test-names (dboard:tabdat-item-test-names tabdat))
+        (run-keys (dboard:tabdat-run-keys tabdat))
+        (start-run-offset (dboard:tabdat-start-run-offset tabdat))
+        (start-test-offset (dboard:tabdat-start-test-offset tabdat))
+        (runs-btn-height (dboard:tabdat-runs-btn-height tabdat))
+        (all-test-names (dboard:tabdat-all-test-names tabdat))
+        (cnv (dboard:tabdat-cnv tabdat))
+        (command (dboard:tabdat-command tabdat))
+        (run-name (dboard:tabdat-run-name tabdat))
+        (states (dboard:tabdat-states tabdat))
+        (statuses (dboard:tabdat-statuses tabdat))
+        (curr-run-id (dboard:tabdat-curr-run-id tabdat))
+        (curr-test-ids (dboard:tabdat-curr-test-ids tabdat))
+        (state-ignore-hash (dboard:tabdat-state-ignore-hash tabdat))
+        (test-patts (dboard:tabdat-test-patts tabdat))
+        (target (dboard:tabdat-target tabdat))
+        (dbdir (dboard:tabdat-dbdir tabdat))
+        (monitor-db-path (dboard:tabdat-monitor-db-path tabdat))
+        (path-run-ids (dboard:tabdat-path-run-ids tabdat)))
+        (print "allruns is : " allruns)
+        (print "allruns-by-id is : " allruns-by-id)
+        (print "done-runs is : " done-runs)
+        (print "not-done-runs is : " not-done-runs)
+        (print "header  is : " header )
+        (print "keys is : " keys)
+        (print "numruns is : " numruns)
+        (print "tot-runs is : " tot-runs)
+        (print "last-data-update is : " last-data-update)
+        (print "runs-mutex is : " runs-mutex)
+        (print "run-update-times is : " run-update-times)
+        (print "last-test-dat is : " last-test-dat)
+        (print "run-db-paths is : " run-db-paths)
+        (print "buttondat is : " buttondat)
+        (print "item-test-names is : " item-test-names)
+        (print "run-keys is : " run-keys)
+        (print "start-run-offset is : " start-run-offset)
+        (print "start-test-offset is : " start-test-offset)
+        (print "runs-btn-height is : " runs-btn-height)
+        (print "all-test-names is : " all-test-names)
+        (print "cnv is : " cnv)
+        (print "command is : " command)
+        (print "run-name is : " run-name)
+        (print "states is : " states)
+        (print "statuses is : " statuses)
+        (print "curr-run-id is : " curr-run-id)
+        (print "curr-test-ids is : " curr-test-ids)
+        (print "state-ignore-hash is : " state-ignore-hash)
+        (print "test-patts is : " test-patts)
+        (print "target is : " target)
+        (print "dbdir is : " dbdir)
+        (print "monitor-db-path is : " monitor-db-path)
+        (print "path-run-ids is : " path-run-ids)))
+
+(define (dashboard:do-update-rundat tabdat)
+  (update-rundat
+   tabdat
+   (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%")
+   (dboard:tabdat-numruns tabdat)
+   (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
+   ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
+   (let* ((dbkeys (dboard:tabdat-dbkeys tabdat)))
+     ;; (print "dbkeys: " dbkeys)
+     (let ((fres   (if (dboard:tabdat-target tabdat)
+                       (let ((ptparts (append (dboard:tabdat-target tabdat)(make-list (length dbkeys) "%"))))
+                         (map (lambda (k v)(list k v)) dbkeys ptparts))
+                       (let ((res '()))
+                         ;; (print "target: " (dboard:tabdat-target tabdat))
+                         (for-each (lambda (key)
+                                     (if (not (equal? key "runname"))
+                                         (let ((val (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) key #f)))
+                                           (if val (set! res (cons (list key val) res))))))
+                                   dbkeys)
+                         res))))
+       ;; (debug:print 0 *default-log-port* "fres: " fres)
+       fres))))
+
 (define (dashboard:runs-tab-updater commondat tab-num)
   (debug:catch-and-dump 
    (lambda ()
      (let* ((tabdat (dboard:common-get-tabdat commondat tab-num: tab-num))
 	    (dbkeys (dboard:tabdat-dbkeys tabdat)))
-       (update-rundat tabdat
-		      (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%")
-		      (dboard:tabdat-numruns tabdat)
-		      (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
-		      ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
-		      (let* ((dbkeys (dboard:tabdat-dbkeys tabdat)))
-			;; (print "dbkeys: " dbkeys)
-			(let ((fres   (if (dboard:tabdat-target tabdat)
-					 (let ((ptparts (append (dboard:tabdat-target tabdat)(make-list (length dbkeys) "%"))))
-					   (map (lambda (k v)(list k v)) dbkeys ptparts))
-					 (let ((res '()))
-					   ;; (print "target: " (dboard:tabdat-target tabdat))
-					   (for-each (lambda (key)
-						       (if (not (equal? key "runname"))
-							   (let ((val (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) key #f)))
-							     (if val (set! res (cons (list key val) res))))))
-						     dbkeys)
-					   res))))
-			  ;; (debug:print 0 *default-log-port* "fres: " fres)
-			  fres)))
+       ;;(print "RA => calling runs-tab-updater with commondat " commondat " tab-num " tab-num)
+       ;;(tabdat-values tabdat) ;;RA added 
+       (dashboard:do-update-rundat tabdat)
        (let ((uidat (dboard:commondat-uidat commondat)))
+         ;;(print "RA => Calling update-buttons with tabdat : " tabdat " uidat " uidat)
 	 (update-buttons tabdat uidat (dboard:tabdat-numruns tabdat) (dboard:tabdat-num-tests tabdat)))
        ))
    "dashboard:runs-tab-updater"))
@@ -3045,7 +3273,7 @@ Misc
     ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
     (cond 
      ((args:get-arg "-test") ;; run-id,test-id
-      (let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-test") ","))))
+      (let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-test") ",")))) ;; RADT couldn't find string->number, though it works
 			(if (> (length d) 1)
 			    d
 			    (list #f #f))))
@@ -3054,7 +3282,7 @@ Misc
 	(if (and (number? run-id)
 		 (number? test-id)
 		 (>= test-id 0))
-	    (examine-test run-id test-id)
+	    (dashboard-tests:examine-test run-id test-id)
 	    (begin
 	      (debug:print 3 *default-log-port* "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
 	      (exit 1)))))
