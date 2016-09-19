@@ -3268,7 +3268,9 @@ Misc
       (load debugcontrolf)))
 
 (define (main)
-  (if (not (args:get-arg "-skip-version-check"))(common:exit-on-version-changed))
+  (if (not (args:get-arg "-skip-version-check"))
+      (let ((th1 (make-thread common:exit-on-version-changed)))
+	(thread-start! th1)))
   (let* ((commondat       (dboard:commondat-make)))
     ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
     (cond 
