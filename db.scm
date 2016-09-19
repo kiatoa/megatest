@@ -2253,7 +2253,13 @@
 		    (lambda (db)
 		      (sqlite3:for-each-row 
 		       (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
-			 (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
+			 ;;(set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
+			 ;;(print (cons a b))
+		      	 (set! res (alist->db:test-rec (db:qry-gen-alist qryvalstr (cons a b))))
+
+		      	 (print (db:test-rec->alist res)))
+
+
 		       db
 		       qry
 		       run-id

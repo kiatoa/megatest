@@ -1398,10 +1398,11 @@ Misc
 		  '()))) ;; get 'em all
     ;; (debug:print 0 *default-log-port* "dboard:get-tests-dat: got " (length tdat) " test records for run " run-id)
     (sort tdat (lambda (a b)
-		 (let* ((aval (vector-ref a 2))
-			(bval (vector-ref b 2))
+		 (let* ((aval (db:test-get-testname a));;(vector-ref a 2))
+			(bval (db:test-get-testname b));;(vector-ref b 2))
 			(anum (string->number aval))
 			(bnum (string->number bval)))
+		 	(print a b)
 		   (if (and anum bnum)
 		       (< anum bnum)
 		       (string<= aval bval)))))))
