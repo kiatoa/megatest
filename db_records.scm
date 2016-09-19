@@ -59,6 +59,8 @@
     (dbr:dbstruct-set-locdbs! v (make-hash-table))
     v))
 
+;; Returns the database for a particular run-id fron the dbstruct:localdbs
+;;
 (define (dbr:dbstruct-get-localdb v run-id)
   (hash-table-ref/default (dbr:dbstruct-get-locdbs v) run-id #f))
 
@@ -96,7 +98,7 @@
   (if (equal? itempath "") testname (conc testname "/" itempath)))
 
 (define-inline (db:test-get-first_err    vec) (printable (vector-ref vec 15)))
-(define-inline (db:test-get-first_warn   vec) (printable (vector-ref vec 16)))
+(define-inline (db:test-get-first_warn   vec) (printable (vector-ref vec 16))) ;; RADT => reference 16 is repeated
 
 (define-inline (db:test-set-cpuload!  vec val)(vector-set! vec 7 val))
 (define-inline (db:test-set-diskfree! vec val)(vector-set! vec 8 val))
@@ -115,6 +117,7 @@
        (equal? (db:test-get-uname vec)     "n/a"))) ;; test has never been run
 
 ;; make-vector-record "" db mintest id run_id testname state status event_time item_path
+;; RADT => purpose of mintest??
 ;;
 (define (make-db:mintest)(make-vector 7))
 (define-inline (db:mintest-get-id           vec)    (vector-ref  vec 0))

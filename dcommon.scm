@@ -380,7 +380,7 @@
                        )))
                 (list test-name item-path  xor-new-item)))
             all-keys)))
-      ;;(BB> "hide-clean="hide-clean)
+
       (if hide-clean
           (filter
            (lambda (item)

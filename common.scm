@@ -145,7 +145,7 @@
 
 ;; from metadat lookup MEGATEST_VERSION
 ;;
-(define (common:get-last-run-version)
+(define (common:get-last-run-version) ;; RADT => How does this work in send-receive function??; assume it is the value saved in some DB
   (rmt:get-var "MEGATEST_VERSION"))
 
 (define (common:set-last-run-version)
@@ -156,6 +156,7 @@
 	       (common:version-signature))))
 
 ;; Move me elsewhere ...
+;; RADT => Why do we meed the version check here, this is called only if version misma
 ;;
 (define (common:cleanup-db)
   (db:multi-db-sync 
@@ -169,6 +170,8 @@
   (if (common:version-changed?)
       (common:set-last-run-version)))
 
+;; Force a megatest cleanup-db if version is changed and skip-version-check not specified
+;;
 (define (common:exit-on-version-changed)
   (if (common:version-changed?)
       (let ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config")))
