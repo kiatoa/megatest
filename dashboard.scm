@@ -1402,7 +1402,6 @@ Misc
 			(bval (db:test-get-testname b));;(vector-ref b 2))
 			(anum (string->number aval))
 			(bnum (string->number bval)))
-		 	(print a b)
 		   (if (and anum bnum)
 		       (< anum bnum)
 		       (string<= aval bval)))))))
