@@ -1362,15 +1362,14 @@ Misc
 				      "wheel-cb"))
 		       )))
 	cnv-obj)
-      (let* ((hb1 (iup:hbox))
-             (buttondat (dboard:tabdat-graph-button-dat tabdat)))
-             ;; (b1 (iup:button "testbutton")))
+      (let* ((hb1 (iup:hbox (iup:button "Checking"))))
         (dboard:tabdat-graph-button-box-set! tabdat hb1)
-        (for-each
-         (lambda (buttondat)
-           (let* ((b1 (iup:button "buttondat-graph-name")))
-           (iup:child-add! b1 hb1))))
         hb1)
+      ;; (let* ((hb2 (iup:hbox))
+      ;;        (b1 (iup:button "Checking")))
+      ;;   (dboard:tabdat-graph-button-box-set! tabdat hb2)
+      ;;   (iup:child-add! b1 hb2)
+      ;;   hb2)
       ))))
 
 ;;======================================================================
@@ -2554,7 +2553,8 @@ Misc
 	 (cmp      (vg:get-component dwg "runslib" compname))
 	 (cfg      (configf:get-section *configdat* "graph"))
 	 (stdcolor (vg:rgb->number 120 130 140))
-	 (delta-y  (- uly lly)))
+	 (delta-y  (- uly lly))
+         (hb1      (dboard:tabdat-graph-button-box tabdat)))
     (vg:add-obj-to-comp
      cmp 
      (vg:make-rect-obj llx lly ulx uly))
@@ -2581,12 +2581,19 @@ Misc
      (lambda (cf)
        (let* ((alldat  (dboard:graph-read-data (cadr cf) tstart tend)))
 	 (if alldat
-             ;; RA => generate canvas
 	     (for-each
 	      (lambda (fieldn)
 		(let* ((dat     (hash-table-ref alldat fieldn))
 		       (vals    (map (lambda (x)(vector-ref x 2)) dat))
-                       (buttondat (tabdat-graph-button-dat)))
+                       (buttondat (dboard:tabdat-graph-button-dat tabdat)))
+                  (if (not (hash-table-exists? buttondat fieldn))
+                      (let* ((b1 (iup:button fieldn)))
+                        (hash-table-set! buttondat fieldn b1)
+                        (print "fieldn is " fieldn "hb1: " hb1)
+                        (iup:child-add! b1 hb1)))
+
+                  ;; (print "graph-button-dat in runtimes is " (dboard:tabdat-graph-button-dat tabdat))
+                  ;; (print "fieldn alldat dat vals buttondat " fieldn alldat dat vals buttondat)
                   ;; Check if the dat is already added in the buttondat table; if not add it
 		  (if (not (null? vals))
 		      (let* ((maxval   (apply max vals))
@@ -2641,9 +2648,12 @@ Misc
 			;;       (vg:make-rect-obj (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
 			;; 			fill-color: stdcolor))))
 			;;  dat)
-			)))) ;; for each data point in the series
+			))
+                  (iup:redraw hb1 #:children? #t)
+                  (iup:refresh hb1))) ;; for each data point in the series
 	      (hash-table-keys alldat)))))
      cfg)))
+
 	 
 ;; run times tab
 ;;
