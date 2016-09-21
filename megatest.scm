@@ -1881,6 +1881,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 ;; fakeout readline
+(include "readline-fix.scm")
 
 (if (or (getenv "MT_RUNSCRIPT")
 	(args:get-arg "-repl")
@@ -1910,7 +1911,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (import readline)
 	      (import apropos)
 	      ;; (import (prefix sqlite3 sqlite3:)) ;; doesn't work ...
-	      (include "readline-fix.scm")
 
 	      (if *use-new-readline*
 		  (begin

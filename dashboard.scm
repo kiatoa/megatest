@@ -3270,7 +3270,10 @@ Misc
 (define (main)
   (if (not (args:get-arg "-skip-version-check"))
       (let ((th1 (make-thread common:exit-on-version-changed)))
-	(thread-start! th1)))
+	(thread-start! th1)
+	(if (> megatest-version (common:get-last-run-version-number))
+	    (debug:print-info 0 *default-log-port* "Version bump detected, blocking until db sync complete")
+	    (thread-join! th1))))
   (let* ((commondat       (dboard:commondat-make)))
     ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
     (cond 
