@@ -2664,12 +2664,10 @@
 	(lambda (id run-id test-name state status event-time host cpu-load disk-free uname run-dir item-path run-duration final-logf comment short-dir attempt-num archived)
 	  ;;             0    1       2      3      4        5       6      7        8     9     10      11          12          13           14         15          16
 	  ;;(set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final-logf comment short-dir attemptnum archived)))
-	  (set! res (cons
-	  	(make-db:test-rec id: id run-id: run-id test-name: test-name state: state status: status event-time: event-time
+	  (set! res (make-db:test-rec id: id run-id: run-id test-name: test-name state: state status: status event-time: event-time
        		host: host cpu-load: cpu-load disk-free: disk-free uname: uname run-dir: run-dir item-path: item-path
        		run-duration: run-duration final-logf: final-logf comment: comment short-dir: short-dir 
-       		attempt-num: attempt-num archived: archived )
-		       res)))
+       		attempt-num: attempt-num archived: archived)))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
 	test-id)
