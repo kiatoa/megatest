@@ -2580,12 +2580,12 @@
 	 (res '()))
     (db:delay-if-busy dbdat)
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum archived)
+     (lambda (id run_id testname state status event_time host cpuload diskfree uname rundir item_path run_duration final_logf comment shortdir attemptnum archived)
        ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14     15        16
        ;;(set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum archived)
-       (set! res (cons (make-db:test-rec id: id run-id: run-id testname: testname state: state status: status event_time: event-time
-       		host: host cpuload: cpuload diskfree: diskfree uname: uname rundir: rundir item_path: item-path
-       		run_duration: run-duration final_logf: final-logf comment: comment shortdir: shortdir 
+       (set! res (cons (make-db:test-rec id: id run_id: run_id testname: testname state: state status: status event_time: event_time
+       		host: host cpuload: cpuload diskfree: diskfree uname: uname rundir: rundir item_path: item_path
+       		run_duration: run_duration final_logf: final_logf comment: comment shortdir: shortdir 
        		attemptnum: attemptnum archived: archived )
 		       res)))
      db
@@ -2661,13 +2661,13 @@
    (lambda (db)
      (let ((res #f))
        (sqlite3:for-each-row ;; attemptnum added to hold pid of top process (not Megatest) controlling a test
-	(lambda (id run-id test-name state status event-time host cpu-load disk-free uname run-dir item-path run-duration final-logf comment short-dir attempt-num archived)
+	(lambda (id run_id testname state status event_time host cpuload diskfree uname rundir item_path run_duration final_logf comment shortdir attemptnum archived)
 	  ;;             0    1       2      3      4        5       6      7        8     9     10      11          12          13           14         15          16
 	  ;;(set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final-logf comment short-dir attemptnum archived)))
-	  (set! res (make-db:test-rec id: id run-id: run-id test-name: test-name state: state status: status event-time: event-time
-       		host: host cpu-load: cpu-load disk-free: disk-free uname: uname run-dir: run-dir item-path: item-path
-       		run-duration: run-duration final-logf: final-logf comment: comment short-dir: short-dir 
-       		attempt-num: attempt-num archived: archived)))
+       	  (set! res (make-db:test-rec id: id run_id: run_id testname: testname state: state status: status event_time: event_time
+       		host: host cpuload: cpuload diskfree: diskfree uname: uname rundir: rundir item_path: item_path
+       		run_duration: run_duration final_logf: final_logf comment: comment shortdir: shortdir 
+       		attemptnum: attemptnum archived: archived )))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
 	test-id)
