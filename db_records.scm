@@ -105,7 +105,7 @@
 
 (define (db:test-get-id			typed-rec)   (db:test-rec-id 		typed-rec))
 (define (db:test-get-run_id 	typed-rec)	 (db:test-rec-run-id 	typed-rec))
-(define (db:test-get-testname   typed-rec)   (db:test-rec-test-name 	typed-rec))
+(define (db:test-get-testname   typed-rec)   (db:test-rec-test-name typed-rec))
 (define (db:test-get-state      typed-rec)   (db:test-rec-state 	typed-rec))
 (define (db:test-get-status     typed-rec)   (db:test-rec-status 	typed-rec))
 (define (db:test-get-event_time typed-rec)   (db:test-rec-event-time typed-rec))

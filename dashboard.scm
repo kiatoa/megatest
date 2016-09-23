@@ -905,7 +905,7 @@ Misc
 					   ;;     testsdat)))
 					   (if (not matching)
 					       ;;(vector -1 -1 "" "" "" 0 "" "" 0 "" "" "" 0 "" "")
-					       (make-db:test-rec (id -1))
+					       (make-db:test-rec id: -1)
 					       ;; (car matching))))
 					       matching)))
 			   (testname     (db:test-get-testname   testdat))
