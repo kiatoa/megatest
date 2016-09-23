@@ -1,5 +1,5 @@
 ;;======================================================================
-;; Copyright 2006-2013, Matthew Welland.
+;; Copyright 2006-2016, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -13,10 +13,12 @@
 ;; Database access
 ;;======================================================================
 
-(require-extension (srfi 18) extras tcp)
+;; dbstruct vector containing all the relevant dbs like main.db, megatest.db, run.db etc
+
+(require-extension (srfi 18) extras tcp) ;; RADT => use of require-extension?
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking z3)
 (import (prefix sqlite3 sqlite3:))
-(import (prefix base64 base64:))
+(import (prefix base64 base64:)) ;; RADT => prefix??
 
 (declare (unit db))
 (declare (uses common))
@@ -39,13 +41,13 @@
 ;;======================================================================
 
 (define (db:general-sqlite-error-dump exn stmt . params)
-  (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+  (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn))) ;; RADT ... how does this work?
     ;; check for (exn sqlite3) ((condition-property-accessor 'exn 'message) exn)
     (print "err-status: " err-status)
     (debug:print-error 0 *default-log-port* " query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
     (print-call-chain (current-error-port))))
 
-;; convert to -inline
+;; convert to -inline RADT => how inline?
 (define (db:first-result-default db stmt default . params)
   (handle-exceptions
    exn
@@ -66,7 +68,7 @@
 ;;    if db not open, open inmem, rundb and sync then return inmem
 ;;    inuse gets set automatically for rundb's
 ;;
-(define (db:get-db dbstruct run-id)
+(define (db:get-db dbstruct run-id) ;; RADT => Where is dbstruct defined?
   (if (sqlite3:database? dbstruct) ;; pass sqlite3 databases on through
       dbstruct
       (begin
@@ -77,6 +79,8 @@
 			 )))
 	  dbdat))))
 
+;;RADT => Purpose of dbdat?
+;;
 (define (db:dbdat-get-db dbdat)
   (if (pair? dbdat)
       (car dbdat)
@@ -90,6 +94,7 @@
 ;; mod-read:
 ;;     'mod   modified data
 ;;     'read  read data
+;; Locks the mutex and depending on 'mod or 'read passed, sets the last timestamp in dbstruct
 ;;
 (define (db:done-with dbstruct run-id mod-read)
   (if (not (sqlite3:database? dbstruct))
@@ -108,7 +113,7 @@
   (let* ((dbdat (if (vector? dbstruct)
 		    (db:get-db dbstruct run-id)
 		    dbstruct)) ;; cheat, allow for passing in a dbdat
-	 (db    (db:dbdat-get-db dbdat)))
+	 (db    (db:dbdat-get-db dbdat))) ;;RADT => dbdat should already be a database, why need this function
     (db:delay-if-busy dbdat)
     (handle-exceptions
      exn
@@ -116,7 +121,7 @@
        (debug:print-error 0 *default-log-port* "sqlite3 issue in db:with-db, dbstruct=" dbstruct ", run-id=" run-id ", proc=" proc ", params=" params " error: " ((condition-property-accessor 'exn 'message) exn))
        (print-call-chain (current-error-port)))
      (let ((res (apply proc db params)))
-       (if (vector? dbstruct)(db:done-with dbstruct run-id r/w))
+       (if (vector? dbstruct)(db:done-with dbstruct run-id r/w)) ;; RA => Mark timestamp on defstruct RADT => How come 'mod not passed instead of r/w 
        res))))
 
 ;;======================================================================
@@ -149,7 +154,7 @@
 (define (db:dbfile-path run-id)
   (let* ((dbdir           (db:get-dbdir))
 	 (fname           (if run-id
-			      (if (eq? run-id 0) "main.db" (conc run-id ".db"))
+			      (if (eq? run-id 0) "main.db" (conc run-id ".db")) ;;main.db is assigned if run-id 0; does it mean main.db same as 1.db???
 			      #f)))
     (handle-exceptions
      exn
@@ -158,20 +163,22 @@
        (exit 1))
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     (if fname
-	(conc dbdir "/" fname)
+	(conc dbdir "/" fname) ;;RADT => why not creating fname db if does not exist here 
 	dbdir)))
 
+;; Returns the database location as specified in config file
+;;
 (define (db:get-dbdir)
   (or (configf:lookup *configdat* "setup" "dbdir")
       (conc (configf:lookup *configdat* "setup" "linktree") "/.db")))
 	       
 (define (db:set-sync db)
   (let ((syncprag (configf:lookup *configdat* "setup" "sychronous")))
-    (sqlite3:execute db (conc "PRAGMA synchronous = " (or syncprag 1) ";"))))
+    (sqlite3:execute db (conc "PRAGMA synchronous = " (or syncprag 1) ";")))) ;; RADT => advantage of PRAGMA here??
 
 ;; open an sql database inside a file lock
-;;
 ;; returns: db existed-prior-to-opening
+;; RA => Returns a db handler; sets the lock if opened in writable mode
 ;;
 (define (db:lock-create-open fname initproc)
   ;; (if (file-exists? fname)
@@ -264,10 +271,10 @@
 		  ;; (db:sync-tables db:sync-tests-only inmem refdb)
 		  inmem)))))))
 
-;; This routine creates the db. It is only called if the db is not already ls opened
+;; This routine creates the db if not already present. It is only called if the db is not already ls opened
 ;;
-(define (db:open-main dbstruct) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-  (let ((mdb (dbr:dbstruct-get-main dbstruct)))
+(define (db:open-main dbstruct) ;;  (conc *toppath* "/megatest.db") (car *configinfo*))) 
+  (let ((mdb (dbr:dbstruct-get-main dbstruct))) ;; RA => Returns the first reference in dbstruct
     (if mdb
 	mdb
 	(begin
@@ -2654,14 +2661,15 @@
    (lambda (db)
      (let ((res #f))
        (sqlite3:for-each-row ;; attemptnum added to hold pid of top process (not Megatest) controlling a test
-	(lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)
+	(lambda (id run-id test-name state status event-time host cpu-load disk-free uname run-dir item-path run-duration final-logf comment short-dir attempt-num archived)
 	  ;;             0    1       2      3      4        5       6      7        8     9     10      11          12          13           14         15          16
-	  ;;(set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)))
-	  (cons (make-db:test-rec id: id run-id: run-id testname: testname state: state status: status event_time: event-time
-       		host: host cpuload: cpuload diskfree: diskfree uname: uname rundir: rundir item_path: item-path
-       		run_duration: run-duration final_logf: final-logf comment: comment shortdir: shortdir 
-       		attemptnum: attemptnum archived: archived )
-		       res))
+	  ;;(set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final-logf comment short-dir attemptnum archived)))
+	  (set! res (cons
+	  	(make-db:test-rec id: id run-id: run-id test-name: test-name state: state status: status event-time: event-time
+       		host: host cpu-load: cpu-load disk-free: disk-free uname: uname run-dir: run-dir item-path: item-path
+       		run-duration: run-duration final-logf: final-logf comment: comment short-dir: short-dir 
+       		attempt-num: attempt-num archived: archived )
+		       res)))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
 	test-id)
@@ -3365,8 +3373,10 @@
 		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
 		      (loop (car tal)(cdr tal))))))))))
 
+;; Function recursively checks if <db>.journal exists; if yes means db busy; call itself after delayed interval
+;; 
 (define (db:delay-if-busy dbdat #!key (count 6))
-  (if (not (configf:lookup *configdat* "server" "delay-on-busy"))
+  (if (not (configf:lookup *configdat* "server" "delay-on-busy")) ;;RADT => two conditions in a if block?? also understand what config looked up
       (and dbdat (db:dbdat-get-db dbdat))
       (if dbdat
 	  (let* ((dbpath (db:dbdat-get-path dbdat))
@@ -3377,7 +3387,7 @@
 		 (begin
 		   (debug:print-info 0 *default-log-port* "WARNING: failed to test for existance of " dbfj)
 		   (thread-sleep! 1)
-		   (db:delay-if-busy count (- count 1)))
+		   (db:delay-if-busy count (- count 1))) ;; RADT => Don't we need to sent a dbstruct here?
 		 (file-exists? dbfj))
 		(case count
 		  ((6)
@@ -3401,7 +3411,7 @@
 		  (else
 		   (debug:print-info 0 *default-log-port* "delaying db access due to high database load.")
 		   (thread-sleep! 12.8))))
-	    db)
+	    db) ;; RADT => why does it need to return db, not #t
 	  "bogus result from db:delay-if-busy")))
 
 (define (db:test-get-records-for-index-file dbstruct run-id test-name)
