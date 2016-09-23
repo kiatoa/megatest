@@ -1043,7 +1043,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (keys        (rmt:get-keys)) ;; (db:get-keys dbstruct))
 	       ;; (runsda   t  (db:get-runs dbstruct runpatt #f #f '()))
 	       (runsdat     (rmt:get-runs-by-patt keys (or runpatt "%") (common:args-get-target) ;; (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
-			           	 #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment")))
+			           	 #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
 	       (runstmp     (db:get-rows runsdat))
 	       (header      (db:get-header runsdat))
 	       ;; this is "-since" support. This looks at last mod times of <run-id>.db files
@@ -1881,6 +1881,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 ;; fakeout readline
+(include "readline-fix.scm")
 
 (if (or (getenv "MT_RUNSCRIPT")
 	(args:get-arg "-repl")
@@ -1910,7 +1911,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (import readline)
 	      (import apropos)
 	      ;; (import (prefix sqlite3 sqlite3:)) ;; doesn't work ...
-	      (include "readline-fix.scm")
 
 	      (if *use-new-readline*
 		  (begin

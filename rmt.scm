@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use json format)
+(use json format) ;; RADT => purpose of json format??
 
 (declare (unit rmt))
 (declare (uses api))
@@ -73,6 +73,9 @@
 	    #f))))
 
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
+
+;; RA => e.g. usage (rmt:send-receive 'get-var #f (list varname))
+;;
 (define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
   ;; clean out old connections
   ;; (mutex-lock! *db-multi-sync-mutex*)

@@ -416,7 +416,7 @@
 ;;======================================================================
 ;;
 ;;======================================================================
-(define (examine-test run-id test-id) ;; run-id run-key origtest)
+(define (dashboard-tests:examine-test run-id test-id) ;; run-id run-key origtest)
   (let* ((db-path       (db:dbfile-path run-id)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/db/" run-id ".db"))
 	 (dbstruct      (make-dbr:dbstruct path:  (db:dbfile-path #f) ;; (configf:lookup *configdat* "setup" "linktree") 
 					   local: #t))
