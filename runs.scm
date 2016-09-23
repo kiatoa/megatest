@@ -1702,7 +1702,7 @@
 		 ;; actions that operate on one test at a time can be handled below
 		 ;;
 		 (let ((sorted-tests     (filter 
-					  vector?
+					  db:test-rec?
 					  (sort tests (lambda (a b)(let ((dira ;; (rmt:sdb-qry 'getstr 
 									  (db:test-get-rundir a)) ;; )  ;; (filedb:get-path *fdb* (db:test-get-rundir a)))
 									 (dirb ;; (rmt:sdb-qry 'getstr 
