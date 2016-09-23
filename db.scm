@@ -2686,7 +2686,8 @@
        (sqlite3:for-each-row
 	(lambda (a . b)
 	  ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-	  (set! res (cons (apply vector a b) res)))
+	  (set! res (cons (alist->db:test-rec (db:qry-gen-alist db:test-record-qry-selector (cons a b))) res)))
+	  ;;(set! res (cons (apply vector a b) res)))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id in ("
 	      (string-intersperse (map conc test-ids) ",") ");"))
@@ -2701,7 +2702,8 @@
      (let ((res #f))
        (sqlite3:for-each-row
 	(lambda (a . b)
-	  (print a));;set! res (apply vector a b)))
+	  (set! res (cons (alist->db:test-rec (db:qry-gen-alist db:test-record-qry-selector (cons a b))) res)))
+	  ;;(set! res (apply vector a b)))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE testname=? AND item_path=?;")
 	test-name item-path)
