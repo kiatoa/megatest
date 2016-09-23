@@ -1,5 +1,5 @@
 ;;======================================================================
-;; Copyright 2006-2013, Matthew Welland.
+;; Copyright 2006-2016, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -47,7 +47,7 @@
     (debug:print-error 0 *default-log-port* " query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
     (print-call-chain (current-error-port))))
 
-;; convert to -inline RADT => how inline?
+;; convert to -inline 
 (define (db:first-result-default db stmt default . params)
   (handle-exceptions
    exn
@@ -68,7 +68,7 @@
 ;;    if db not open, open inmem, rundb and sync then return inmem
 ;;    inuse gets set automatically for rundb's
 ;;
-(define (db:get-db dbstruct run-id) ;; RADT => Where is dbstruct defined?
+(define (db:get-db dbstruct run-id) 
   (if (sqlite3:database? dbstruct) ;; pass sqlite3 databases on through
       dbstruct
       (begin
@@ -79,8 +79,6 @@
 			 )))
 	  dbdat))))
 
-;;RADT => Purpose of dbdat?
-;;
 (define (db:dbdat-get-db dbdat)
   (if (pair? dbdat)
       (car dbdat)
@@ -113,7 +111,7 @@
   (let* ((dbdat (if (vector? dbstruct)
 		    (db:get-db dbstruct run-id)
 		    dbstruct)) ;; cheat, allow for passing in a dbdat
-	 (db    (db:dbdat-get-db dbdat))) ;;RADT => dbdat should already be a database, why need this function
+	 (db    (db:dbdat-get-db dbdat))) 
     (db:delay-if-busy dbdat)
     (handle-exceptions
      exn
@@ -154,7 +152,7 @@
 (define (db:dbfile-path run-id)
   (let* ((dbdir           (db:get-dbdir))
 	 (fname           (if run-id
-			      (if (eq? run-id 0) "main.db" (conc run-id ".db")) ;;main.db is assigned if run-id 0; does it mean main.db same as 1.db???
+			      (if (eq? run-id 0) "main.db" (conc run-id ".db")) ;;main.db is assigned if run-id 0
 			      #f)))
     (handle-exceptions
      exn
@@ -163,7 +161,7 @@
        (exit 1))
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     (if fname
-	(conc dbdir "/" fname) ;;RADT => why not creating fname db if does not exist here 
+	(conc dbdir "/" fname) 
 	dbdir)))
 
 ;; Returns the database location as specified in config file
@@ -174,7 +172,7 @@
 	       
 (define (db:set-sync db)
   (let ((syncprag (configf:lookup *configdat* "setup" "sychronous")))
-    (sqlite3:execute db (conc "PRAGMA synchronous = " (or syncprag 1) ";")))) ;; RADT => advantage of PRAGMA here??
+    (sqlite3:execute db (conc "PRAGMA synchronous = " (or syncprag 1) ";")))) 
 
 ;; open an sql database inside a file lock
 ;; returns: db existed-prior-to-opening
@@ -3361,7 +3359,7 @@
 ;; Function recursively checks if <db>.journal exists; if yes means db busy; call itself after delayed interval
 ;; 
 (define (db:delay-if-busy dbdat #!key (count 6))
-  (if (not (configf:lookup *configdat* "server" "delay-on-busy")) ;;RADT => two conditions in a if block?? also understand what config looked up
+  (if (not (configf:lookup *configdat* "server" "delay-on-busy")) 
       (and dbdat (db:dbdat-get-db dbdat))
       (if dbdat
 	  (let* ((dbpath (db:dbdat-get-path dbdat))
@@ -3372,7 +3370,7 @@
 		 (begin
 		   (debug:print-info 0 *default-log-port* "WARNING: failed to test for existance of " dbfj)
 		   (thread-sleep! 1)
-		   (db:delay-if-busy count (- count 1))) ;; RADT => Don't we need to sent a dbstruct here?
+		   (db:delay-if-busy count (- count 1))) 
 		 (file-exists? dbfj))
 		(case count
 		  ((6)
@@ -3396,7 +3394,7 @@
 		  (else
 		   (debug:print-info 0 *default-log-port* "delaying db access due to high database load.")
 		   (thread-sleep! 12.8))))
-	    db) ;; RADT => why does it need to return db, not #t
+	    db) 
 	  "bogus result from db:delay-if-busy")))
 
 (define (db:test-get-records-for-index-file dbstruct run-id test-name)
