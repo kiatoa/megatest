@@ -14,7 +14,7 @@
 ;;======================================================================
 
 (use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3 call-with-environment-variables csv)
-(use defstruct pathname-expand)
+(use typed-records pathname-expand)
 
 (import (prefix base64 base64:))
 (import (prefix sqlite3 sqlite3:))
