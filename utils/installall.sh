@@ -17,14 +17,30 @@ echo sudo apt-get install libwebkitgtk-dev
 echo sudo apt-get install libpangox-1.0-0 zlib1g-dev libfreetype6-dev
 echo sudo apt-get install libssl-dev
 echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
-echo KTYPE can be 26, 26g4, or 32
-echo  
-echo KTYPE=$KTYPE
+echo
+echo Set OPTION to std, currently OPTION=$OPTION
+echo
 echo You are using PREFIX=$PREFIX
 echo You are using proxy="$proxy"
 echo 
 echo "Set additional_libpath to help find gtk or other libraries, don't forget a leading :"
 
+SYSTEM_TYPE=$(lsb_release -irs | tr '\n' '-')$(uname -i)-$OPTION
+
+# Set up variables
+#
+case $SYSTEM_TYPE in
+    Ubuntu-16.04-i686-std)
+	KTYPE=44
+	CDVER=5.10
+	IUPVER=3.19.1
+	IMVER=3.11
+	;;
+			   
+esac
+			   
+echo KTYPE=$KTYPE			   
+		      
 # NOTES:
 #
 # Centos with security setup may need to do commands such as following as root:
@@ -166,21 +182,21 @@ done
 
 # $CHICKEN_INSTALL $PROX sqlite3
 cd $BUILDHOME
-# IUP versions
-if [[ x$USEOLDIUP == "x" ]];then
-  CDVER=5.10
-  IUPVER=3.17
-  IMVER=3.11
-else
-  CDVER=5.10
-  IUPVER=3.17
-  IMVER=3.11
-fi
-if [[ x$KTYPE == "x24g3" ]];then
-  CDVER=5.4.1
-  IUPVER=3.5
-  IMVER=3.6.3
-fi
+# # IUP versions
+# if [[ x$USEOLDIUP == "x" ]];then
+#   CDVER=5.10
+#   IUPVER=3.17
+#   IMVER=3.11
+# else
+#   CDVER=5.10
+#   IUPVER=3.17
+#   IMVER=3.11
+# fi
+# if [[ x$KTYPE == "x24g3" ]];then
+#   CDVER=5.4.1
+#   IUPVER=3.5
+#   IMVER=3.6.3
+# fi
 
 if [[ `uname -a | grep x86_64` == "" ]]; then 
     export ARCHSIZE=''
