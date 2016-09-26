@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use json format)
+(use json format) ;; RADT => purpose of json format??
 
 (declare (unit rmt))
 (declare (uses api))
@@ -73,6 +73,9 @@
 	    #f))))
 
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
+
+;; RA => e.g. usage (rmt:send-receive 'get-var #f (list varname))
+;;
 (define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
   ;; clean out old connections
   ;; (mutex-lock! *db-multi-sync-mutex*)
@@ -578,8 +581,8 @@
 (define (rmt:update-run-event_time run-id)
   (rmt:send-receive 'update-run-event_time #f (list run-id)))
 
-(define (rmt:get-runs-by-patt  keys runnamepatt targpatt offset limit fields) ;; fields of #f uses default
-  (rmt:send-receive 'get-runs-by-patt #f (list keys runnamepatt targpatt offset limit fields)))
+(define (rmt:get-runs-by-patt  keys runnamepatt targpatt offset limit fields last-runs-update) ;; fields of #f uses default
+  (rmt:send-receive 'get-runs-by-patt #f (list keys runnamepatt targpatt offset limit fields last-runs-update)))
 
 (define (rmt:find-and-mark-incomplete run-id ovr-deadtime)
   (if (rmt:send-receive 'have-incompletes? run-id (list run-id ovr-deadtime))

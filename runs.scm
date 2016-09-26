@@ -945,6 +945,7 @@
 			    reruns)))))))))
 
 ;; scan a list of tests looking to see if any are potentially runnable
+;;
 (define (runs:runable-tests tests)
   (filter (lambda (t)
 	    (if (not (vector? t))
