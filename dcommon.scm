@@ -14,7 +14,7 @@
 (import (prefix iup iup:))
 (use canvas-draw)
 (import canvas-draw-iup)
-(use regex defstruct)
+(use regex typed-records)
 
 (declare (unit dcommon))
 
@@ -277,29 +277,137 @@
 	(let* ((test-id    (db:test-get-id hed)) ;; look at the tests-dat spec for locations
 	       (test-name  (db:test-get-testname hed))
 	       (item-path  (db:test-get-item-path hed))
-	       (state      (db:test-get-status hed))
+	       (state      (db:test-get-state hed))
 	       (status     (db:test-get-status hed))
 	       (newitem    (list test-name item-path (list test-id state status))))
 	  (if (null? tal)
 	      (reverse (cons newitem res))
 	      (loop (car tal)(cdr tal)(cons newitem res)))))))
 
+(define (dcommon:tests-mindat->hash tests-mindat)
+  (let* ((res (make-hash-table)))
+    (for-each
+     (lambda (item)
+       (let* ((test-name+item-path (cons (list-ref item 0) (list-ref item 1)))
+              (value (list-ref item 2)))
+         (hash-table-set! res test-name+item-path value)))
+     tests-mindat)
+    res))
+
+;; return 1 if status1 is better
+;; return 0 if status1 and 2 are equally good
+;; return -1 if status2 is better
+(define (dcommon:status-compare3 status1 status2)
+  (let*
+      ((status-goodness-ranking  (list "PASS" "WARN" "WAIVED" "SKIP" "FAIL" "ABORT" #f))
+       (mem1 (member status1 status-goodness-ranking))
+       (mem2 (member status2 status-goodness-ranking))
+       )
+    (cond
+     ((and (not mem1) (not mem2)) 0)
+     ((not mem1) -1)
+     ((not mem2) 1)
+     ((= (length mem1) (length mem2)) 0)
+     ((> (length mem1) (length mem2)) 1)
+     (else -1))))
+     
+(define (dcommon:xor-tests-mindat src-tests-mindat dest-tests-mindat #!key (hide-clean #f))
+  (let* ((src-hash (dcommon:tests-mindat->hash src-tests-mindat))
+         (dest-hash (dcommon:tests-mindat->hash dest-tests-mindat))
+         (all-keys
+          (reverse (sort 
+           (delete-duplicates
+            (append (hash-table-keys src-hash) (hash-table-keys dest-hash)))
+
+           (lambda (a b) 
+             (cond
+              ((< 0 (string-compare3 (car a) (car b))) #t)
+              ((> 0 (string-compare3 (car a) (car b))) #f)
+              ((< 0 (string-compare3 (cdr a) (cdr b))) #t)
+              (else #f)))
+
+           ))))
+    (let ((res
+           (map ;; TODO: rename xor to delta globally in dcommon and dashboard
+            (lambda (key)
+              (let* ((test-name (car key))
+                     (item-path (cdr key))
+
+                     (dest-value (hash-table-ref/default dest-hash key #f)) ;; (list test-id state status)
+                     (dest-test-id  (if dest-value (list-ref dest-value 0) #f))
+                     (dest-state    (if dest-value (list-ref dest-value 1) #f))
+                     (dest-status   (if dest-value (list-ref dest-value 2) #f))
+
+                     (src-value     (hash-table-ref/default src-hash key #f))   ;; (list test-id state status)
+                     (src-test-id   (if src-value (list-ref src-value 0) #f))
+                     (src-state     (if src-value (list-ref src-value 1) #f))
+                     (src-status    (if src-value (list-ref src-value 2) #f))
+
+                     (incomplete-statuses '("DELETED" "INCOMPLETE" "STUCK/DEAD" "N/A")) ;; if any of these statuses apply, treat test as incomplete
+
+                     (dest-complete
+                      (and dest-value dest-state dest-status
+                           (equal? dest-state "COMPLETED")
+                           (not (member dest-status incomplete-statuses))))
+                     (src-complete
+                      (and src-value src-state src-status
+                           (equal? src-state "COMPLETED")
+                           (not (member src-status incomplete-statuses))))
+                     (status-compare-result (dcommon:status-compare3 src-status dest-status))
+                     (xor-new-item
+                      (cond
+                       ;; complete, for this case means: state=compelte AND status not in ( deleted uncomplete stuck/dead n/a )
+                       ;; neither complete -> bad
+
+                       ;; src !complete, dest complete -> better
+                       ((and (not dest-complete) (not src-complete))
+                        (list dest-test-id "BOTH-BAD" "BOTH-INCOMPLETE"))
+                       ((not dest-complete)
+                        (list src-test-id "DIFF-MISSING" "DEST-INCOMPLETE"))  
+                       ((not src-complete)
+                        (list dest-test-id "DIFF-NEW" "SRC-INCOMPLETE"))      
+                       ((and
+                         (equal? src-state dest-state)
+                         (equal? src-status dest-status))
+                        (list dest-test-id  (conc "CLEAN") (conc "CLEAN-" dest-status) )) 
+                       ;;    better or worse: pass > warn > waived > skip > fail > abort
+                       ;;     pass > warn > waived > skip > fail > abort
+                       
+                       ((= 1 status-compare-result) ;; src is better, dest is worse
+                        (list dest-test-id "DIRTY-WORSE" (conc src-status "->" dest-status)))
+                       (else
+                        (list dest-test-id "DIRTY-BETTER" (conc src-status "->" dest-status)))
+                       )))
+                (list test-name item-path  xor-new-item)))
+            all-keys)))
+
+      (if hide-clean
+          (filter
+           (lambda (item)
+             ;;(print item)
+             (not
+              (equal?
+               "CLEAN"
+               (list-ref (list-ref item 2) 1))))
+           res)
+          res))))
+
 (define (dcommon:examine-xterm run-id test-id)
   (let* ((testdat (rmt:get-test-info-by-id run-id test-id)))
     (if (not testdat)
-	(begin
-	  (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
-	  (exit 1))
+        (begin
+          (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
+          (exit 1))
         (let*
             ((rundir        (if testdat 
-				(db:test-get-rundir testdat)
-				  logfile))
+                                (db:test-get-rundir testdat)
+                                logfile))
              (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
              (xterm      (lambda ()
                            (if (directory-exists? rundir)
                                (let* ((shell (if (get-environment-variable "SHELL") 
-                                                (conc "-e " (get-environment-variable "SHELL"))
-                                                ""))
+                                                 (conc "-e " (get-environment-variable "SHELL"))
+                                                 ""))
                                       (command (conc "cd " rundir 
                                                      ";mt_xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
                                  (print "Command =" command)
@@ -317,17 +425,17 @@
 ;; Table of keys
 (define (dcommon:keys-matrix rawconfig)
   (let* ((curr-row-num 1)
-	 (key-vals     (configf:section-vars rawconfig "fields"))
-	 (keys-matrix  (iup:matrix
-			#:alignment1 "ALEFT"
-			#:expand "YES" ;; "HORIZONTAL" ;; "VERTICAL"
-			;; #:scrollbar "YES"
-			#:numcol 1
-			#:numlin (length key-vals)
-			#:numcol-visible 1
-			#:numlin-visible (length key-vals)
-			#:click-cb (lambda (obj lin col status)
-				     (print "obj: " obj " lin: " lin " col: " col " status: " status)))))
+         (key-vals     (configf:section-vars rawconfig "fields"))
+         (keys-matrix  (iup:matrix
+                        #:alignment1 "ALEFT"
+                        #:expand "YES" ;; "HORIZONTAL" ;; "VERTICAL"
+                        ;; #:scrollbar "YES"
+                        #:numcol 1
+                        #:numlin (length key-vals)
+                        #:numcol-visible 1
+                        #:numlin-visible (length key-vals)
+                        #:click-cb (lambda (obj lin col status)
+                                     (print "obj: " obj " lin: " lin " col: " col " status: " status)))))
     ;; (iup:attribute-set! keys-matrix "0:0" "Run Keys")
     (iup:attribute-set! keys-matrix "WIDTH0" 0)
     (iup:attribute-set! keys-matrix "0:1" "Key Name")
@@ -346,14 +454,14 @@
 ;; Section to table
 (define (dcommon:section-matrix rawconfig sectionname varcolname valcolname #!key (title #f))
   (let* ((curr-row-num    1)
-	 (key-vals        (configf:section-vars rawconfig sectionname))
-	 (section-matrix  (iup:matrix
-			   #:alignment1 "ALEFT"
-			   #:expand "YES" ;; "HORIZONTAL"
-			   #:numcol 1
-			   #:numlin (length key-vals)
-			   #:numcol-visible 1
-			   #:numlin-visible (min 10 (length key-vals))
+         (key-vals        (configf:section-vars rawconfig sectionname))
+         (section-matrix  (iup:matrix
+                           #:alignment1 "ALEFT"
+                           #:expand "YES" ;; "HORIZONTAL"
+                           #:numcol 1
+                           #:numlin (length key-vals)
+                           #:numcol-visible 1
+                           #:numlin-visible (min 10 (length key-vals))
 			   #:scrollbar "YES")))
     (iup:attribute-set! section-matrix "0:0" varcolname)
     (iup:attribute-set! section-matrix "0:1" valcolname)
@@ -942,7 +1050,7 @@
 	  (refresh-runs-list (lambda ()
 			       (if (dashboard:database-changed? commondat tabdat)
 				   (let* ((target        (dboard:tabdat-target-string tabdat))
-					  (runs-for-targ (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" target #f #f #f))
+					  (runs-for-targ (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" target #f #f #f 0))
 					  (runs-header   (vector-ref runs-for-targ 0))
 					  (runs-dat      (vector-ref runs-for-targ 1))
 					  (run-names     (cons default-run-name 

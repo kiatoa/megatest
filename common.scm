@@ -145,8 +145,12 @@
 
 ;; from metadat lookup MEGATEST_VERSION
 ;;
-(define (common:get-last-run-version)
+(define (common:get-last-run-version) ;; RADT => How does this work in send-receive function??; assume it is the value saved in some DB
   (rmt:get-var "MEGATEST_VERSION"))
+
+(define (common:get-last-run-version-number)
+  (string->number 
+   (substring (common:get-last-run-version) 0 6)))
 
 (define (common:set-last-run-version)
   (rmt:set-var "MEGATEST_VERSION" (common:version-signature)))
@@ -156,6 +160,7 @@
 	       (common:version-signature))))
 
 ;; Move me elsewhere ...
+;; RADT => Why do we meed the version check here, this is called only if version misma
 ;;
 (define (common:cleanup-db)
   (db:multi-db-sync 
@@ -169,11 +174,13 @@
   (if (common:version-changed?)
       (common:set-last-run-version)))
 
+;; Force a megatest cleanup-db if version is changed and skip-version-check not specified
+;;
 (define (common:exit-on-version-changed)
   (if (common:version-changed?)
       (let ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config")))
         (debug:print 0 *default-log-port*
-		     "ERROR: Version mismatch!\n"
+		     "WARNING: Version mismatch!\n"
 		     "   expected: " (common:version-signature) "\n"
 		     "   got:      " (common:get-last-run-version))
 	(if (and (file-exists? mtconf)
@@ -637,6 +644,14 @@
 ;; S Y S T E M   S T U F F
 ;;======================================================================
 
+;; lazy-safe get file mod time. on any error (file not existing etc.) return 0
+;;
+(define (common:lazy-modification-time fpath)
+  (handle-exceptions
+   exn
+   0
+   (file-modification-time fpath)))
+
 ;; return a nice clean pathname made absolute
 (define (common:nice-path dir)
   (let ((match (string-match "^(~[^\\/]*)(\\/.*|)$" dir)))
@@ -1000,7 +1015,7 @@
 ;; find start time to mark and mark delta
 ;;
 (define (common:find-start-mark-and-mark-delta tstart tend)
-  (let* ((deltat   (- tend tstart))
+  (let* ((deltat   (- (max tend (+ tend 10)) tstart)) ;; can't handle runs of less than 4 seconds. Pad it to 10 seconds ...
 	 (result   #f)
 	 (min      60)
 	 (hr       (* 60 60))
@@ -1297,3 +1312,20 @@
 			  (loop (car tal)(cdr tal))))))))
 	fallback-launcher)))
   
+;;======================================================================
+;; D A S H B O A R D   U S E R   V I E W S
+;;======================================================================
+
+;; first read ~/views.config if it exists, then read $MTRAH/views.config if it exists
+;;
+(define (common:load-views-config)
+  (let* ((view-cfgdat    (make-hash-table))
+	 (home-cfgfile   (conc (get-environment-variable "HOME") "/.mtviews.config"))
+	 (mthome-cfgfile (conc *toppath* "/.mtviews.config")))
+    (if (file-exists? mthome-cfgfile)
+	(read-config mthome-cfgfile view-cfgdat #t))
+    ;; we load the home dir file AFTER the MTRAH file so the user can clobber settings when running the dashboard in read-only areas
+    (if (file-exists? home-cfgfile)
+	(read-config home-cfgfile view-cfgdat #t))
+    view-cfgdat))
+

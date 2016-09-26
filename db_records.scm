@@ -15,55 +15,57 @@
 ;; Accessors for a dbstruct
 ;;
 
-(define-inline (dbr:dbstruct-get-main    vec)    (vector-ref  vec 0)) ;; ( db path )
-(define-inline (dbr:dbstruct-get-strdb   vec)    (vector-ref  vec 1)) ;; ( db path )
-(define-inline (dbr:dbstruct-get-path    vec)    (vector-ref  vec 2)) 
-(define-inline (dbr:dbstruct-get-local   vec)    (vector-ref  vec 3))
-(define-inline (dbr:dbstruct-get-rundb   vec)    (vector-ref  vec 4)) ;; ( db path )
-(define-inline (dbr:dbstruct-get-inmem   vec)    (vector-ref  vec 5)) ;; ( db #f )
-(define-inline (dbr:dbstruct-get-mtime   vec)    (vector-ref  vec 6))
-(define-inline (dbr:dbstruct-get-rtime   vec)    (vector-ref  vec 7))
-(define-inline (dbr:dbstruct-get-stime   vec)    (vector-ref  vec 8))
-(define-inline (dbr:dbstruct-get-inuse   vec)    (vector-ref  vec 9))
-(define-inline (dbr:dbstruct-get-refdb   vec)    (vector-ref  vec 10)) ;; ( db path )
-(define-inline (dbr:dbstruct-get-locdbs  vec)    (vector-ref  vec 11))
-(define-inline (dbr:dbstruct-get-olddb   vec)    (vector-ref  vec 12)) ;; ( db path )
-;; (define-inline (dbr:dbstruct-get-main-path vec)  (vector-ref  vec 13))
-;; (define-inline (dbr:dbstruct-get-rundb-path vec) (vector-ref  vec 14))
-;; (define-inline (dbr:dbstruct-get-run-id  vec)    (vector-ref  vec 13))
-
-(define-inline (dbr:dbstruct-set-main!   vec val)(vector-set! vec 0 val))
-(define-inline (dbr:dbstruct-set-strdb!  vec val)(vector-set! vec 1 val))
-(define-inline (dbr:dbstruct-set-path!   vec val)(vector-set! vec 2 val))
-(define-inline (dbr:dbstruct-set-local!  vec val)(vector-set! vec 3 val))
-(define-inline (dbr:dbstruct-set-rundb!  vec val)(vector-set! vec 4 val))
-(define-inline (dbr:dbstruct-set-inmem!  vec val)(vector-set! vec 5 val))
-(define-inline (dbr:dbstruct-set-mtime!  vec val)(vector-set! vec 6 val))
-(define-inline (dbr:dbstruct-set-rtime!  vec val)(vector-set! vec 7 val))
-(define-inline (dbr:dbstruct-set-stime!  vec val)(vector-set! vec 8 val))
-(define-inline (dbr:dbstruct-set-inuse!  vec val)(vector-set! vec 9 val))
-(define-inline (dbr:dbstruct-set-refdb!  vec val)(vector-set! vec 10 val))
-(define-inline (dbr:dbstruct-set-locdbs! vec val)(vector-set! vec 11 val))
-(define-inline (dbr:dbstruct-set-olddb!  vec val)(vector-set! vec 12 val))
-(define-inline (dbr:dbstruct-set-main-path! vec val)(vector-set! vec 13 val))
-(define-inline (dbr:dbstruct-set-rundb-path! vec val)(vector-set! vec 14 val))
-
-; (define-inline (dbr:dbstruct-set-run-id! vec val)(vector-set! vec 13 val))
+;; (define-inline (dbr:dbstruct-main    vec)    (vector-ref  vec 0)) ;; ( db path )
+;; (define-inline (dbr:dbstruct-strdb   vec)    (vector-ref  vec 1)) ;; ( db path )
+;; (define-inline (dbr:dbstruct-path    vec)    (vector-ref  vec 2)) 
+;; (define-inline (dbr:dbstruct-local   vec)    (vector-ref  vec 3))
+;; (define-inline (dbr:dbstruct-rundb   vec)    (vector-ref  vec 4)) ;; ( db path )
+;; (define-inline (dbr:dbstruct-inmem   vec)    (vector-ref  vec 5)) ;; ( db #f )
+;; (define-inline (dbr:dbstruct-mtime   vec)    (vector-ref  vec 6))
+;; (define-inline (dbr:dbstruct-rtime   vec)    (vector-ref  vec 7))
+;; (define-inline (dbr:dbstruct-stime   vec)    (vector-ref  vec 8))
+;; (define-inline (dbr:dbstruct-inuse   vec)    (vector-ref  vec 9))
+;; (define-inline (dbr:dbstruct-refdb   vec)    (vector-ref  vec 10)) ;; ( db path )
+;; (define-inline (dbr:dbstruct-locdbs  vec)    (vector-ref  vec 11))
+;; (define-inline (dbr:dbstruct-olddb   vec)    (vector-ref  vec 12)) ;; ( db path )
+;; ;; (define-inline (dbr:dbstruct-main-path vec)  (vector-ref  vec 13))
+;; ;; (define-inline (dbr:dbstruct-rundb-path vec) (vector-ref  vec 14))
+;; ;; (define-inline (dbr:dbstruct-run-id  vec)    (vector-ref  vec 13))
+;; 
+;; (define-inline (dbr:dbstruct-main-set!   vec val)(vector-set! vec 0 val))
+;; (define-inline (dbr:dbstruct-strdb-set!  vec val)(vector-set! vec 1 val))
+;; (define-inline (dbr:dbstruct-path-set!   vec val)(vector-set! vec 2 val))
+;; (define-inline (dbr:dbstruct-local-set!  vec val)(vector-set! vec 3 val))
+;; (define-inline (dbr:dbstruct-rundb-set!  vec val)(vector-set! vec 4 val))
+;; (define-inline (dbr:dbstruct-inmem-set!  vec val)(vector-set! vec 5 val))
+;; (define-inline (dbr:dbstruct-mtime-set!  vec val)(vector-set! vec 6 val))
+;; (define-inline (dbr:dbstruct-rtime-set!  vec val)(vector-set! vec 7 val))
+;; (define-inline (dbr:dbstruct-stime-set!  vec val)(vector-set! vec 8 val))
+;; (define-inline (dbr:dbstruct-inuse-set!  vec val)(vector-set! vec 9 val))
+;; (define-inline (dbr:dbstruct-refdb-set!  vec val)(vector-set! vec 10 val))
+;; (define-inline (dbr:dbstruct-locdbs-set! vec val)(vector-set! vec 11 val))
+;; (define-inline (dbr:dbstruct-olddb-set!  vec val)(vector-set! vec 12 val))
+;; (define-inline (dbr:dbstruct-main-path-set! vec val)(vector-set! vec 13 val))
+;; (define-inline (dbr:dbstruct-rundb-path-set! vec val)(vector-set! vec 14 val))
+;; 
+; (define-inline (dbr:dbstruct-run-id-set! vec val)(vector-set! vec 13 val))
 
 ;; constructor for dbstruct
 ;;
-(define (make-dbr:dbstruct #!key (path #f)(local #f))
-  (let ((v (make-vector 15 #f)))
-    (dbr:dbstruct-set-path! v path)
-    (dbr:dbstruct-set-local! v local)
-    (dbr:dbstruct-set-locdbs! v (make-hash-table))
-    v))
+;; (define (make-dbr:dbstruct #!key (path #f)(local #f))
+;;   (let ((v (make-vector 15 #f)))
+;;     (dbr:dbstruct-path-set! v path)
+;;     (dbr:dbstruct-local-set! v local)
+;;     (dbr:dbstruct-locdbs-set! v (make-hash-table))
+;;     v))
 
-(define (dbr:dbstruct-get-localdb v run-id)
-  (hash-table-ref/default (dbr:dbstruct-get-locdbs v) run-id #f))
+;; Returns the database for a particular run-id fron the dbstruct:localdbs
+;;
+(define (dbr:dbstruct-localdb v run-id)
+  (hash-table-ref/default (dbr:dbstruct-locdbs v) run-id #f))
 
-(define (dbr:dbstruct-set-localdb! v run-id db)
-  (hash-table-set! (dbr:dbstruct-get-locdbs v) run-id db))
+(define (dbr:dbstruct-localdb-set! v run-id db)
+  (hash-table-set! (dbr:dbstruct-locdbs v) run-id db))
 
 
 (define (make-db:test)(make-vector 20))
@@ -96,7 +98,7 @@
   (if (equal? itempath "") testname (conc testname "/" itempath)))
 
 (define-inline (db:test-get-first_err    vec) (printable (vector-ref vec 15)))
-(define-inline (db:test-get-first_warn   vec) (printable (vector-ref vec 16)))
+(define-inline (db:test-get-first_warn   vec) (printable (vector-ref vec 16))) ;; RADT => reference 16 is repeated
 
 (define-inline (db:test-set-cpuload!  vec val)(vector-set! vec 7 val))
 (define-inline (db:test-set-diskfree! vec val)(vector-set! vec 8 val))
@@ -115,6 +117,7 @@
        (equal? (db:test-get-uname vec)     "n/a"))) ;; test has never been run
 
 ;; make-vector-record "" db mintest id run_id testname state status event_time item_path
+;; RADT => purpose of mintest??
 ;;
 (define (make-db:mintest)(make-vector 7))
 (define-inline (db:mintest-get-id           vec)    (vector-ref  vec 0))

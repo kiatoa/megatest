@@ -370,6 +370,12 @@
     (arithmetic-shift g 8)
     b))
 
+(define (vg:generate-color)
+  (vg:rgb->number (random 255)
+                  (random 255)
+                  (random 255)))
+  ;;(vg:rgb->number 0 0 0))
+
 (define (vg:iup-color->number iup-color)
   (apply vg:rgb->number (map string->number (string-split iup-color))))
 
