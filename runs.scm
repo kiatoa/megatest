@@ -404,18 +404,22 @@
       (if (> (length (hash-table-keys test-records)) 0)
 	  (let* ((keep-going        #t)
 		 (run-queue-retries 5)
-		 (th1        (make-thread (lambda ()
-					    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
-					    ;; (handle-exceptions
-					    ;;  exn
-					    ;;  (begin
-					    ;;    (print-call-chain (current-error-port))
-					    ;;    (debug:print-error 0 *default-log-port* "failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
+		 (th1        (make-thread 
+		 	(lambda ()
+					    ;;(runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
+					     (handle-exceptions
+					      exn
+					      (begin
+					        (print-call-chain (current-error-port))
+					        (debug:print-error 0 *default-log-port* "failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
+					        (print "exn=" (condition->list exn))
+					        (exit 1))
 					    ;;    (if (> run-queue-retries 0)
 					    ;; 	   (begin
 					    ;; 	     (set! run-queue-retries (- run-queue-retries 1))
 					    ;; 	     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))))
-					    ;;  (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)))
+					    ;;(runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)))
+					    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)))
 					  "runs:run-tests-queue"))
 		 (th2        (make-thread (lambda ()				    
 					    ;; (rmt:find-and-mark-incomplete-all-runs))))) CAN'T INTERRUPT IT ...

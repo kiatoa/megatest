@@ -9,6 +9,8 @@
 ;;  PURPOSE.
 ;;======================================================================
 
+(include "db_records.scm")
+
 (define-inline (runs:runrec-make-record) (make-vector 13))
 (define-inline (runs:runrec-get-target  vec)(vector-ref vec 0))  ;; a/b/c
 (define-inline (runs:runrec-get-runname vec)(vector-ref vec 1))  ;; string
@@ -24,12 +26,12 @@
 (define-inline (runs:runrec-top-path    vec)(vector-ref vec 11)) ;; *toppath*
 (define-inline (runs:runrec-run_id      vec)(vector-ref vec 12)) ;; run-id
 
-(define-inline (test:get-id vec)       (vector-ref vec 0))
-(define-inline (test:get-run_id vec)   (vector-ref vec 1))
-(define-inline (test:get-test-name vec)(vector-ref vec 2))
-(define-inline (test:get-state vec)    (vector-ref vec 3))
-(define-inline (test:get-status vec)   (vector-ref vec 4))
-(define-inline (test:get-item-path vec)(vector-ref vec 5))
+(define-inline (test:get-id vec)       (db:test-rec-id vec))
+(define-inline (test:get-run_id vec)   (db:test-rec-run_id vec))
+(define-inline (test:get-test-name vec)(db:test-rec-testname vec))
+(define-inline (test:get-state vec)    (db:test-rec-state vec))
+(define-inline (test:get-status vec)   (db:test-rec-status vec))
+(define-inline (test:get-item-path vec)(db:test-rec-item_path vec))
 
 (define-inline (test:test-get-fullname test)
    (conc (db:test-get-testname test)
