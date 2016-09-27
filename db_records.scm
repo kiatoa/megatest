@@ -137,13 +137,13 @@
 (define-inline (db:test-get-first_err    vec) (printable (vector-ref vec 15)))
 (define-inline (db:test-get-first_warn   vec) (printable (vector-ref vec 16))) ;; RADT => reference 16 is repeated
 
-(define-inline (db:test-set-cpuload!  vec val)(vector-set! vec 7 val))
-(define-inline (db:test-set-diskfree! vec val)(vector-set! vec 8 val))
-(define-inline (db:test-set-testname! vec val)(vector-set! vec 2 val))
-(define-inline (db:test-set-state!    vec val)(vector-set! vec 3 val))
-(define-inline (db:test-set-status!   vec val)(vector-set! vec 4 val))
-(define-inline (db:test-set-run_duration! vec val)(vector-set! vec 12 val))
-(define-inline (db:test-set-final_logf! vec val)(vector-set! vec 13 val))
+(define-inline (db:test-set-cpuload!  vec val)		(db:test-rec-cpuload-set! vec val))
+(define-inline (db:test-set-diskfree! vec val)		(db:test-rec-diskfree-set! vec val))
+(define-inline (db:test-set-testname! vec val)		(db:test-rec-testname-set! vec val))
+(define-inline (db:test-set-state!    vec val)		(db:test-rec-state-set! vec val))
+(define-inline (db:test-set-status!   vec val)		(db:test-rec-status-set! vec val))
+(define-inline (db:test-set-run_duration! vec val)	(db:test-rec-run_duration-set! vec val))
+(define-inline (db:test-set-final_logf! vec val)	(db:test-rec-final_logf-set! vec val))
 
 ;; Test record utility functions
 
