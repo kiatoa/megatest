@@ -14,7 +14,7 @@
 echo You may need to do the following first:
 echo sudo apt-get install libreadline-dev
 echo sudo apt-get install libwebkitgtk-dev 
-echo sudo apt-get install libpangox-1.0-0 zlib1g-dev libfreetype6-dev
+echo sudo apt-get install libpangox-1.0-0 zlib1g-dev libfreetype6-dev cmake
 echo sudo apt-get install libssl-dev
 echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
 echo
@@ -25,22 +25,41 @@ echo You are using proxy="$proxy"
 echo 
 echo "Set additional_libpath to help find gtk or other libraries, don't forget a leading :"
 
-SYSTEM_TYPE=$(lsb_release -irs | tr '\n' '-')$(uname -i)-$OPTION
+SYSTEM_TYPE=$(lsb_release -irs |tr ' ' '_' |tr '\n' '-')$(uname -i)-$OPTION
 
 # Set up variables
 #
 case $SYSTEM_TYPE in
-    Ubuntu-16.04-i686-std)
-	KTYPE=44
+Ubuntu-16.04-x86_64-std)
+	KTYPE=32
 	CDVER=5.10
-	IUPVER=3.19.1
+	IUPVER=3.17
 	IMVER=3.11
 	;;
-			   
+Ubuntu-16.04-i686-std)
+	KTYPE=32
+	CDVER=5.10
+	IUPVER=3.17
+	IMVER=3.11
+	;;
+SUSE_LINUX_11-x86_64-std)
+  KTYPE=26g4 
+	CDVER=5.10
+	IUPVER=3.17
+	IMVER=3.11
+  ;;
+CentOS_5.11-x86_64-std)
+  KTYPE=24g3 
+  CDVER=5.4.1
+  IUPVER=3.5
+  IMVER=3.6.3
+  ;; 
 esac
 			   
-echo KTYPE=$KTYPE			   
-		      
+echo KTYPE=$KTYPE			  
+echo CDVER=$CDVER
+echo IUPVER=$IUPVER
+echo IMVER=$IMVER	
 # NOTES:
 #
 # Centos with security setup may need to do commands such as following as root:
@@ -228,7 +247,7 @@ done
 cp iup/include/* $PREFIX/include/
 cp iup/*.so $PREFIX/lib/
 cp iup/*.a $PREFIX/lib/
-cp iup/ftgl/lib/Linux26g4_64/* $PREFIX/lib/
+cp iup/ftgl/lib/*/* $PREFIX/lib/
 cd $BUILDHOME
 # ffcall obtained from:
 # cvs -z3 -d:pserver:anonymous@cvs.savannah.gnu.org:/sources/libffcall co ffcall 
