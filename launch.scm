@@ -14,7 +14,7 @@
 ;;======================================================================
 
 (use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3 call-with-environment-variables csv)
-(use defstruct pathname-expand)
+(use typed-records pathname-expand)
 
 (import (prefix base64 base64:))
 (import (prefix sqlite3 sqlite3:))
@@ -70,7 +70,10 @@
 				 (fmt-csv (map list->csv-record csvr))))
 	       (status (configf:lookup dat "final" "exit-status"))
 	       (msg     (configf:lookup dat "final" "message")))
-	  (rmt:csv->test-data run-id test-id csvt)
+          ;;(if csvt  ;; this if blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
+              (rmt:csv->test-data run-id test-id csvt)
+            ;;  (BB> "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
+            ;;  )
 	  (cond
 	   ((equal? status "PASS") "PASS") ;; skip the message part if status is pass
 	   (status (conc (configf:lookup dat "final" "exit-status") ": " (if msg msg "no message")))

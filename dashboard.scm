@@ -526,7 +526,7 @@ Misc
 			    (dboard:rundat-db-path-set! run-dat db-pth)
 			    db-pth)))
 	 (tmptests    (if (or do-not-use-db-file-timestamps
-			      (>= (file-modification-time db-path) last-update))
+			      (>=  (common:lazy-modification-time db-path) last-update))
                           (rmt:get-tests-for-run run-id testnamepatt states statuses  ;; run-id testpatt states statuses
 						 (dboard:rundat-run-data-offset run-dat)
 						 num-to-get

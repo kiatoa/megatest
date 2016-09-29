@@ -644,6 +644,14 @@
 ;; S Y S T E M   S T U F F
 ;;======================================================================
 
+;; lazy-safe get file mod time. on any error (file not existing etc.) return 0
+;;
+(define (common:lazy-modification-time fpath)
+  (handle-exceptions
+   exn
+   0
+   (file-modification-time fpath)))
+
 ;; return a nice clean pathname made absolute
 (define (common:nice-path dir)
   (let ((match (string-match "^(~[^\\/]*)(\\/.*|)$" dir)))

@@ -211,7 +211,9 @@
     (if (not (eof-object? lin))
 	(begin
 	  (debug:print 4 *default-log-port* lin)
-	  (rmt:csv->test-data run-id test-id lin)
+          ;;(when lin ;; this when blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
+          (rmt:csv->test-data run-id test-id lin)
+          ;;)
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status too 
@@ -223,7 +225,9 @@
     (if (not (eof-object? lin))
 	(begin
 	  (debug:print 4 *default-log-port* lin)
-	  (rmt:csv->test-data run-id test-id lin)
+          ;;(when lin  ;; this when blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
+          (rmt:csv->test-data run-id test-id lin)
+          ;;)
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status too 
