@@ -20,6 +20,9 @@ echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
 echo
 echo Set OPTION to std, currently OPTION=$OPTION
 echo
+echo Additionally, if you want mysql-client, you will need to make sure
+echo mysql_config is in your path
+echo
 echo You are using PREFIX=$PREFIX
 echo You are using proxy="$proxy"
 echo 
@@ -124,8 +127,11 @@ export CHICKEN_INSTALL=$PREFIX/bin/chicken-install
 mkdir -p $PREFIX
 echo "export PATH=$PREFIX/bin:\$PATH" > $PREFIX/setup-chicken4x.sh
 echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:\$LD_LIBRARY_PATH" >> $PREFIX/setup-chicken4x.sh
+echo "export CHICKEN_DOC_PAGER=cat" >> $PREFIX/setup-chicken4x.sh
+
 echo "setenv PATH $PREFIX/bin:\$PATH" > $PREFIX/setup-chicken4x.csh
 echo "setenv LD_LIBRARY_PATH $LD_LIBRARY_PATH:\$LD_LIBRARY_PATH" >> $PREFIX/setup-chicken4x.csh
+echo "setenv CHICKEN_DOC_PAGER cat" >> $PREFIX/setup-chicken4x.csh
 
 echo PATH=$PATH
 echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH
@@ -178,7 +184,16 @@ for egg in matchable readline apropos base64 regex-literals format "regex-case" 
 	tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client \
 	spiffy-request-vars s md5 message-digest spiffy-directory-listing ssax sxml-serializer \
 	sxml-modifications logpro z3 call-with-environment-variables \
-	pathname-expand typed-records simple-exceptions numbers crypt parley srfi-42
+	pathname-expand typed-records simple-exceptions numbers crypt parley srfi-42 \
+	alist-lib ansi-escape-sequences args basic-sequences bindings chicken-doc chicken-doc-cmd \
+	cock condition-utils debug define-record-and-printer easyffi easyffi-base \
+	expand-full ezxdisp filepath foof-loop ini-file irc lalr lazy-seq \
+	locale locale-builtin locale-categories locale-components locale-current locale-posix \
+	locale-timezone loops low-level-macros procedural-macros refdb rfc3339 scsh-process \
+	sexp-diff sha1 shell slice srfi-101 srfi-19 srfi-19-core srfi-19-date srfi-19-io \
+	srfi-19-period srfi-19-support srfi-19-time srfi-19-timezone srfi-29 srfi-37 srfi-78 syslog \
+	udp uuid uuid-lib zlib
+
 do
 	echo "Installing $egg"
 	$CHICKEN_INSTALL $PROX -keep-installed $egg
@@ -188,6 +203,11 @@ do
 		exit 1
 	fi
 done
+
+if [[ -e `which mysql_config` ]]; then
+  $CHICKEN_INSTALL $PROX -keep-installed mysql-client
+fi
+
 for egg in "sqlite3" sql-de-lite nanomsg
 do
 	echo "Installing $egg"
@@ -198,6 +218,12 @@ do
 		exit 1
 	fi
 done
+cd $BUILDHOME
+cd `$PREFIX/bin/csi -p '(chicken-home)'`
+curl http://3e8.org/pub/chicken-doc/chicken-doc-repo.tgz | tar zx
+cd $BUILDHOME
+
+
 
 # $CHICKEN_INSTALL $PROX sqlite3
 cd $BUILDHOME
@@ -323,3 +349,5 @@ echo file can be found in the current directory which should work for setting up
 
 echo Testing iup
 $PREFIX/bin/csi -b -eval '(use iup)(print "Success")'
+
+
