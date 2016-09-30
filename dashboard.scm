@@ -210,6 +210,10 @@ Misc
 
   ;; Run times layout
   (graph-button-box #f)
+  (graph-matrix     #f)
+  ((graph-matrix-table (make-hash-table)) : hash-table)
+  ((graph-matrix-row 1) : number)
+  ((graph-matrix-col 1) : number)
   ;; ((graph-button-dat (make-hash-table)) : hash-table) ;;RA=> Deprecating buttons as of now
 
   ;; Controls used to launch runs etc.
@@ -932,7 +936,6 @@ Misc
 			  (iup:attribute-set! button "BGCOLOR" color))
 		      (if (not (equal? curr-title buttontxt))
 			  (iup:attribute-set! button "TITLE"   buttontxt))
-                      ;;(print "RA => testdat " testdat " teststate " teststate " teststatus " teststatus " buttondat " buttondat " curr-color " curr-color  " curr-title " curr-title "buttontxt" buttontxt " title " curr-title )
 		      (vector-set! buttondat 0 run-id)
 		      (vector-set! buttondat 1 color)
 		      (vector-set! buttondat 2 buttontxt)
@@ -1357,6 +1360,9 @@ Misc
       (dcommon:command-runname-selector commondat tabdat tab-num: tab-num)
       (dcommon:command-testname-selector commondat tabdat update-keyvals))
      (iup:vbox
+      (iup:split
+       #:orientation "HORIZONTAL"
+       #:value 800
       (let* ((cnv-obj (iup:canvas 
 		       ;; #:size "500x400"
 		       #:expand "YES"
@@ -1398,16 +1404,34 @@ Misc
 				      "wheel-cb"))
 		       )))
 	cnv-obj)
-      ;; RA => Delete these if not being referenced for matrix
-      ;; (let* ((hb1 (iup:hbox))
-      ;;        (buttondat (dboard:tabdat-graph-button-dat tabdat)))
-      ;;        ;; (b1 (iup:button "testbutton")))
-      ;;   (dboard:tabdat-graph-button-box-set! tabdat hb1)
-      ;;   (for-each
-      ;;    (lambda (buttondat)
-      ;;      (let* ((b1 (iup:button "buttondat-graph-name")))
-      ;;      (iup:child-add! b1 hb1))))
-      ;;   hb1)
+      (let* ((hb1 (iup:hbox))
+             (graph-matrix-table (dboard:tabdat-graph-matrix-table tabdat))
+             (curr-column-num 0)
+             (graph-matrix (iup:matrix
+                           #:alignment1 "ALEFT"
+                           #:expand "YES" ;; "HORIZONTAL"
+                           #:numcol 10
+                           #:numlin 20
+                           #:numcol-visible (min 10)
+                           #:numlin-visible 1)))
+        (dboard:tabdat-graph-matrix-set! tabdat graph-matrix)
+        (iup:attribute-set! graph-matrix "WIDTH0" 0)
+        (iup:attribute-set! graph-matrix "HEIGHT0" 0)
+        graph-matrix))
+        ;;(hash-table-set! graph-matrix-table 'graph1 "color1")
+        ;;(hash-table-set! graph-matrix-table 'graph2 "color2")
+        ;; (for-each
+        ;;  (lambda (name-key)
+        ;;    (print "hash-table-key : " name-key)
+        ;;    (iup:attribute-set! graph-matrix (conc "0:" curr-column-num) name-key)
+        ;;    ;; set the color to the value of mame-key in the table
+        ;;    (set! curr-column-num (+ 1 curr-column-num)))
+        ;;  (hash-table-keys graph-matrix-table))
+        ;; (iup:split
+        ;;  #:orientation "HORIZONTAL" ;; "HORIZONTAL"
+        ;;  #:value 50
+        ;;  (iup:label "Graph")
+        ;;  graph-matrix))
       ))))
 
 ;;======================================================================
@@ -1634,6 +1658,7 @@ Misc
                                   (begin
                                     (set! changed #t)
                                     (iup:attribute-set! run-matrix key (cadr value))
+                                    (print "RA=> value" (car value))
                                     (iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
                           matrix-content)
                 
@@ -2843,7 +2868,10 @@ Misc
 	 (cmp      (vg:get-component dwg "runslib" compname))
 	 (cfg      (configf:get-section *configdat* "graph"))
 	 (stdcolor (vg:rgb->number 120 130 140))
-	 (delta-y  (- uly lly)))
+	 (delta-y  (- uly lly))
+         (graph-matrix-table (dboard:tabdat-graph-matrix-table tabdat))
+         (graph-matrix (dboard:tabdat-graph-matrix tabdat))
+         (changed      #f))
     (vg:add-obj-to-comp
      cmp 
      (vg:make-rect-obj llx lly ulx uly))
@@ -2874,7 +2902,25 @@ Misc
 	      (lambda (fieldn)
 		(let* ((dat     (hash-table-ref alldat fieldn))
 		       (vals    (map (lambda (x)(vector-ref x 2)) dat)))
-                  ;; Check if the dat is already added in the buttondat table; if not add it
+                  (if (not (hash-table-exists? graph-matrix-table fieldn))
+                      ;;(print fieldn "exists")
+                      (begin
+                        (let* ((graph-color-rgb (vg:generate-color-rgb))
+                               (graph-color (apply vg:rgb->number graph-color-rgb))
+                               (graph-matrix-col (dboard:tabdat-graph-matrix-col tabdat))
+                               (graph-matrix-row (dboard:tabdat-graph-matrix-row tabdat)))
+                          (hash-table-set! graph-matrix-table fieldn graph-color)
+                          (print "Graph data " graph-matrix-row " " graph-matrix-col " " fieldn " " graph-color " " graph-color-rgb)
+                          (set! changed #t)
+                          (iup:attribute-set! graph-matrix (conc graph-matrix-row ":"  graph-matrix-col) fieldn)
+                          (iup:attribute-set! graph-matrix "FGCOLOR1:1" '(70 249 73))
+                          (iup:attribute-set! graph-matrix (conc "BGCOLOR" (conc graph-matrix-row ":"  graph-matrix-col)) graph-color-rgb)
+                          (if (> graph-matrix-col 10)
+                              (begin
+                                (dboard:tabdat-graph-matrix-col-set! tabdat 1)
+                                (dboard:tabdat-graph-matrix-row-set! tabdat (+ graph-matrix-row 1)))
+                              (dboard:tabdat-graph-matrix-col-set! tabdat (+ graph-matrix-col 1)))
+                          )))
 		  (if (not (null? vals))
 		      (let* ((maxval   (apply max vals))
 			     (minval   (min 0 (apply min vals)))
@@ -2882,8 +2928,8 @@ Misc
 			     (deltaval (- maxval minval))
 			     (yscale   (/ delta-y (if (zero? deltaval) 1 deltaval)))
 			     (yfunc    (lambda (y)(+ lly (* yscale (- y minval))))) ;; (lambda (y)(* (+ y yoff) yscale))))
-                             (graph-color (vg:generate-color)))
-			;; (print (car cf) "; maxval: " maxval " minval: " minval " deltaval: " deltaval " yscale: " yscale)
+                             (graph-color (hash-table-ref graph-matrix-table fieldn)))
+                        ;; set to hash-table value for fieldn
 			(vg:add-obj-to-comp
 			 cmp 
 			 (vg:make-text-obj (- llx 10)(yfunc maxval) (conc maxval)))
@@ -2930,7 +2976,8 @@ Misc
 			;;  dat)
 			)))) ;; for each data point in the series
 	      (hash-table-keys alldat)))))
-     cfg)))
+     cfg)
+    (if changed (iup:attribute-set! graph-matrix "REDRAW" "ALL"))))
 	 
 ;; run times tab
 ;;
