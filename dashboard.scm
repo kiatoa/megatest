@@ -2906,14 +2906,13 @@ Misc
                       ;;(print fieldn "exists")
                       (begin
                         (let* ((graph-color-rgb (vg:generate-color-rgb))
-                               (graph-color (apply vg:rgb->number graph-color-rgb))
+                               (graph-color (vg:iup-color->number graph-color-rgb))
                                (graph-matrix-col (dboard:tabdat-graph-matrix-col tabdat))
                                (graph-matrix-row (dboard:tabdat-graph-matrix-row tabdat)))
                           (hash-table-set! graph-matrix-table fieldn graph-color)
                           (print "Graph data " graph-matrix-row " " graph-matrix-col " " fieldn " " graph-color " " graph-color-rgb)
                           (set! changed #t)
                           (iup:attribute-set! graph-matrix (conc graph-matrix-row ":"  graph-matrix-col) fieldn)
-                          (iup:attribute-set! graph-matrix "FGCOLOR1:1" '(70 249 73))
                           (iup:attribute-set! graph-matrix (conc "BGCOLOR" (conc graph-matrix-row ":"  graph-matrix-col)) graph-color-rgb)
                           (if (> graph-matrix-col 10)
                               (begin

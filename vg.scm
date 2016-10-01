@@ -370,16 +370,19 @@
     (arithmetic-shift g 8)
     b))
 
+;; Obsolete function
+;;
 (define (vg:generate-color)
   (vg:rgb->number (random 255)
                   (random 255)
                   (random 255)))
 
+;; Need to return a string of random iup-color for graph
+;;
 (define (vg:generate-color-rgb)
-  (list (random 255)
-        (random 255)
-        (random 255)))
-
+  (conc (number->string (random 255)) " "
+        (number->string (random 255)) " "
+        (number->string (random 255))))
 
 (define (vg:iup-color->number iup-color)
   (apply vg:rgb->number (map string->number (string-split iup-color))))
