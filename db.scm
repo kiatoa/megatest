@@ -2297,14 +2297,7 @@
 (define (db:test-short-record->norm inrec)
   ;;  "id,run_id,testname,item_path,state,status"
   ;;  "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
-  (vector (vector-ref inrec 0) ;; id
-	  (vector-ref inrec 1) ;; run_id
-	  (vector-ref inrec 2) ;; testname
-	  (vector-ref inrec 4) ;; state
-	  (vector-ref inrec 5) ;; status
-	  -1 "" -1 -1 "" "-" 
-	  (vector-ref inrec 3) ;; item-path
-	  -1 "-" "-"))
+	(make-db:test-rec id: -1))
 
 (define (db:get-tests-for-run-state-status dbstruct run-id testpatt)
   (let* ((res            '())
