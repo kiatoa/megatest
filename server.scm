@@ -23,7 +23,7 @@
 (declare (uses synchash))
 (declare (uses http-transport))
 (declare (uses rpc-transport))
-(declare (uses nmsg-transport))
+;;(declare (uses nmsg-transport))
 (declare (uses launch))
 (declare (uses daemon))
 
@@ -52,7 +52,7 @@
 (define (server:launch run-id)
   (case *transport-type*
     ((http)(http-transport:launch run-id))
-    ((nmsg)(nmsg-transport:launch run-id))
+    ;;((nmsg)(nmsg-transport:launch run-id))
     ((rpc)  (rpc-transport:launch run-id))
     (else (debug:print-error 0 *default-log-port* "unknown server type " *transport-type*))))
 ;;       (else   (debug:print-error 0 *default-log-port* "No known transport set, transport=" transport ", using rpc")
@@ -188,9 +188,10 @@
 		     ((http)(server:ping-server run-id 
 						(tasks:hostinfo-get-interface server)
 						(tasks:hostinfo-get-port      server)))
-		     ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
-						 (tasks:hostinfo-get-port      server)
-						 timeout: 2)))))
+		     ;; ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
+		     ;;    			 (tasks:hostinfo-get-port      server)
+		     ;;    			 timeout: 2))
+                     )))
 	  ;; if the server didn't respond we must remove the record
 	  (if res
 	      #t
