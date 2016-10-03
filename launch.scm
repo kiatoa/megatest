@@ -703,7 +703,7 @@
 ;;           *runconfigdat* (runconfigs.config info)
 ;;           *configstatus* (status of the read data)
 ;;
-(define (launch:setup-new #!key (force #f))
+(define (launch:setup #!key (force #f))
   (let* ((toppath  (or *toppath* (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
 	 (runname  (common:args-get-runname))
 	 (target   (common:args-get-target))
@@ -830,8 +830,6 @@
 	(begin
 	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")))
     *toppath*))
-
-(define launch:setup launch:setup-new)
 
 (define (get-best-disk confdat testconfig)
   (let* ((disks   (or (and testconfig (hash-table-ref/default testconfig "disks" #f))
