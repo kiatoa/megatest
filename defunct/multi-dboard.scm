@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use format numbers sql-de-lite srfi-1 posix regex regex-case srfi-69 nanomsg srfi-18 call-with-environment-variables)
+(use format numbers sql-de-lite srfi-1 posix regex regex-case srfi-69 srfi-18 call-with-environment-variables)
 (require-library iup)
 (import (prefix iup iup:))
 (use canvas-draw)
