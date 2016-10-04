@@ -2892,14 +2892,22 @@
 ;; faz,bar,    10,  8mA,     ,     ,"this is a comment"
 ;; EOF
 
+
+(define (db:csv->list-safe csvdata)
+  (if (string? csvdata)
+      (csv->list (make-csv-reader
+		  (open-input-string csvdata)
+		  '((strip-leading-whitespace? #t)
+		    (strip-trailing-whitespace? #t))))      
+      (begin
+	(debug:print 0 *default-log-port* "ERROR: received non-string data for csv")
+	'())))
+
 (define (db:csv->test-data dbstruct run-id test-id csvdata)
   (debug:print 4 *default-log-port* "test-id " test-id ", csvdata: " csvdata)
   (let* ((dbdat   (db:get-db dbstruct run-id))
 	 (db      (db:dbdat-get-db dbdat))
-	 (csvlist (csv->list (make-csv-reader
-			      (open-input-string csvdata)
-			      '((strip-leading-whitespace? #t)
-				(strip-trailing-whitespace? #t)))))) ;; (csv->list csvdata)))
+	 (csvlist (db:csv->list-safe csvdata)))
     (for-each
      (lambda (csvrow)
        (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f #f)) 9))

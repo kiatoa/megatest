@@ -119,7 +119,12 @@
 	      (params (vector-ref dat 1)))
 	  (case (if (symbol? cmd)
 		    cmd
-		    (string->symbol cmd))
+		    (if (string? cmd)
+			(string->symbol cmd)
+			(begin
+			  (debug:print 0 *default-log-port* "ERROR: received bad data in execute-requests \"" cmd "\""
+				       "   and params " params)
+			  (exit 1))))
 
 	    ;;===============================================
 	    ;; READ/WRITE QUERIES
