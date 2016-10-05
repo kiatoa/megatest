@@ -94,6 +94,8 @@ Misc
       (print help)
       (exit)))
 
+;; TODO: Move this inside (main)
+;;
 (if (not (launch:setup))
     (begin
       (print "Failed to find megatest.config, exiting") 
@@ -3263,85 +3265,88 @@ Misc
 ;; The heavy lifting starts here
 ;;======================================================================
 
+(define (main)
+  (let ((mtdb-path (conc *toppath* "/megatest.db"))) ;; 
+    (if (and (file-exists? mtdb-path)
+	     (file-write-access? mtdb-path))
+	(if (not (args:get-arg "-skip-version-check"))
+	    (let ((th1 (make-thread common:exit-on-version-changed)))
+	      (thread-start! th1)
+	      (if (> megatest-version (common:get-last-run-version-number))
+		  (debug:print-info 0 *default-log-port* "Version bump detected, blocking until db sync complete")
+		  (thread-join! th1)))))
+    (let* ((commondat       (dboard:commondat-make)))
+      ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
+      (cond 
+       ((args:get-arg "-test") ;; run-id,test-id
+	(let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-test") ",")))) ;; RADT couldn't find string->number, though it works
+			  (if (> (length d) 1)
+			      d
+			      (list #f #f))))
+	       (run-id  (car dat))
+	       (test-id (cadr dat)))
+	  (if (and (number? run-id)
+		   (number? test-id)
+		   (>= test-id 0))
+	      (dashboard-tests:examine-test run-id test-id)
+	      (begin
+		(debug:print 3 *default-log-port* "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
+		(exit 1)))))
+       ;; ((args:get-arg "-guimonitor")
+       ;;  (gui-monitor (dboard:tabdat-dblocal tabdat)))
+       (else
+	(dboard:commondat-uidat-set! commondat (make-dashboard-buttons commondat)) ;; (dboard:tabdat-dblocal data)
+	;; (dboard:tabdat-numruns tabdat)
+	;; (dboard:tabdat-num-tests tabdat)
+	;; (dboard:tabdat-dbkeys tabdat)
+	;; runs-sum-dat new-view-dat))
+	;; legacy setup of updaters for summary tab and runs tab
+	;; summary tab
+	;; (dboard:commondat-add-updater 
+	;;  commondat 
+	;;  (lambda ()
+	;; 	 (dashboard:summary-tab-updater commondat 0))
+	;;  tab-num: 0)
+	;; runs tab
+	(dboard:commondat-curr-tab-num-set! commondat 0)
+	(dboard:commondat-add-updater 
+	 commondat 
+	 (lambda ()
+	   (dashboard:runs-tab-updater commondat 1))
+	 tab-num: 1)
+	(iup:callback-set! *tim*
+			   "ACTION_CB"
+			   (lambda (time-obj)
+			     (let ((update-is-running #f))
+			       (mutex-lock! (dboard:commondat-update-mutex commondat))
+			       (set! update-is-running (dboard:commondat-updating commondat))
+			       (if (not update-is-running)
+				   (dboard:commondat-updating-set! commondat #t))
+			       (mutex-unlock! (dboard:commondat-update-mutex commondat))
+			       (if (not update-is-running) ;; we know that the update was not running and we now have a lock on doing an update
+				   (begin
+				     (dboard:common-run-curr-updaters commondat) ;; (dashboard:run-update commondat)
+				     (mutex-lock! (dboard:commondat-update-mutex commondat))
+				     (dboard:commondat-updating-set! commondat #f)
+				     (mutex-unlock! (dboard:commondat-update-mutex commondat)))
+				   ))
+			     1))))
+      
+      (let ((th1 (make-thread (lambda ()
+				(thread-sleep! 1)
+				(dboard:common-run-curr-updaters commondat 0) ;; force update of summary tab 
+				;; (dboard:commondat-please-update-set! commondat #t) ;; MRW: ww36.3 - why was please update set true here? Removing it for now.
+				;; (dashboard:run-update commondat)
+				) "update buttons once"))
+	    (th2 (make-thread iup:main-loop "Main loop")))
+	;; (thread-start! th1)
+	(thread-start! th2)
+	(thread-join! th2)))))
+
 ;; ease debugging by loading ~/.dashboardrc
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.dashboardrc")))
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
-
-(define (main)
-  (if (not (args:get-arg "-skip-version-check"))
-      (let ((th1 (make-thread common:exit-on-version-changed)))
-	(thread-start! th1)
-	(if (> megatest-version (common:get-last-run-version-number))
-	    (debug:print-info 0 *default-log-port* "Version bump detected, blocking until db sync complete")
-	    (thread-join! th1))))
-  (let* ((commondat       (dboard:commondat-make)))
-    ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
-    (cond 
-     ((args:get-arg "-test") ;; run-id,test-id
-      (let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-test") ",")))) ;; RADT couldn't find string->number, though it works
-			(if (> (length d) 1)
-			    d
-			    (list #f #f))))
-	     (run-id  (car dat))
-	     (test-id (cadr dat)))
-	(if (and (number? run-id)
-		 (number? test-id)
-		 (>= test-id 0))
-	    (dashboard-tests:examine-test run-id test-id)
-	    (begin
-	      (debug:print 3 *default-log-port* "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
-	      (exit 1)))))
-     ;; ((args:get-arg "-guimonitor")
-     ;;  (gui-monitor (dboard:tabdat-dblocal tabdat)))
-     (else
-      (dboard:commondat-uidat-set! commondat (make-dashboard-buttons commondat)) ;; (dboard:tabdat-dblocal data)
-					  ;; (dboard:tabdat-numruns tabdat)
-					  ;; (dboard:tabdat-num-tests tabdat)
-					  ;; (dboard:tabdat-dbkeys tabdat)
-					  ;; runs-sum-dat new-view-dat))
-      ;; legacy setup of updaters for summary tab and runs tab
-      ;; summary tab
-      ;; (dboard:commondat-add-updater 
-      ;;  commondat 
-      ;;  (lambda ()
-      ;; 	 (dashboard:summary-tab-updater commondat 0))
-      ;;  tab-num: 0)
-      ;; runs tab
-      (dboard:commondat-curr-tab-num-set! commondat 0)
-      (dboard:commondat-add-updater 
-       commondat 
-       (lambda ()
-      	 (dashboard:runs-tab-updater commondat 1))
-       tab-num: 1)
-      (iup:callback-set! *tim*
-			 "ACTION_CB"
-			 (lambda (time-obj)
-			   (let ((update-is-running #f))
-			     (mutex-lock! (dboard:commondat-update-mutex commondat))
-			     (set! update-is-running (dboard:commondat-updating commondat))
-			     (if (not update-is-running)
-				 (dboard:commondat-updating-set! commondat #t))
-			     (mutex-unlock! (dboard:commondat-update-mutex commondat))
-			     (if (not update-is-running) ;; we know that the update was not running and we now have a lock on doing an update
-				 (begin
-				   (dboard:common-run-curr-updaters commondat) ;; (dashboard:run-update commondat)
-				   (mutex-lock! (dboard:commondat-update-mutex commondat))
-				   (dboard:commondat-updating-set! commondat #f)
-				   (mutex-unlock! (dboard:commondat-update-mutex commondat)))
-				 ))
-			   1))))
-    
-    (let ((th1 (make-thread (lambda ()
-			      (thread-sleep! 1)
-			      (dboard:common-run-curr-updaters commondat 0) ;; force update of summary tab 
-			      ;; (dboard:commondat-please-update-set! commondat #t) ;; MRW: ww36.3 - why was please update set true here? Removing it for now.
-			      ;; (dashboard:run-update commondat)
-			      ) "update buttons once"))
-	  (th2 (make-thread iup:main-loop "Main loop")))
-      ;; (thread-start! th1)
-      (thread-start! th2)
-      (thread-join! th2))))
 
 (main)
 

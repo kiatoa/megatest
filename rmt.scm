@@ -15,8 +15,7 @@
 (declare (uses api))
 (declare (uses tdb))
 (declare (uses http-transport))
-(declare (uses nmsg-transport))
-
+;;(declare (uses nmsg-transport))
 ;;
 ;; THESE ARE ALL CALLED ON THE CLIENT SIDE!!!
 ;;
@@ -87,10 +86,11 @@
         	  (< (http-transport:server-dat-get-last-access connection) expire-time))
              (begin
                (debug:print-info 0 *default-log-port* "Discarding connection to server for run-id " run-id ", too long between accesses")
-               ;; SHOULD CLOSE THE CONNECTION HERE
-	       (case *transport-type*
-		 ((nmsg)(nn-close (http-transport:server-dat-get-socket 
-				   (hash-table-ref *runremote* run-id)))))
+               ;; bb- disabling nanomsg
+               ;; SHOULD CLOSE THE CONNECTION HERE 
+	       ;; (case *transport-type*
+	       ;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket 
+	       ;;  		   (hash-table-ref *runremote* run-id)))))
                (hash-table-delete! *runremote* run-id)))))
      (hash-table-keys *runremote*)))
   ;; (mutex-unlock! *db-multi-sync-mutex*)
@@ -105,9 +105,9 @@
 				  (http-transport:client-api-send-receive run-id connection-info cmd params)
 				  ((commfail)(vector #f "communications fail"))
 				  ((exn)(vector #f "other fail"))))
-			  ((nmsg)(condition-case
-				  (nmsg-transport:client-api-send-receive run-id connection-info cmd params)
-				  ((timeout)(vector #f "timeout talking to server"))))
+			  ;; ((nmsg)(condition-case
+			  ;;         (nmsg-transport:client-api-send-receive run-id connection-info cmd params)
+			  ;;         ((timeout)(vector #f "timeout talking to server"))))
 			  (else  (exit))))
 	       (success (if (vector? dat) (vector-ref dat 0) #f))
 	       (res     (if (vector? dat) (vector-ref dat 1) #f)))
@@ -117,7 +117,8 @@
 		;; (mutex-unlock! *send-receive-mutex*)
 		(case *transport-type* 
 		  ((http) res) ;; (db:string->obj res))
-		  ((nmsg) res))) ;; (vector-ref res 1)))
+		  ;; ((nmsg) res)
+                  )) ;; (vector-ref res 1)))
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 *default-log-port* "WARNING: Communication failed, trying call to rmt:send-receive again.")
 		;; (case *transport-type*
@@ -318,7 +319,8 @@
 (define (rmt:login-no-auto-client-setup connection-info run-id)
   (case *transport-type*
     ((http)(rmt:send-receive-no-auto-client-setup connection-info 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
-    ((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info 'login (list *toppath* megatest-version run-id *my-client-signature*)))))
+    ;;((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info 'login (list *toppath* megatest-version run-id *my-client-signature*)))
+    ))
 
 ;; hand off a call to one of the db:queries statements
 ;; added run-id to make looking up the correct db possible 

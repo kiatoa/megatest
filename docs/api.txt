@@ -42,6 +42,8 @@ Method: GET
 
 Filter Params: target, testpatt, offset, limit
 
+Megatest Cmd: megatest -start-dir <path to  megatest area> -list-runs % -target % -dumpmode json  -fields runs:runname,id+tests:state,status:id
+
 Response:
 
 
@@ -86,6 +88,8 @@ URL: <base>/runs
 
 Method: POST
 
+Megatest Cmd:  megatest -runtests % -target <target> :runname <run_name> -run
+
 Request Params: 
 ==================
 {"[blue]#target#": "target_value", "[blue]#runname#" : "runname", "[blue]#test_pattern#": "optional test pattern"}
@@ -129,6 +133,9 @@ URL: <base>/runs/:id
 Method: GET
 
 Filter Params: testpatt
+
+Megatest Cmd: megatest -start-dir <path to  megatest area> -list-runs <runname> -target % -dumpmode json  -fields runs:runname,id+tests:state,status:id
+
 
 Response: 
 
@@ -191,6 +198,9 @@ URL: <base>/runs/:id/tests
 
 Method: GET
 
+Megatest Cmd: megatest -start-dir <path to  megatest area> -list-runs <runname> -target % -dumpmode json  -fields runs:runname,id+tests:state,status:id
+
+
 Response: 
 ==================
 [
@@ -224,6 +234,9 @@ Get perticular test that belongs to a Runs
 URL: <base>/runs/:id/tests/:id
 
 Method: GET
+
+Megatest Cmd: megatest -start-dir <path to  megatest area> -list-runs <runname> -target % -testpattern <pattern> -dumpmode json  -fields runs:runname,id+tests:state,status:id
+
 
 Response: 
 
