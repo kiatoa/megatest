@@ -2283,7 +2283,7 @@
 		       (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
 			 ;;(set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
 			 ;;(print (cons a b))
-		      	 (set! res (cons (alist->db:test-rec (db:qry-gen-alist qryvalstr (cons a b))) res)))
+		      	 (set! res (cons (db:test-rec-from-qry-long (cons a b)) res)))
 		       
 		       db
 		       qry
@@ -2700,7 +2700,7 @@
        (sqlite3:for-each-row
 	(lambda (a . b)
 	  ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-	  (set! res (cons (alist->db:test-rec (db:qry-gen-alist db:test-record-qry-selector (cons a b))) res)))
+	  (set! res (cons (db:test-rec-from-qry-long (cons a b)) res)))
 	  ;;(set! res (cons (apply vector a b) res)))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id in ("
@@ -2716,7 +2716,7 @@
      (let ((res #f))
        (sqlite3:for-each-row
 	(lambda (a . b)
-	  (set! res (alist->db:test-rec (db:qry-gen-alist db:test-record-qry-selector (cons a b)))))
+	  (set! res (db:test-rec-from-qry-long (cons a b))))
 	  ;;(set! res (apply vector a b)))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE testname=? AND item_path=?;")
