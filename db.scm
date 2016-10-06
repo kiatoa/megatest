@@ -66,7 +66,7 @@
     (debug:print-error 0 *default-log-port* " query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
     (print-call-chain (current-error-port))))
 
-;; convert to -inline
+;; convert to -inline 
 ;;
 (define (db:first-result-default db stmt default . params)
   (handle-exceptions
@@ -100,7 +100,6 @@
 	  dbdat))))
 
 ;; legacy handling of structure for managing db's. Refactor this into dbr:?
-;;
 (define (db:dbdat-get-db dbdat)
   (if (pair? dbdat)
       (car dbdat)
@@ -133,7 +132,7 @@
   (let* ((dbdat (if (dbr:dbstruct? dbstruct)
 		    (db:get-db dbstruct run-id)
 		    dbstruct)) ;; cheat, allow for passing in a dbdat
-	 (db    (db:dbdat-get-db dbdat)))
+	 (db    (db:dbdat-get-db dbdat))) 
     (handle-exceptions
      exn
      (begin
@@ -184,7 +183,7 @@
        (exit 1))
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     (if fname
-	(conc dbdir "/" fname)
+	(conc dbdir "/" fname) 
 	dbdir)))
 
 ;; Returns the database location as specified in config file
@@ -3383,7 +3382,7 @@
 ;; return the sqlite3 db handle if possible
 ;; 
 (define (db:delay-if-busy dbdat #!key (count 6))
-  (if (not (configf:lookup *configdat* "server" "delay-on-busy")) ;;RADT => two conditions in a if block?? also understand what config looked up
+  (if (not (configf:lookup *configdat* "server" "delay-on-busy")) 
       (and dbdat (db:dbdat-get-db dbdat))
       (if dbdat
 	  (let* ((dbpath (db:dbdat-get-path dbdat))
@@ -3394,7 +3393,7 @@
 		 (begin
 		   (debug:print-info 0 *default-log-port* "WARNING: failed to test for existance of " dbfj)
 		   (thread-sleep! 1)
-		   (db:delay-if-busy count (- count 1)))
+		   (db:delay-if-busy count (- count 1))) 
 		 (file-exists? dbfj))
 		(case count
 		  ((6)
@@ -3418,7 +3417,7 @@
 		  (else
 		   (debug:print-info 0 *default-log-port* "delaying db access due to high database load.")
 		   (thread-sleep! 12.8))))
-	    db) ;; RADT => why does it need to return db, not #t
+	    db) 
 	  "bogus result from db:delay-if-busy")))
 
 (define (db:test-get-records-for-index-file dbstruct run-id test-name)

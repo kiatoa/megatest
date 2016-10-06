@@ -675,8 +675,8 @@
       (lambda ()
 	(read-line)))))
 
-(define (get-cpu-load)
-  (car (common:get-cpu-load)))
+(define (get-cpu-load #!key (remote-host #f))
+  (car (common:get-cpu-load remote-host)))
 ;;   (let* ((load-res (process:cmd-run->list "uptime"))
 ;; 	 (load-rx  (regexp "load average:\\s+(\\d+)"))
 ;; 	 (cpu-load #f))
@@ -691,12 +691,18 @@
 
 ;; get cpu load by reading from /proc/loadavg, return all three values
 ;;
-(define (common:get-cpu-load)
-  (with-input-from-file "/proc/loadavg" 
-    (lambda ()(list (read)(read)(read)))))
+(define (common:get-cpu-load remote-host)
+  (if remote-host
+      (map (lambda (res)
+	     (if (eof-object? res) 9e99 res))
+	   (with-input-from-pipe 
+	    (conc "ssh " remote-host " cat /proc/loadavg")
+	    (lambda ()(list (read)(read)(read)))))
+      (with-input-from-file "/proc/loadavg" 
+	(lambda ()(list (read)(read)(read))))))
 
-(define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f))
-  (let* ((loadavg (common:get-cpu-load))
+(define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
+  (let* ((loadavg (common:get-cpu-load remote-host))
 	 (first   (car loadavg))
 	 (next    (cadr loadavg))
 	 (adjload (* maxload numcpus))
@@ -713,22 +719,26 @@
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
 
-(define (common:get-num-cpus)
-  (with-input-from-file "/proc/cpuinfo"
-    (lambda ()
-      (let loop ((numcpu 0)
-		 (inl    (read-line)))
-	(if (eof-object? inl)
-	    numcpu
-	    (loop (if (string-match "^processor\\s+:\\s+\\d+$" inl)
-		      (+ numcpu 1)
-		      numcpu)
-		  (read-line)))))))
+(define (common:get-num-cpus remote-host)
+  (let ((proc (lambda ()
+		(let loop ((numcpu 0)
+			   (inl    (read-line)))
+		  (if (eof-object? inl)
+		      numcpu
+		      (loop (if (string-match "^processor\\s+:\\s+\\d+$" inl)
+				(+ numcpu 1)
+				numcpu)
+			    (read-line)))))))
+    (if remote-host
+	(with-input-from-pipe 
+	 (conc "ssh " remote-host " cat /proc/cpuinfo")
+	 proc)
+	(with-input-from-file "/proc/cpuinfo" proc))))
 
 ;; wait for normalized cpu load to drop below maxload
 ;;
-(define (common:wait-for-normalized-load maxload #!key (msg #f))
-  (let ((num-cpus (common:get-num-cpus)))
+(define (common:wait-for-normalized-load maxload #!key (msg #f)(remote-host #f))
+  (let ((num-cpus (common:get-num-cpus remote-host)))
     (common:wait-for-cpuload maxload num-cpus 15 msg: msg)))
 
 (define (get-uname . params)
