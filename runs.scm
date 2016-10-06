@@ -725,7 +725,7 @@
 					  (runs:calc-not-completed prereqs-not-met)))
 	 (loop-list               (list hed tal reg reruns))
 	 ;; configure the load runner
-	 (numcpus                 (common:get-num-cpus))
+	 (numcpus                 (common:get-num-cpus #f))
 	 (maxload                 (string->number (or (configf:lookup *configdat* "jobtools" "maxload") "3")))
 	 (waitdelay               (string->number (or (configf:lookup *configdat* "jobtools" "waitdelay") "60"))))
     (debug:print-info 4 *default-log-port* "have-resources: " have-resources " prereqs-not-met: (" 

@@ -210,6 +210,14 @@ Misc
   ((layout-update-ok  #t)                : boolean)
   ((compact-layout    #t)                : boolean)
 
+  ;; Run times layout
+  (graph-button-box #f)
+  (graph-matrix     #f)
+  ((graph-matrix-table (make-hash-table)) : hash-table)
+  ((graph-matrix-row 1) : number)
+  ((graph-matrix-col 1) : number)
+  ;; ((graph-button-dat (make-hash-table)) : hash-table) ;;RA=> Deprecating buttons as of now
+
   ;; Controls used to launch runs etc.
   ((command          "")                 : string)      ;; for run control this is the command being built up
   (command-tb        #f)			         
@@ -253,7 +261,6 @@ Misc
   ((view-changed       #t)                : boolean)   
   ((xadj               0)                 : number)     ;; x slider number (if using canvas)
   ((yadj               0)                 : number)     ;; y slider number (if using canvas)
-
   ;; runs-summary tab state
   ((runs-summary-modes '((one-run . "Show One Run") (xor-two-runs . "XOR Two Runs") (xor-two-runs-hide-clean . "XOR; Hide Clean")) )   : list)
   ((runs-summary-mode-buttons '())               : list)
@@ -931,7 +938,6 @@ Misc
 			  (iup:attribute-set! button "BGCOLOR" color))
 		      (if (not (equal? curr-title buttontxt))
 			  (iup:attribute-set! button "TITLE"   buttontxt))
-                      ;;(print "RA => testdat " testdat " teststate " teststate " teststatus " teststatus " buttondat " buttondat " curr-color " curr-color  " curr-title " curr-title "buttontxt" buttontxt " title " curr-title )
 		      (vector-set! buttondat 0 run-id)
 		      (vector-set! buttondat 1 color)
 		      (vector-set! buttondat 2 buttontxt)
@@ -1356,6 +1362,9 @@ Misc
       (dcommon:command-runname-selector commondat tabdat tab-num: tab-num)
       (dcommon:command-testname-selector commondat tabdat update-keyvals))
      (iup:vbox
+      (iup:split
+       #:orientation "HORIZONTAL"
+       #:value 800
       (let* ((cnv-obj (iup:canvas 
 		       ;; #:size "500x400"
 		       #:expand "YES"
@@ -1396,7 +1405,36 @@ Misc
 									 (* scalex -0.02))))))
 				      "wheel-cb"))
 		       )))
-	cnv-obj)))))
+	cnv-obj)
+      (let* ((hb1 (iup:hbox))
+             (graph-matrix-table (dboard:tabdat-graph-matrix-table tabdat))
+             (curr-column-num 0)
+             (graph-matrix (iup:matrix
+                           #:alignment1 "ALEFT"
+                           #:expand "YES" ;; "HORIZONTAL"
+                           #:numcol 10
+                           #:numlin 20
+                           #:numcol-visible (min 10)
+                           #:numlin-visible 1)))
+        (dboard:tabdat-graph-matrix-set! tabdat graph-matrix)
+        (iup:attribute-set! graph-matrix "WIDTH0" 0)
+        (iup:attribute-set! graph-matrix "HEIGHT0" 0)
+        graph-matrix))
+        ;;(hash-table-set! graph-matrix-table 'graph1 "color1")
+        ;;(hash-table-set! graph-matrix-table 'graph2 "color2")
+        ;; (for-each
+        ;;  (lambda (name-key)
+        ;;    (print "hash-table-key : " name-key)
+        ;;    (iup:attribute-set! graph-matrix (conc "0:" curr-column-num) name-key)
+        ;;    ;; set the color to the value of mame-key in the table
+        ;;    (set! curr-column-num (+ 1 curr-column-num)))
+        ;;  (hash-table-keys graph-matrix-table))
+        ;; (iup:split
+        ;;  #:orientation "HORIZONTAL" ;; "HORIZONTAL"
+        ;;  #:value 50
+        ;;  (iup:label "Graph")
+        ;;  graph-matrix))
+      ))))
 
 ;;======================================================================
 ;; R U N
@@ -1622,6 +1660,7 @@ Misc
                                   (begin
                                     (set! changed #t)
                                     (iup:attribute-set! run-matrix key (cadr value))
+                                    (print "RA=> value" (car value))
                                     (iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
                           matrix-content)
                 
@@ -2174,7 +2213,7 @@ Misc
          (conc "megatest -remove-runs -target " target
                " -runname " runname
                " -testpatt % "))))
-     (iup:menu-item ;; RADT => itemize this run lists before merging with v1.61
+     (iup:menu-item 
       "Kill Complete Run"
       #:action
       (lambda (obj)
@@ -2819,7 +2858,7 @@ Misc
 		 fields)
 		res-ht)
 	      #f)))))
-  
+
 ;; graph data 
 ;;  tsc=timescale, tfn=function; time->x
 ;;
@@ -2831,7 +2870,10 @@ Misc
 	 (cmp      (vg:get-component dwg "runslib" compname))
 	 (cfg      (configf:get-section *configdat* "graph"))
 	 (stdcolor (vg:rgb->number 120 130 140))
-	 (delta-y  (- uly lly)))
+	 (delta-y  (- uly lly))
+         (graph-matrix-table (dboard:tabdat-graph-matrix-table tabdat))
+         (graph-matrix (dboard:tabdat-graph-matrix tabdat))
+         (changed      #f))
     (vg:add-obj-to-comp
      cmp 
      (vg:make-rect-obj llx lly ulx uly))
@@ -2862,6 +2904,24 @@ Misc
 	      (lambda (fieldn)
 		(let* ((dat     (hash-table-ref alldat fieldn))
 		       (vals    (map (lambda (x)(vector-ref x 2)) dat)))
+                  (if (not (hash-table-exists? graph-matrix-table fieldn))
+                      ;;(print fieldn "exists")
+                      (begin
+                        (let* ((graph-color-rgb (vg:generate-color-rgb))
+                               (graph-color (vg:iup-color->number graph-color-rgb))
+                               (graph-matrix-col (dboard:tabdat-graph-matrix-col tabdat))
+                               (graph-matrix-row (dboard:tabdat-graph-matrix-row tabdat)))
+                          (hash-table-set! graph-matrix-table fieldn graph-color)
+                          (print "Graph data " graph-matrix-row " " graph-matrix-col " " fieldn " " graph-color " " graph-color-rgb)
+                          (set! changed #t)
+                          (iup:attribute-set! graph-matrix (conc graph-matrix-row ":"  graph-matrix-col) fieldn)
+                          (iup:attribute-set! graph-matrix (conc "BGCOLOR" (conc graph-matrix-row ":"  graph-matrix-col)) graph-color-rgb)
+                          (if (> graph-matrix-col 10)
+                              (begin
+                                (dboard:tabdat-graph-matrix-col-set! tabdat 1)
+                                (dboard:tabdat-graph-matrix-row-set! tabdat (+ graph-matrix-row 1)))
+                              (dboard:tabdat-graph-matrix-col-set! tabdat (+ graph-matrix-col 1)))
+                          )))
 		  (if (not (null? vals))
 		      (let* ((maxval   (apply max vals))
 			     (minval   (min 0 (apply min vals)))
@@ -2869,8 +2929,8 @@ Misc
 			     (deltaval (- maxval minval))
 			     (yscale   (/ delta-y (if (zero? deltaval) 1 deltaval)))
 			     (yfunc    (lambda (y)(+ lly (* yscale (- y minval))))) ;; (lambda (y)(* (+ y yoff) yscale))))
-                             (graph-color (vg:generate-color)))
-			;; (print (car cf) "; maxval: " maxval " minval: " minval " deltaval: " deltaval " yscale: " yscale)
+                             (graph-color (hash-table-ref graph-matrix-table fieldn)))
+                        ;; set to hash-table value for fieldn
 			(vg:add-obj-to-comp
 			 cmp 
 			 (vg:make-text-obj (- llx 10)(yfunc maxval) (conc maxval)))
@@ -2917,7 +2977,8 @@ Misc
 			;;  dat)
 			)))) ;; for each data point in the series
 	      (hash-table-keys alldat)))))
-     cfg)))
+     cfg)
+    (if changed (iup:attribute-set! graph-matrix "REDRAW" "ALL"))))
 	 
 ;; run times tab
 ;;
@@ -3278,7 +3339,7 @@ Misc
       ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
       (cond 
        ((args:get-arg "-test") ;; run-id,test-id
-	(let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-test") ",")))) ;; RADT couldn't find string->number, though it works
+      (let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-test") ",")))) 
 			  (if (> (length d) 1)
 			      d
 			      (list #f #f))))
