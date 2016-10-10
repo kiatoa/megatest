@@ -2538,12 +2538,6 @@ Misc
 
 (define *last-recalc-ended-time* 0)
 
-(define (dashboard:been-changed tabdat)
-  (> (file-modification-time (dboard:tabdat-dbfpath tabdat)) (dboard:tabdat-last-db-update tabdat)))
-
-(define (dashboard:set-db-update-time tabdat)
-  (dboard:tabdat-last-db-update-set! tabdat (file-modification-time (dboard:tabdat-dbfpath tabdat))))
-
 (define (dashboard:recalc modtime please-update-buttons last-db-update-time)
   (or please-update-buttons
       (and (> (current-milliseconds)(+ *last-recalc-ended-time* 150))
@@ -2583,9 +2577,12 @@ Misc
 (define (dashboard:database-changed? commondat tabdat)
   (let* ((run-update-time (current-seconds))
 	 (modtime         (dashboard:get-youngest-run-db-mod-time tabdat)) ;; NOTE: ensure this is tabdat!! 
-	 (recalc          (dashboard:recalc modtime (dboard:commondat-please-update commondat) (dboard:tabdat-last-db-update tabdat))))
-     (dboard:commondat-please-update-set! commondat #f)
-     recalc))
+	 (recalc          (dashboard:recalc modtime 
+					    (dboard:commondat-please-update commondat) 
+					    (dboard:tabdat-last-db-update tabdat))))
+    (if recalc (dboard:tabdat-last-db-update-set! tabdat run-update-time))
+    (dboard:commondat-please-update-set! commondat #f)
+    recalc))
 
 ;; point inside line
 ;;
