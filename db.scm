@@ -1995,7 +1995,6 @@
   (let* ((tmp      (runs:get-std-run-fields keys (or fields '("id" "runname" "state" "status" "owner" "event_time"))))
 	 (keystr   (car tmp))
 	 (header   (cadr tmp))
-	 (res     '())
 	 (key-patt "")
 	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
 	 (qry-str  #f)
@@ -2020,15 +2019,17 @@
 			(if offset (conc " OFFSET " offset) "")
 			";"))
     (debug:print-info 4 *default-log-port* "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
-    (db:with-db dbstruct #f #f ;; reads db, does not write to it.
-		(lambda (db)
-		  (sqlite3:for-each-row
-		   (lambda (a . r)
-		     (set! res (cons (list->vector (cons a r)) res)))
-		   db
-		   qry-str
-		   runnamepatt)))
-    (vector header res)))
+    (vector header 
+            (reverse
+             (db:with-db dbstruct #f #f ;; reads db, does not write to it.
+                         (lambda (db)
+                           (sqlite3:fold-row
+                            (lambda (res . r)
+                              (cons (list->vector r) res))
+                            '()
+                            db
+                            qry-str
+                            runnamepatt)))))))
 
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-rows runinfo))
 (define (db:get-run-info dbstruct run-id)
