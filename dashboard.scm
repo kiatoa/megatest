@@ -305,7 +305,7 @@ Misc
 (defstruct dboard:graph-dat
     ((id           #f) : string)
     ((color        #f) : vector)
-    ((flag         #f) : boolean)
+    ((flag         #t) : boolean)
     ((cell         #f) : number)
     )
 
@@ -1421,7 +1421,7 @@ Misc
                            #:scrollbar "YES"
                            #:numcol 10
                            #:numlin 20
-                           #:numcol-visible (min 10)
+                           #:numcol-visible (min 8)
                            #:numlin-visible 1
                            #:click-cb
                            (lambda (obj row col status)
@@ -1433,7 +1433,17 @@ Misc
                                    (dboard:graph-dat-flag-set! graph-dat #f)
                                    (dboard:graph-dat-flag-set! graph-dat #t))
                                (print "Toggling graph, need to work on updaters")
-                               ;;(run-times-tab-updater)
+                               (if (not (dboard:tabdat-running-layout tabdat))
+						     (begin
+						       (dashboard:run-times-tab-run-data-updater commondat tabdat tab-num)
+						       (dboard:tabdat-last-data-update-set! tabdat (current-seconds))
+						       (thread-start! (make-thread
+								       (lambda ()
+									 (dboard:tabdat-running-layout-set! tabdat #t)
+									 (dashboard:run-times-tab-layout-updater commondat tabdat tab-num)
+									 (dboard:tabdat-running-layout-set! tabdat #f))
+								       "run-times-tab-layout-updater"))))
+                               ;;(dboard:tabdat-view-changed-set! tabdat #t)
                                )))))
         (dboard:tabdat-graph-matrix-set! tabdat graph-matrix)
         (iup:attribute-set! graph-matrix "WIDTH0" 0)
@@ -2920,12 +2930,11 @@ Misc
                                (graph-dat (make-dboard:graph-dat
                                                   id: fieldn
                                                   color: graph-color
-                                                  flag: #f
+                                                  flag: #t
                                                   cell: graph-cell
                                                   )))
                           (hash-table-set! graph-matrix-table fieldn graph-dat)
                           (hash-table-set! graph-cell-table graph-cell graph-dat)
-                          ;;(hash-table-set! graph-matrix-table fieldn graph-color)
                           (print "Graph data " graph-matrix-row " " graph-matrix-col " " fieldn " " graph-color " " graph-color-rgb " ")
                           (set! changed #t)
                           (iup:attribute-set! graph-matrix (conc graph-matrix-row ":"  graph-matrix-col) fieldn)
