@@ -562,8 +562,11 @@
 						   (set! changed #t)
 						   (iup:attribute-set! stats-matrix key value)))))
 					 run-stats)
-			       (if changed (iup:attribute-set! stats-matrix "REDRAW" "ALL")))))))
-    (stats-updater)
+			       (if changed (iup:attribute-set! stats-matrix "REDRAW" "ALL")))
+                             ))))
+    ;; (dboard:commondat-please-update-set! commondat #t) ;; force redraw on first pass 
+    ;; (mark-for-update tabdat)
+    ;; (stats-updater)
     (dboard:commondat-add-updater commondat stats-updater tab-num: tab-num)
     ;; (set! dashboard:update-summary-tab updater)
     (iup:attribute-set! stats-matrix "WIDTHDEF" "40")
