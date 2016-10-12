@@ -14,7 +14,7 @@
 (import (prefix iup iup:))
 (use canvas-draw)
 (import canvas-draw-iup)
-(use regex defstruct)
+(use regex typed-records)
 
 (declare (unit dcommon))
 

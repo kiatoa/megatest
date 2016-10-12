@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 nanomsg sql-de-lite hostinfo)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo)
 (require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -644,6 +644,14 @@
 ;; S Y S T E M   S T U F F
 ;;======================================================================
 
+;; lazy-safe get file mod time. on any error (file not existing etc.) return 0
+;;
+(define (common:lazy-modification-time fpath)
+  (handle-exceptions
+   exn
+   0
+   (file-modification-time fpath)))
+
 ;; return a nice clean pathname made absolute
 (define (common:nice-path dir)
   (let ((match (string-match "^(~[^\\/]*)(\\/.*|)$" dir)))
@@ -667,8 +675,8 @@
       (lambda ()
 	(read-line)))))
 
-(define (get-cpu-load)
-  (car (common:get-cpu-load)))
+(define (get-cpu-load #!key (remote-host #f))
+  (car (common:get-cpu-load remote-host)))
 ;;   (let* ((load-res (process:cmd-run->list "uptime"))
 ;; 	 (load-rx  (regexp "load average:\\s+(\\d+)"))
 ;; 	 (cpu-load #f))
@@ -683,12 +691,18 @@
 
 ;; get cpu load by reading from /proc/loadavg, return all three values
 ;;
-(define (common:get-cpu-load)
-  (with-input-from-file "/proc/loadavg" 
-    (lambda ()(list (read)(read)(read)))))
+(define (common:get-cpu-load remote-host)
+  (if remote-host
+      (map (lambda (res)
+	     (if (eof-object? res) 9e99 res))
+	   (with-input-from-pipe 
+	    (conc "ssh " remote-host " cat /proc/loadavg")
+	    (lambda ()(list (read)(read)(read)))))
+      (with-input-from-file "/proc/loadavg" 
+	(lambda ()(list (read)(read)(read))))))
 
-(define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f))
-  (let* ((loadavg (common:get-cpu-load))
+(define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
+  (let* ((loadavg (common:get-cpu-load remote-host))
 	 (first   (car loadavg))
 	 (next    (cadr loadavg))
 	 (adjload (* maxload numcpus))
@@ -705,22 +719,26 @@
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
 
-(define (common:get-num-cpus)
-  (with-input-from-file "/proc/cpuinfo"
-    (lambda ()
-      (let loop ((numcpu 0)
-		 (inl    (read-line)))
-	(if (eof-object? inl)
-	    numcpu
-	    (loop (if (string-match "^processor\\s+:\\s+\\d+$" inl)
-		      (+ numcpu 1)
-		      numcpu)
-		  (read-line)))))))
+(define (common:get-num-cpus remote-host)
+  (let ((proc (lambda ()
+		(let loop ((numcpu 0)
+			   (inl    (read-line)))
+		  (if (eof-object? inl)
+		      numcpu
+		      (loop (if (string-match "^processor\\s+:\\s+\\d+$" inl)
+				(+ numcpu 1)
+				numcpu)
+			    (read-line)))))))
+    (if remote-host
+	(with-input-from-pipe 
+	 (conc "ssh " remote-host " cat /proc/cpuinfo")
+	 proc)
+	(with-input-from-file "/proc/cpuinfo" proc))))
 
 ;; wait for normalized cpu load to drop below maxload
 ;;
-(define (common:wait-for-normalized-load maxload #!key (msg #f))
-  (let ((num-cpus (common:get-num-cpus)))
+(define (common:wait-for-normalized-load maxload #!key (msg #f)(remote-host #f))
+  (let ((num-cpus (common:get-num-cpus remote-host)))
     (common:wait-for-cpuload maxload num-cpus 15 msg: msg)))
 
 (define (get-uname . params)
@@ -1095,18 +1113,6 @@
 	  (u8vector->list
 	   (if res res (hostname->ip hostname)))) ".")))
 
-(define (common:open-nm-req addr)
-  (let* ((req (nn-socket 'req))
-	 (res (nn-connect req addr)))
-    req))
-
-;; (with-output-to-string (lambda ()(serialize obj)))
-(define (common:nm-send-receive soc msg)
-  (nn-send soc msg)
-  (nn-recv soc))
-
-(define (common:close-nm-req soc)
-  (nn-close soc))
 
 (define (common:send-dboard-main-changed)
   (let* ((dashboard-ips (mddb:get-dashboards)))
@@ -1120,87 +1126,7 @@
 	 res))
      dashboard-ips)))
     
-(define (common:nm-send-receive-timeout req msg)
-  (let* ((key     "ping")
-	 (success #f)
-	 (keepwaiting #t)
-	 (result  #f)
-	 (sendrec (make-thread
-		   (lambda ()
-		     (nn-send req msg)
-		     (set! result (nn-recv req))
-		     (set! success #t))
-		   "send-receive"))
-	 (timeout (make-thread (lambda ()
-				 (let loop ((count 0))
-				   (thread-sleep! 1)
-				   (print "still waiting after count seconds...")
-				   (if (and keepwaiting (< count 10))
-				       (loop (+ count 1))))
-				 (if keepwaiting
-				     (begin
-				       (print "timeout waiting for reply")
-				       (thread-terminate! sendrec))))
-			       "timeout")))
-    (handle-exceptions
-     exn
-     (begin
-       (print-call-chain)
-       (print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-       (print "exn=" (condition->list exn)))
-     (thread-start! timeout)
-     (thread-start! sendrec)
-     (thread-join!  sendrec)
-     (if success (thread-terminate! timeout)))
-    result))
     
-(define (common:ping-nm req)
-  ;; send a random number and check that we get it back
-  (let* ((key     "ping")
-	 (success #f)
-	 (keepwaiting #t)
-	 (ping    (make-thread
-		   (lambda ()
-		     (print "ping: sending string \"" key "\", expecting " (current-process-id))
-		     (nn-send req key)
-		     (let ((result  (nn-recv req)))
-		       (if (equal? (conc (current-process-id)) result)
-			   (begin
-			     (print "ping, success: received \"" result "\"")
-			     (set! success #t))
-			   (begin
-			     (print "ping, failed: received key \"" result "\"")
-			     (set! keepwaiting #f)
-			     (set! success #f)))))
-		   "ping"))
-	 (timeout (make-thread (lambda ()
-				 (let loop ((count 0))
-				   (thread-sleep! 1)
-				   (print "still waiting after count seconds...")
-				   (if (and keepwaiting (< count 10))
-				       (loop (+ count 1))))
-				 (if keepwaiting
-				     (begin
-				       (print "timeout waiting for ping")
-				       (thread-terminate! ping))))
-			       "timeout")))
-    (handle-exceptions
-     exn
-     (begin
-       (print-call-chain)
-       (print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-       (print "exn=" (condition->list exn))
-       (print "ping failed to connect to tcp://" hostport))
-     (thread-start! timeout)
-     (thread-start! ping)
-     (thread-join! ping)
-     (if success (thread-terminate! timeout)))
-    (if return-socket
-	(if success req #f)
-	(begin
-	  (nn-close req)
-	  success))))
-
 ;;======================================================================
 ;; D A S H B O A R D   D B 
 ;;======================================================================

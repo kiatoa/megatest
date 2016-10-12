@@ -11,7 +11,7 @@
 
 (declare (unit env))
 
-(use sql-de-lite) ;; srfi-1 posix regex regex-case srfi-69 nanomsg srfi-18 call-with-environment-variables)
+(use sql-de-lite) ;; srfi-1 posix regex regex-case srfi-69 srfi-18 call-with-environment-variables)
 
 (define (env:open-db fname)
   (let* ((db-exists (file-exists? fname))

@@ -6,7 +6,7 @@ SRCFILES = common.scm items.scm launch.scm \
    ods.scm runconfig.scm server.scm configf.scm \
    db.scm keys.scm margs.scm megatest-version.scm \
    process.scm runs.scm tasks.scm tests.scm genexample.scm \
-   http-transport.scm nmsg-transport.scm filedb.scm \
+   http-transport.scm filedb.scm \
    client.scm synchash.scm daemon.scm mt.scm \
    ezsteps.scm lock-queue.scm sdb.scm \
    rmt.scm api.scm tdb.scm rpc-transport.scm \
@@ -47,8 +47,8 @@ dboard : $(OFILES) $(GOFILES) dashboard.scm
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
 	csc $(CSCOPTS) $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
 
-multi-dboard : multi-dboard.scm $(OFILES) $(GOFILES)
-	csc $(CSCOPTS) $(OFILES) $(GOFILES) multi-dboard.scm -o multi-dboard
+#multi-dboard : multi-dboard.scm $(OFILES) $(GOFILES)
+#	csc $(CSCOPTS) $(OFILES) $(GOFILES) multi-dboard.scm -o multi-dboard
 
 # 
 # $(PREFIX)/bin/revtagfsl : utils/revtagfsl.scm
@@ -91,8 +91,8 @@ $(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard utils/mk_wrapper
 	utils/mk_wrapper $(PREFIX) ndboard $(PREFIX)/bin/newdashboard
 	chmod a+x $(PREFIX)/bin/newdashboard
 
-$(PREFIX)/bin/.$(ARCHSTR)/mdboard : multi-dboard
-	$(INSTALL) multi-dboard $(PREFIX)/bin/.$(ARCHSTR)/mdboard
+#$(PREFIX)/bin/.$(ARCHSTR)/mdboard : multi-dboard
+#	$(INSTALL) multi-dboard $(PREFIX)/bin/.$(ARCHSTR)/mdboard
 
 $(PREFIX)/bin/mdboard : $(PREFIX)/bin/.$(ARCHSTR)/mdboard  utils/mk_wrapper
 	utils/mk_wrapper $(PREFIX) mdboard $(PREFIX)/bin/mdboard
@@ -259,5 +259,5 @@ altdb.scm :
 	   echo "(use postgresql)(hash-table-set! *available-db* 'postgresql #t)" >> altdb.scm;\
 	fi
 
-portlogger-example : portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o nmsg-transport.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
-	csc $(CSCOPTS) portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o nmsg-transport.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
+portlogger-example : portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
+	csc $(CSCOPTS) portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
