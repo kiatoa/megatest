@@ -1569,7 +1569,8 @@ Misc
          
 
 (define (dashboard:runs-summary-updater commondat tabdat tb cell-lookup run-matrix)
-  (dashboard:do-update-rundat tabdat) 
+  (if (dashboard:database-changed? commondat tabdat)
+      (dashboard:do-update-rundat tabdat))
   (dboard:runs-summary-control-panel-updater tabdat)
   (let* ((last-runs-update  (dboard:tabdat-last-runs-update tabdat))
 	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
@@ -1583,7 +1584,8 @@ Misc
 	 ;;        		   runs)
 	 ;;        	 ht))
          )
-    (dboard:update-tree tabdat runs-hash runs-header tb)
+    (if (dashboard:database-changed? commondat tabdat)
+      (dboard:update-tree tabdat runs-hash runs-header tb))
     (if run-id
         (let* ((matrix-content
                 (case (dboard:tabdat-runs-summary-mode tabdat) 
@@ -2899,8 +2901,21 @@ Misc
 	 (if alldat
 	     (for-each
 	      (lambda (fieldn)
-		(let* ((dat     (hash-table-ref alldat fieldn))
-		       (vals    (map (lambda (x)(vector-ref x 2)) dat)))
+		(let*-values (((dat)                (hash-table-ref alldat fieldn))
+                              ((vals minval maxval) (if (null? dat)
+                                                        (values '() #f #f)
+                                                        (let loop ((hed (car dat))
+                                                                   (tal (cdr dat))
+                                                                   (res '())
+                                                                   (min (vector-ref (car dat) 2))
+                                                                   (max (vector-ref (car dat) 2)))
+                                                          (let* ((val    (vector-ref hed 2))
+                                                                 (newmin (if (< val min) val min))
+                                                                 (newmax (if (> val max) val max))
+                                                                 (newres (cons val res)))
+                                                            (if (null? tal)
+                                                                (values (reverse res) newmin newmax)
+                                                                (loop (car tal)(cdr tal) newres newmin newmax)))))))
                   (if (not (hash-table-exists? graph-matrix-table fieldn))
                       ;;(print fieldn "exists")
                       (begin
@@ -2920,8 +2935,8 @@ Misc
                               (dboard:tabdat-graph-matrix-col-set! tabdat (+ graph-matrix-col 1)))
                           )))
 		  (if (not (null? vals))
-		      (let* ((maxval   (apply max vals))
-			     (minval   (min 0 (apply min vals)))
+		      (let* (;; (maxval   (apply max vals))
+			     ;; (minval   (min 0 (apply min vals)))
 			     (yoff     (- minval lly)) ;;  minval))
 			     (deltaval (- maxval minval))
 			     (yscale   (/ delta-y (if (zero? deltaval) 1 deltaval)))
@@ -2999,7 +3014,8 @@ Misc
 	       (graph-height 120)
 	       (run-to-run-margin 25))
 	  (dboard:tabdat-layout-update-ok-set! tabdat #t)
-	  (if (canvas? cnv)
+	  (if (and (canvas? cnv)
+                   (not (null? allruns))) ;; allruns can go null when browsing the runs tree
 	      (let*-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
 			    ((originx originy)             (canvas-origin cnv))
 			    ((calc-y)                      (lambda (rownum)
