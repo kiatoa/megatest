@@ -16,7 +16,7 @@
 ;; dbstruct vector containing all the relevant dbs like main.db, megatest.db, run.db etc
 
 (require-extension (srfi 18) extras tcp) ;; RADT => use of require-extension?
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking z3)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking z3 typed-records)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:)) ;; RADT => prefix??
 
@@ -37,6 +37,25 @@
 (define *number-non-write-queries* 0)
 
 ;;======================================================================
+;;  R E C O R D S
+;;======================================================================
+
+(defstruct dbr:dbstruct 
+  main
+  strdb
+  ((path #f)  : string)
+  ((local #f) : boolean)
+  rundb
+  inmem
+  mtime
+  rtime 
+  stime
+  inuse
+  refdb
+  ((locdbs (make-hash-table)) : hash-table)
+  olddb)
+
+;;======================================================================
 ;; SQLITE3 HELPERS
 ;;======================================================================
 
@@ -48,6 +67,7 @@
     (print-call-chain (current-error-port))))
 
 ;; convert to -inline 
+;;
 (define (db:first-result-default db stmt default . params)
   (handle-exceptions
    exn
@@ -79,6 +99,7 @@
 			 )))
 	  dbdat))))
 
+;; legacy handling of structure for managing db's. Refactor this into dbr:?
 (define (db:dbdat-get-db dbdat)
   (if (pair? dbdat)
       (car dbdat)
@@ -99,27 +120,26 @@
       (begin
 	(mutex-lock! *rundb-mutex*)
 	(if (eq? mod-read 'mod)
-	    (dbr:dbstruct-set-mtime! dbstruct (current-milliseconds))
-	    (dbr:dbstruct-set-rtime! dbstruct (current-milliseconds)))
-	(dbr:dbstruct-set-inuse! dbstruct #f)
+	    (dbr:dbstruct-mtime-set! dbstruct (current-milliseconds))
+	    (dbr:dbstruct-rtime-set! dbstruct (current-milliseconds)))
+	(dbr:dbstruct-inuse-set! dbstruct #f)
 	(mutex-unlock! *rundb-mutex*))))
 
 ;; (db:with-db dbstruct run-id sqlite3:exec "select blah from blaz;")
 ;; r/w is a flag to indicate if the db is modified by this query #t = yes, #f = no
 ;;
 (define (db:with-db dbstruct run-id r/w proc . params)
-  (let* ((dbdat (if (vector? dbstruct)
+  (let* ((dbdat (if (dbr:dbstruct? dbstruct)
 		    (db:get-db dbstruct run-id)
 		    dbstruct)) ;; cheat, allow for passing in a dbdat
 	 (db    (db:dbdat-get-db dbdat))) 
-    (db:delay-if-busy dbdat)
     (handle-exceptions
      exn
      (begin
        (debug:print-error 0 *default-log-port* "sqlite3 issue in db:with-db, dbstruct=" dbstruct ", run-id=" run-id ", proc=" proc ", params=" params " error: " ((condition-property-accessor 'exn 'message) exn))
        (print-call-chain (current-error-port)))
      (let ((res (apply proc db params)))
-       (if (vector? dbstruct)(db:done-with dbstruct run-id r/w)) ;; RA => Mark timestamp on defstruct RADT => How come 'mod not passed instead of r/w 
+       (if (vector? dbstruct)(db:done-with dbstruct run-id r/w))
        res))))
 
 ;;======================================================================
@@ -148,11 +168,13 @@
 
 ;; NB// #f => return dbdir only
 ;;      (was planned to be;  zeroth db with name=main.db)
+;; 
+;; If run-id is #f return to create and retrieve the path where the db will live.
 ;;
 (define (db:dbfile-path run-id)
   (let* ((dbdir           (db:get-dbdir))
 	 (fname           (if run-id
-			      (if (eq? run-id 0) "main.db" (conc run-id ".db")) ;;main.db is assigned if run-id 0
+			      (if (eq? run-id 0) "main.db" (conc run-id ".db"))
 			      #f)))
     (handle-exceptions
      exn
@@ -205,10 +227,10 @@
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
 (define (db:open-rundb dbstruct run-id #!key (attemptnum 0)(do-not-open #f)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-  (let* ((local  (dbr:dbstruct-get-local dbstruct))
+  (let* ((local  (dbr:dbstruct-local dbstruct))
 	 (rdb    (if local
-		     (dbr:dbstruct-get-localdb dbstruct run-id)
-		     (dbr:dbstruct-get-inmem dbstruct)))) ;; (dbr:dbstruct-get-runrec dbstruct run-id 'inmem)))
+		     (dbr:dbstruct-localdb dbstruct run-id)
+		     (dbr:dbstruct-inmem dbstruct)))) ;; (dbr:dbstruct-runrec dbstruct run-id 'inmem)))
     (if (or rdb
 	    do-not-open)
 	rdb
@@ -247,22 +269,22 @@
 		 )
 	    (if (and dbexists (not write-access))
 		(set! *db-write-access* #f)) ;; only unset so other db's also can use this control
-	    (dbr:dbstruct-set-rundb!  dbstruct (cons db dbpath))
-	    (dbr:dbstruct-set-inuse!  dbstruct #t)
-	    (dbr:dbstruct-set-olddb!  dbstruct olddb)
-	    ;; (dbr:dbstruct-set-run-id! dbstruct run-id)
+	    (dbr:dbstruct-rundb-set!  dbstruct (cons db dbpath))
+	    (dbr:dbstruct-inuse-set!  dbstruct #t)
+	    (dbr:dbstruct-olddb-set!  dbstruct olddb)
+	    ;; (dbr:dbstruct-run-id-set! dbstruct run-id)
 	    (mutex-unlock! *rundb-mutex*)
 	    (if local
 		(begin
-		  (dbr:dbstruct-set-localdb! dbstruct run-id db) ;; (dbr:dbstruct-set-inmem! dbstruct db) ;; direct access ...
+		  (dbr:dbstruct-localdb-set! dbstruct run-id db) ;; (dbr:dbstruct-inmem-set! dbstruct db) ;; direct access ...
 		  db)
 		(begin
-		  (dbr:dbstruct-set-inmem!  dbstruct inmem)
+		  (dbr:dbstruct-inmem-set!  dbstruct inmem)
 		  ;; dec 14, 2014 - keep deleted records available. hunch is that they are needed for id placeholders
 		  ;; (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';") ;; they just slow us down in this context
 		  (db:sync-tables db:sync-tests-only db inmem)
 		  (db:delay-if-busy refdb) ;; dbpath: (db:dbdat-get-path refdb)) ;; What does delaying here achieve? 
-		  (dbr:dbstruct-set-refdb!  dbstruct refdb)
+		  (dbr:dbstruct-refdb-set!  dbstruct refdb)
 		  (db:sync-tables db:sync-tests-only inmem refdb) ;; use inmem as the reference, don't read again from db
 		  ;; sync once more to deal with delays?
 		  ;; (db:sync-tables db:sync-tests-only db inmem)
@@ -272,7 +294,7 @@
 ;; This routine creates the db if not already present. It is only called if the db is not already ls opened
 ;;
 (define (db:open-main dbstruct) ;;  (conc *toppath* "/megatest.db") (car *configinfo*))) 
-  (let ((mdb (dbr:dbstruct-get-main dbstruct))) ;; RA => Returns the first reference in dbstruct
+  (let ((mdb (dbr:dbstruct-main dbstruct))) ;; RA => Returns the first reference in dbstruct
     (if mdb
 	mdb
 	(begin
@@ -285,8 +307,8 @@
 		 (dbdat        (cons db dbpath)))
 	    (if (and dbexists (not write-access))
 		(set! *db-write-access* #f))
-	    (dbr:dbstruct-set-main!   dbstruct dbdat)
-	    (dbr:dbstruct-set-olddb!  dbstruct olddb) ;; olddb is already a (cons db path)
+	    (dbr:dbstruct-main-set!   dbstruct dbdat)
+	    (dbr:dbstruct-olddb-set!  dbstruct olddb) ;; olddb is already a (cons db path)
 	    (mutex-unlock! *rundb-mutex*)
 	    (if (and (not dbexists)
 		     *db-write-access*) ;; did not have a prior db and do have write access
@@ -317,14 +339,14 @@
 ;; sync run to disk if touched
 ;;
 (define (db:sync-touched dbstruct run-id #!key (force-sync #f))
-  (let ((mtime  (dbr:dbstruct-get-mtime dbstruct))
-	(stime  (dbr:dbstruct-get-stime dbstruct))
-	(rundb  (dbr:dbstruct-get-rundb dbstruct))
-	(inmem  (dbr:dbstruct-get-inmem dbstruct))
-	(maindb (dbr:dbstruct-get-main  dbstruct))
-	(refdb  (dbr:dbstruct-get-refdb dbstruct))
-	(olddb  (dbr:dbstruct-get-olddb dbstruct))
-	;; (runid  (dbr:dbstruct-get-run-id dbstruct))
+  (let ((mtime  (dbr:dbstruct-mtime dbstruct))
+	(stime  (dbr:dbstruct-stime dbstruct))
+	(rundb  (dbr:dbstruct-rundb dbstruct))
+	(inmem  (dbr:dbstruct-inmem dbstruct))
+	(maindb (dbr:dbstruct-main  dbstruct))
+	(refdb  (dbr:dbstruct-refdb dbstruct))
+	(olddb  (dbr:dbstruct-olddb dbstruct))
+	;; (runid  (dbr:dbstruct-run-id dbstruct))
 	)
     (debug:print-info 4 *default-log-port* "Syncing for run-id: " run-id)
     ;; (mutex-lock! *http-mutex*)
@@ -339,7 +361,7 @@
 		  (db:delay-if-busy maindb)
 		  (db:delay-if-busy olddb)
 		  (let ((num-synced (db:sync-tables (db:sync-main-list maindb) maindb olddb)))
-		    (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
+		    (dbr:dbstruct-stime-set! dbstruct (current-milliseconds))
 		    num-synced)
 		  0))
 	    (begin
@@ -356,7 +378,7 @@
 	    (begin
 	      (db:delay-if-busy rundb)
 	      (db:delay-if-busy olddb)
-	      (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
+	      (dbr:dbstruct-stime-set! dbstruct (current-milliseconds))
 	      (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
 		;; (mutex-unlock! *http-mutex*)
 		num-synced)
@@ -365,11 +387,11 @@
 		0))))))
 
 (define (db:close-main dbstruct)
-  (let ((maindb (dbr:dbstruct-get-main dbstruct)))
+  (let ((maindb (dbr:dbstruct-main dbstruct)))
     (if maindb
 	(begin
 	  (sqlite3:finalize! (db:dbdat-get-db maindb))
-	  (dbr:dbstruct-set-main! dbstruct #f)))))
+	  (dbr:dbstruct-main-set! dbstruct #f)))))
 
 (define (db:close-run-db dbstruct run-id)
   (let ((rdb (db:open-rundb dbstruct run-id do-not-open: #t)))
@@ -377,8 +399,8 @@
 	     (sqlite3:database? rdb))
 	(begin
 	  (sqlite3:finalize! rdb)
-	  (dbr:dbstruct-set-localdb! dbstruct run-id #f)
-	  (dbr:dbstruct-set-inmem! dbstruct #f)))))
+	  (dbr:dbstruct-localdb-set! dbstruct run-id #f)
+	  (dbr:dbstruct-inmem-set! dbstruct #f)))))
 
 ;; close all opened run-id dbs
 (define (db:close-all dbstruct)
@@ -389,7 +411,7 @@
 
   (db:close-main dbstruct)
   
-  (let ((locdbs (dbr:dbstruct-get-locdbs dbstruct)))
+  (let ((locdbs (dbr:dbstruct-locdbs dbstruct)))
     (if (hash-table? locdbs)
 	(for-each (lambda (run-id)
 		    (db:close-run-db dbstruct run-id))
@@ -756,7 +778,7 @@
 		   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
 	       (debug:print 0 *default-log-port* "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
 	       (db:replace-test-records dbstruct run-id testrecs)
-	       (sqlite3:finalize! (db:dbdat-get-db (dbr:dbstruct-get-rundb dbstruct)))))
+	       (sqlite3:finalize! (db:dbdat-get-db (dbr:dbstruct-rundb dbstruct)))))
 	   run-ids)))
 
     ;; now ensure all newdb data are synced to megatest.db
@@ -1973,7 +1995,6 @@
   (let* ((tmp      (runs:get-std-run-fields keys (or fields '("id" "runname" "state" "status" "owner" "event_time"))))
 	 (keystr   (car tmp))
 	 (header   (cadr tmp))
-	 (res     '())
 	 (key-patt "")
 	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
 	 (qry-str  #f)
@@ -1998,15 +2019,17 @@
 			(if offset (conc " OFFSET " offset) "")
 			";"))
     (debug:print-info 4 *default-log-port* "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
-    (db:with-db dbstruct #f #f ;; reads db, does not write to it.
-		(lambda (db)
-		  (sqlite3:for-each-row
-		   (lambda (a . r)
-		     (set! res (cons (list->vector (cons a r)) res)))
-		   db
-		   qry-str
-		   runnamepatt)))
-    (vector header res)))
+    (vector header 
+            (reverse
+             (db:with-db dbstruct #f #f ;; reads db, does not write to it.
+                         (lambda (db)
+                           (sqlite3:fold-row
+                            (lambda (res . r)
+                              (cons (list->vector r) res))
+                            '()
+                            db
+                            qry-str
+                            runnamepatt)))))))
 
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-rows runinfo))
 (define (db:get-run-info dbstruct run-id)
@@ -3357,6 +3380,7 @@
 		      (loop (car tal)(cdr tal))))))))))
 
 ;; Function recursively checks if <db>.journal exists; if yes means db busy; call itself after delayed interval
+;; return the sqlite3 db handle if possible
 ;; 
 (define (db:delay-if-busy dbdat #!key (count 6))
   (if (not (configf:lookup *configdat* "server" "delay-on-busy")) 

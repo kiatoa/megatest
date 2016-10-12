@@ -14,16 +14,55 @@
 echo You may need to do the following first:
 echo sudo apt-get install libreadline-dev
 echo sudo apt-get install libwebkitgtk-dev 
+echo sudo apt-get install libpangox-1.0-0 zlib1g-dev libfreetype6-dev cmake
 echo sudo apt-get install libssl-dev
 echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
-echo KTYPE can be 26, 26g4, or 32
-echo  
-echo KTYPE=$KTYPE
+echo
+echo Set OPTION to std, currently OPTION=$OPTION
+echo
+echo Additionally, if you want mysql-client, you will need to make sure
+echo mysql_config is in your path
+echo
 echo You are using PREFIX=$PREFIX
 echo You are using proxy="$proxy"
 echo 
 echo "Set additional_libpath to help find gtk or other libraries, don't forget a leading :"
 
+SYSTEM_TYPE=$(lsb_release -irs |tr ' ' '_' |tr '\n' '-')$(uname -i)-$OPTION
+
+# Set up variables
+#
+case $SYSTEM_TYPE in
+Ubuntu-16.04-x86_64-std)
+	KTYPE=32
+	CDVER=5.10
+	IUPVER=3.17
+	IMVER=3.11
+	;;
+Ubuntu-16.04-i686-std)
+	KTYPE=32
+	CDVER=5.10
+	IUPVER=3.17
+	IMVER=3.11
+	;;
+SUSE_LINUX_11-x86_64-std)
+  KTYPE=26g4 
+	CDVER=5.10
+	IUPVER=3.17
+	IMVER=3.11
+  ;;
+CentOS_5.11-x86_64-std)
+  KTYPE=24g3 
+  CDVER=5.4.1
+  IUPVER=3.5
+  IMVER=3.6.3
+  ;; 
+esac
+			   
+echo KTYPE=$KTYPE			  
+echo CDVER=$CDVER
+echo IUPVER=$IUPVER
+echo IMVER=$IMVER	
 # NOTES:
 #
 # Centos with security setup may need to do commands such as following as root:
@@ -57,7 +96,7 @@ fi
 
 if [[ $KTYPE == "" ]]; then
   echo 'Using KTYPE=26'
-  export KTYPE=26
+  export KTYPE=26g4
 else
   echo Using KTYPE=$KTYPE
 fi
@@ -66,8 +105,8 @@ fi
 mkdir -p tgz
 
 # http://code.call-cc.org/releases/4.8.0/chicken-4.8.0.5.tar.gz
-export CHICKEN_VERSION=4.8.0.5
-export CHICKEN_BASEVER=4.8.0
+export CHICKEN_VERSION=4.11.0
+export CHICKEN_BASEVER=4.11.0
 chicken_targz=chicken-${CHICKEN_VERSION}.tar.gz
 if ! [[ -e tgz/$chicken_targz ]]; then 
     wget http://code.call-cc.org/releases/${CHICKEN_BASEVER}/${chicken_targz}
@@ -82,75 +121,127 @@ if [[ $PREFIX == "" ]]; then
 fi
 
 export PATH=$PREFIX/bin:$PATH
-export LIBPATH=$PREFIX/lib$ADDITIONAL_LIBPATH
+export LIBPATH=$PREFIX/lib:$PREFIX/lib64:$ADDITIONAL_LIBPATH
 export LD_LIBRARY_PATH=$LIBPATH
 export CHICKEN_INSTALL=$PREFIX/bin/chicken-install
-echo "export PATH=$PREFIX/bin:\$PATH" > setup-chicken4x.sh
-echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> setup-chicken4x.sh
+mkdir -p $PREFIX
+echo "export PATH=$PREFIX/bin:\$PATH" > $PREFIX/setup-chicken4x.sh
+echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:\$LD_LIBRARY_PATH" >> $PREFIX/setup-chicken4x.sh
+echo "export CHICKEN_DOC_PAGER=cat" >> $PREFIX/setup-chicken4x.sh
+
+echo "setenv PATH $PREFIX/bin:\$PATH" > $PREFIX/setup-chicken4x.csh
+echo "setenv LD_LIBRARY_PATH $LD_LIBRARY_PATH:\$LD_LIBRARY_PATH" >> $PREFIX/setup-chicken4x.csh
+echo "setenv CHICKEN_DOC_PAGER cat" >> $PREFIX/setup-chicken4x.csh
 
 echo PATH=$PATH
 echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH
 
 if ! [[ -e $PREFIX/bin/csi ]]; then
-    tar xfvz tgz/$chicken_targz
+    tar xfz tgz/$chicken_targz
     cd chicken-${CHICKEN_VERSION}
     # make PLATFORM=linux PREFIX=$PREFIX spotless
     make PLATFORM=linux PREFIX=$PREFIX
     make PLATFORM=linux PREFIX=$PREFIX install
     cd $BUILDHOME
 fi
+cd $BUILDHOME
+#wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
+#mv 1.0.0 1.0.0.tar.gz
+# if ! [[ -e $PREFIX/lib64/libnanomsg.so.1.0.0 ]]; then
+#         wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
+#         mv 1.0.0 1.0.0.tar.gz
+# 	tar xf 1.0.0.tar.gz 
+# 	cd nanomsg-1.0.0
+# 	./configure --prefix=$PREFIX
+# 	make
+# 	make install
+# fi
+# cd $BUILDHOME
+
+export SQLITE3_VERSION=3090200
+if ! [[ -e $PREFIX/bin/sqlite3 ]]; then
+	echo Install sqlite3
+	sqlite3_tgz=sqlite-autoconf-$SQLITE3_VERSION.tar.gz
+	if ! [[ -e tgz/$sqlite3_tgz ]]; then
+	    wget http://www.sqlite.org/2015/$sqlite3_tgz
+	    mv $sqlite3_tgz tgz
+	fi
+
+	if ! [[ -e $PREFIX/bin/sqlite3 ]] ; then
+	    if [[ -e tgz/sqlite-autoconf-$SQLITE3_VERSION.tar.gz ]]; then
+		tar xfz tgz/sqlite-autoconf-$SQLITE3_VERSION.tar.gz 
+		(cd sqlite-autoconf-$SQLITE3_VERSION;./configure --prefix=$PREFIX;make;make install)
+	    fi
+	fi
+fi
+cd $BUILDHOME
 
 # Some eggs are quoted since they are reserved to Bash
 # for f in matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5; do
 # $CHICKEN_INSTALL $PROX -keep-installed matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client spiffy-request-vars md5 message-digest http-client spiffy-directory-listing
-$CHICKEN_INSTALL $PROX -keep-installed matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client spiffy-request-vars s md5 message-digest piffy-directory-listing ssax sxml-serializer sxml-modifications logpro
-#   if ! [[ -e $PREFIX/lib/chicken/6/$f.so ]];then
-#     $CHICKEN_INSTALL $PROX $f
-#     # $CHICKEN_INSTALL -deploy -prefix $DEPLOYTARG $PROX $f
-#   else
-#     echo Skipping install of egg $f as it is already installed
-#   fi
-# done
+for egg in matchable readline apropos base64 regex-literals format "regex-case" "test" \
+	coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo \
+	tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client \
+	spiffy-request-vars s md5 message-digest spiffy-directory-listing ssax sxml-serializer \
+	sxml-modifications logpro z3 call-with-environment-variables \
+	pathname-expand typed-records simple-exceptions numbers crypt parley srfi-42 \
+	alist-lib ansi-escape-sequences args basic-sequences bindings chicken-doc chicken-doc-cmd \
+	cock condition-utils debug define-record-and-printer easyffi easyffi-base \
+	expand-full ezxdisp filepath foof-loop ini-file irc lalr lazy-seq \
+	locale locale-builtin locale-categories locale-components locale-current locale-posix \
+	locale-timezone loops low-level-macros procedural-macros refdb rfc3339 scsh-process \
+	sexp-diff sha1 shell slice srfi-101 srfi-19 srfi-19-core srfi-19-date srfi-19-io \
+	srfi-19-period srfi-19-support srfi-19-time srfi-19-timezone srfi-29 srfi-37 srfi-78 syslog \
+	udp uuid uuid-lib zlib
 
-cd $BUILDHOME
-
-for a in `ls */*.meta|cut -f1 -d/` ; do 
-    echo $a
-    (cd $a;$CHICKEN_INSTALL)
+do
+	echo "Installing $egg"
+	$CHICKEN_INSTALL $PROX -keep-installed $egg
+	#$CHICKEN_INSTALL $PROX $egg
+	if [ $? -ne 0 ]; then
+		echo "$egg failed to install"
+		exit 1
+	fi
 done
 
-export LIBPATH=$PREFIX/lib$ADDITIONAL_LIBPATH
-export LD_LIBRARY_PATH=$LIBPATH
-
-export SQLITE3_VERSION=3071401
-echo Install sqlite3
-sqlite3_tgz=sqlite-autoconf-$SQLITE3_VERSION.tar.gz
-if ! [[ -e tgz/$sqlite3_tgz ]]; then
-    wget http://www.sqlite.org/$sqlite3_tgz
-    mv $sqlite3_tgz tgz
+if [[ -e `which mysql_config` ]]; then
+  $CHICKEN_INSTALL $PROX -keep-installed mysql-client
 fi
 
-if ! [[ -e $PREFIX/bin/sqlite3 ]] ; then
-    if [[ -e tgz/sqlite-autoconf-$SQLITE3_VERSION.tar.gz ]]; then
-	tar xfz tgz/sqlite-autoconf-$SQLITE3_VERSION.tar.gz 
-	(cd sqlite-autoconf-$SQLITE3_VERSION;./configure --prefix=$PREFIX;make;make install)
-	# CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL -prefix $DEPLOYTARG -deploy $PROX sqlite3
-	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL $PROX sqlite3
-    fi
-fi
+for egg in "sqlite3" sql-de-lite # nanomsg
+do
+	echo "Installing $egg"
+	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib -L$PREFIX/lib64"  $CHICKEN_INSTALL $PROX -keep-installed $egg
+	#CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib -L$PREFIX/lib64"  $CHICKEN_INSTALL $PROX $egg
+	if [ $? -ne 0 ]; then
+		echo "$egg failed to install"
+		exit 1
+	fi
+done
+cd $BUILDHOME
+cd `$PREFIX/bin/csi -p '(chicken-home)'`
+curl http://3e8.org/pub/chicken-doc/chicken-doc-repo.tgz | tar zx
+cd $BUILDHOME
+
+
 
 # $CHICKEN_INSTALL $PROX sqlite3
-
-# IUP versions
-if [[ x$USEOLDIUP == "x" ]];then
-  CDVER=5.7
-  IUPVER=3.8
-  IMVER=3.8
-else
-  CDVER=5.7
-  IUPVER=3.8
-  IMVER=3.8
-fi
+cd $BUILDHOME
+# # IUP versions
+# if [[ x$USEOLDIUP == "x" ]];then
+#   CDVER=5.10
+#   IUPVER=3.17
+#   IMVER=3.11
+# else
+#   CDVER=5.10
+#   IUPVER=3.17
+#   IMVER=3.11
+# fi
+# if [[ x$KTYPE == "x24g3" ]];then
+#   CDVER=5.4.1
+#   IUPVER=3.5
+#   IMVER=3.6.3
+# fi
 
 if [[ `uname -a | grep x86_64` == "" ]]; then 
     export ARCHSIZE=''
@@ -159,88 +250,104 @@ else
 fi
     # export files="cd-5.4.1_Linux${KTYPE}_lib.tar.gz im-3.6.3_Linux${KTYPE}_lib.tar.gz iup-3.5_Linux${KTYPE}_lib.tar.gz"
 if [[ x$USEOLDIUP == "x" ]];then
-   export files="cd-${CDVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz im-${IMVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz iup-${IUPVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz"
+   export files="cd/cd-${CDVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz im/im-${IMVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz iup/iup-${IUPVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz"
 else
    echo WARNING: Using old IUP libraries
-   export files="cd-5.4.1_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz im-3.6.3_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz iup-3.5_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz"
+   export files="cd/cd-5.4.1_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz im/im-3.6.3_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz iup/iup-3.5_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz"
 fi
+echo $files
 
 mkdir -p $PREFIX/iuplib
+mkdir -p iup/
 for a in `echo $files` ; do
     if ! [[ -e tgz/$a ]] ; then
-	wget http://www.kiatoa.com/matt/iup/$a
-        mv $a tgz/$a
+        echo wget -c -O tgz/$a http://www.kiatoa.com/matt/chicken-build/$a
+	wget -c http://www.kiatoa.com/matt/chicken-build/$a
+        mv `echo $a | cut -d'/' -f2` tgz/
     fi
     echo Untarring tgz/$a into $BUILDHOME/lib
-    (cd $PREFIX/lib;tar xfvz $BUILDHOME/tgz/$a;mv include/* ../include)
+    tar -xzf tgz/`echo $a | cut -d'/' -f2` -C iup/
+    #(cd $PREFIX/lib;tar xfvz $BUILDHOME/tgz/$a;mv include/* ../include)
     # (cd $DEPLOYTARG;tar xfvz $BUILDHOME/$a)
 done
-
+cp iup/include/* $PREFIX/include/
+cp iup/*.so $PREFIX/lib/
+cp iup/*.a $PREFIX/lib/
+cp iup/ftgl/lib/*/* $PREFIX/lib/
+cd $BUILDHOME
 # ffcall obtained from:
 # cvs -z3 -d:pserver:anonymous@cvs.savannah.gnu.org:/sources/libffcall co ffcall 
-
-if ! [[ -e tgz/ffcall.tar.gz ]] ; then
-    wget http://www.kiatoa.com/matt/iup/ffcall.tar.gz 
-    mv ffcall.tar.gz tgz
+#exit
+if ! [[ -e $PREFIX/include/callback.h ]] ; then
+	#fossil clone http://www.kiatoa.com/fossils/ffcall ffcall.fossil
+	wget -c -O ffcall.tar.gz 'http://www.kiatoa.com/fossils/ffcall/tarball?name=ffcall&uuid=trunk'
+	tar -xzf ffcall.tar.gz
+	#mkdir -p ffcall
+	cd ffcall
+	#fossil open ../ffcall.fossil
+	./configure --prefix=$PREFIX --enable-shared
+	make CC="gcc -fPIC"
+	make install
 fi
+cd $BUILDHOME
+#wget -c -O opensrc.tar.gz 'http://www.kiatoa.com/fossils/opensrc/tarball?name=opensrc&uuid=trunk'
+# Not working due to login problems.
+if ! [[ -e $PREFIX/bin/hs ]] ; then
+	#fossil clone http://www.kiatoa.com/fossils/opensrc opensrc.fossil
+	#mkdir -p opensrc
+	wget -c -O opensrc.tar.gz 'http://www.kiatoa.com/fossils/opensrc/tarball?name=opensrc&uuid=trunk'
+	tar -xzf opensrc.tar.gz
+	cd opensrc
+	#fossil open ../opensrc.fossil
+	cd histstore
+	$PREFIX/bin/csc histstore.scm -o hs 
+	cp -f hs $PREFIX/bin/hs 
+	cd ../mutils
+	$PREFIX/bin/chicken-install
+	cd ../dbi 
+	$PREFIX/bin/chicken-install
+	cd ../margs
+	$PREFIX/bin/chicken-install
+fi
+cd $BUILDHOME
 
-tar xfvz tgz/ffcall.tar.gz
-
-cd ffcall
-./configure --prefix=$PREFIX --enable-shared
-make
-make install
-
+if ! [[ -e $PREFIX/bin/stmlrun ]] ; then
+	#fossil clone http://www.kiatoa.com/fossils/stml stml.fossil
+	wget -c -O stml.tar.gz 'http://www.kiatoa.com/fossils/stml/tarball?name=stml&uuid=trunk'
+	tar -xzf stml.tar.gz
+	cd stml
+	#fossil open ../stml.fossil
+	cp install.cfg.template install.cfg
+	echo "TARGDIR=$PREFIX/bin" > install.cfg
+	echo "LOGDIR=/tmp/stmlrun" >> install.cfg
+	echo "SQLITE3=$PREFIX/bin/sqlite3" >> install.cfg
+	cp requirements.scm.template requirements.scm
+	which csc
+	make clean
+	CSCOPTS="-C -fPIC" make
+fi
 
 cd $BUILDHOME
 export CSCLIBS=`echo $LD_LIBRARY_PATH | sed 's/:/ -L/g'`
-CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks -feature disable-iup-web iup
+IUPEGGVER='iup'
+if [[ $IUPVER == "3.5" ]]; then
+  IUPEGGVER='iup:1.2.1'
+fi
+
+#CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks -feature disable-iup-web iup
+CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL $PROX -D no-library-checks -feature disable-iup-web $IUPEGGVER
+
 # CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks -feature disable-iup-web -deploy -prefix $DEPLOYTARG iup
 # iup:1.0.2 
-CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks canvas-draw
+CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL $PROX -D no-library-checks canvas-draw
 # CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
 
-# NB// Removed bunch of zmq compiling tricks. Look at older versions of this file if you need to recreate...
-
 cd $BUILDHOME  
-
-# git clone https://bitbucket.org/DerGuteMoritz/zmq/commits/branch/3.2 zmq-3.2
-# cd zmq-3.2
-# chicken-install
-#
-# cd $BUILDHOME
-
-## WEBKIT=WebKit-r131972
-## if  ! [[ -e ${WEBKIT}.tar.bz2 ]] ; then
-##    #    http://builds.nightly.webkit.org/files/trunk/src/WebKit-r131972.tar.bz2
-##    wget http://builds.nightly.webkit.org/files/trunk/src/${WEBKIT}.tar.bz2
-## fi
-## 
-## if [[ x$only_it_worked == $I_wish ]] ;then
-##    if [[ -e ${WEBKIT}.tar.bz2 ]] ; then
-##       tar xfj ${WEBKIT}.tar.bz2
-##       cd $WEBKIT
-##       ./autogen.sh
-##       ./configure --prefix=$PREFIX
-##       make
-##       make install
-##    fi
-## fi
-## 
-## cd $BUILHOME
-
-# export CD_REL=d704525ebe1c6d08
-# if ! [[ -e  Canvas_Draw-$CD_REL.zip ]]; then
-#     wget http://www.kiatoa.com/matt/iup/Canvas_Draw-$CD_REL.zip
-# fi
-# 
-# unzip -o Canvas_Draw-$CD_REL.zip
-# 
-# cd "Canvas Draw-$CD_REL/chicken"
-# CSC_OPTIONS="-I$PREFIX/include -L$LIBPATH" $CHICKEN_INSTALL $PROX -D no-library-checks
 
 echo You may need to add $LD_LIBRARY_PATH to your LD_LIBRARY_PATH variable, a setup-chicken4x.sh 
 echo file can be found in the current directory which should work for setting up to run chicken4x
 
 echo Testing iup
 $PREFIX/bin/csi -b -eval '(use iup)(print "Success")'
+
+

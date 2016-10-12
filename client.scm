@@ -169,13 +169,16 @@
 		     (port      (tasks:hostinfo-get-port      server-dat))
 		     (start-res (case *transport-type*
 				  ((http)(http-transport:client-connect iface port))
-				  ((nmsg)(nmsg-transport:client-connect hostname port))))
+				  ;;((nmsg)(nmsg-transport:client-connect hostname port))
+                                  ))
 		     (ping-res  (case *transport-type* 
 				  ((http)(rmt:login-no-auto-client-setup start-res run-id))
-				  ((nmsg)(let ((logininfo (rmt:login-no-auto-client-setup start-res run-id)))
- 					   (if logininfo
- 					       (car (vector-ref logininfo 1))
- 					       #f))))))
+				  ;; ((nmsg)(let ((logininfo (rmt:login-no-auto-client-setup start-res run-id)))
+ 				  ;;          (if logininfo
+ 				  ;;              (car (vector-ref logininfo 1))
+ 				  ;;              #f)))
+
+                                  )))
 		(if (and start-res
 			 ping-res)
 		    (begin
