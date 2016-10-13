@@ -1258,7 +1258,8 @@ Misc
       (dboard:commondat-add-updater 
        commondat 
        (lambda ()
-	 (dashboard:update-tree-selector tabdat))
+         (if (dashboard:database-changed? commondat tabdat context-key: 'run-control)
+             (dashboard:update-tree-selector tabdat)))
        tab-num: tab-num)
       result)))
 
@@ -1605,16 +1606,12 @@ Misc
                    (numcols      1)
                    (changed      #f)
                    )
-
-              
-
-              
               
               (dboard:tabdat-filters-changed-set! tabdat #f)
               (let loop ((pass-num 0)
                          (changed  #f))
                 ;; Update the runs tree
-                (dboard:update-tree tabdat runs-hash runs-header tb)
+                ;; (dboard:update-tree tabdat runs-hash runs-header tb)
                 
                 (if (eq? pass-num 1)
                     (begin ;; big reset
