@@ -1265,7 +1265,8 @@ Misc
       (dboard:commondat-add-updater 
        commondat 
        (lambda ()
-	 (dashboard:update-tree-selector tabdat))
+         (if (dashboard:database-changed? commondat tabdat context-key: 'run-control)
+             (dashboard:update-tree-selector tabdat)))
        tab-num: tab-num)
       result)))
 
@@ -1429,28 +1430,41 @@ Misc
                            (lambda (obj row col status)
                              (let*
                                  ((graph-cell (conc row ":" col))
-                                 (graph-dat   (hash-table-ref graph-cell-table graph-cell))
+                                 (graph-dat   (hash-table-ref/default graph-cell-table graph-cell #f))
                                  (graph-flag  (dboard:graph-dat-flag graph-dat)))
                                (if graph-flag
                                    (dboard:graph-dat-flag-set! graph-dat #f)
                                    (dboard:graph-dat-flag-set! graph-dat #t))
                                (print "Toggling graph, need to work on updaters")
-                               (if (not (dboard:tabdat-running-layout tabdat))
-						     (begin
-						       (dashboard:run-times-tab-run-data-updater commondat tabdat tab-num)
-						       (dboard:tabdat-last-data-update-set! tabdat (current-seconds))
-						       (thread-start! (make-thread
-								       (lambda ()
-									 (dboard:tabdat-running-layout-set! tabdat #t)
-									 (dashboard:run-times-tab-layout-updater commondat tabdat tab-num)
-									 (dboard:tabdat-running-layout-set! tabdat #f))
-								       "run-times-tab-layout-updater"))))
-                               ;;(dboard:tabdat-view-changed-set! tabdat #t)
+                               ;; (if (not (dboard:tabdat-running-layout tabdat))
+			       ;;  		     (begin
+			       ;;  		       (dashboard:run-times-tab-run-data-updater commondat tabdat tab-num)
+			       ;;  		       (dboard:tabdat-last-data-update-set! tabdat (current-seconds))
+			       ;;  		       (thread-start! (make-thread
+			       ;;  				       (lambda ()
+			       ;;  					 (dboard:tabdat-running-layout-set! tabdat #t)
+			       ;;  					 (dashboard:run-times-tab-layout-updater commondat tabdat tab-num)
+			       ;;  					 (dboard:tabdat-running-layout-set! tabdat #f))
+			       ;;  				       "run-times-tab-layout-updater"))))
+                               (dboard:tabdat-view-changed-set! tabdat #t)
                                )))))
         (dboard:tabdat-graph-matrix-set! tabdat graph-matrix)
         (iup:attribute-set! graph-matrix "WIDTH0" 0)
         (iup:attribute-set! graph-matrix "HEIGHT0" 0)
         graph-matrix))
+      (iup:hbox
+       (iup:vbox
+        (iup:button "Show All" #:action (lambda (obj)
+                                          (for-each (lambda (graph-cell)
+                                                      (let* ((graph-dat   (hash-table-ref (dboard:tabdat-graph-cell-table tabdat) graph-cell)))
+                                                        (dboard:graph-dat-flag-set! graph-dat #t)))
+                                                    (hash-table-keys (dboard:tabdat-graph-cell-table tabdat))))))
+       (iup:hbox
+        (iup:button "Hide All" #:action (lambda (obj)
+                                          (for-each (lambda (graph-cell)
+                                                      (let* ((graph-dat   (hash-table-ref (dboard:tabdat-graph-cell-table tabdat) graph-cell)))
+                                                        (dboard:graph-dat-flag-set! graph-dat #f)))
+                                                    (hash-table-keys (dboard:tabdat-graph-cell-table tabdat)))))))
       ))))
 
 ;;======================================================================
@@ -1621,16 +1635,12 @@ Misc
                    (numcols      1)
                    (changed      #f)
                    )
-
-              
-
-              
               
               (dboard:tabdat-filters-changed-set! tabdat #f)
               (let loop ((pass-num 0)
                          (changed  #f))
                 ;; Update the runs tree
-                (dboard:update-tree tabdat runs-hash runs-header tb)
+                ;; (dboard:update-tree tabdat runs-hash runs-header tb)
                 
                 (if (eq? pass-num 1)
                     (begin ;; big reset
@@ -2437,7 +2447,7 @@ Misc
 					 ))
 				   (if (eq? pressed 0)
 				       (let* ((toolpath (car (argv)))
-					      (buttndat (hash-table-ref (dboard:tabdat-buttondat runs-dat) button-key))
+					      (buttndat (hash-table-ref (dboard:tabdat-buttondatiup runs-dat) button-key))
 					      (test-id  (db:test-get-id (vector-ref buttndat 3)))
 					      (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
 					      (cmd  (conc toolpath " -test " run-id "," test-id "&")))
@@ -2806,6 +2816,7 @@ Misc
 	(vch (dboard:tabdat-view-changed tabdat)))
     (if (and cnv dwg vch)
 	(begin
+          (print "RA => Canvas updater triggered")
 	  (vg:drawing-xoff-set! dwg (dboard:tabdat-xadj tabdat))
 	  (vg:drawing-yoff-set! dwg (dboard:tabdat-yadj tabdat))
 	  (mutex-lock! mtx)
@@ -2942,7 +2953,7 @@ Misc
                                (graph-matrix-row (dboard:tabdat-graph-matrix-row tabdat))
                                (graph-cell       (conc graph-matrix-row ":" graph-matrix-col)) 
                                (graph-dat (make-dboard:graph-dat
-                                                  id: fieldn
+                                                  flag: #f
                                                   color: graph-color
                                                   flag: #t
                                                   cell: graph-cell
@@ -3015,6 +3026,7 @@ Misc
   ;; each run is a component
   ;; all runs stored in runslib library
   (let escapeloop ((escape #f))
+    (print "RA=> Update layout is triggered")
     (if (and (not escape)
 	     tabdat)
 	(let* ((canvas-margin 10)
