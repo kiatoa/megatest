@@ -720,6 +720,70 @@
        tot-count)))
    (mutex-unlock! *db-sync-mutex*)))
 
+
+(define (db:patch-schema-rundb run-id frundb)
+  ;;
+  ;; remove this some time after September 2016 (added in version v1.6031
+  ;;
+  (for-each
+   (lambda (table-name)
+     (handle-exceptions
+      exn
+      (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
+          (debug:print 0 *default-log-port* "Column last_update already added to " table-name " table")
+          (db:general-sqlite-error-dump exn "alter table " table-name " ..." #f "none"))
+      (sqlite3:execute
+       frundb
+       (conc "ALTER TABLE " table-name " ADD COLUMN last_update INTEGER DEFAULT 0")))
+     (sqlite3:execute
+      frundb
+      (conc "DROP TRIGGER IF EXISTS update_" table-name "_trigger;"))
+     (sqlite3:execute
+      frundb
+      (conc "CREATE TRIGGER IF NOT EXISTS update_" table-name "_trigger AFTER UPDATE ON " table-name "
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE " table-name " SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;"))
+     )
+   '("tests" "test_steps" "test_data")))
+
+(define (db:patch-schema-maindb run-id maindb)
+  ;;
+  ;; remove all these some time after september 2016 (added in v1.6031
+  ;;
+  (handle-exceptions
+   exn
+   (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
+       (debug:print 0 *default-log-port* "Column last_update already added to runs table")
+       (db:general-sqlite-error-dump exn "alter table runs ..." run-id "none"))
+   (sqlite3:execute
+    maindb
+    "ALTER TABLE runs ADD COLUMN last_update INTEGER DEFAULT 0"))
+  ;; these schema changes don't need exception handling
+  (sqlite3:execute
+   maindb
+   "CREATE TRIGGER IF NOT EXISTS update_runs_trigger AFTER UPDATE ON runs
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE runs SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;")
+  (sqlite3:execute maindb "CREATE TABLE IF NOT EXISTS run_stats (
+                              id     INTEGER PRIMARY KEY,
+                              run_id INTEGER,
+                              state  TEXT,
+                              status TEXT,
+                              count  INTEGER,
+                              last_update INTEGER DEFAULT (strftime('%s','now')))")
+  (sqlite3:execute maindb "CREATE TRIGGER  IF NOT EXISTS update_run_stats_trigger AFTER UPDATE ON run_stats
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE run_stats SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;"))
+
 ;; options:
 ;;
 ;;  'killservers  - kills all servers
@@ -791,89 +855,53 @@
 	       (count       1)
 	       (total       (length all-run-ids))
 	       (dead-runs  '()))
-	  (for-each
-	   (lambda (run-id)
-	     (debug:print 0 *default-log-port* "Processing run " (if (eq? run-id 0) " main.db " run-id) ", " count " of " total)
-	     (set! count (+ count 1))
-	     (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
-		    (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
-	       ;; (db:delay-if-busy frundb)
-	       ;; (db:delay-if-busy mtdb)
-	       ;; (db:clean-up frundb)
-	       (if (eq? run-id 0)
-		   (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
-		     (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
-		     (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f)))
-		     ;; 
-		     ;; Feb 18, 2016: add field last_update to runs table
-		     ;;
-		     ;; remove all these some time after september 2016 (added in v1.6031
-		     ;;
-		     (handle-exceptions
-		      exn
-		      (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
-			  (debug:print 0 *default-log-port* "Column last_update already added to runs table")
-			  (db:general-sqlite-error-dump exn "alter table runs ..." run-id "none"))
-		      (sqlite3:execute
-		       maindb
-		       "ALTER TABLE runs ADD COLUMN last_update INTEGER DEFAULT 0"))
-		     ;; these schema changes don't need exception handling
-		     (sqlite3:execute
-		      maindb
-		      "CREATE TRIGGER IF NOT EXISTS update_runs_trigger AFTER UPDATE ON runs
-                             FOR EACH ROW
-                               BEGIN 
-                                 UPDATE runs SET last_update=(strftime('%s','now'))
-                                   WHERE id=old.id;
-                               END;")
-		     (sqlite3:execute maindb "CREATE TABLE IF NOT EXISTS run_stats (
-                              id     INTEGER PRIMARY KEY,
-                              run_id INTEGER,
-                              state  TEXT,
-                              status TEXT,
-                              count  INTEGER,
-                              last_update INTEGER DEFAULT (strftime('%s','now')))")
-		     (sqlite3:execute maindb "CREATE TRIGGER  IF NOT EXISTS update_run_stats_trigger AFTER UPDATE ON run_stats
-                             FOR EACH ROW
-                               BEGIN 
-                                 UPDATE run_stats SET last_update=(strftime('%s','now'))
-                                   WHERE id=old.id;
-                               END;")
-		     )
-		   (begin
-		     ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
-		     (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
-		     (db:clean-up-rundb (db:get-db fromdb run-id))
-		     ;;
-		     ;; Feb 18, 2016: add field last_update to tests, test_steps and test_data
-		     ;;
-		     ;; remove this some time after September 2016 (added in version v1.6031
-		     ;;
-		     (for-each
-		      (lambda (table-name)
-			(handle-exceptions
-			 exn
-			 (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
-			     (debug:print 0 *default-log-port* "Column last_update already added to " table-name " table")
-			     (db:general-sqlite-error-dump exn "alter table " table-name " ..." #f "none"))
-			 (sqlite3:execute
-			  frundb
-			  (conc "ALTER TABLE " table-name " ADD COLUMN last_update INTEGER DEFAULT 0")))
-			(sqlite3:execute
-			 frundb
-			 (conc "DROP TRIGGER IF EXISTS update_" table-name "_trigger;"))
-			(sqlite3:execute
-			 frundb
-			 (conc "CREATE TRIGGER IF NOT EXISTS update_" table-name "_trigger AFTER UPDATE ON " table-name "
-                             FOR EACH ROW
-                               BEGIN 
-                                 UPDATE " table-name " SET last_update=(strftime('%s','now'))
-                                   WHERE id=old.id;
-                               END;"))
-			)
-		      '("tests" "test_steps" "test_data"))))))
-	   all-run-ids)
-	  ;; removed deleted runs
+          ;; first fix schema if needed
+          (map
+           (lambda (th)
+             (thread-join! th))
+           (map
+            (lambda (run-id)
+              (thread-start! 
+               (make-thread
+                (lambda ()
+                  (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
+                         (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
+                    (if (eq? run-id 0)
+                        (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
+                          (db:patch-schema-maindb run-id maindb))
+                        (db:patch-schema-rundb run-id frundb)))
+                  (set! count (+ count 1))
+                  (debug:print 0 *default-log-port* "Finished patching schema for " (if (eq? run-id 0) " main.db " (conc run-id ".db")) ", " count " of " total)))))
+            all-run-ids))
+          ;; Then sync and fix db's
+          (set! count 0)
+          (process-fork
+           (lambda ()
+             (map
+              (lambda (th)
+                (thread-join! th))
+              (map
+               (lambda (run-id)
+                 (thread-start! 
+                  (make-thread
+                   (lambda ()
+                     (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
+                            (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
+                       (if (eq? run-id 0)
+                           (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
+                             (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
+                             (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f))))
+                           (begin
+                             ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
+                             (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
+                             (db:clean-up-rundb (db:get-db fromdb run-id)))))
+                     (set! count (+ count 1))
+                     (debug:print 0 *default-log-port* "Finished clean up of "
+                                  (if (eq? run-id 0)
+                                      " main.db " (conc run-id ".db")) ", " count " of " total)))))
+               all-run-ids))))
+
+          ;; removed deleted runs
 	  (let ((dbdir (tasks:get-task-db-path)))
 	    (for-each (lambda (run-id)
 			(let ((fullname (conc dbdir "/" run-id ".db")))
