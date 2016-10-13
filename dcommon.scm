@@ -509,7 +509,7 @@
   (let* ((stats-matrix (iup:matrix expand: "YES"))
 	 (changed      #f)
 	 (stats-updater (lambda ()
-			 (if (dashboard:database-changed? commondat tabdat)
+			 (if (dashboard:database-changed? commondat tabdat context-key: 'run-stats)
 			     (let* ((run-stats    (rmt:get-run-stats))
 				    (indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
 				    (row-indices  (car indices))
@@ -1051,7 +1051,7 @@
 					       (dashboard:update-run-command tabdat))))
 				       "command-runname-selector lb action"))))
 	  (refresh-runs-list (lambda ()
-			       (if (dashboard:database-changed? commondat tabdat)
+			       (if (dashboard:database-changed? commondat tabdat context-key: 'runname-selector-runs-list)
 				   (let* ((target        (dboard:tabdat-target-string tabdat))
 					  (runs-for-targ (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" target #f #f #f 0))
 					  (runs-header   (vector-ref runs-for-targ 0))
@@ -1064,7 +1064,7 @@
 				     (iuplistbox-fill-list lb run-names selected-item: default-run-name))))))
      ;; (dboard:tabdat-updater-for-runs-set! tabdat refresh-runs-list)
      (dboard:commondat-add-updater commondat refresh-runs-list tab-num: tab-num)
-     (refresh-runs-list)
+     ;; (refresh-runs-list)
      (dboard:tabdat-run-name-set! tabdat default-run-name)
      (iup:hbox
       tb

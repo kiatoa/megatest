@@ -246,7 +246,7 @@ Misc
   (dbdir               #f)
   (dbfpath             #f)
   (dbkeys              #f)
-  ((last-db-update     0)                : number)      ;; last db file timestamp
+  ((last-db-update     (make-hash-table)) : hash-table) ;; last db file timestamp
   (monitor-db-path     #f)                              ;; where to find monitor.db
   ro                                                    ;; is the database read-only?
 
@@ -971,9 +971,10 @@ Misc
   (dboard:tabdat-filters-changed-set! tabdat #t)
   (set-bg-on-filter commondat tabdat))
 
+;; force ALL updates to zero (effectively)
+;;
 (define (mark-for-update tabdat)
-  ;; (dboard:tabdat-filters-changed-set! tabdat #t)
-  (dboard:tabdat-last-db-update-set! tabdat 0))
+  (dboard:tabdat-last-db-update-set! tabdat (make-hash-table)))
 
 ;;======================================================================
 ;; R U N C O N T R O L
@@ -1569,7 +1570,7 @@ Misc
          
 
 (define (dashboard:runs-summary-updater commondat tabdat tb cell-lookup run-matrix)
-  (if (dashboard:database-changed? commondat tabdat)
+  (if (dashboard:database-changed? commondat tabdat context-key: 'runs-summary-rundat)
       (dashboard:do-update-rundat tabdat))
   (dboard:runs-summary-control-panel-updater tabdat)
   (let* ((last-runs-update  (dboard:tabdat-last-runs-update tabdat))
@@ -1584,8 +1585,8 @@ Misc
 	 ;;        		   runs)
 	 ;;        	 ht))
          )
-    (if (dashboard:database-changed? commondat tabdat)
-      (dboard:update-tree tabdat runs-hash runs-header tb))
+    (if (dashboard:database-changed? commondat tabdat context-key: 'runs-summary-tree)
+        (dboard:update-tree tabdat runs-hash runs-header tb))
     (if run-id
         (let* ((matrix-content
                 (case (dboard:tabdat-runs-summary-mode tabdat) 
@@ -1966,7 +1967,7 @@ Misc
 	 (runs-summary-updater  
           (lambda ()
 	    (mutex-lock! update-mutex)
-            (if  (or (dashboard:database-changed? commondat tabdat)
+            (if  (or (dashboard:database-changed? commondat tabdat context-key: 'runs-summary-updater)
                      (dboard:tabdat-view-changed tabdat))
                  (debug:catch-and-dump
                   (lambda () ;; check that run-matrix is initialized before calling the updater
@@ -2576,13 +2577,21 @@ Misc
 	  #t)
 	#f)))
 
-(define (dashboard:database-changed? commondat tabdat)
+(define (dboard:get-last-db-update tabdat context)
+  (hash-table-ref/default (dboard:tabdat-last-db-update tabdat) context 0))
+
+(define (dboard:set-last-db-update! tabdat context newtime)
+  (hash-table-set! (dboard:tabdat-last-db-update tabdat) context newtime))
+
+(define (dashboard:database-changed? commondat tabdat #!key (context-key 'default))
   (let* ((run-update-time (current-seconds))
 	 (modtime         (dashboard:get-youngest-run-db-mod-time tabdat)) ;; NOTE: ensure this is tabdat!! 
 	 (recalc          (dashboard:recalc modtime 
 					    (dboard:commondat-please-update commondat) 
-					    (dboard:tabdat-last-db-update tabdat))))
-    (if recalc (dboard:tabdat-last-db-update-set! tabdat run-update-time))
+                                            (dboard:get-last-db-update tabdat context-key))))
+					    ;; (dboard:tabdat-last-db-update tabdat))))
+    (if recalc 
+        (dboard:set-last-db-update! tabdat context-key run-update-time))
     (dboard:commondat-please-update-set! commondat #f)
     recalc))
 
@@ -2743,9 +2752,11 @@ Misc
 					    (make-list num-keys "%"))
 				    num-keys)
 			      ))
-	       (runpatt   (if (dboard:tabdat-target tabdat)
-			     (last (dboard:tabdat-target tabdat))
-			     "%"))
+	       (runpatt   (if (and (dboard:tabdat-target tabdat)
+                                   (list? (dboard:tabdat-target tabdat))
+                                   (not (null? (dboard:tabdat-target tabdat))))
+                              (last (dboard:tabdat-target tabdat))
+                              "%"))
 	       (testpatt  (or (dboard:tabdat-test-patts tabdat) "%"))
 	       (filtrstr  (conc targpatt "/" runpatt "/" testpatt)))
 	  ;; (print "targpatt: " targpatt " runpatt: " runpatt " testpatt: " testpatt)
