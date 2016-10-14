@@ -65,7 +65,7 @@ megatest.o : megatest-fossil-hash.scm
 client.scm common.scm configf.scm dashboard-guimonitor.scm dashboard-tests.scm dashboard.scm db.scm dcommon.scm ezsteps.scm fs-transport.scm http-transport.scm index-tree.scm items.scm keys.scm launch.scm megatest.scm monitor.scm mt.scm newdashboard.scm runconfig.scm runs.scm server.scm tdb.scm tests.scm tree.scm : common_records.scm rpc-transport.scm
 common_records.scm : altdb.scm
 vg.o dashboard.o : vg_records.scm
-
+dcommon.o : run_records.scm
 # Temporary while transitioning to new routine
 # runs.o : run-tests-queue-classic.scm  run-tests-queue-new.scm
 
