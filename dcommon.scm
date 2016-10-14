@@ -26,6 +26,7 @@
 (include "common_records.scm")
 (include "db_records.scm")
 (include "key_records.scm")
+(include "run_records.scm")
 
 ;; yes, this is non-ideal 
 (define dashboard:update-summary-tab #f)
@@ -261,6 +262,41 @@
     ;; (debug:print 2 *default-log-port* "run-changes: " run-changes)
     ;; (debug:print 2 *default-log-port* "test-changes: " test-changes)
     (list run-changes all-test-changes)))
+
+(define (dcommon:runsdat-get-col-num dat target runname force-set)
+  (let* ((runs-index (dboard:runsdat-runs-index dat))
+	 (col-name   (conc target "/" runname))
+	 (res        (hash-table-ref/default runs-index col-name #f)))
+    (if res
+	res
+	(if force-set
+	    (let ((max-col-num (+ 1 (apply max -1 (hash-table-values runs-index)))))
+	      (hash-table-set! runs-index col-name max-col-num)
+	      max-col-num)))))
+
+(define (dcommon:runsdat-get-row-num dat testname itempath force-set)
+  (let* ((tests-index (dboard:runsdat-runs-index dat))
+	 (row-name    (conc testname "/" itempath))
+	 (res         (hash-table-ref/default runs-index row-name #f)))
+    (if res
+	res
+	(if force-set
+	    (let ((max-row-num (+ 1 (apply max -1 (hash-table-values tests-index)))))
+	      (hash-table-set! runs-index row-name max-row-num)
+	      max-row-num)))))
+
+(define (dcommon:rundat-copy-tests-to-by-name rundat)
+  (let ((src-ht (dboard:rundat-tests rundat))
+	(trg-ht (dboard:rundat-tests-by-name rundat)))
+    (if (and (hash-table? src-ht)(hash-table? trg-ht))
+	(begin
+	  (hash-table-clear! trg-ht)
+	  (for-each
+	   (lambda (testdat)
+	     (hash-table-set! trg-ht (test:test-get-fullname testdat) testdat))
+	   (hash-table-values src-ht)))
+	(debug:print 0 *default-log-port* "WARNING: src-ht " src-ht " trg-ht " trg-ht))))
+  
 
 ;;======================================================================
 ;; TESTS DATA

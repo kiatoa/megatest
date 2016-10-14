@@ -143,6 +143,7 @@ Misc
    tabdat))
 
 ;; gets and calls updater list based on curr-tab-num
+;;
 (define (dboard:common-run-curr-updaters commondat #!key (tab-num #f))
   (if (dboard:common-get-tabdat commondat tab-num: tab-num) ;; only update if there is a tabdat
       (let* ((tnum     (or tab-num (dboard:commondat-curr-tab-num commondat)))
@@ -351,51 +352,17 @@ Misc
    key-vals: key-vals 
    )) 
 
-(define (dboard:rundat-copy-tests-to-by-name rundat)
-  (let ((src-ht (dboard:rundat-tests rundat))
-	(trg-ht (dboard:rundat-tests-by-name rundat)))
-    (if (and (hash-table? src-ht)(hash-table? trg-ht))
-	(begin
-	  (hash-table-clear! trg-ht)
-	  (for-each
-	   (lambda (testdat)
-	     (hash-table-set! trg-ht (test:test-get-fullname testdat) testdat))
-	   (hash-table-values src-ht)))
-	(debug:print 0 *default-log-port* "WARNING: src-ht " src-ht " trg-ht " trg-ht))))
-  
 (defstruct dboard:testdat
   id       ;; testid
   state    ;; test state
   status   ;; test status
   )
 
-(define (dboard:runsdat-get-col-num dat target runname force-set)
-  (let* ((runs-index (dboard:runsdat-runs-index dat))
-	 (col-name   (conc target "/" runname))
-	 (res        (hash-table-ref/default runs-index col-name #f)))
-    (if res
-	res
-	(if force-set
-	    (let ((max-col-num (+ 1 (apply max -1 (hash-table-values runs-index)))))
-	      (hash-table-set! runs-index col-name max-col-num)
-	      max-col-num)))))
-
-(define (dboard:runsdat-get-row-num dat testname itempath force-set)
-  (let* ((tests-index (dboard:runsdat-runs-index dat))
-	 (row-name    (conc testname "/" itempath))
-	 (res         (hash-table-ref/default runs-index row-name #f)))
-    (if res
-	res
-	(if force-set
-	    (let ((max-row-num (+ 1 (apply max -1 (hash-table-values tests-index)))))
-	      (hash-table-set! runs-index row-name max-row-num)
-	      max-row-num)))))
-
 ;; default is to NOT set the cell if the column and row names are not pre-existing
 ;;
 (define (dboard:runsdat-set-test-cell dat target runname testname itempath test-id state status #!key (force-set #f))
-  (let* ((col-num  (dboard:runsdat-get-col-num dat target runname force-set))
-	 (row-num  (dboard:runsdat-get-row-num dat testname itempath force-set)))
+  (let* ((col-num  (dcommon:runsdat-get-col-num dat target runname force-set))
+	 (row-num  (dcommon:runsdat-get-row-num dat testname itempath force-set)))
     (if (and row-num col-num)
 	(let ((tdat (dboard:testdat 
 		     id: test-id
@@ -852,7 +819,7 @@ Misc
        (if rundat
 	   (let* ((testdats  (dboard:rundat-tests rundat))
 		  (testnames (map test:test-get-fullname (hash-table-values testdats))))
-	     (dboard:rundat-copy-tests-to-by-name rundat)
+	     (dcommon:rundat-copy-tests-to-by-name rundat)
 	     ;; for the normalized list of testnames (union of all runs)
 	     (if (not (and (dboard:tabdat-hide-empty-runs tabdat)
 			   (null? testnames)))
@@ -3257,95 +3224,33 @@ Misc
 		)))
 	(debug:print 2 *default-log-port* "no tabdat for run-times-tab-updater"))))
 
-(define (tabdat-values tabdat)
-  (let ((allruns (dboard:tabdat-allruns tabdat))
-        (allruns-by-id (dboard:tabdat-allruns-by-id tabdat))
-        (done-runs (dboard:tabdat-done-runs tabdat))
-        (not-done-runs (dboard:tabdat-not-done-runs tabdat))
-        (header  (dboard:tabdat-header  tabdat))
-        (keys (dboard:tabdat-keys tabdat))
-        (numruns (dboard:tabdat-numruns tabdat))
-        (tot-runs (dboard:tabdat-tot-runs tabdat))
-        (last-data-update (dboard:tabdat-last-data-update tabdat))
-        (runs-mutex (dboard:tabdat-runs-mutex tabdat))
-        (run-update-times (dboard:tabdat-run-update-times tabdat))
-        (last-test-dat (dboard:tabdat-last-test-dat tabdat))
-        (run-db-paths (dboard:tabdat-run-db-paths tabdat))
-        (buttondat (dboard:tabdat-buttondat tabdat))
-        (item-test-names (dboard:tabdat-item-test-names tabdat))
-        (run-keys (dboard:tabdat-run-keys tabdat))
-        (start-run-offset (dboard:tabdat-start-run-offset tabdat))
-        (start-test-offset (dboard:tabdat-start-test-offset tabdat))
-        (runs-btn-height (dboard:tabdat-runs-btn-height tabdat))
-        (all-test-names (dboard:tabdat-all-test-names tabdat))
-        (cnv (dboard:tabdat-cnv tabdat))
-        (command (dboard:tabdat-command tabdat))
-        (run-name (dboard:tabdat-run-name tabdat))
-        (states (dboard:tabdat-states tabdat))
-        (statuses (dboard:tabdat-statuses tabdat))
-        (curr-run-id (dboard:tabdat-curr-run-id tabdat))
-        (curr-test-ids (dboard:tabdat-curr-test-ids tabdat))
-        (state-ignore-hash (dboard:tabdat-state-ignore-hash tabdat))
-        (test-patts (dboard:tabdat-test-patts tabdat))
-        (target (dboard:tabdat-target tabdat))
-        (dbdir (dboard:tabdat-dbdir tabdat))
-        (monitor-db-path (dboard:tabdat-monitor-db-path tabdat))
-        (path-run-ids (dboard:tabdat-path-run-ids tabdat)))
-        (print "allruns is : " allruns)
-        (print "allruns-by-id is : " allruns-by-id)
-        (print "done-runs is : " done-runs)
-        (print "not-done-runs is : " not-done-runs)
-        (print "header  is : " header )
-        (print "keys is : " keys)
-        (print "numruns is : " numruns)
-        (print "tot-runs is : " tot-runs)
-        (print "last-data-update is : " last-data-update)
-        (print "runs-mutex is : " runs-mutex)
-        (print "run-update-times is : " run-update-times)
-        (print "last-test-dat is : " last-test-dat)
-        (print "run-db-paths is : " run-db-paths)
-        (print "buttondat is : " buttondat)
-        (print "item-test-names is : " item-test-names)
-        (print "run-keys is : " run-keys)
-        (print "start-run-offset is : " start-run-offset)
-        (print "start-test-offset is : " start-test-offset)
-        (print "runs-btn-height is : " runs-btn-height)
-        (print "all-test-names is : " all-test-names)
-        (print "cnv is : " cnv)
-        (print "command is : " command)
-        (print "run-name is : " run-name)
-        (print "states is : " states)
-        (print "statuses is : " statuses)
-        (print "curr-run-id is : " curr-run-id)
-        (print "curr-test-ids is : " curr-test-ids)
-        (print "state-ignore-hash is : " state-ignore-hash)
-        (print "test-patts is : " test-patts)
-        (print "target is : " target)
-        (print "dbdir is : " dbdir)
-        (print "monitor-db-path is : " monitor-db-path)
-        (print "path-run-ids is : " path-run-ids)))
+;; handy trick for printing a record
+;;
+;;   (pp (dboard:tabdat->alist tabdat))
+;; 
+;;  removing the tabdat-values proc 
+;;
+;; (define (tabdat-values tabdat)
 
+;; runs update-rundat using the various filters from the gui
+;;
 (define (dashboard:do-update-rundat tabdat)
   (update-rundat
    tabdat
    (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%")
    (dboard:tabdat-numruns tabdat)
    (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
-   ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "item-name" "%")
    (let* ((dbkeys (dboard:tabdat-dbkeys tabdat)))
-     ;; (print "dbkeys: " dbkeys)
      (let ((fres   (if (dboard:tabdat-target tabdat)
                        (let ((ptparts (append (dboard:tabdat-target tabdat)(make-list (length dbkeys) "%"))))
                          (map (lambda (k v)(list k v)) dbkeys ptparts))
                        (let ((res '()))
-                         ;; (print "target: " (dboard:tabdat-target tabdat))
                          (for-each (lambda (key)
                                      (if (not (equal? key "runname"))
                                          (let ((val (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) key #f)))
                                            (if val (set! res (cons (list key val) res))))))
                                    dbkeys)
                          res))))
-       ;; (debug:print 0 *default-log-port* "fres: " fres)
        fres))))
 
 (define (dashboard:runs-tab-updater commondat tab-num)
@@ -3355,20 +3260,13 @@ Misc
 	    (dbkeys (dboard:tabdat-dbkeys tabdat)))
        ;;(print "RA => calling runs-tab-updater with commondat " commondat " tab-num " tab-num)
        ;;(tabdat-values tabdat) ;;RA added 
+       ;; (pp (dboard:tabdat->alist tabdat))
        (dashboard:do-update-rundat tabdat)
        (let ((uidat (dboard:commondat-uidat commondat)))
          ;;(print "RA => Calling update-buttons with tabdat : " tabdat " uidat " uidat)
 	 (update-buttons tabdat uidat (dboard:tabdat-numruns tabdat) (dboard:tabdat-num-tests tabdat)))
        ))
    "dashboard:runs-tab-updater"))
-
-;; ((2)
-;;  (dashboard:update-run-summary-tab))
-;; ((3)
-;;  (dashboard:update-new-view-tab))
-;; (else
-;;  (dboard:common-run-curr-updater commondat)))
-;; (set! *last-recalc-ended-time* (current-milliseconds))))))))
 
 ;;======================================================================
 ;; The heavy lifting starts here
@@ -3380,11 +3278,6 @@ Misc
 	     (file-write-access? mtdb-path))
 	(if (not (args:get-arg "-skip-version-check"))
             (common:exit-on-version-changed)))
-	;; (let ((th1 (make-thread common:exit-on-version-changed)))
-	;;   (thread-start! th1)
-	;;   (if (> megatest-version (common:get-last-run-version-number))
-	;;       (debug:print-info 0 *default-log-port* "Version bump detected, blocking until db sync complete")
-	;;       (thread-join! th1)))))
     (let* ((commondat       (dboard:commondat-make)))
       ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
       (cond 
@@ -3406,18 +3299,6 @@ Misc
        ;;  (gui-monitor (dboard:tabdat-dblocal tabdat)))
        (else
 	(dboard:commondat-uidat-set! commondat (make-dashboard-buttons commondat)) ;; (dboard:tabdat-dblocal data)
-	;; (dboard:tabdat-numruns tabdat)
-	;; (dboard:tabdat-num-tests tabdat)
-	;; (dboard:tabdat-dbkeys tabdat)
-	;; runs-sum-dat new-view-dat))
-	;; legacy setup of updaters for summary tab and runs tab
-	;; summary tab
-	;; (dboard:commondat-add-updater 
-	;;  commondat 
-	;;  (lambda ()
-	;; 	 (dashboard:summary-tab-updater commondat 0))
-	;;  tab-num: 0)
-	;; runs tab
 	(dboard:commondat-curr-tab-num-set! commondat 0)
 	(dboard:commondat-add-updater 
 	 commondat 
@@ -3445,11 +3326,8 @@ Misc
       (let ((th1 (make-thread (lambda ()
 				(thread-sleep! 1)
 				(dboard:common-run-curr-updaters commondat 0) ;; force update of summary tab 
-				;; (dboard:commondat-please-update-set! commondat #t) ;; MRW: ww36.3 - why was please update set true here? Removing it for now.
-				;; (dashboard:run-update commondat)
 				) "update buttons once"))
 	    (th2 (make-thread iup:main-loop "Main loop")))
-	;; (thread-start! th1)
 	(thread-start! th2)
 	(thread-join! th2)))))
 
