@@ -211,12 +211,12 @@ Misc
   ((compact-layout    #t)                : boolean)
 
   ;; Run times layout
-  (graph-button-box #f)
+  ;; (graph-button-box #f) ;; RA => Think it is not referenced anywhere
   (graph-matrix     #f)
-  ((graph-matrix-table (make-hash-table)) : hash-table)
+  ((graph-matrix-table (make-hash-table)) : hash-table) ;; graph-dats referenced thru graph name info
+  ((graph-cell-table (make-hash-table)) : hash-table) ;; graph-dats referenced thru matrix cell info
   ((graph-matrix-row 1) : number)
   ((graph-matrix-col 1) : number)
-  ;; ((graph-button-dat (make-hash-table)) : hash-table) ;;RA=> Deprecating buttons as of now
 
   ;; Controls used to launch runs etc.
   ((command          "")                 : string)      ;; for run control this is the command being built up
@@ -278,7 +278,7 @@ Misc
     (if (list? targ)(string-intersperse targ "/") "no-target-specified")))
 
 (define (dboard:tabdat-test-patts-use vec)    
-  (let ((val (dboard:tabdat-test-patts vec)))(if val val "")))
+  (let ((val (dboard:tabdat-test-patts vec)))(if val val ""))) ;;RADT => What is the if for?
 
 ;; additional setters for dboard:data
 (define (dboard:tabdat-test-patts-set!-use    vec val)
@@ -302,6 +302,14 @@ Misc
   (dboard:tabdat-dbkeys-set! tabdat (append (dboard:tabdat-keys tabdat) (list "runname")))
   (dboard:tabdat-tot-runs-set! tabdat (rmt:get-num-runs "%"))
   )
+
+;; RADT => Matrix defstruct addition
+(defstruct dboard:graph-dat
+    ((id           #f) : string)
+    ((color        #f) : vector)
+    ((flag         #t) : boolean)
+    ((cell         #f) : number)
+    )
 
 ;; data for runs, tests etc. was used in run summary?
 ;;
@@ -1409,33 +1417,42 @@ Misc
 		       )))
 	cnv-obj)
       (let* ((hb1 (iup:hbox))
-             (graph-matrix-table (dboard:tabdat-graph-matrix-table tabdat))
-             (curr-column-num 0)
+             (graph-cell-table (dboard:tabdat-graph-cell-table tabdat))
+             (changed #f)
              (graph-matrix (iup:matrix
                            #:alignment1 "ALEFT"
                            #:expand "YES" ;; "HORIZONTAL"
+                           #:scrollbar "YES"
                            #:numcol 10
                            #:numlin 20
-                           #:numcol-visible (min 10)
-                           #:numlin-visible 1)))
+                           #:numcol-visible (min 8)
+                           #:numlin-visible 1
+                           #:click-cb
+                           (lambda (obj row col status)
+                             (let*
+                                 ((graph-cell (conc row ":" col))
+                                 (graph-dat   (hash-table-ref graph-cell-table graph-cell))
+                                 (graph-flag  (dboard:graph-dat-flag graph-dat)))
+                               (if graph-flag
+                                   (dboard:graph-dat-flag-set! graph-dat #f)
+                                   (dboard:graph-dat-flag-set! graph-dat #t))
+                               (print "Toggling graph, need to work on updaters")
+                               (if (not (dboard:tabdat-running-layout tabdat))
+						     (begin
+						       (dashboard:run-times-tab-run-data-updater commondat tabdat tab-num)
+						       (dboard:tabdat-last-data-update-set! tabdat (current-seconds))
+						       (thread-start! (make-thread
+								       (lambda ()
+									 (dboard:tabdat-running-layout-set! tabdat #t)
+									 (dashboard:run-times-tab-layout-updater commondat tabdat tab-num)
+									 (dboard:tabdat-running-layout-set! tabdat #f))
+								       "run-times-tab-layout-updater"))))
+                               ;;(dboard:tabdat-view-changed-set! tabdat #t)
+                               )))))
         (dboard:tabdat-graph-matrix-set! tabdat graph-matrix)
         (iup:attribute-set! graph-matrix "WIDTH0" 0)
         (iup:attribute-set! graph-matrix "HEIGHT0" 0)
         graph-matrix))
-        ;;(hash-table-set! graph-matrix-table 'graph1 "color1")
-        ;;(hash-table-set! graph-matrix-table 'graph2 "color2")
-        ;; (for-each
-        ;;  (lambda (name-key)
-        ;;    (print "hash-table-key : " name-key)
-        ;;    (iup:attribute-set! graph-matrix (conc "0:" curr-column-num) name-key)
-        ;;    ;; set the color to the value of mame-key in the table
-        ;;    (set! curr-column-num (+ 1 curr-column-num)))
-        ;;  (hash-table-keys graph-matrix-table))
-        ;; (iup:split
-        ;;  #:orientation "HORIZONTAL" ;; "HORIZONTAL"
-        ;;  #:value 50
-        ;;  (iup:label "Graph")
-        ;;  graph-matrix))
       ))))
 
 ;;======================================================================
@@ -2879,6 +2896,7 @@ Misc
 	 (stdcolor (vg:rgb->number 120 130 140))
 	 (delta-y  (- uly lly))
          (graph-matrix-table (dboard:tabdat-graph-matrix-table tabdat))
+         (graph-cell-table (dboard:tabdat-graph-cell-table tabdat))
          (graph-matrix (dboard:tabdat-graph-matrix tabdat))
          (changed      #f))
     (vg:add-obj-to-comp
@@ -2925,14 +2943,21 @@ Misc
                                                                 (values (reverse res) newmin newmax)
                                                                 (loop (car tal)(cdr tal) newres newmin newmax)))))))
                   (if (not (hash-table-exists? graph-matrix-table fieldn))
-                      ;;(print fieldn "exists")
                       (begin
                         (let* ((graph-color-rgb (vg:generate-color-rgb))
                                (graph-color (vg:iup-color->number graph-color-rgb))
                                (graph-matrix-col (dboard:tabdat-graph-matrix-col tabdat))
-                               (graph-matrix-row (dboard:tabdat-graph-matrix-row tabdat)))
-                          (hash-table-set! graph-matrix-table fieldn graph-color)
-                          (print "Graph data " graph-matrix-row " " graph-matrix-col " " fieldn " " graph-color " " graph-color-rgb)
+                               (graph-matrix-row (dboard:tabdat-graph-matrix-row tabdat))
+                               (graph-cell       (conc graph-matrix-row ":" graph-matrix-col)) 
+                               (graph-dat (make-dboard:graph-dat
+                                                  id: fieldn
+                                                  color: graph-color
+                                                  flag: #t
+                                                  cell: graph-cell
+                                                  )))
+                          (hash-table-set! graph-matrix-table fieldn graph-dat)
+                          (hash-table-set! graph-cell-table graph-cell graph-dat)
+                          (print "Graph data " graph-matrix-row " " graph-matrix-col " " fieldn " " graph-color " " graph-color-rgb " ")
                           (set! changed #t)
                           (iup:attribute-set! graph-matrix (conc graph-matrix-row ":"  graph-matrix-col) fieldn)
                           (iup:attribute-set! graph-matrix (conc "BGCOLOR" (conc graph-matrix-row ":"  graph-matrix-col)) graph-color-rgb)
@@ -2942,60 +2967,51 @@ Misc
                                 (dboard:tabdat-graph-matrix-row-set! tabdat (+ graph-matrix-row 1)))
                               (dboard:tabdat-graph-matrix-col-set! tabdat (+ graph-matrix-col 1)))
                           )))
-		  (if (not (null? vals))
+		  (if (not (null? vals)) 
 		      (let* (;; (maxval   (apply max vals))
 			     ;; (minval   (min 0 (apply min vals)))
-			     (yoff     (- minval lly)) ;;  minval))
-			     (deltaval (- maxval minval))
-			     (yscale   (/ delta-y (if (zero? deltaval) 1 deltaval)))
-			     (yfunc    (lambda (y)(+ lly (* yscale (- y minval))))) ;; (lambda (y)(* (+ y yoff) yscale))))
-                             (graph-color (hash-table-ref graph-matrix-table fieldn)))
-                        ;; set to hash-table value for fieldn
-			(vg:add-obj-to-comp
-			 cmp 
-			 (vg:make-text-obj (- llx 10)(yfunc maxval) (conc maxval)))
-			(vg:add-obj-to-comp
-			 cmp 
-			 (vg:make-text-obj (- llx 10)(yfunc minval) (conc minval)))
-			(fold 
-			 (lambda (next prev)  ;; #(time ? val) #(time ? val)
-			   (if prev
-			       (let* ((yval        (vector-ref prev 2))
-                                      (yval-next   (vector-ref next 2))
-				      (last-tval   (tfn   (vector-ref prev 0)))
-				      (last-yval   (yfunc yval)) ;; (+ lly (* yscale (vector-ref prev 2))))
-                                      (next-yval   (yfunc yval-next))
-				      (curr-tval   (tfn   (vector-ref next 0))))
-				 (if (>= curr-tval last-tval)
-                                     (begin
-                                       (vg:add-obj-to-comp
-                                        cmp 
-                                        ;;(vg:make-rect-obj last-tval lly curr-tval last-yval ;; (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
-                                        (vg:make-line-obj last-tval last-yval curr-tval last-yval
-                                                          line-color: graph-color))
-                                       (vg:add-obj-to-comp
-                                        cmp 
-                                        ;;(vg:make-rect-obj last-tval lly curr-tval last-yval ;; (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
-                                        (vg:make-line-obj curr-tval last-yval curr-tval next-yval
-                                                 line-color: graph-color)))         
-				     (print "ERROR: curr-tval is not > last-tval; curr-tval " curr-tval ", last-tval " last-tval))))
-			   next)
-			 ;; for init create vector tstart,0
-			 #f ;; (vector tstart minval minval)
-			 dat)
-			   
-			 ;; (for-each
-			;;  (lambda (dpt)
-			;;    (let* ((tval  (vector-ref dpt 0))
-			 ;; 	  (yval  (vector-ref dpt 2))
-			;; 	  (stval (tfn tval))
-			;; 	  (syval (yfunc yval)))
-			;;      (vg:add-obj-to-comp
-			;;       cmp 
-			;;       (vg:make-rect-obj (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
-			;; 			fill-color: stdcolor))))
-			;;  dat)
-			)))) ;; for each data point in the series
+			     (yoff        (- minval lly)) ;;  minval))
+			     (deltaval    (- maxval minval))
+			     (yscale      (/ delta-y (if (zero? deltaval) 1 deltaval)))
+			     (yfunc       (lambda (y)(+ lly (* yscale (- y minval))))) ;; (lambda (y)(* (+ y yoff) yscale))))
+                             (graph-dat   (hash-table-ref graph-matrix-table fieldn))
+                             (graph-color (dboard:graph-dat-color graph-dat))
+                             (graph-flag (dboard:graph-dat-flag graph-dat)))
+                        (print "Value of " fieldn "graph is " graph-flag)
+                        (if graph-flag
+                            (begin
+                              (vg:add-obj-to-comp
+                               cmp 
+                               (vg:make-text-obj (- llx 10)(yfunc maxval) (conc maxval)))
+                              (vg:add-obj-to-comp
+                               cmp 
+                               (vg:make-text-obj (- llx 10)(yfunc minval) (conc minval)))
+                              (fold 
+                               (lambda (next prev)  ;; #(time ? val) #(time ? val)
+                                 (if prev
+                                     (let* ((yval        (vector-ref prev 2))
+                                            (yval-next   (vector-ref next 2))
+                                            (last-tval   (tfn   (vector-ref prev 0)))
+                                            (last-yval   (yfunc yval)) ;; (+ lly (* yscale (vector-ref prev 2))))
+                                            (next-yval   (yfunc yval-next))
+                                            (curr-tval   (tfn   (vector-ref next 0))))
+                                       (if (>= curr-tval last-tval)
+                                           (begin
+                                             (vg:add-obj-to-comp
+                                              cmp 
+                                              ;;(vg:make-rect-obj last-tval lly curr-tval last-yval ;; (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
+                                              (vg:make-line-obj last-tval last-yval curr-tval last-yval
+                                                                line-color: graph-color))
+                                             (vg:add-obj-to-comp
+                                              cmp 
+                                              ;;(vg:make-rect-obj last-tval lly curr-tval last-yval ;; (- stval 2) lly (+ stval 2)(+ lly (* yval yscale))
+                                              (vg:make-line-obj curr-tval last-yval curr-tval next-yval
+                                                                line-color: graph-color)))         
+                                           (print "ERROR: curr-tval is not > last-tval; curr-tval " curr-tval ", last-tval " last-tval))))
+                                 next)
+                               #f ;; (vector tstart minval minval)
+                               dat)
+                              )))))) ;; for each data point in the series
 	      (hash-table-keys alldat)))))
      cfg)
     (if changed (iup:attribute-set! graph-matrix "REDRAW" "ALL"))))
