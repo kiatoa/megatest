@@ -1431,7 +1431,7 @@ Misc
                            (lambda (obj row col status)
                              (let*
                                  ((graph-cell (conc row ":" col))
-                                 (graph-dat   (hash-table-ref graph-cell-table graph-cell))
+                                 (graph-dat   (hash-table-ref/default graph-cell-table graph-cell #f))
                                  (graph-flag  (dboard:graph-dat-flag graph-dat)))
                                (if graph-flag
                                    (dboard:graph-dat-flag-set! graph-dat #f)
@@ -1453,6 +1453,19 @@ Misc
         (iup:attribute-set! graph-matrix "WIDTH0" 0)
         (iup:attribute-set! graph-matrix "HEIGHT0" 0)
         graph-matrix))
+      (iup:hbox
+       (iup:vbox
+        (iup:button "Show All" #:action (lambda (obj)
+                                          (for-each (lambda (graph-cell)
+                                                      (let* ((graph-dat   (hash-table-ref (dboard:tabdat-graph-cell-table tabdat) graph-cell)))
+                                                        (dboard:graph-dat-flag-set! graph-dat #t)))
+                                                    (hash-table-keys (dboard:tabdat-graph-cell-table tabdat))))))
+       (iup:hbox
+        (iup:button "Hide All" #:action (lambda (obj)
+                                          (for-each (lambda (graph-cell)
+                                                      (let* ((graph-dat   (hash-table-ref (dboard:tabdat-graph-cell-table tabdat) graph-cell)))
+                                                        (dboard:graph-dat-flag-set! graph-dat #f)))
+                                                    (hash-table-keys (dboard:tabdat-graph-cell-table tabdat)))))))
       ))))
 
 ;;======================================================================
