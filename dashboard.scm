@@ -221,7 +221,8 @@ Misc
 
   ;; Controls used to launch runs etc.
   ((command          "")                 : string)      ;; for run control this is the command being built up
-  (command-tb        #f)			         
+  (command-tb        #f)	                        ;; widget for the type of command; run, remove-runs etc.
+  (test-patterns-textbox #f)                            ;; text box widget for editing a list of test patterns
   (key-listboxes     #f)			         
   (key-lbs           #f)			         
   run-name                                              ;; from run name setting widget
@@ -1084,7 +1085,10 @@ Misc
   (let* ((cmd-tb       (dboard:tabdat-command-tb tabdat))
 	 (cmd          (dboard:tabdat-command    tabdat))
 	 (test-patt    (let ((tp (dboard:tabdat-test-patts tabdat)))
-			 (if (equal? tp "") "%" tp)))
+			 (if (or (not tp)
+                                 (equal? tp ""))
+                             "%"
+                             tp)))
 	 (states       (dboard:tabdat-states     tabdat))
 	 (statuses     (dboard:tabdat-statuses   tabdat))
 	 (target       (let ((targ-list (dboard:tabdat-target     tabdat)))
@@ -1189,6 +1193,8 @@ Misc
        (tree:add-node tb "Runs" target)) ;; (append key-vals (list run-name))
      all-targets)))
 
+;; Run controls panel
+;;
 (define (dashboard:run-controls commondat tabdat #!key (tab-num #f))
   (let* ((targets       (make-hash-table))
 	 (test-records  (make-hash-table))

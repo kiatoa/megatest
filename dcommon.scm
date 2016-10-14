@@ -1040,17 +1040,17 @@
       tb)
     (iup:button "Execute" #:size "50x"
 		#:action (lambda (obj)
-			   (let ((cmd (conc "xterm -geometry 180x20 -e \""
-					    (iup:attribute (dboard:tabdat-command-tb data) "VALUE")
-					    ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-			     (system cmd)))))))
+			   ;; (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
+                           (common:run-a-command (iup:attribute (dboard:tabdat-command-tb data) "VALUE")))))))
+    ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+    ;; (system cmd)))))))
 
 (define (dcommon:command-action-selector commondat tabdat #!key (tab-num #f))
   (iup:frame
    #:title "Set the action to take"
    (iup:hbox
     ;; (iup:label "Command to run" #:expand "HORIZONTAL" #:size "70x" #:alignment "LEFT:ACENTER")
-    (let* ((cmds-list '("run" "remove-runs" "set-state-status" "lock-runs" "unlock-runs"))
+    (let* ((cmds-list '("run" "remove-runs")) ;;  "set-state-status" "lock-runs" "unlock-runs"))
 	   (lb         (iup:listbox #:expand "HORIZONTAL"
 				    #:dropdown "YES"
 				    #:action (lambda (obj val index lbstate)
@@ -1125,6 +1125,7 @@
 			   #:size "10x30"
 			   #:multiline "YES")))
       (set! test-patterns-textbox tb)
+      (dboard:tabdat-test-patterns-textbox-set! tabdat tb)
       tb))
 ;; (iup:frame
 ;;  #:title "Target"
@@ -1153,7 +1154,7 @@
 	(dboard:tabdat-statuses-set! tabdat all)
 	(dashboard:update-run-command tabdat)))))))
 
-(define (dcommon:command-tests-tasks-canvas data test-records sorted-testnames tests-draw-state)
+(define (dcommon:command-tests-tasks-canvas tabdat test-records sorted-testnames tests-draw-state)
   (iup:frame
    #:title "Tests and Tasks"
    (let* ((updater #f)
@@ -1215,17 +1216,22 @@
 							      (>= new-y lly)
 							      (<= x urx)
 							      (<= new-y ury))
-							 (let ((patterns (string-split (iup:attribute test-patterns-textbox "VALUE"))))
+							 (let* ((box-patterns (string-split (iup:attribute test-patterns-textbox "VALUE")))
+                                                                (test-patts   (string-split (or (dboard:tabdat-test-patts tabdat)
+                                                                                                "")
+                                                                                            ","))
+                                                                (patterns     (delete-duplicates (append box-patterns test-patts)))) 
 							   (let* ((selected     (not (member test-name patterns)))
 								  (newpatt-list (if selected
 										    (cons test-name patterns)
 										    (delete test-name patterns)))
 								  (newpatt      (string-intersperse newpatt-list "\n")))
+                                                             (print "INFO: newpatt=" newpatt ", patterns=" patterns ", test-patts=" test-patts)
+							     (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
 							     (iup:attribute-set! obj "REDRAW" "ALL")
 							     (hash-table-set! selected-tests test-name selected)
-							     (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
-							     (dboard:tabdat-test-patts-set!-use data (dboard:lines->test-patt newpatt))
-							     (dashboard:update-run-command data)
+							     (dboard:tabdat-test-patts-set!-use tabdat (dboard:lines->test-patt newpatt))
+							     (dashboard:update-run-command tabdat)
 							     (if updater (updater last-xadj last-yadj)))))))
 						 (hash-table-keys tests-info)))))))
      canvas-obj)))
