@@ -1436,7 +1436,6 @@ Misc
                                (if graph-flag
                                    (dboard:graph-dat-flag-set! graph-dat #f)
                                    (dboard:graph-dat-flag-set! graph-dat #t))
-                               (print "Toggling graph, need to work on updaters")
                                (if (not (dboard:tabdat-running-layout tabdat))
 						     (begin
 						       (dashboard:run-times-tab-run-data-updater commondat tabdat tab-num)
@@ -1690,7 +1689,7 @@ Misc
                                   (begin
                                     (set! changed #t)
                                     (iup:attribute-set! run-matrix key (cadr value))
-                                    (print "RA=> value" (car value))
+                                    ;; (print "RA=> value" (car value))
                                     (iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
                           matrix-content)
                 
@@ -2970,7 +2969,8 @@ Misc
                                                   )))
                           (hash-table-set! graph-matrix-table fieldn graph-dat)
                           (hash-table-set! graph-cell-table graph-cell graph-dat)
-                          (print "Graph data " graph-matrix-row " " graph-matrix-col " " fieldn " " graph-color " " graph-color-rgb " ")
+                          ;; (print "Graph data " graph-matrix-row " " graph-matrix-col " " fieldn " " graph-color " " graph-color-rgb " ")
+                          ;; (print "Graph data " graph-matrix-row " " graph-matrix-col " " fieldn " " graph-color " " graph-color-rgb " ")
                           (set! changed #t)
                           (iup:attribute-set! graph-matrix (conc graph-matrix-row ":"  graph-matrix-col) fieldn)
                           (iup:attribute-set! graph-matrix (conc "BGCOLOR" (conc graph-matrix-row ":"  graph-matrix-col)) graph-color-rgb)
@@ -2990,7 +2990,6 @@ Misc
                              (graph-dat   (hash-table-ref graph-matrix-table fieldn))
                              (graph-color (dboard:graph-dat-color graph-dat))
                              (graph-flag (dboard:graph-dat-flag graph-dat)))
-                        (print "Value of " fieldn "graph is " graph-flag)
                         (if graph-flag
                             (begin
                               (vg:add-obj-to-comp
