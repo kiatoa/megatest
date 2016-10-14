@@ -945,12 +945,16 @@
        (setenv var val)))
     vars))
 
-(define (common:run-a-command cmd)
-  (let ((fullcmd  (conc (dtests:get-pre-command)
-			cmd 
-			(dtests:get-post-command))))
+(define (common:run-a-command cmd #!key (with-vars #f))
+  (let* ((pre-cmd  (dtests:get-pre-command))
+         (post-cmd (dtests:get-post-command))
+         (fullcmd  (if (or pre-cmd post-cmd)
+                       (conc pre-cmd cmd post-cmd)
+                       (conc "viewscreen " cmd))))
     (debug:print-info 02 *default-log-port* "Running command: " fullcmd)
-    (common:without-vars fullcmd "MT_.*")))
+    (if with-vars
+        (common:without-vars cmd)
+        (common:without-vars fullcmd "MT_.*"))))
 		  
 ;;======================================================================
 ;; T I M E   A N D   D A T E

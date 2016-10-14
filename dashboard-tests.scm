@@ -43,11 +43,11 @@
 
 (define (dtests:get-pre-command #!key (default-override #f))
   (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "pre-command")))
-    (or cfg-ovrd default-override "xterm -geometry 180x20 -e \"")))
+    (or cfg-ovrd default-override "viewscreen "))) ;; "xterm -geometry 180x20 -e \"")))
 
 (define (dtests:get-post-command #!key (default-override #f))
   (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "post-command")))
-    (or cfg-ovrd default-override ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+    (or cfg-ovrd default-override ""))) ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
 
 
 (define (test-info-panel testdat store-label widgets)

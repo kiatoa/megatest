@@ -122,6 +122,10 @@ $(PREFIX)/bin/nbfake : utils/nbfake
 	$(INSTALL) $< $@
 	chmod a+x $@
 
+$(PREFIX)/bin/viewscreen : utils/viewscreen
+	$(INSTALL) $< $@
+	chmod a+x $@
+
 $(PREFIX)/bin/nbfind : utils/nbfind
 	$(INSTALL) $< $@
 	chmod a+x $@
@@ -138,6 +142,10 @@ deploytarg/nbfake : utils/nbfake
 	$(INSTALL) $< $@
 	chmod a+x $@
 
+deploytarg/viewscreen : utils/viewscreen
+	$(INSTALL) $< $@
+	chmod a+x $@
+
 deploytarg/nbfind : utils/nbfind
 	$(INSTALL) $< $@
 	chmod a+x $@
@@ -151,7 +159,7 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
-	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/mt_xterm \
+	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/viewscreen $(PREFIX)/bin/mt_xterm \
           $(PREFIX)/bin/newdashboard $(PREFIX)/bin/mdboard
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
@@ -194,7 +202,7 @@ deploytarg/apropos.so : Makefile
 # deploytarg/libsqlite3.so : 
 # 	CSC_OPTIONS="-Ideploytarg -Ldeploytarg" $CHICKEN_INSTALL -prefix deploytarg -deploy sqlite3
 
-deploy : deploytarg/mtest deploytarg/dboard $(DEPLOYHELPERS) deploytarg/nbfake deploytarg/nbfind deploytarg/apropos.so
+deploy : deploytarg/mtest deploytarg/dboard $(DEPLOYHELPERS) deploytarg/nbfake deploytarg/viewsceen deploytarg/nbfind deploytarg/apropos.so
 
 # deploytarg/libiupcd.so : $(CKPATH)/lib/libiupcd.so
 # 	for i in iup im cd av call sqlite; do \
