@@ -262,6 +262,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-sort"
 			) 
 		 (list  "-h" "-help" "--help"
+			"-manual"
 			"-version"
 		        "-force"
 		        "-xterm"
@@ -404,6 +405,17 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(args:get-arg "--help"))
     (begin
       (print help)
+      (exit)))
+
+(if (args:get-arg "-manual")
+    (let* ((htmlviewercmd (or (configf:lookup *configdat* "setup" "htmlviewercmd")
+			      (common:which '("firefox" "arora"))))
+	   (install-home  (common:get-install-area))
+	   (manual-html   (conc install-home "/share/docs/megatest_manual.html")))
+      (if (and install-home
+	       (file-exists? manual-html))
+	  (system (conc "(" htmlviewercmd " " manual-html " ) &"))
+	  (system (conc "(" htmlviewercmd " http://www.kiatoa.com/cgi-bin/fossils/megatest/doc/tip/docs/manual/megatest_manual.html ) &")))
       (exit)))
 
 (if (args:get-arg "-start-dir")
