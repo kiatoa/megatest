@@ -12,6 +12,6 @@ if [[ $(screen -list | egrep 'Attached|Detached'|awk '{print $1}') == "" ]];then
     sleep 1
 fi
 
-cmd="$*"
+cmd="cd $PWD;$*"
 
-screen -X screen bash -c "$cmd;echo \"Press any key to continue, ^a <space> to see other windows\";bash -c 'read -n 1 -s'"
+screen -X screen bash -c "$cmd;echo \"Press any key to continue, ctrl-a <space> to see other windows\";bash -c 'read -n 1 -s'"

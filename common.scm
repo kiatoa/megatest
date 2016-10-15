@@ -494,6 +494,32 @@
    (or configf (read-config "megatest.config" #f #t))
    "disks" '("none" "")))
 
+;; return first command that exists, else #f
+;;
+(define (common:which cmds)
+  (if (null? cmds)
+      #f
+      (let loop ((hed (car cmds))
+		 (tal (cdr cmds)))
+	(let ((res (with-input-from-pipe (conc "which " hed) read-line)))
+	  (if (and (string? res)
+		   (file-exists? res))
+	      res
+	      (if (null? tal)
+		  #f
+		  (loop (car tal)(cdr tal))))))))
+  
+(define (common:get-install-area)
+  (let ((exe-path (car (argv))))
+    (if (file-exists? exe-path)
+	(handle-exceptions
+	 exn
+	 #f
+	 (pathname-directory
+	  (pathname-directory 
+	   (pathname-directory exe-path))))
+	#f)))
+
 ;;======================================================================
 ;; T A R G E T S  ,   S T A T E ,   S T A T U S ,   
 ;;                    R U N N A M E    A N D   T E S T P A T T

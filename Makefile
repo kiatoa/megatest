@@ -36,6 +36,8 @@ CKPATH=$(shell dirname $(shell dirname $(CSIPATH)))
 ARCHSTR=$(shell lsb_release -sr)
 # ARCHSTR=$(shell bash -c "echo \$$MACHTYPE")
 
+PNGFILES = $(shell cd docs/manual;ls *png)
+
 all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard 
 
 mtest: $(OFILES) readline-fix.scm megatest.o
@@ -46,6 +48,14 @@ dboard : $(OFILES) $(GOFILES) dashboard.scm
 
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
 	csc $(CSCOPTS) $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
+
+# install documentation to $(PREFIX)/docs
+# DOES NOT REBUILD DOCS
+#
+$(PREFIX)/share/docs/megatest_manual.html : docs/manual/megatest_manual.html
+	mkdir -p $(PREFIX)/share/docs
+	$(INSTALL) docs/manual/megatest_manual.html $(PREFIX)/share/docs/megatest_manual.html
+	for png in $(PNGFILES);do $(INSTALL) docs/manual/$$png $(PREFIX)/share/docs/$$png;done
 
 #multi-dboard : multi-dboard.scm $(OFILES) $(GOFILES)
 #	csc $(CSCOPTS) $(OFILES) $(GOFILES) multi-dboard.scm -o multi-dboard
@@ -94,9 +104,9 @@ $(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard utils/mk_wrapper
 #$(PREFIX)/bin/.$(ARCHSTR)/mdboard : multi-dboard
 #	$(INSTALL) multi-dboard $(PREFIX)/bin/.$(ARCHSTR)/mdboard
 
-$(PREFIX)/bin/mdboard : $(PREFIX)/bin/.$(ARCHSTR)/mdboard  utils/mk_wrapper
-	utils/mk_wrapper $(PREFIX) mdboard $(PREFIX)/bin/mdboard
-	chmod a+x $(PREFIX)/bin/mdboard
+# $(PREFIX)/bin/mdboard : $(PREFIX)/bin/.$(ARCHSTR)/mdboard  utils/mk_wrapper
+# 	utils/mk_wrapper $(PREFIX) mdboard $(PREFIX)/bin/mdboard
+# 	chmod a+x $(PREFIX)/bin/mdboard
 
 # $(HELPERS) : utils/%
 # 	$(INSTALL) $< $@
@@ -150,7 +160,6 @@ deploytarg/nbfind : utils/nbfind
 	$(INSTALL) $< $@
 	chmod a+x $@
 
-
 # install dashboard as dboard so wrapper script can be called dashboard
 $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 	utils/mk_wrapper $(PREFIX) dboard $(PREFIX)/bin/dashboard
@@ -160,7 +169,7 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
 	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/viewscreen $(PREFIX)/bin/mt_xterm \
-          $(PREFIX)/bin/newdashboard $(PREFIX)/bin/mdboard
+	  $(PREFIX)/share/docs/megatest_manual.html 
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)
