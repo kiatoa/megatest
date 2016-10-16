@@ -1123,7 +1123,7 @@
 			   #:value (dboard:test-patt->lines
 				    (dboard:tabdat-test-patts-use tabdat))
 			   #:expand "YES"
-			   #:size "10x30"
+			   #:size "x30" ;; was 10x30
 			   #:multiline "YES")))
       (set! test-patterns-textbox tb)
       (dboard:tabdat-test-patterns-textbox-set! tabdat tb)

@@ -1252,7 +1252,18 @@ Misc
  ;;	 logs-tb))
 
 (define (dboard:runs-tree-browser commondat tabdat)
-  (let* ((tb
+  (let* ((txtbox (iup:textbox #:action (lambda (val a b)
+					 (debug:catch-and-dump
+					  (lambda ()
+					    (if b (dboard:tabdat-target-set! tabdat (string-split b "/")))
+					    (dashboard:update-run-command tabdat))
+					  "command-testname-selector tb action"))
+			      #:value (dboard:test-patt->lines
+				       (dboard:tabdat-test-patts-use tabdat))
+			      #:expand "HORIZONTAL"
+			      ;; #:size "10x30"
+			      ))
+	 (tb
           (iup:treebox
            #:value 0
            #:name "Runs"
@@ -1265,7 +1276,9 @@ Misc
                 (let* ((run-path (tree:node->path obj id))
                        (run-id    (tree-path->run-id tabdat (cdr run-path))))
                   ;; (dboard:tabdat-view-changed-set! tabdat #t) ;; ?? done below when run-id is a number
-                  (dboard:tabdat-target-set! tabdat (cdr run-path)) ;; (print "run-path: " run-path)			    
+                  (dboard:tabdat-target-set! tabdat (cdr run-path)) ;; (print "run-path: " run-path)
+		  (iup:attribute-set! txtbox "VALUE" (string-intersperse (cdr run-path) "/"))
+		  (dashboard:update-run-command tabdat)
                   (dboard:tabdat-layout-update-ok-set! tabdat #f)
                   (if (number? run-id)
                       (begin
@@ -1280,7 +1293,7 @@ Misc
            ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
            )))
     (dboard:tabdat-runs-tree-set! tabdat tb)
-    tb))
+    (iup:vbox tb txtbox)))
 
 ;;======================================================================
 ;; R U N   C O N T R O L S
