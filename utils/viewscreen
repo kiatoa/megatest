@@ -10,8 +10,10 @@ if [[ $(screen -list | egrep 'Attached|Detached'|awk '{print $1}') == "" ]];then
     # exit 1
     xterm -e screen &
     sleep 1
+    screen -X hardstatus off
+    screen -X hardstatus alwayslastline
+    screen -X hardstatus string '%{= kG}[ %{G}%H %{g}][%= %{= kw}%?%-Lw%?%{r}(%{W}%n*%f%t%?(%u)%?%{r})%{w}%?%+Lw%?%?%= %{g}][%{B} %m-%d %{W} %c %{g}]'
 fi
 
 cmd="cd $PWD;$*"
-
 screen -X screen bash -c "$cmd;echo \"Press any key to continue, ctrl-a <space> to see other windows\";bash -c 'read -n 1 -s'"
