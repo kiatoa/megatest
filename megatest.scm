@@ -171,6 +171,7 @@ Utilities
   -archive cmd            : archive runs specified by selectors to one of disks specified
                             in the [archive-disks] section.
                             cmd: keep-html, restore, save, save-remove
+  -generate-html          : create a simple html tree for browsing your runs
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -286,6 +287,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-list-servers"
                         "-run-wait"      ;; wait on a run to complete (i.e. no RUNNING)
 			"-local"         ;; run some commands using local db access
+                        "-generate-html"
 
 			;; misc queries
 			"-list-disks"
@@ -2002,6 +2004,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        #f ;; do all run-ids
        'new2old
        )
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-generate-html")
+    (let* ((toppath (launch:setup)))
+      (if (tests:create-html-tree #f)
+          (debug:print-info 0 *default-log-port* "HTML output created in " toppath "/lt/runs-index.html")
+          (debug:print 0 *default-log-port* "Failed to create HTML output in " toppath "/lt/runs-index.html"))
       (set! *didsomething* #t)))
 
 ;;======================================================================
