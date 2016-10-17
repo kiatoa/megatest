@@ -648,18 +648,23 @@
 ;;   tipfunc takes two parameters: y the tip value and path the path to that point
 ;;
 (define (common:htree->html ht path tipfunc)
-  (s:ul
-   (map (lambda (x)
-	  (let ((levelname (car x)))
-	    (s:li
-	     levelname
-	     (let ((y       (cdr x))
-		   (newpath (append path (list levelname))))
-	       ;; (print "levelname=" levelname " newpath=" newpath)
-	       (if (hash-table? y)
-		   (common:htree->html y newpath tipfunc)
-		   (tipfunc y newpath))))))
-	(hash-table->alist ht))))
+  (let ((datlist 	(hash-table->alist ht)))
+    (if (null? datlist)
+    	(tipfunc #f path) ;; really shouldn't get here
+	(s:ul
+	 (map (lambda (x)
+		(let* ((levelname (car x))
+		       (y         (cdr x))
+		       (newpath   (append path (list levelname)))
+		       (leaf      (or (not (hash-table? y))
+				      (null? (hash-table-keys y)))))
+		  (if leaf
+		      (s:li (tipfunc y newpath))
+		      (s:li
+		       (list 
+			levelname
+			(common:htree->html y newpath tipfunc))))))
+	      datlist)))))
 
 ;; hash-table tree to alist tree
 ;;
