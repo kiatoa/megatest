@@ -648,7 +648,9 @@
 ;;   tipfunc takes two parameters: y the tip value and path the path to that point
 ;;
 (define (common:htree->html ht path tipfunc)
-  (let ((datlist 	(hash-table->alist ht)))
+  (let ((datlist 	(sort (hash-table->alist ht)
+                              (lambda (a b)
+                                (string< (car a)(car b))))))
     (if (null? datlist)
     	(tipfunc #f path) ;; really shouldn't get here
 	(s:ul
