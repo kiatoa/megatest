@@ -640,6 +640,10 @@ ul.LinkedList { display: block; }
 EOF
 )
 
+(define (tests:run-record->test-path run numkeys)
+   (append (take (vector->list run) numkeys)
+	   (list (vector-ref run (+ 1 numkeys)))))
+
 ;; (tests:create-html-tree "test-index.html")
 ;;
 (define (tests:create-html-tree outf)
@@ -655,8 +659,7 @@ EOF
 	       (header    (vector-ref runsdat 0))
 	       (runs      (vector-ref runsdat 1))
 	       (runtreedat (map (lambda (x)
-				  (append (take (vector->list x) numkeys)
-					  (list (vector-ref x (+ 1 numkeys))))) ;; gets the runname
+				  (tests:run-record->test-path x numkeys))
 				runs))
 	       (runs-htree (common:list->htree runtreedat)))
 	  (set! runs-to-process runs)
@@ -679,7 +682,24 @@ EOF
 							    ))))))
 	  (close-output-port oup)
 	  (common:simple-file-release-lock lockfile)
-	  ; (
+	  (for-each
+	   (lambda (run)
+	     (let* ((test-subpath (tests:run-record->test-path run numkeys))
+		    (run-id       (db:get-value-by-header run header "id"))
+		    (testdats     (rmt:get-tests-for-run
+				   run-id "%" ;; testnamepatt
+				   '()        ;; states
+				   '()        ;; statuses
+				   #f         ;; offset
+				   #f         ;; num-to-get
+				   #f         ;; hide/not-hide
+				   #f         ;; sort-by
+				   #f         ;; sort-order
+				   #f         ;; 'shortlist                           ;; qrytype
+                                   0         ;; last update
+				   #f)))
+	       (print "testdats: " testdats)))
+	   runs)
 	  #t)
 	#f)))
 
