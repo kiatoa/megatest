@@ -643,36 +643,45 @@ EOF
 ;; (tests:create-html-tree "test-index.html")
 ;;
 (define (tests:create-html-tree outf)
-  (if (common:simple-file-lock (conc outf ".lock"))
-      (let* ((oup (open-output-file outf))
-	     (area-name (common:get-testsuite-name))
-	     (keys      (rmt:get-keys))
-	     (numkeys   (length keys))
-	     (runsdat   (rmt:get-runs "%" #f #f (map (lambda (x)(list x "%")) keys)))
-	     (header    (vector-ref runsdat 0))
-	     (runs      (vector-ref runsdat 1))
-	     (runtreedat (map (lambda (x)
-				(append (take (vector->list x) numkeys)
-					(list (vector-ref x (+ 1 numkeys))))) ;; gets the runname
-			      runs))
-	     (runs-htree (common:list->htree runtreedat)))
-	(s:output-new
-	 oup
-	 (s:html tests:css-jscript-block
-		 (s:title "Summary for " area-name)
-		 (s:body 'onload "addEvents();"
-			 ;; top list
-			 (s:ul 'id "LinkedList1" 'class "LinkedList"
-			       (s:li
-				"Runs"
-				(common:htree->html runs-htree
-						    '()
-						    (lambda (x p)
-						      (apply s:a x p))))))))
-	(close-output-port oup)
-	(common:simple-file-release-lock (conc outf ".lock"))
-	#t)
-      #f))
+  (let* ((lockfile  (conc outf ".lock"))
+	 (runs-to-process '()))
+    (if (common:simple-file-lock lockfile)
+	(let* ((linktree  (common:get-linktree))
+	       (oup       (open-output-file outf))
+	       (area-name (common:get-testsuite-name))
+	       (keys      (rmt:get-keys))
+	       (numkeys   (length keys))
+	       (runsdat   (rmt:get-runs "%" #f #f (map (lambda (x)(list x "%")) keys)))
+	       (header    (vector-ref runsdat 0))
+	       (runs      (vector-ref runsdat 1))
+	       (runtreedat (map (lambda (x)
+				  (append (take (vector->list x) numkeys)
+					  (list (vector-ref x (+ 1 numkeys))))) ;; gets the runname
+				runs))
+	       (runs-htree (common:list->htree runtreedat)))
+	  (set! runs-to-process runs)
+	  (s:output-new
+	   oup
+	   (s:html tests:css-jscript-block
+		   (s:title "Summary for " area-name)
+		   (s:body 'onload "addEvents();"
+			   (s:h1 "Summary for " area-name)
+			   ;; top list
+			   (s:ul 'id "LinkedList1" 'class "LinkedList"
+				 (s:li
+				  "Runs"
+				  (common:htree->html runs-htree
+						      '()
+						      (lambda (x p)
+							(let ((targpath (string-intersperse p "/"))
+							      (runname  (car (reverse p))))
+							  (s:a runname 'href (conc targpath "/runsummary.html"))))
+							    ))))))
+	  (close-output-port oup)
+	  (common:simple-file-release-lock lockfile)
+	  ; (
+	  #t)
+	#f)))
 
 ;;   (let* ((outputfilename (conc "megatest-rollup-" test-name ".html"))
 ;; 	 (orig-dir       (current-directory))
