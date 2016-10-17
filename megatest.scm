@@ -179,8 +179,8 @@ Spreadsheet generation
                             if it contains forward slashes the path will be converted
                             to windows style
 Getting started
-  -gen-megatest-area       : create a skeleton megatest area. You will be prompted for paths
-  -gen-megatest-test tname : create a skeleton megatest test. You will be prompted for info
+  -create-megatest-area       : create a skeleton megatest area. You will be prompted for paths
+  -create-test testname       : create a skeleton megatest test. You will be prompted for info
 
 Examples
 
@@ -243,7 +243,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-set-state-status"
 			"-set-run-status"
 			"-debug" ;; for *verbosity* > 2
-			"-gen-megatest-test"
+			"-create-test"
 			"-override-timeout"
 			"-test-files"  ;; -test-paths is for listing all
 			"-load"        ;; load and exectute a scheme file
@@ -306,7 +306,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-cleanup-db"
 			"-rollup"
 			"-update-meta"
-			"-gen-megatest-area"
+			"-create-megatest-area"
 			"-mark-incompletes"
 
 			"-convert-to-norm"
@@ -761,7 +761,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				  (string->number (args:get-arg "-run-id")))))
 	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
 	      ;; if not list or kill then start a client (if appropriate)
-	      (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
+	      (if (or (args-defined? "-h" "-version" "-create-megatest-area" "-create-test")
 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
 		  (debug:print-info 1 *default-log-port* "Server connection not needed")
 		  (begin
@@ -1831,13 +1831,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ;; (megatest-gui)
       (set! *didsomething* #t)))
 
-(if (args:get-arg "-gen-megatest-area")
+(if (args:get-arg "-create-megatest-area")
     (begin
       (genexample:mk-megatest.config)
       (set! *didsomething* #t)))
 
-(if (args:get-arg "-gen-megatest-test")
-    (let ((testname (args:get-arg "-gen-megatest-test")))
+(if (args:get-arg "-create-test")
+    (let ((testname (args:get-arg "-create-test")))
       (genexample:mk-megatest-test testname)
       (set! *didsomething* #t)))
 
