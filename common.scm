@@ -622,6 +622,62 @@
 	      (cdr tal))
 	(max hed max-val))))
 
+;; path list to hash-table tree
+;;   ((a b c)(a b d)(e b c)) => ((a (b (d) (c))) (e (b (c))))
+;;
+(define (common:list->htree lst)
+  (let ((resh (make-hash-table)))
+    (for-each
+     (lambda (inlst)
+       (let loop ((ht  resh)
+		  (hed (car inlst))
+		  (tal (cdr inlst)))
+	 (if (hash-table-ref/default ht hed #f)
+	     (if (not (null? tal))
+		 (loop (hash-table-ref ht hed)
+		       (car tal)
+		       (cdr tal)))
+	     (begin
+	       (hash-table-set! ht hed (make-hash-table))
+	       (loop ht hed tal)))))
+     lst)
+    resh))
+
+;; hash-table tree to html list tree
+;;
+;;   tipfunc takes two parameters: y the tip value and path the path to that point
+;;
+(define (common:htree->html ht path tipfunc)
+  (let ((datlist 	(sort (hash-table->alist ht)
+                              (lambda (a b)
+                                (string< (car a)(car b))))))
+    (if (null? datlist)
+    	(tipfunc #f path) ;; really shouldn't get here
+	(s:ul
+	 (map (lambda (x)
+		(let* ((levelname (car x))
+		       (y         (cdr x))
+		       (newpath   (append path (list levelname)))
+		       (leaf      (or (not (hash-table? y))
+				      (null? (hash-table-keys y)))))
+		  (if leaf
+		      (s:li (tipfunc y newpath))
+		      (s:li
+		       (list 
+			levelname
+			(common:htree->html y newpath tipfunc))))))
+	      datlist)))))
+
+;; hash-table tree to alist tree
+;;
+(define (common:htree->atree ht)
+  (map (lambda (x)
+	 (cons (car x)
+	       (let ((y (cdr x)))
+		 (if (hash-table? y)
+		     (common:htree->atree y)
+		     y))))
+       (hash-table->alist ht)))
 
 ;;======================================================================
 ;; M U N G E   D A T A   I N T O   N I C E   F O R M S
