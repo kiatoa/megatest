@@ -651,7 +651,7 @@ EOF
 	 (runs-to-process '()))
     (if (common:simple-file-lock lockfile)
 	(let* ((linktree  (common:get-linktree))
-	       (oup       (open-output-file outf))
+	       (oup       (open-output-file (or outf (conc linktree "/runs-index.html"))))
 	       (area-name (common:get-testsuite-name))
 	       (keys      (rmt:get-keys))
 	       (numkeys   (length keys))
@@ -676,18 +676,26 @@ EOF
 				  (common:htree->html runs-htree
 						      '()
 						      (lambda (x p)
-							(let ((targpath (string-intersperse p "/"))
-							      (runname  (car (reverse p))))
-							  (s:a runname 'href (conc targpath "/runsummary.html"))))
-							    ))))))
-	  (close-output-port oup)
+							(let* ((targ-path (string-intersperse p "/"))
+                                                               (full-path (conc linktree "/" targ-path))
+                                                               (run-name  (car (reverse p))))
+                                                          (if (and (file-exists? full-path)
+                                                                   (directory?   full-path)
+                                                                   (file-write-access? full-path))
+                                                              (s:a run-name 'href (conc targ-path "/run-summary.html"))
+                                                              (begin
+                                                                (debug:print 0 *default-log-port* "INFO: Can't create " targ-path "/run-summary.html")
+                                                                (conc run-name " (Not able to create summary at " targ-path ")")))))))))))
+          (close-output-port oup)
 	  (common:simple-file-release-lock lockfile)
 	  (for-each
 	   (lambda (run)
 	     (let* ((test-subpath (tests:run-record->test-path run numkeys))
 		    (run-id       (db:get-value-by-header run header "id"))
-		    (testdats     (rmt:get-tests-for-run
-				   run-id "%" ;; testnamepatt
+                    (run-dir      (tests:run-record->test-path run numkeys))
+		    (test-dats    (rmt:get-tests-for-run
+				   run-id
+                                   "%/"       ;; testnamepatt
 				   '()        ;; states
 				   '()        ;; statuses
 				   #f         ;; offset
@@ -697,52 +705,67 @@ EOF
 				   #f         ;; sort-order
 				   #f         ;; 'shortlist                           ;; qrytype
                                    0         ;; last update
-				   #f)))
-	       (print "testdats: " testdats)))
-	   runs)
-	  #t)
+				   #f))
+                    (tests-tree-dat (map (lambda (test-dat)
+                                         ;; (tests:run-record->test-path x numkeys))
+                                         (let* ((test-name  (db:test-get-testname test-dat))
+                                                (item-path  (db:test-get-item-path test-dat))
+                                                (full-name  (db:test-make-full-name test-name item-path))
+                                                (path-parts (string-split full-name)))
+                                           path-parts))
+                                       test-dats))
+                    (tests-htree (common:list->htree tests-tree-dat))
+                    (html-dir    (conc linktree "/" (string-intersperse run-dir "/")))
+                    (html-path   (conc html-dir "/run-summary.html"))
+                    (oup         (if (and (file-exists? html-dir)
+                                          (directory?   html-dir)
+                                          (file-write-access? html-dir))
+                                     (open-output-file  html-path)
+                                     #f)))
+               ;; (print "run-dir: " run-dir ", tests-tree-dat: " tests-tree-dat)
+               (if oup
+                   (begin
+                     (s:output-new
+                      oup
+                      (s:html tests:css-jscript-block
+                              (s:title "Summary for " area-name)
+                              (s:body 'onload "addEvents();"
+                                      (s:h1 "Summary for " (string-intersperse run-dir "/"))
+                                      ;; top list
+                                      (s:ul 'id "LinkedList1" 'class "LinkedList"
+                                            (s:li
+                                             "Tests"
+                                             (common:htree->html tests-htree
+                                                                 '()
+                                                                 (lambda (x p)
+                                                                   (let* ((targ-path (string-intersperse p "/"))
+                                                                          (test-name (car p))
+                                                                          (item-path ;; (if (> (length p) 2) ;; test-name + run-name
+                                                                           (string-intersperse p "/"))
+                                                                          (full-targ (conc html-dir "/" targ-path))
+                                                                          (std-file  (conc full-targ "/test-summary.html"))
+                                                                          (alt-file  (conc full-targ "/megatest-rollup-" test-name ".html"))
+                                                                          (html-file (if (file-exists? alt-file)
+                                                                                         alt-file
+                                                                                         std-file))
+                                                                          (run-name  (car (reverse p))))
+                                                                     (if (and (not (file-exists? full-targ))
+                                                                              (directory? full-targ)
+                                                                              (file-write-access? full-targ))
+                                                                         (tests:summarize-test 
+                                                                          run-id 
+                                                                          (rmt:get-test-id run-id test-name item-path)))
+                                                                     (if (file-exists? full-targ)
+                                                                         (s:a run-name 'href html-file)
+                                                                         (begin
+                                                                           (debug:print 0 *default-log-port* "ERROR: can't access " full-targ)
+                                                                           (conc "No summary for " run-name)))))
+                                                                 ))))))
+                     (close-output-port oup)))))
+           runs)
+          #t)
 	#f)))
 
-;;   (let* ((outputfilename (conc "megatest-rollup-" test-name ".html"))
-;; 	 (orig-dir       (current-directory))
-;; 	 (logf-info      (rmt:test-get-logfile-info run-id test-name))
-;; 	 (logf           (if logf-info (cadr logf-info) #f))
-;; 	 (path           (if logf-info (car  logf-info) #f)))
-;;     ;; This query finds the path and changes the directory to it for the test
-;;     (if (and (string? path)
-;; 	     (directory? path)) ;; can get #f here under some wierd conditions. why, unknown ...
-;; 	(begin
-;; 	  (debug:print 4 *default-log-port* "Found path: " path)
-;; 	  (change-directory path))
-;; 	;; (set! outputfilename (conc path "/" outputfilename)))
-;; 	(debug:print-error 0 *default-log-port* "summarize-items for run-id=" run-id ", test-name=" test-name ", no such path: " path))
-;;     (debug:print 4 *default-log-port* "summarize-items with logf " logf ", outputfilename " outputfilename " and force " force)
-;;     (if (or (equal? logf "logs/final.log")
-;; 	    (equal? logf outputfilename)
-;; 	    force)
-;; 	(let ((my-start-time (current-seconds))
-;; 	      (lockf         (conc outputfilename ".lock")))
-;; 	  (let loop ((have-lock  (common:simple-file-lock lockf)))
-;; 	    (if have-lock
-;; 		(let ((script (configf:lookup *configdat* "testrollup" test-name)))
-;; 		  (print "Obtained lock for " outputfilename)
-;; 		  ;; (rmt:top-test-set-per-pf-counts run-id test-name)
-;; 		  (rmt:roll-up-pass-fail-counts run-id test-name "" #f #f)
-;; 		  (rmt:top-test-set-per-pf-counts run-id test-name)
-;; 		  (if script
-;; 		      (system (conc script " > " outputfilename " & "))
-;; 		      (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename))
-;; 		  (change-directory orig-dir)
-;; 		  ;; NB// tests:test-set-toplog! is remote internal...
-;; 		  (tests:test-set-toplog! run-id test-name outputfilename))
-;; 		;; didn't get the lock, check to see if current update started later than this 
-;; 		;; update, if so we can exit without doing any work
-;; 		(if (> my-start-time (file-modification-time lockf))
-;; 		    ;; we started since current re-gen in flight, delay a little and try again
-;; 		    (begin
-;; 		      (debug:print-info 1 *default-log-port* "Waiting to update " outputfilename ", another test currently updating it")
-;; 		      (thread-sleep! (+ 5 (random 5))) ;; delay between 5 and 10 seconds
-;; 		      (loop (common:simple-file-lock lockf))))))))))
 
 ;; CHECK - WAS THIS ADDED OR REMOVED? MANUAL MERGE WITH API STUFF!!!
 ;;
