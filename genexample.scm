@@ -304,7 +304,7 @@ You can edit your config files and create tests in the " path " directory
 	      (print "#\n# would result in items: a/d  b/e   c/f\n#\n")
 	      (print "# Logpro rules for each step can be captured here in the testconfig")
 	      (print "# note: The ;; after the stepname and the leading whitespace are required")
-	      (print "#")
+	      (print "#\n[logpro]\n")
 	      (for-each (lambda (step)
 			  (let ((stepname   (car step))
 				(scriptname (cadr step)))
