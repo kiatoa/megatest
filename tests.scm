@@ -570,6 +570,151 @@
 	;;	(append key (list val)))))
 	))))
 
+(define tests:css-jscript-block
+#<<EOF
+<style type="text/css">
+ul.LinkedList { display: block; }
+/* ul.LinkedList ul { display: none; } */
+.HandCursorStyle { cursor: pointer; cursor: hand; }  /* For IE */
+  </style>
+
+  <script type="text/JavaScript">
+    // Add this to the onload event of the BODY element
+    function addEvents() {
+      activateTree(document.getElementById("LinkedList1"));
+    }
+
+    // This function traverses the list and add links 
+    // to nested list items
+    function activateTree(oList) {
+      // Collapse the tree
+      for (var i=0; i < oList.getElementsByTagName("ul").length; i++) {
+        oList.getElementsByTagName("ul")[i].style.display="none";            
+      }                                                                  
+      // Add the click-event handler to the list items
+      if (oList.addEventListener) {
+        oList.addEventListener("click", toggleBranch, false);
+      } else if (oList.attachEvent) { // For IE
+        oList.attachEvent("onclick", toggleBranch);
+      }
+      // Make the nested items look like links
+      addLinksToBranches(oList);
+    }
+
+    // This is the click-event handler
+    function toggleBranch(event) {
+      var oBranch, cSubBranches;
+      if (event.target) {
+        oBranch = event.target;
+      } else if (event.srcElement) { // For IE
+        oBranch = event.srcElement;
+      }
+      cSubBranches = oBranch.getElementsByTagName("ul");
+      if (cSubBranches.length > 0) {
+        if (cSubBranches[0].style.display == "block") {
+          cSubBranches[0].style.display = "none";
+        } else {
+          cSubBranches[0].style.display = "block";
+        }
+      }
+    }
+
+    // This function makes nested list items look like links
+    function addLinksToBranches(oList) {
+      var cBranches = oList.getElementsByTagName("li");
+      var i, n, cSubBranches;
+      if (cBranches.length > 0) {
+        for (i=0, n = cBranches.length; i < n; i++) {
+          cSubBranches = cBranches[i].getElementsByTagName("ul");
+          if (cSubBranches.length > 0) {
+            addLinksToBranches(cSubBranches[0]);
+            cBranches[i].className = "HandCursorStyle";
+            cBranches[i].style.color = "blue";
+            cSubBranches[0].style.color = "black";
+            cSubBranches[0].style.cursor = "auto";
+          }
+        }
+      }
+    }
+  </script>
+EOF
+)
+
+;; (tests:create-html-tree "test-index.html")
+;;
+(define (tests:create-html-tree outf)
+  (if (common:simple-file-lock (conc outf ".lock"))
+      (let* ((oup (open-output-file outf))
+	     (area-name (common:get-testsuite-name))
+	     (keys      (rmt:get-keys))
+	     (numkeys   (length keys))
+	     (runsdat   (rmt:get-runs "%" #f #f (map (lambda (x)(list x "%")) keys)))
+	     (header    (vector-ref runsdat 0))
+	     (runs      (vector-ref runsdat 1))
+	     (runtreedat (map (lambda (x)
+				(append (take (vector->list x) numkeys)
+					(list (vector-ref x (+ 1 numkeys))))) ;; gets the runname
+			      runs))
+	     (runs-htree (common:list->htree runtreedat)))
+	(s:output-new
+	 oup
+	 (s:html tests:css-jscript-block
+		 (s:title "Summary for " area-name)
+		 (s:body 'onload "addEvents();"
+			 ;; top list
+			 (s:ul 'id "LinkedList1" 'class "LinkedList"
+			       (s:li
+				"Runs"
+				(common:htree->html runs-htree
+						    '()
+						    (lambda (x p)
+						      (apply s:a x p))))))))
+	(close-output-port oup)
+	(common:simple-file-release-lock (conc outf ".lock"))
+	#t)
+      #f))
+
+;;   (let* ((outputfilename (conc "megatest-rollup-" test-name ".html"))
+;; 	 (orig-dir       (current-directory))
+;; 	 (logf-info      (rmt:test-get-logfile-info run-id test-name))
+;; 	 (logf           (if logf-info (cadr logf-info) #f))
+;; 	 (path           (if logf-info (car  logf-info) #f)))
+;;     ;; This query finds the path and changes the directory to it for the test
+;;     (if (and (string? path)
+;; 	     (directory? path)) ;; can get #f here under some wierd conditions. why, unknown ...
+;; 	(begin
+;; 	  (debug:print 4 *default-log-port* "Found path: " path)
+;; 	  (change-directory path))
+;; 	;; (set! outputfilename (conc path "/" outputfilename)))
+;; 	(debug:print-error 0 *default-log-port* "summarize-items for run-id=" run-id ", test-name=" test-name ", no such path: " path))
+;;     (debug:print 4 *default-log-port* "summarize-items with logf " logf ", outputfilename " outputfilename " and force " force)
+;;     (if (or (equal? logf "logs/final.log")
+;; 	    (equal? logf outputfilename)
+;; 	    force)
+;; 	(let ((my-start-time (current-seconds))
+;; 	      (lockf         (conc outputfilename ".lock")))
+;; 	  (let loop ((have-lock  (common:simple-file-lock lockf)))
+;; 	    (if have-lock
+;; 		(let ((script (configf:lookup *configdat* "testrollup" test-name)))
+;; 		  (print "Obtained lock for " outputfilename)
+;; 		  ;; (rmt:top-test-set-per-pf-counts run-id test-name)
+;; 		  (rmt:roll-up-pass-fail-counts run-id test-name "" #f #f)
+;; 		  (rmt:top-test-set-per-pf-counts run-id test-name)
+;; 		  (if script
+;; 		      (system (conc script " > " outputfilename " & "))
+;; 		      (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename))
+;; 		  (change-directory orig-dir)
+;; 		  ;; NB// tests:test-set-toplog! is remote internal...
+;; 		  (tests:test-set-toplog! run-id test-name outputfilename))
+;; 		;; didn't get the lock, check to see if current update started later than this 
+;; 		;; update, if so we can exit without doing any work
+;; 		(if (> my-start-time (file-modification-time lockf))
+;; 		    ;; we started since current re-gen in flight, delay a little and try again
+;; 		    (begin
+;; 		      (debug:print-info 1 *default-log-port* "Waiting to update " outputfilename ", another test currently updating it")
+;; 		      (thread-sleep! (+ 5 (random 5))) ;; delay between 5 and 10 seconds
+;; 		      (loop (common:simple-file-lock lockf))))))))))
+
 ;; CHECK - WAS THIS ADDED OR REMOVED? MANUAL MERGE WITH API STUFF!!!
 ;;
 ;; get a pretty table to summarize steps
@@ -668,7 +813,8 @@
 		       (string<? (conc time-a)(conc time-b)))))))))
 
 
-;; summarize test
+;; summarize test in to a file test-summary.html in the test directory
+;;
 (define (tests:summarize-test run-id test-id)
   (let* ((test-dat  (rmt:get-test-info-by-id run-id test-id))
 	 (steps-dat (rmt:get-steps-for-test run-id test-id))
