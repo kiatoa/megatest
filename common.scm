@@ -622,6 +622,16 @@
 	      (cdr tal))
 	(max hed max-val))))
 
+;; get min or max, use > for max and < for min, this works around the limits on apply
+;;
+(define (common:min-max comp lst)
+  (if (null? lst)
+      #f ;; better than an exception for my needs
+      (fold (lambda (a b)
+	      (if (comp a b) a b))
+	    (car lst)
+	    lst)))
+
 ;; path list to hash-table tree
 ;;   ((a b c)(a b d)(e b c)) => ((a (b (d) (c))) (e (b (c))))
 ;;
