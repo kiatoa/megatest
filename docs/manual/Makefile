@@ -15,7 +15,7 @@ DISPATH = $(shell dirname $(BINPATH))
 
 all : server.ps megatest_manual.html client.ps complex-itemmap.png
 
-megatest_manual.html : megatest_manual.txt getting_started.txt writing_tests.txt reference.txt ../plan.txt howto.txt *png
+megatest_manual.html : megatest_manual.txt getting_started.txt writing_tests.txt reference.txt ../plan.txt howto.txt installation.txt *png
 	asciidoc  -b html5 -a icons -a iconsdir=$(DISPATH)/images/icons -a toc2 megatest_manual.txt
 #	dos2unix megatest_manual.html
 

@@ -362,7 +362,9 @@
 
 (define (common:get-testsuite-name)
   (or (configf:lookup *configdat* "setup" "testsuite" )
-      (pathname-file *toppath*)))
+      (if *toppath* 
+          (pathname-file *toppath*)
+          (pathname-file (current-directory)))))
 
 ;;======================================================================
 ;; E X I T   H A N D L I N G
