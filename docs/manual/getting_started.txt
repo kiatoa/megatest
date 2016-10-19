@@ -3,10 +3,28 @@ Getting Started
 ===============
 
 [partintro]
-.Getting started with Megatest
+.Getting started with Megatest: creating a testsuite/flow and your first test with installation instructions following.
 --
-How to install Megatest and set it up for running your regressions and continuous integration process.
+How to create your first testsuite and add a test.
 --
+
+After installing Megatest you can easily create a flow or testsuite and add some tests.
+
+Creating a Megatest Area
+------------------------
+
+.Using the helper to create a Megatest area
+------------------
+megatest -create-megatest-area
+------------------
+
+Creating a Test
+---------------
+
+.Using the helper to create a Megatest test
+---------------
+megatest -create-test testname
+---------------
 
 Installation
 ------------
@@ -15,9 +33,9 @@ Dependencies
 ~~~~~~~~~~~~
 
 Chicken scheme and a number of "eggs" are required for building
-Megatest. See the script installall.sch in the utils directory of the
-distribution for a mostly automated way to install everything needed
-for building Megatest on Linux.
+Megatest. See the script installall.sh in the utils directory of the
+source distribution for an automated way to install everything
+needed for building Megatest on Linux.
 
 footnote:[An example footnote.]
 indexterm:[Example index entry]

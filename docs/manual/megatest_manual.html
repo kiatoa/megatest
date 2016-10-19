@@ -898,19 +898,40 @@ Task table used for queueing runner actions (remove runs, cleanRunExecute, etc)
 </div>
 <h1 id="_getting_started">Getting Started</h1>
 <div class="openblock">
-<div class="title">Getting started with Megatest</div>
+<div class="title">Getting started with Megatest: creating a testsuite/flow and your first test with installation instructions following.</div>
 <div class="content">
-<div class="paragraph"><p>How to install Megatest and set it up for running your regressions and continuous integration process.</p></div>
+<div class="paragraph"><p>How to create your first testsuite and add a test.</p></div>
 </div></div>
+<div class="paragraph"><p>After installing Megatest you can easily create a flow or testsuite and add some tests.</p></div>
+<div class="sect1">
+<h2 id="_creating_a_megatest_area">Creating a Megatest Area</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="title">Using the helper to create a Megatest area</div>
+<div class="content monospaced">
+<pre>megatest -create-megatest-area</pre>
+</div></div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_creating_a_test">Creating a Test</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="title">Using the helper to create a Megatest test</div>
+<div class="content monospaced">
+<pre>megatest -create-test testname</pre>
+</div></div>
+</div>
+</div>
 <div class="sect1">
 <h2 id="_installation">Installation</h2>
 <div class="sectionbody">
 <div class="sect2">
 <h3 id="_dependencies">Dependencies</h3>
 <div class="paragraph"><p>Chicken scheme and a number of "eggs" are required for building
-Megatest. See the script installall.sch in the utils directory of the
-distribution for a mostly automated way to install everything needed
-for building Megatest on Linux.</p></div>
+Megatest. See the script installall.sh in the utils directory of the
+source distribution for an automated way to install everything
+needed for building Megatest on Linux.</p></div>
 <div class="paragraph"><p><span class="footnote"><br>[An example footnote.]<br></span></p></div>
 </div>
 </div>
