@@ -15,7 +15,10 @@
 (define genexample:example-logpro
 #<<EOF
   ;; You should have at least one expect:required. This ensures that your process ran
-  (expect:required in "LogFileBody" > 0 "Put description here" #/put pattern here/)
+  ;; comment out the line below and replace "put pattern here" with a pattern that will
+  ;; always be seen in your log file if the step runs successfully.
+  ;;
+  ;; (expect:required in "LogFileBody" > 0 "Put description here" #/put pattern here/)
   ;;
   ;; You may need ignores to suppress false error or warning hits from the later expects
   ;; NOTE: Order is important here!

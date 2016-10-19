@@ -1,99 +1,99 @@
 
 Getting Started
-===============
+---------------
 
 [partintro]
-.Getting started with Megatest: creating a testsuite/flow and your first test with installation instructions following.
+.Getting started with Megatest
 --
-How to create your first testsuite and add a test.
+Creating a testsuite or flow and your first test or task.
 --
 
-After installing Megatest you can easily create a flow or testsuite and add some tests.
+After installing Megatest you can create a flow or testsuite and add some
+tests using the helpers. Here is a quickstart sequence to get you up and
+running your first automated testsuite.
 
 Creating a Megatest Area
-------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Choose Target Keys
+^^^^^^^^^^^^^^^^^^
+
+First choose your "target" keys. These are used to organise your runs in a
+way that is meaningful to your project. If you are unsure about what to use
+for keys just use a single generic key such as "RUNTYPE". These keys will be
+used to hand values to your tests via environment variables so ensure they
+are unique. Prefixing them with something such as PROJKEYS_ is a good
+strategy. 
+
+Examples of keys:
+
+.Example keys
+[width="60%",options="header"]
+|==============================================
+| Option            | Description
+| RELEASE/ITERATION | This example is used by Megatest for its internal QA.
+| ARCH/OS/RELEASE   | For a software project targeting multiple platforms
+| UCTRLR/NODETYPE   | Microcontroller project with different controllers
+running same software
+|==============================================
+
+Create Area Config Files
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+You will need to choose locations for your runs (the data generated every
+time you run the testsuite) and link tree. For getting started answer the
+prompts with "runs" and "links". We use the Unix editor "vi" in the examples
+below but you can use any plain text editor.
 
 .Using the helper to create a Megatest area
 ------------------
 megatest -create-megatest-area
+
+# optional: verify that the settings are ok
+vi megatest.config
+vi runconfigs.config
 ------------------
 
 Creating a Test
----------------
+~~~~~~~~~~~~~~~
+
+Choose the test name for your first test and run the helper. You can edit
+the files after the initial creation. You will need to enter names and
+scripts for the steps to be run and then edit the
+tests/<testname>/testconfig file and modify the logpro rules to properly
+process the log output from your steps. For your first test just hit enter
+for the "waiton", "priority" and iteration variable prompts.
+
+Hint: for geting started make your logpro rules very liberal. expect:error
+patterns should match nothing and comment out expect:required rules.
 
 .Using the helper to create a Megatest test
 ---------------
-megatest -create-test testname
+megatest -create-test myfirsttest
+
+# then edit the generated config
+vi tests/myfirsttest/testconfig
 ---------------
 
-Installation
-------------
+Running your test
+~~~~~~~~~~~~~~~~~
 
-Dependencies
-~~~~~~~~~~~~
+First choose a target and runname. If you have a two-place target such as
+RELEASE/ITERATION a target would look like v1.0/aff3 where v1.0 is the
+RELEASE and aff3 is the ITERATION. For a run name just use something like
+run1. 
 
-Chicken scheme and a number of "eggs" are required for building
-Megatest. See the script installall.sh in the utils directory of the
-source distribution for an automated way to install everything
-needed for building Megatest on Linux.
+.Running all tests (testpatt of "%" matches all tests)
+---------------
+megatest -run -target v1.0/aff3 -runname run1 -testpatt % -log run1.log
+---------------
 
-footnote:[An example footnote.]
-indexterm:[Example index entry]
+Viewing the results
+~~~~~~~~~~~~~~~~~~~
 
-// 
-// 
-// And now for something completely different: ((monkeys)), lions and
-// tigers (Bengal and Siberian) using the alternative syntax index
-// entries.
-// (((Big cats,Lions)))
-// (((Big cats,Tigers,Bengal Tiger)))
-// (((Big cats,Tigers,Siberian Tiger)))
-// Note that multi-entry terms generate separate index entries.
-// 
-// Here are a couple of image examples: an image:images/smallnew.png[]
-// example inline image followed by an example block image:
-// 
-// .Tiger block image
-// image::images/tiger.png[Tiger image]
-// 
-// Followed by an example table:
-// 
-// .An example table
-// [width="60%",options="header"]
-// |==============================================
-// | Option          | Description
-// | -a 'USER GROUP' | Add 'USER' to 'GROUP'.
-// | -R 'GROUP'      | Disables access to 'GROUP'.
-// |==============================================
-// 
-// .An example example
-// ===============================================
-// Lorum ipum...
-// ===============================================
-// 
-// [[X1]]
-// Sub-section with Anchor
-// ~~~~~~~~~~~~~~~~~~~~~~~
-// Sub-section at level 2.
-// 
-// Chapter Sub-section
-// ^^^^^^^^^^^^^^^^^^^
-// Sub-section at level 3.
-// 
-// Chapter Sub-section
-// +++++++++++++++++++
-// Sub-section at level 4.
-// 
-// This is the maximum sub-section depth supported by the distributed
-// AsciiDoc configuration.
-// footnote:[A second example footnote.]
-// 
-// 
-// The Second Chapter
-// ------------------
-// An example link to anchor at start of the <<X1,first sub-section>>.
-// indexterm:[Second example index entry]
-// 
-// An example link to a bibliography entry <<taoup>>.
-// 
-// 
+Start the dashboard and browse your run in the "Runs" tab.
+
+.Starting dashboard
+----------------
+dashboard -rows 24
+----------------

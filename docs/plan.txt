@@ -1,15 +1,15 @@
 Road Map
-========
+--------
 
 Note 1: This road-map is tentative and subject to change without notice.
 
 Note 2: Starting over. Old plan is commented out.
 
 Current Items
--------------
+~~~~~~~~~~~~~
 
 ww05 - migrate to inmem-db
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 . Switch to inmem db with fast sync to on disk db's [DONE]
 . Server polls tasks table for next action

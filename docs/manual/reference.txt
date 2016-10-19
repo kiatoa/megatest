@@ -1,12 +1,12 @@
 
 Reference
-=========
+---------
 
 Megatest Config File Settings
------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Disk Space Checks
-~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^
 
 Some parameters you can put in the [setup] section of megatest.config:
 
@@ -22,17 +22,17 @@ free-space-script check-space.sh
 -------------------
 
 Trim trailing spaces
-~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^
 
 ------------------
 [configf:settings trim-trailing-spaces yes]
 ------------------
 
 Job Submission Control
-~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^
 
 Submit jobs to Host Types based on Test Name
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+++++++++++++++++++++++++++++++++++++++++++++
 
 .In megatest.config
 ------------------------
@@ -52,7 +52,7 @@ flexi-launcher yes
 ------------------------
 
 host-types
-^^^^^^^^^^
+++++++++++
 
 List of host types and the commandline to run a job on that host type.
 
@@ -62,14 +62,15 @@ general nbfake
 ------------
 
 launchers
-^^^^^^^^^
++++++++++
+
 .test/itempath => host-type
 ------------
 runfirst/sum% remote
 ------------
 
 Miscellaneous Setup Items
-~~~~~~~~~~~~~~~~~~~~~~~~~
++++++++++++++++++++++++++
 
 Attempt to rerun tests in "STUCK/DEAD", "n/a", "ZERO_ITEMS" states.
 
@@ -80,7 +81,7 @@ reruns 5
 ------------------
 
 Run time limit
-^^^^^^^^^^^^^^
+++++++++++++++
 
 -----------------
 [setup]
@@ -89,7 +90,7 @@ runtimelim 1h 2m 3s
 -----------------
 
 Tests browser view
-^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~
 
 The tests browser (see the Run Control tab on the dashboard) has two views for displaying the tests. 
 
