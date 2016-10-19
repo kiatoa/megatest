@@ -2571,7 +2571,7 @@ Misc
    (begin
      (debug:print 0 *default-log-port* "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn))
      (current-seconds)) ;; something went wrong - just print an error and return current-seconds
-   (apply max (map (lambda (filen)
+   (common:max (map (lambda (filen)
 		     (file-modification-time filen))
 		   (glob (conc (dboard:tabdat-dbdir tabdat) "/*.db"))))))
 
@@ -2647,16 +2647,6 @@ Misc
 			   (hash-table-ref/default rowhash (+ i rownum) '())))
     (if (< i num-rows)
 	(loop (+ i 1)))))
-
-;; get min or max, use > for max and < for min, this works around the limits on apply
-;;
-(define (dboard:min-max comp lst)
-  (if (null? lst)
-      #f ;; better than an exception for my needs
-      (fold (lambda (a b)
-	      (if (comp a b) a b))
-	    (car lst)
-	    lst)))
 
 ;; sort a list of test-ids by the event _time using a hash table of id => testdat
 ;;
@@ -3082,8 +3072,8 @@ Misc
 			       (runcomp   (vg:comp-new));; new component for this run
 			       (rows-used (make-hash-table)) ;; keep track of what parts of the rows are used here row1 = (obj1 obj2 ...)
 			       ;; (row-height 4)
-			       (run-start  (dboard:min-max < (map db:test-get-event_time testsdat)))
-			       (run-end    (let ((re (dboard:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat))))
+			       (run-start  (common:min-max < (map db:test-get-event_time testsdat)))
+			       (run-end    (let ((re (common:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat))))
 					     (max re (+ 1 run-start)))) ;; use run-start+1 if run-start == run-end so delta is not zero
 			       (timeoffset (- run-start)) ;; (+ fixed-originx canvas-margin) run-start))
 			       (run-duration (- run-end run-start))
