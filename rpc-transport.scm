@@ -62,10 +62,12 @@
                 (debug:print-info 2 *default-log-port* "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
                 (tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat) " rpc-transport:launch")))
           (begin
+
             (rpc-transport:run (if (args:get-arg "-server")(args:get-arg "-server") "-") run-id server-id)
             (exit))))))
 
 (define (rpc-transport:run hostn run-id server-id)
+  (BB> "rpc-trainsport:run fired for hostn="hostn" run-id="run-id" server-id="server-id)
   (debug:print 2 *default-log-port* "Attempting to start the rpc server ...")
    ;; (trace rpc:publish-procedure!)
 
