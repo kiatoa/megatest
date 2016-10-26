@@ -433,11 +433,11 @@
 
 ;; no elegance here ...
 ;;
-(define (tasks:kill-server hostname pid)
+(define (tasks:kill-server hostname pid #!key (kill-switch ""))
   (debug:print-info 0 *default-log-port* "Attempting to kill server process " pid " on host " hostname)
   (setenv "TARGETHOST" hostname)
   (setenv "TARGETHOST_LOGF" "server-kills.log")
-  (system (conc "nbfake kill " pid))
+  (system (conc "nbfake kill "kill-switch" "pid))
   (unsetenv "TARGETHOST_LOGF")
   (unsetenv "TARGETHOST"))
  

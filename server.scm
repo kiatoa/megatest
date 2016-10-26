@@ -49,12 +49,13 @@
 ;;
 ;; start_server
 ;;
-(define (server:launch run-id)
-  (case *transport-type*
+(define (server:launch run-id transport-type)
+  (BB> "server:launch fired for run-id="run-id" transport-type="transport-type)
+  (case transport-type
     ((http)(http-transport:launch run-id))
     ;;((nmsg)(nmsg-transport:launch run-id))
     ((rpc)  (rpc-transport:launch run-id))
-    (else (debug:print-error 0 *default-log-port* "unknown server type " *transport-type*))))
+    (else (debug:print-error 0 *default-log-port* "unknown server type " transport-type))))
 ;;       (else   (debug:print-error 0 *default-log-port* "No known transport set, transport=" transport ", using rpc")
 ;; 	      (rpc-transport:launch run-id)))))
 
