@@ -148,7 +148,7 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
-  -transport http|zmq     : use http or zmq for transport (default is http) 
+  -transport http|rpc     : use http or rpc for transport (default is http) 
   -daemonize              : fork into background and disconnect from stdin/out
   -log logfile            : send stdout and stderr to logfile
   -list-servers           : list the servers 
@@ -819,7 +819,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (equal? sid 0)) ;; kill all/any
 		     (begin
 		       (debug:print-info 0 *default-log-port* "Attempting to stop server with pid " pid)
-		       (tasks:kill-server status hostname pullport pid transport)))))
+		       (tasks:kill-server hostname pid)))))
 	     servers)
 	    (debug:print-info 1 *default-log-port* "Done with listservers")
 	    (set! *didsomething* #t)

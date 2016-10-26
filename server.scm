@@ -103,6 +103,7 @@
 ;; Given a run id start a server process    ### NOTE ### > file 2>&1 
 ;; if the run-id is zero and the target-host is set 
 ;; try running on that host
+;;   incidental: rotate logs in logs/ dir.
 ;;
 (define  (server:run run-id)
   (let* ((curr-host   (get-host-name))
@@ -118,8 +119,11 @@
     (debug:print 0 *default-log-port* "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
     (if (not (directory-exists? "logs"))(create-directory "logs"))
+    
     ;; Rotate logs, logic: 
-    ;;                 if > 500k and older than 1 week, remove previous compressed log and compress this log
+    ;;                 if > 500k and older than 1 week:
+    ;;                     remove previous compressed log and compress this log
+    ;;
     (directory-fold 
      (lambda (file rem)
        (if (and (string-match "^.*.log" file)
@@ -143,6 +147,7 @@
 	(begin
 	  (debug:print-info 0 *default-log-port* "Starting server on " target-host ", logfile is " logfile)
 	  (setenv "TARGETHOST" target-host)))
+    
     (setenv "TARGETHOST_LOGF" logfile)
     (common:wait-for-normalized-load 4 " delaying server start due to load" remote-host: (get-environment-variable "TARGETHOST")) ;; do not try starting servers on an already overloaded machine, just wait forever
     (system (conc "nbfake " cmdln))
@@ -151,7 +156,7 @@
     ;; (system cmdln)
     (pop-directory)))
 
-(define (server:get-client-signature)
+(define (server:get-client-signature) ;; BB> why is this proc named "get-"?  it returns nothing -- set! has not return value.
   (if *my-client-signature* *my-client-signature*
       (let ((sig (server:mk-signature)))
 	(set! *my-client-signature* sig)

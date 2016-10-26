@@ -3055,10 +3055,10 @@
       (base64:base64-encode 
        (z3:encode-buffer
 	(with-output-to-string
-	  (lambda ()(serialize obj)))))
+	  (lambda ()(serialize obj))))) ;; BB: serialize - this is what causes problems between different builds of megatest communicating.  serialize is sensitive to binary image of mtest.
       #t))
     ((zmq nmsg)(with-output-to-string (lambda ()(serialize obj))))
-    (else obj)))
+    (else obj))) ;; rpc
 
 (define (db:string->obj msg #!key (transport 'http))
   (case transport
@@ -3075,7 +3075,7 @@
 	   (debug:print-error 0 *default-log-port* "reception failed. Received " msg " but cannot translate it.")
 	   msg))) ;; crude reply for when things go awry
     ((zmq nmsg)(with-input-from-string msg (lambda ()(deserialize))))
-    (else msg)))
+    (else msg))) ;; rpc
 
 (define (db:test-set-status-state dbstruct run-id test-id status state msg)
   (let ((dbdat  (db:get-db dbstruct run-id)))

@@ -1,4 +1,6 @@
 # make install CSCOPTS='-accumulate-profile -profile-name $(PWD)/profile-ww$(shell date +%V.%u)'
+# rm <files>.o ; make install CSCOPTS='-profile' ; ... ;  chicken-profile | less
+
 PREFIX=$(PWD)
 CSCOPTS= 
 INSTALL=install
