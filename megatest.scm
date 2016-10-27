@@ -148,7 +148,7 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
-  -transport http|zmq     : use http or zmq for transport (default is http) 
+  -transport http|rpc     : use http or rpc for transport (default is http) 
   -daemonize              : fork into background and disconnect from stdin/out
   -log logfile            : send stdout and stderr to logfile
   -list-servers           : list the servers 
@@ -486,14 +486,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Misc general calls
 ;;======================================================================
 
-(if (args:get-arg "-cache-db")
-	(begin
-		(set! *didsomething* #t)
-		(let* ((temp-dir (or (args:get-arg "-target-db") (create-directory (conc "/tmp/" (getenv "USER") "/" (string-translate (current-directory) "/" "_")))))
-			(target-db (conc temp-dir "/cached.db"))
-			(source-db (args:get-arg "-source-db")))
-
-		(db:cache-for-read-only source-db target-db))))
+(if (and (args:get-arg "-cache-db")
+         (args:get-arg "-source-db"))
+    (let* ((temp-dir (or (args:get-arg "-target-db") (create-directory (conc "/tmp/" (getenv "USER") "/" (string-translate (current-directory) "/" "_")))))
+           (target-db (conc temp-dir "/cached.db"))
+           (source-db (args:get-arg "-source-db")))        
+      (db:cache-for-read-only source-db target-db)
+      (set! *didsomething* #t)))
 
 ;; handle a clean-cache request as early as possible
 ;;
@@ -751,10 +750,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ;;
     (let ((tl        (launch:setup))
 	  (run-id    (and (args:get-arg "-run-id")
-			  (string->number (args:get-arg "-run-id")))))
+			  (string->number (args:get-arg "-run-id"))))
+          (transport-type (string->symbol (or (args:get-arg "-transport") "http"))))
       (if run-id
 	  (begin
-	    (server:launch run-id)
+	    (server:launch run-id transport-type)
 	    (set! *didsomething* #t))
 	  (debug:print-error 0 *default-log-port* "server requires run-id be specified with -run-id")))
 
@@ -766,6 +766,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(hash-table-keys args:arg-hash)
 		'("-list-servers"
 		  "-stop-server"
+                  "-kill-server"
 		  "-show-cmdinfo"
 		  "-list-runs"
 		  "-ping")))
@@ -788,14 +789,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))
 
 (if (or (args:get-arg "-list-servers")
-	(args:get-arg "-stop-server"))
+	(args:get-arg "-stop-server")
+        (args:get-arg "-kill-server"))
     (let ((tl (launch:setup)))
       (if tl 
 	  (let* ((tdbdat  (tasks:open-db))
 		 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
 		 (fmtstr  "~5a~12a~8a~20a~24a~10a~10a~10a~10a\n")
 		 (servers-to-kill '())
-		 (killinfo   (args:get-arg "-stop-server"))
+                 (kill-switch  (if (args:get-arg "-kill-server") "-9" ""))
+                 (killinfo   (or (args:get-arg "-stop-server") (args:get-arg "-kill-server") ))
 		 (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
 		 (sid        (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f)))
 	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface:OutPort" "InPort" "LastBeat" "State" "Transport")
@@ -829,8 +832,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 (if (or (equal? id sid)
 			 (equal? sid 0)) ;; kill all/any
 		     (begin
-		       (debug:print-info 0 *default-log-port* "Attempting to stop server with pid " pid)
-		       (tasks:kill-server status hostname pullport pid transport)))))
+		       (debug:print-info 0 *default-log-port* "Attempting to kill "kill-switch" server with pid " pid)
+		       (tasks:kill-server hostname pid kill-switch: kill-switch)))))
 	     servers)
 	    (debug:print-info 1 *default-log-port* "Done with listservers")
 	    (set! *didsomething* #t)

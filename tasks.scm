@@ -231,6 +231,14 @@
   (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state = 'running' AND run_id=? AND interface=? AND port=?;"
 		   (conc "defunct" tag) run-id iface port))
 
+
+;; BB> adding missing func for --list-servers
+(define (tasks:server-deregister mdb hostname #!key (pullport #f) (pid #f) (action #f)) ;;pullport pid: pid action: 'delete))
+  (if (eq? action 'delete)
+      (sqlite3:execute mdb "DELETE FROM servers WHERE pid=? AND port=? AND hostname=?;" pid pullport hostname)
+      (sqlite3:execute mdb "UPDATE servers SET state='defunct', heartbeat=strftime('%s','now') WHERE hostname=? AND pid=?;"
+                       hostname pid)))
+
 (define (tasks:server-delete-records-for-this-pid mdb tag)
   (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE hostname=? AND pid=?;"
 		   (conc "defunct" tag) (get-host-name) (current-process-id)))
@@ -425,11 +433,11 @@
 
 ;; no elegance here ...
 ;;
-(define (tasks:kill-server hostname pid)
+(define (tasks:kill-server hostname pid #!key (kill-switch ""))
   (debug:print-info 0 *default-log-port* "Attempting to kill server process " pid " on host " hostname)
   (setenv "TARGETHOST" hostname)
   (setenv "TARGETHOST_LOGF" "server-kills.log")
-  (system (conc "nbfake kill " pid))
+  (system (conc "nbfake kill "kill-switch" "pid))
   (unsetenv "TARGETHOST_LOGF")
   (unsetenv "TARGETHOST"))
  

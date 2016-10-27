@@ -105,6 +105,17 @@ well in that mode then use "nodot" to turn it off.
 nodot
 -----------------
 
+Dashboard settings
+~~~~~~~~~~~~~~~~~~
+
+.Runs tab buttons, font and size
+------------------
+[dashboard]
+btn-height x14
+btn-fontsz 10
+cell-width 60
+------------------
+
 Database settings
 ~~~~~~~~~~~~~~~~~
 

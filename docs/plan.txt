@@ -1,9 +1,37 @@
 Road Map
 --------
 
-Note 1: This road-map is tentative and subject to change without notice.
+Note 1: This road-map is still evolving and subject to change without notice.
 
-Note 2: Starting over. Old plan is commented out.
+Architecture Refactor
+~~~~~~~~~~~~~~~~~~~~~
+
+Goals
+^^^^^
+
+. Reduce load on the file system. Sqlite3 files on network filesystem can be
+  a burden.
+. Reduce number of servers and frequency of start/stop. This is mostly an
+  issue of clutter but also a reduction in "moving parts".
+. Coalesce activities to a single home host where possible. Give the user
+  feedback that they have started the dashboard on a host other than the
+  home host.
+. Reduce number of processes involved in managing running tests.
+
+Changes Needed
+^^^^^^^^^^^^^^
+
+. ACID compliant db will be on /tmp and synced to megatest.db with a five
+  second max delay.
+. Read/writes to db for processes on homehost will go direct to /tmp
+  megatest.db file.
+. Read/wites fron non-homehost processes will go through one server. Bulk
+  reads (e.g. for dashboard or list-runs) will be cached on the current host
+  in /tmp and synced from the home megatest.db in the testsuite area.
+. Db syncs rely on the target db file timestame minus some margin.
+. Since bulk reads do not use the server we can switch to simple RPC for the
+  network transport.
+. Test running manager process extended to manage multiple running tests.
 
 Current Items
 ~~~~~~~~~~~~~

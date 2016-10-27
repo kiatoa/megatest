@@ -206,7 +206,7 @@
   ;;       (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
   ;;       (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
   ;;       db)
-  (let* ((parent-dir   (pathname-directory fname))
+  (let* ((parent-dir   (or (pathname-directory fname)(current-directory))) ;; no parent? go local
 	 (dir-writable (file-write-access? parent-dir))
 	 (file-exists  (file-exists? fname))
 	 (file-write   (if file-exists
@@ -785,27 +785,27 @@
                                END;"))
 
 (define (db:cache-for-read-only source target)
-	(let* ((toppath  (launch:setup))
-		(cache-db (db:open-megatest-db path: target))
-		(source-db (db:open-megatest-db path: source))
-		(curr-time (current-seconds))
-		(res '()))
-		(print source-db)
-		(begin
-			(if (not (file-exists? target)) 
-				((db:sync-tables (db:sync-main-list source-db) source-db cache-db)
-				(db:sync-tables db:sync-tests-only source-db cache-db)
-				(db:clean-up-rundb cache-db))
-				((sqlite3:for-each-row
-				     (lambda (id release runname state status owner event_time comment fail_count pass_count )
-				       (set! res (cons (id release runname state status owner event_time comment fail_count pass_count ) res)))
-				     (db:dbdat-get-db source-db)
-				     "SELECT id, release, runname, state, status, owner, event_time, comment, fail_count, pass_count FROM runs;"))
-				)
-			(print res)
-			(sqlite3:finalize! (db:dbdat-get-db cache-db))
-		   ))
-	)
+  (let* ((toppath   (launch:setup))
+         (cache-db  (db:open-megatest-db path: target))
+         (source-db (db:open-megatest-db path: source))
+         (curr-time (current-seconds))
+         (res      '()))
+    (print source-db)
+    (begin
+      (if (not (file-exists? target)) 
+          ((db:sync-tables (db:sync-main-list source-db) source-db cache-db)
+           (db:sync-tables db:sync-tests-only source-db cache-db)
+           (db:clean-up-rundb cache-db))
+          ((sqlite3:for-each-row
+            (lambda (id release runname state status owner event_time comment fail_count pass_count )
+              (set! res (cons (id release runname state status owner event_time comment fail_count pass_count ) res)))
+            (db:dbdat-get-db source-db)
+            "SELECT id, release, runname, state, status, owner, event_time, comment, fail_count, pass_count FROM runs;"))
+          )
+      (print res)
+      (sqlite3:finalize! (db:dbdat-get-db cache-db))
+      ))
+  )
 
 ;; options:
 ;;
@@ -3078,10 +3078,10 @@
       (base64:base64-encode 
        (z3:encode-buffer
 	(with-output-to-string
-	  (lambda ()(serialize obj)))))
+	  (lambda ()(serialize obj))))) ;; BB: serialize - this is what causes problems between different builds of megatest communicating.  serialize is sensitive to binary image of mtest.
       #t))
     ((zmq nmsg)(with-output-to-string (lambda ()(serialize obj))))
-    (else obj)))
+    (else obj))) ;; rpc
 
 (define (db:string->obj msg #!key (transport 'http))
   (case transport
@@ -3098,7 +3098,7 @@
 	   (debug:print-error 0 *default-log-port* "reception failed. Received " msg " but cannot translate it.")
 	   msg))) ;; crude reply for when things go awry
     ((zmq nmsg)(with-input-from-string msg (lambda ()(deserialize))))
-    (else msg)))
+    (else msg))) ;; rpc
 
 (define (db:test-set-status-state dbstruct run-id test-id status state msg)
   (let ((dbdat  (db:get-db dbstruct run-id)))
