@@ -66,24 +66,30 @@
             (rpc-transport:run (if (args:get-arg "-server")(args:get-arg "-server") "-") run-id server-id)
             (exit))))))
 
+(define *rpc-listener-port* #f)
+(define *rpc-listener-port-bind-timestamp* #f)
+
 (define (rpc-transport:run hostn run-id server-id)
-  (BB> "rpc-trainsport:run fired for hostn="hostn" run-id="run-id" server-id="server-id)
+  (BB> "rpc-transport:run fired for hostn="hostn" run-id="run-id" server-id="server-id)
   (debug:print 2 *default-log-port* "Attempting to start the rpc server ...")
    ;; (trace rpc:publish-procedure!)
 
   (rpc:publish-procedure! 'server:login server:login)
   (rpc:publish-procedure! 'testing (lambda () "Just testing"))
-
+  (BB> "flag1")
   (let* ((db              #f)
-	 (hostname        (get-host-name))
-	 (ipaddrstr       (let ((ipstr (if (string=? "-" hostn)
+         (tdbdat          (tasks:open-db))
+	 (hostname        (let ((res (get-host-name))) (BB> "hostname="res) res))
+	 (ipaddrstr       (let* ((ipstr (if (string=? "-" hostn)
 					   ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
 					   (server:get-best-guess-address hostname)
-					   #f)))
-			    (if ipstr ipstr hostn))) ;; hostname))) 
-	 (start-port      (open-run-close tasks:server-get-next-port tasks:open-db))
+					   #f))
+                                 (res (if ipstr ipstr hostn)))
+                            (BB> "ipaddrstr="res)                             
+                            res)) ;; hostname))) 
+	 (start-port      (let ((res (portlogger:open-run-close portlogger:find-port))) (BB> "start-port="res) res))
 	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree"))
-	 (rpc:listener    (rpc-transport:find-free-port-and-open (rpc:default-server-port)))
+	 (rpc:listener    (rpc-transport:find-free-port-and-open start-port))
 	 (th1             (make-thread
 			   (lambda ()
 			     ((rpc:make-server rpc:listener) #t))
@@ -96,15 +102,17 @@
 	 (ipaddrstr       (if (string=? "-" hostn)
 			      (server:get-best-guess-address hostname) ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
 			      #f))
-	 (portnum         (rpc:default-server-port))
+	 (portnum         (let ((res (rpc:default-server-port))) (BB> "rpc:default-server-port="res" rpc-listener-port="*rpc-listener-port*) res))
 	 (host:port       (conc (if ipaddrstr ipaddrstr hostname) ":" portnum))
 	 (tdb             (tasks:open-db)))
+    (BB> "Got here before thread start of rpc listener")
     (thread-start! th1)
+    (BB> "started thread th1="th1)
     (set! db *inmemdb*)
-    (open-run-close tasks:server-set-interface-port 
-		    tasks:open-db 
-		    server-id 
-		    ipaddrstr portnum)
+    (tasks:server-set-interface-port 
+     (db:delay-if-busy tdbdat)
+     server-id 
+     ipaddrstr portnum)
     (debug:print 0 *default-log-port* "Server started on " host:port)
     
     ;; (trace rpc:publish-procedure!)
@@ -116,10 +124,10 @@
     ;;======================================================================
     ;;
     (on-exit (lambda ()
-	       (open-run-close tasks:server-set-state! tasks:open-db server-id "stopped")))
+	       (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "stopped")))
 
     (set! *rpc:listener* rpc:listener)
-    (tasks:server-set-state! tdb server-id "running")
+    (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")
     (set! *inmemdb*  (db:setup run-id))
     ;; if none running or if > 20 seconds since 
     ;; server last used then start shutdown
@@ -139,16 +147,19 @@
 	      (debug:print-info 0 *default-log-port* "Server shutdown complete. Exiting")
 	      ))))))
 
-(define (rpc-transport:find-free-port-and-open port)
+(define (rpc-transport:find-free-port-and-open port #!key )
   (handle-exceptions
    exn
-	  (begin
+   (begin
      (print "Failed to bind to port " (rpc:default-server-port) ", trying next port")
      (rpc-transport:find-free-port-and-open (+ port 1)))
    (rpc:default-server-port port)
+   (set! *rpc-listener-port* port) ;; a bit paranoid about rpc:default-server-port parameter not changing across threads (as params are wont to do).  keeping this global in my back pocket in case this causes problems
+   (set! *rpc-listener-port-bind-timestamp* (current-milliseconds)) ;; may want to test how long it has been since the last bind attempt happened...
    (tcp-read-timeout 240000)
+   (BB> "rpc-transport> attempting to bind tcp port "port)
    (tcp-listen (rpc:default-server-port) 10000)))
-
+  
 (define (rpc-transport:ping run-id host port)
   (handle-exceptions
    exn
