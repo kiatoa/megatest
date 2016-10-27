@@ -10,7 +10,7 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos) ;; (srfi 18) extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format apropos) ;; (srfi 18) extras)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -29,6 +29,8 @@
 (include "key_records.scm")
 (include "db_records.scm")
 (include "megatest-fossil-hash.scm")
+
+(define (toplevel-command . param) #f)
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -227,6 +229,10 @@ Built from " megatest-fossil-hash ))
       (save-environment-as-files (args:get-arg "-env2file"))
       (set! *didsomething* #t)))
 
+(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.megatestrc")))
+  (if (file-exists? debugcontrolf)
+      (load debugcontrolf)))
+
 ;;======================================================================
 ;; Remove old run(s)
 ;;======================================================================
@@ -352,7 +358,8 @@ Built from " megatest-fossil-hash ))
 		 (th3 (make-thread (lambda ()
 				     (server:keep-running db host:port)))))
 	    (thread-start! th3)
-	    (thread-join! th3))
+	    (thread-join! th3)
+            (set! *didsomething* #t))
 	  (debug:print 0 "ERROR: Failed to setup for megatest"))))
 
 ;;======================================================================
@@ -790,12 +797,12 @@ Built from " megatest-fossil-hash ))
 	    (set! *db* db)
 	    (if (not (args:get-arg "-server"))
 		(server:client-setup))
-	    (import readline)
-	    (import apropos)
-	    (gnu-history-install-file-manager
-	     (string-append
-	      (or (get-environment-variable "HOME") ".") "/.megatest_history"))
-	    (current-input-port (make-gnu-readline-port "megatest> "))
+	    ;; (import readline)
+	    ;; (import apropos)
+	    ;; (gnu-history-install-file-manager
+	    ;;  (string-append
+	    ;;   (or (get-environment-variable "HOME") ".") "/.megatest_history"))
+	    ;; (current-input-port (make-gnu-readline-port "megatest> "))
 	    (repl)))
       (set! *didsomething* #t)))
 

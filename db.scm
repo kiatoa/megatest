@@ -728,7 +728,7 @@
      (lambda (count)
        (set! res count))
      db
-     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART','NOT_STARTED');")
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART');") ;; remove NOT_STARTED
     res))
 
 (define (db:get-count-tests-running-in-jobgroup db jobgroup)
