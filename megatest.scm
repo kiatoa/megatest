@@ -261,8 +261,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-fields"
 			"-recover-test" ;; run-id,test-id - used internally to recover a test stuck in RUNNING state
 			"-sort"
-			) 
-		 (list  "-h" "-help" "--help"
+			"-target-db"
+			"-source-db"
+			)
+ 		 (list  "-h" "-help" "--help"
 			"-manual"
 			"-version"
 		        "-force"
@@ -279,7 +281,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-rerun-clean"
 			"-rerun-all"
 			"-clean-cache"
-
+			"-cache-db"
 			;; misc
 			"-repl"
 			"-lock"
@@ -483,6 +485,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 ;; Misc general calls
 ;;======================================================================
+
+(if (args:get-arg "-cache-db")
+	(begin
+		(set! *didsomething* #t)
+		(let* ((temp-dir (or (args:get-arg "-target-db") (create-directory (conc "/tmp/" (getenv "USER") "/" (string-translate (current-directory) "/" "_")))))
+			(target-db (conc temp-dir "/cached.db"))
+			(source-db (args:get-arg "-source-db")))
+
+		(db:cache-for-read-only source-db target-db))))
 
 ;; handle a clean-cache request as early as possible
 ;;
