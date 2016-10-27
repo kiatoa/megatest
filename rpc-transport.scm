@@ -49,13 +49,13 @@
         (begin
           (debug:print 0 *default-log-port* "INFO: Server for run-id " run-id " already running")
           (exit 0)))
-    (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id))
+    (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id 'rpc))
                (remtries  4))
       (if (not server-id)
           (if (> remtries 0)
               (begin
                 (thread-sleep! 2)
-                (loop (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id)
+                (loop (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id 'rpc)
                       (- remtries 1)))
               (begin
                 ;; since we didn't get the server lock we are going to clean up and bail out

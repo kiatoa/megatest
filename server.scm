@@ -63,16 +63,21 @@
 ;; S E R V E R   U T I L I T I E S 
 ;;======================================================================
 
+;; set global *transport-type* based on -transport switch and serer/transport configuration.  default http otherwise.
+;; called by launch:setup
+(define (server:set-transport)
+  (let ((ttype (string->symbol
+                (or (args:get-arg "-transport")
+                    (configf:lookup *configdat* "server" "transport")
+                    "http"))))
+    (set! *transport-type* ttype)
+    ttype))
+
 ;; Get the transport
 (define (server:get-transport)
   (if *transport-type*
       *transport-type*
-      (let ((ttype (string->symbol
-		    (or (args:get-arg "-transport")
-			(configf:lookup *configdat* "server" "transport")
-			"rpc"))))
-	(set! *transport-type* ttype)
-	ttype)))
+      (server:set-transport)))
 	    
 ;; Generate a unique signature for this server
 (define (server:mk-signature)

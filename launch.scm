@@ -702,7 +702,7 @@
 ;;     sets; *configdat*    (megatest.config info)
 ;;           *runconfigdat* (runconfigs.config info)
 ;;           *configstatus* (status of the read data)
-;;
+;;           *transport-type*
 (define (launch:setup #!key (force #f))
   (let* ((toppath  (or *toppath* (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
 	 (runname  (common:args-get-runname))
@@ -829,6 +829,8 @@
 	(setenv "MT_RUN_AREA_HOME" *toppath*)
 	(begin
 	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")))
+    (server:set-transport)
+    ;;(BB> "Transport is >"*transport-type*"<")
     *toppath*))
 
 (define (get-best-disk confdat testconfig)
