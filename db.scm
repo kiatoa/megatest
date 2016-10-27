@@ -324,8 +324,8 @@
 
 ;; Open the classic megatest.db file in toppath
 ;;
-(define (db:open-megatest-db)
-  (let* ((dbpath       (conc *toppath* "/megatest.db"))
+(define (db:open-megatest-db #!key (path #f))
+  (let* ((dbpath       (or path (conc *toppath* "/megatest.db")))
 	 (dbexists     (file-exists? dbpath))
 	 (db           (db:lock-create-open dbpath
 					    (lambda (db)
@@ -784,6 +784,29 @@
                                    WHERE id=old.id;
                                END;"))
 
+(define (db:cache-for-read-only source target)
+	(let* ((toppath  (launch:setup))
+		(cache-db (db:open-megatest-db path: target))
+		(source-db (db:open-megatest-db path: source))
+		(curr-time (current-seconds))
+		(res '()))
+		(print source-db)
+		(begin
+			(if (not (file-exists? target)) 
+				((db:sync-tables (db:sync-main-list source-db) source-db cache-db)
+				(db:sync-tables db:sync-tests-only source-db cache-db)
+				(db:clean-up-rundb cache-db))
+				((sqlite3:for-each-row
+				     (lambda (id release runname state status owner event_time comment fail_count pass_count )
+				       (set! res (cons (id release runname state status owner event_time comment fail_count pass_count ) res)))
+				     (db:dbdat-get-db source-db)
+				     "SELECT id, release, runname, state, status, owner, event_time, comment, fail_count, pass_count FROM runs;"))
+				)
+			(print res)
+			(sqlite3:finalize! (db:dbdat-get-db cache-db))
+		   ))
+	)
+
 ;; options:
 ;;
 ;;  'killservers  - kills all servers
@@ -821,7 +844,7 @@
     (if (member 'dejunk options)
 	(begin
 	  (db:delay-if-busy mtdb)
-	  (db:clean-up mtdb)))
+	  (db:clean-up mtdb)))	
 
     ;; adjust test-ids to fit into proper range
     ;;
