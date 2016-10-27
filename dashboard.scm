@@ -1269,6 +1269,7 @@ Misc
            #:name "Runs"
            #:expand "YES"
            #:addexpanded "NO"
+           #:size "10x"
            #:selection-cb
            (lambda (obj id state)
              (debug:catch-and-dump
