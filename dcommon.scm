@@ -218,7 +218,7 @@
 				    (let ((rownums (hash-table-values testname-to-row)))
 				      (set! rownum (if (null? rownums)
 						       1
-						       (+ 1 (apply max rownums))))
+						       (+ 1 (common:max rownums))))
 				      (hash-table-set! testname-to-row fullname rownum)
 				      ;; create the label
 				      (set! changed (dcommon:modifiy-if-different 
@@ -270,7 +270,7 @@
     (if res
 	res
 	(if force-set
-	    (let ((max-col-num (+ 1 (apply max -1 (hash-table-values runs-index)))))
+	    (let ((max-col-num (+ 1 (common:max (cons-1 (hash-table-values runs-index))))))
 	      (hash-table-set! runs-index col-name max-col-num)
 	      max-col-num)))))
 
@@ -281,7 +281,7 @@
     (if res
 	res
 	(if force-set
-	    (let ((max-row-num (+ 1 (apply max -1 (hash-table-values tests-index)))))
+	    (let ((max-row-num (+ 1 (common:max (cons -1 (hash-table-values tests-index))))))
 	      (hash-table-set! runs-index row-name max-row-num)
 	      max-row-num)))))
 
@@ -550,9 +550,9 @@
 				    (indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
 				    (row-indices  (car indices))
 				    (col-indices  (cadr indices))
-				    (max-row      (if (null? row-indices) 1 (apply max (map cadr row-indices))))
+				    (max-row      (if (null? row-indices) 1 (common:max (map cadr row-indices))))
 				    (max-col      (if (null? col-indices) 1 
-						      (apply max (map cadr col-indices))))
+						      (common:max (map cadr col-indices))))
 				    (max-visible  (max (- (dboard:tabdat-num-tests tabdat) 15) 3))
 				    (max-col-vis  (if (> max-col 10) 10 max-col))
 				    (numrows      1)

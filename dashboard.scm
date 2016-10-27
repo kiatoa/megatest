@@ -1261,7 +1261,6 @@ Misc
 			      #:value (dboard:test-patt->lines
 				       (dboard:tabdat-test-patts-use tabdat))
 			      #:expand "HORIZONTAL"
-			      ;; #:size "10x30"
 			      ))
 	 (tb
           (iup:treebox
@@ -1269,6 +1268,7 @@ Misc
            #:name "Runs"
            #:expand "YES"
            #:addexpanded "NO"
+           #:size "10x"
            #:selection-cb
            (lambda (obj id state)
              (debug:catch-and-dump
@@ -1450,7 +1450,8 @@ Misc
                                           (for-each (lambda (graph-cell)
                                                       (let* ((graph-dat   (hash-table-ref (dboard:tabdat-graph-cell-table tabdat) graph-cell)))
                                                         (dboard:graph-dat-flag-set! graph-dat #f)))
-                                                    (hash-table-keys (dboard:tabdat-graph-cell-table tabdat)))))))
+                                                    (hash-table-keys (dboard:tabdat-graph-cell-table tabdat)))
+                                          (dboard:tabdat-view-changed-set! tabdat #t)))))
       ))))
 
 ;;======================================================================
@@ -2450,16 +2451,16 @@ Misc
       (let* ((runs-view (iup:vbox
 			 (iup:split
 			  #:orientation "VERTICAL" ;; "HORIZONTAL"
-			  #:value 150
+			  #:value 200
 			  (dboard:runs-tree-browser commondat runs-dat)
-			  (iup:split
-			   ;; left most block, including row names
-			   (apply iup:vbox lftlst)
-			   ;; right hand block, including cells
-			   (iup:vbox
-			    ;; the header
-			    (apply iup:hbox (reverse hdrlst))
-			    (apply iup:hbox (reverse bdylst)))))
+                           (iup:split
+                            ;; left most block, including row names
+                            (apply iup:vbox lftlst)
+                            ;; right hand block, including cells
+                            (iup:vbox
+                             ;; the header
+                             (apply iup:hbox (reverse hdrlst))
+                             (apply iup:hbox (reverse bdylst)))))
 			 controls
 			 ))
 	     (views-cfgdat (common:load-views-config))
@@ -2571,7 +2572,7 @@ Misc
    (begin
      (debug:print 0 *default-log-port* "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn))
      (current-seconds)) ;; something went wrong - just print an error and return current-seconds
-   (apply max (map (lambda (filen)
+   (common:max (map (lambda (filen)
 		     (file-modification-time filen))
 		   (glob (conc (dboard:tabdat-dbdir tabdat) "/*.db"))))))
 
@@ -2647,16 +2648,6 @@ Misc
 			   (hash-table-ref/default rowhash (+ i rownum) '())))
     (if (< i num-rows)
 	(loop (+ i 1)))))
-
-;; get min or max, use > for max and < for min, this works around the limits on apply
-;;
-(define (dboard:min-max comp lst)
-  (if (null? lst)
-      #f ;; better than an exception for my needs
-      (fold (lambda (a b)
-	      (if (comp a b) a b))
-	    (car lst)
-	    lst)))
 
 ;; sort a list of test-ids by the event _time using a hash table of id => testdat
 ;;
@@ -2772,8 +2763,10 @@ Misc
 	       (testpatt  (or (dboard:tabdat-test-patts tabdat) "%"))
 	       (filtrstr  (conc targpatt "/" runpatt "/" testpatt)))
 	  ;; (print "targpatt: " targpatt " runpatt: " runpatt " testpatt: " testpatt)
+          (print "RA => dboard:tabdat-last-filter-str " dboard:tabdat-last-filter-str "filtrstr" filtrstr "dboard:tabdat-view-changed" (dboard:tabdat-view-changed tabdat))
 
-	  (if (not (equal? (dboard:tabdat-last-filter-str tabdat) filtrstr))
+	  (if (or (not (equal? (dboard:tabdat-last-filter-str tabdat) filtrstr))
+                  (dboard:tabdat-view-changed tabdat))
 	      (let ((dwg (dboard:tabdat-drawing tabdat)))
 		(print "reseting drawing")
 		(dboard:tabdat-layout-update-ok-set! tabdat #f)
@@ -2817,7 +2810,9 @@ Misc
 	  (mutex-lock! mtx)
 	  (canvas-clear! cnv)
 	  (vg:draw dwg tabdat)
+          ;; RA => (dashboard:run-times-tab-run-data-updater commondat tabdat tab-num)
 	  (mutex-unlock! mtx)
+          (print "RA => View changed found to be set" )
 	  (dboard:tabdat-view-changed-set! tabdat #f)))))
   
 ;; doesn't work.
@@ -3082,8 +3077,8 @@ Misc
 			       (runcomp   (vg:comp-new));; new component for this run
 			       (rows-used (make-hash-table)) ;; keep track of what parts of the rows are used here row1 = (obj1 obj2 ...)
 			       ;; (row-height 4)
-			       (run-start  (dboard:min-max < (map db:test-get-event_time testsdat)))
-			       (run-end    (let ((re (dboard:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat))))
+			       (run-start  (common:min-max < (map db:test-get-event_time testsdat)))
+			       (run-end    (let ((re (common:min-max > (map (lambda (t)(+ (db:test-get-event_time t)(db:test-get-run_duration t))) testsdat))))
 					     (max re (+ 1 run-start)))) ;; use run-start+1 if run-start == run-end so delta is not zero
 			       (timeoffset (- run-start)) ;; (+ fixed-originx canvas-margin) run-start))
 			       (run-duration (- run-end run-start))

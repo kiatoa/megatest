@@ -8,7 +8,7 @@ fi
 if [[ $(screen -list | egrep 'Attached|Detached'|awk '{print $1}') == "" ]];then
     # echo "No screen found for displaying to. Run \"screen\" in an xterm"
     # exit 1
-    xterm -e screen &
+    xterm -e screen -e^ff &
     sleep 1
     screen -X hardstatus off
     screen -X hardstatus alwayslastline
@@ -16,4 +16,4 @@ if [[ $(screen -list | egrep 'Attached|Detached'|awk '{print $1}') == "" ]];then
 fi
 
 cmd="cd $PWD;$*"
-screen -X screen bash -c "$cmd;echo \"Press any key to continue, ctrl-a <space> to see other windows\";bash -c 'read -n 1 -s'"
+screen -X screen bash -c "$cmd;echo \"Press any key to continue, ctrl-f <space> to see other windows\";bash -c 'read -n 1 -s'"

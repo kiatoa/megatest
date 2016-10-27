@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<meta name="generator" content="AsciiDoc 8.6.9">
+<meta name="generator" content="AsciiDoc 8.6.7">
 <title>The Megatest Users Manual</title>
 <style type="text/css">
 /* Shared CSS for AsciiDoc xhtml11 and html5 backends */
@@ -86,15 +86,9 @@ ul, ol, li > p {
 ul > li     { color: #aaa; }
 ul > li > * { color: black; }
 
-.monospaced, code, pre {
-  font-family: "Courier New", Courier, monospace;
-  font-size: inherit;
-  color: navy;
+pre {
   padding: 0;
   margin: 0;
-}
-pre {
-  white-space: pre-wrap;
 }
 
 #author {
@@ -224,7 +218,7 @@ div.exampleblock > div.content {
 }
 
 div.imageblock div.content { padding-left: 0; }
-span.image img { border-style: none; vertical-align: text-bottom; }
+span.image img { border-style: none; }
 a.image:visited { color: white; }
 
 dl {
@@ -420,6 +414,12 @@ div.unbreakable { page-break-inside: avoid; }
  *
  * */
 
+tt {
+  font-family: "Courier New", Courier, monospace;
+  font-size: inherit;
+  color: navy;
+}
+
 div.tableblock {
   margin-top: 1.0em;
   margin-bottom: 1.5em;
@@ -452,6 +452,12 @@ div.tableblock > table[frame="vsides"] {
  * html5 specific
  *
  * */
+
+.monospaced {
+  font-family: "Courier New", Courier, monospace;
+  font-size: inherit;
+  color: navy;
+}
 
 table.tableblock {
   margin-top: 1.0em;
@@ -532,8 +538,6 @@ body.manpage div.sectionbody {
 @media print {
   body.manpage div#toc { display: none; }
 }
-
-
 @media screen {
   body {
     max-width: 50em; /* approximately 80 characters wide */
@@ -781,8 +785,11 @@ asciidoc.install(2);
 <h2 id="_preface">Preface</h2>
 <div class="sectionbody">
 <div class="paragraph"><p>This book is organised as three sub-books; getting started, writing tests and reference.</p></div>
-<div class="sect2">
-<h3 id="_why_megatest">Why Megatest?</h3>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_why_megatest">Why Megatest?</h2>
+<div class="sectionbody">
 <div class="paragraph"><p>The Megatest project was started for two reasons, the first was an
 immediate and pressing need for a generalized tool to manage a suite
 of regression tests and the second was the fact that the author had
@@ -792,8 +799,10 @@ tool, flexible enough to meet the needs of any team doing continuous
 integrating and or running a complex suite of tests for release
 qualification.</p></div>
 </div>
-<div class="sect2">
-<h3 id="_megatest_design_philosophy">Megatest Design Philosophy</h3>
+</div>
+<div class="sect1">
+<h2 id="_megatest_design_philosophy">Megatest Design Philosophy</h2>
+<div class="sectionbody">
 <div class="paragraph"><p>Megatest is intended to provide the minimum needed resources to make
 writing a suite of tests and tasks for implementing continuous build
 for software, design engineering or process control (via owlfs for
@@ -844,8 +853,10 @@ Deployable - anyone on the team, at any site, at any time can run the flow
 </li>
 </ul></div>
 </div>
-<div class="sect2">
-<h3 id="_megatest_architecture">Megatest Architecture</h3>
+</div>
+<div class="sect1">
+<h2 id="_megatest_architecture">Megatest Architecture</h2>
+<div class="sectionbody">
 <div class="paragraph"><p>All data to specify the tests and configure the system is stored in
 plain text files. All system state is stored in an sqlite3
 database. Tests are launched using the launching system available for
@@ -855,15 +866,86 @@ megatest uses the network filesystem to call home to your master
 sqlite3 database.</p></div>
 </div>
 </div>
-</div>
-<h1 id="_road_map">Road Map</h1>
-<div class="paragraph"><p>Note 1: This road-map is tentative and subject to change without notice.</p></div>
-<div class="paragraph"><p>Note 2: Starting over. Old plan is commented out.</p></div>
 <div class="sect1">
-<h2 id="_current_items">Current Items</h2>
+<h2 id="_road_map">Road Map</h2>
 <div class="sectionbody">
+<div class="paragraph"><p>Note 1: This road-map is still evolving and subject to change without notice.</p></div>
 <div class="sect2">
-<h3 id="_ww05_migrate_to_inmem_db">ww05 - migrate to inmem-db</h3>
+<h3 id="_architecture_refactor">Architecture Refactor</h3>
+<div class="sect3">
+<h4 id="_goals">Goals</h4>
+<div class="olist arabic"><ol class="arabic">
+<li>
+<p>
+Reduce load on the file system. Sqlite3 files on network filesystem can be
+  a burden.
+</p>
+</li>
+<li>
+<p>
+Reduce number of servers and frequency of start/stop. This is mostly an
+  issue of clutter but also a reduction in "moving parts".
+</p>
+</li>
+<li>
+<p>
+Coalesce activities to a single home host where possible. Give the user
+  feedback that they have started the dashboard on a host other than the
+  home host.
+</p>
+</li>
+<li>
+<p>
+Reduce number of processes involved in managing running tests.
+</p>
+</li>
+</ol></div>
+</div>
+<div class="sect3">
+<h4 id="_changes_needed">Changes Needed</h4>
+<div class="olist arabic"><ol class="arabic">
+<li>
+<p>
+ACID compliant db will be on /tmp and synced to megatest.db with a five
+  second max delay.
+</p>
+</li>
+<li>
+<p>
+Read/writes to db for processes on homehost will go direct to /tmp
+  megatest.db file.
+</p>
+</li>
+<li>
+<p>
+Read/wites fron non-homehost processes will go through one server. Bulk
+  reads (e.g. for dashboard or list-runs) will be cached on the current host
+  in /tmp and synced from the home megatest.db in the testsuite area.
+</p>
+</li>
+<li>
+<p>
+Db syncs rely on the target db file timestame minus some margin.
+</p>
+</li>
+<li>
+<p>
+Since bulk reads do not use the server we can switch to simple RPC for the
+  network transport.
+</p>
+</li>
+<li>
+<p>
+Test running manager process extended to manage multiple running tests.
+</p>
+</li>
+</ol></div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_current_items">Current Items</h3>
+<div class="sect3">
+<h4 id="_ww05_migrate_to_inmem_db">ww05 - migrate to inmem-db</h4>
 <div class="olist arabic"><ol class="arabic">
 <li>
 <p>
@@ -893,25 +975,131 @@ Task table used for queueing runner actions (remove runs, cleanRunExecute, etc)
 </ol></div>
 </li>
 </ol></div>
+<div class="paragraph"><p>shifting, note that the preceding blank line is needed.</p></div>
 </div>
 </div>
 </div>
-<h1 id="_getting_started">Getting Started</h1>
-<div class="openblock">
-<div class="title">Getting started with Megatest</div>
-<div class="content">
-<div class="paragraph"><p>How to install Megatest and set it up for running your regressions and continuous integration process.</p></div>
-</div></div>
+</div>
 <div class="sect1">
 <h2 id="_installation">Installation</h2>
 <div class="sectionbody">
 <div class="sect2">
 <h3 id="_dependencies">Dependencies</h3>
 <div class="paragraph"><p>Chicken scheme and a number of "eggs" are required for building
-Megatest. See the script installall.sch in the utils directory of the
-distribution for a mostly automated way to install everything needed
-for building Megatest on Linux.</p></div>
-<div class="paragraph"><p><span class="footnote"><br>[An example footnote.]<br></span></p></div>
+Megatest. See the script installall.sh in the utils directory of the
+source distribution for an automated way to install everything
+needed for building Megatest on Linux.</p></div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_getting_started">Getting Started</h2>
+<div class="sectionbody">
+<div class="openblock">
+<div class="title">Getting started with Megatest</div>
+<div class="content">
+<div class="paragraph"><p>Creating a testsuite or flow and your first test or task.</p></div>
+</div></div>
+<div class="paragraph"><p>After installing Megatest you can create a flow or testsuite and add some
+tests using the helpers. Here is a quickstart sequence to get you up and
+running your first automated testsuite.</p></div>
+<div class="sect2">
+<h3 id="_creating_a_megatest_area">Creating a Megatest Area</h3>
+<div class="sect3">
+<h4 id="_choose_target_keys">Choose Target Keys</h4>
+<div class="paragraph"><p>First choose your "target" keys. These are used to organise your runs in a
+way that is meaningful to your project. If you are unsure about what to use
+for keys just use a single generic key such as "RUNTYPE". These keys will be
+used to hand values to your tests via environment variables so ensure they
+are unique. Prefixing them with something such as PROJKEYS_ is a good
+strategy.</p></div>
+<div class="paragraph"><p>Examples of keys:</p></div>
+<table class="tableblock frame-all grid-all"
+style="
+width:60%;
+">
+<caption class="title">Table 1. Example keys</caption>
+<col style="width:50%;">
+<col style="width:50%;">
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top" > Option            </th>
+<th class="tableblock halign-left valign-top" > Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top" ><p class="tableblock">RELEASE/ITERATION</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock">This example is used by Megatest for its internal QA.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top" ><p class="tableblock">ARCH/OS/RELEASE</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock">For a software project targeting multiple platforms</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top" ><p class="tableblock">UCTRLR/NODETYPE</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock">Microcontroller project with different controllers
+running same software</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="sect3">
+<h4 id="_create_area_config_files">Create Area Config Files</h4>
+<div class="paragraph"><p>You will need to choose locations for your runs (the data generated every
+time you run the testsuite) and link tree. For getting started answer the
+prompts with "runs" and "links". We use the Unix editor "vi" in the examples
+below but you can use any plain text editor.</p></div>
+<div class="listingblock">
+<div class="title">Using the helper to create a Megatest area</div>
+<div class="content monospaced">
+<pre>megatest -create-megatest-area
+
+# optional: verify that the settings are ok
+vi megatest.config
+vi runconfigs.config</pre>
+</div></div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_creating_a_test">Creating a Test</h3>
+<div class="paragraph"><p>Choose the test name for your first test and run the helper. You can edit
+the files after the initial creation. You will need to enter names and
+scripts for the steps to be run and then edit the
+tests/&lt;testname&gt;/testconfig file and modify the logpro rules to properly
+process the log output from your steps. For your first test just hit enter
+for the "waiton", "priority" and iteration variable prompts.</p></div>
+<div class="paragraph"><p>Hint: for geting started make your logpro rules very liberal. expect:error
+patterns should match nothing and comment out expect:required rules.</p></div>
+<div class="listingblock">
+<div class="title">Using the helper to create a Megatest test</div>
+<div class="content monospaced">
+<pre>megatest -create-test myfirsttest
+
+# then edit the generated config
+vi tests/myfirsttest/testconfig</pre>
+</div></div>
+</div>
+<div class="sect2">
+<h3 id="_running_your_test">Running your test</h3>
+<div class="paragraph"><p>First choose a target and runname. If you have a two-place target such as
+RELEASE/ITERATION a target would look like v1.0/aff3 where v1.0 is the
+RELEASE and aff3 is the ITERATION. For a run name just use something like
+run1.</p></div>
+<div class="listingblock">
+<div class="title">Running all tests (testpatt of "%" matches all tests)</div>
+<div class="content monospaced">
+<pre>megatest -run -target v1.0/aff3 -runname run1 -testpatt % -log run1.log</pre>
+</div></div>
+</div>
+<div class="sect2">
+<h3 id="_viewing_the_results">Viewing the results</h3>
+<div class="paragraph"><p>Start the dashboard and browse your run in the "Runs" tab.</p></div>
+<div class="listingblock">
+<div class="title">Starting dashboard</div>
+<div class="content monospaced">
+<pre>dashboard -rows 24</pre>
+</div></div>
 </div>
 </div>
 </div>
@@ -954,12 +1142,13 @@ needed for a test step into a script it is not necessary.</p></div>
 </div>
 </div>
 </div>
-<h1 id="_how_to_do_things">How To Do Things</h1>
 <div class="sect1">
-<h2 id="_process_runs">Process Runs</h2>
+<h2 id="_how_to_do_things">How To Do Things</h2>
 <div class="sectionbody">
 <div class="sect2">
-<h3 id="_remove_runs">Remove Runs</h3>
+<h3 id="_process_runs">Process Runs</h3>
+<div class="sect3">
+<h4 id="_remove_runs">Remove Runs</h4>
 <div class="paragraph"><p>From the dashboard click on the button (PASS/FAIL&#8230;) for one of the tests. From the test control panel that
 comes up push the clean test button. The command field will be prefilled with a template command for removing
 that test. You can edit the command, for example change the argument to -testpatt to "%" to remove all tests.</p></div>
@@ -974,14 +1163,14 @@ that test. You can edit the command, for example change the argument to -testpat
 <pre>megatest -remove-runs -target %/%/% -runname % -testpatt % -v</pre>
 </div></div>
 </div>
-<div class="sect2">
-<h3 id="_archive_runs">Archive Runs</h3>
+<div class="sect3">
+<h4 id="_archive_runs">Archive Runs</h4>
 <div class="paragraph"><p>Megatest supports using the bup backup tool (<a href="https://bup.github.io/">https://bup.github.io/</a>) to archive your tests for efficient storage
 and retrieval. Archived data can be rapidly retrieved if needed. The metadata for the run (PASS/FAIL status, run
 durations, time stamps etc.) are all preserved in the megatest database.</p></div>
 <div class="paragraph"><p>For setup information see the Archiving topic in the reference section of this manual.</p></div>
-<div class="sect3">
-<h4 id="_to_archive">To Archive</h4>
+<div class="sect4">
+<h5 id="_to_archive">To Archive</h5>
 <div class="paragraph"><p>Hint: use the test control panel to create a template command by pushing the "Archive Tests" button.</p></div>
 <div class="listingblock">
 <div class="title">Archive a full run</div>
@@ -989,8 +1178,8 @@ durations, time stamps etc.) are all preserved in the megatest database.</p></di
 <pre>megatest -target ubuntu/nfs/none -runname ww28.1a -archive save-remove -testpatt %</pre>
 </div></div>
 </div>
-<div class="sect3">
-<h4 id="_to_restore">To Restore</h4>
+<div class="sect4">
+<h5 id="_to_restore">To Restore</h5>
 <div class="listingblock">
 <div class="title">Retrieve a single test</div>
 <div class="content monospaced">
@@ -1001,6 +1190,7 @@ durations, time stamps etc.) are all preserved in the megatest database.</p></di
 <div class="content monospaced">
 <pre>bup -d /path/to/bup/archive ftp</pre>
 </div></div>
+</div>
 </div>
 </div>
 <div class="sect2">
@@ -1029,12 +1219,13 @@ flexi-launcher yes</pre>
 </div>
 </div>
 </div>
-<h1 id="_tricks">Tricks</h1>
+<div class="sect1">
+<h2 id="_tricks">Tricks</h2>
+<div class="sectionbody">
 <div class="paragraph"><p>This section is a compendium of a various useful tricks for debugging,
 configuring and generally getting the most out of Megatest.</p></div>
-<div class="sect1">
-<h2 id="_limiting_your_running_jobs">Limiting your running jobs</h2>
-<div class="sectionbody">
+<div class="sect2">
+<h3 id="_limiting_your_running_jobs">Limiting your running jobs</h3>
 <div class="paragraph"><p>The following example will limit a test in the jobgroup "group1" to no more than 10 tests simultaneously.</p></div>
 <div class="paragraph"><p>In your testconfig:</p></div>
 <div class="listingblock">
@@ -1049,6 +1240,7 @@ jobgroup group1</pre>
 group1 10
 custdes 4</pre>
 </div></div>
+</div>
 </div>
 </div>
 <div class="sect1">
@@ -1131,12 +1323,13 @@ sudo netstat -tulpn</pre>
 </div>
 </div>
 </div>
-<h1 id="_reference">Reference</h1>
 <div class="sect1">
-<h2 id="_megatest_config_file_settings">Megatest Config File Settings</h2>
+<h2 id="_reference">Reference</h2>
 <div class="sectionbody">
 <div class="sect2">
-<h3 id="_disk_space_checks">Disk Space Checks</h3>
+<h3 id="_megatest_config_file_settings">Megatest Config File Settings</h3>
+<div class="sect3">
+<h4 id="_disk_space_checks">Disk Space Checks</h4>
 <div class="paragraph"><p>Some parameters you can put in the [setup] section of megatest.config:</p></div>
 <div class="listingblock">
 <div class="content monospaced">
@@ -1150,17 +1343,17 @@ dbdir-space-required 100000
 free-space-script check-space.sh</pre>
 </div></div>
 </div>
-<div class="sect2">
-<h3 id="_trim_trailing_spaces">Trim trailing spaces</h3>
+<div class="sect3">
+<h4 id="_trim_trailing_spaces">Trim trailing spaces</h4>
 <div class="listingblock">
 <div class="content monospaced">
 <pre>[configf:settings trim-trailing-spaces yes]</pre>
 </div></div>
 </div>
-<div class="sect2">
-<h3 id="_job_submission_control">Job Submission Control</h3>
 <div class="sect3">
-<h4 id="_submit_jobs_to_host_types_based_on_test_name_2">Submit jobs to Host Types based on Test Name</h4>
+<h4 id="_job_submission_control">Job Submission Control</h4>
+<div class="sect4">
+<h5 id="_submit_jobs_to_host_types_based_on_test_name_2">Submit jobs to Host Types based on Test Name</h5>
 <div class="listingblock">
 <div class="title">In megatest.config</div>
 <div class="content monospaced">
@@ -1179,8 +1372,8 @@ launcher bsub
 flexi-launcher yes</pre>
 </div></div>
 </div>
-<div class="sect3">
-<h4 id="_host_types">host-types</h4>
+<div class="sect4">
+<h5 id="_host_types">host-types</h5>
 <div class="paragraph"><p>List of host types and the commandline to run a job on that host type.</p></div>
 <div class="listingblock">
 <div class="title">host-type &#8658; launch command</div>
@@ -1188,17 +1381,16 @@ flexi-launcher yes</pre>
 <pre>general nbfake</pre>
 </div></div>
 </div>
-<div class="sect3">
-<h4 id="_launchers">launchers</h4>
+<div class="sect4">
+<h5 id="_launchers">launchers</h5>
 <div class="listingblock">
 <div class="title">test/itempath &#8658; host-type</div>
 <div class="content monospaced">
 <pre>runfirst/sum% remote</pre>
 </div></div>
 </div>
-</div>
-<div class="sect2">
-<h3 id="_miscellaneous_setup_items">Miscellaneous Setup Items</h3>
+<div class="sect4">
+<h5 id="_miscellaneous_setup_items">Miscellaneous Setup Items</h5>
 <div class="paragraph"><p>Attempt to rerun tests in "STUCK/DEAD", "n/a", "ZERO_ITEMS" states.</p></div>
 <div class="listingblock">
 <div class="title">In megatest.config</div>
@@ -1206,8 +1398,9 @@ flexi-launcher yes</pre>
 <pre>[setup]
 reruns 5</pre>
 </div></div>
-<div class="sect3">
-<h4 id="_run_time_limit">Run time limit</h4>
+</div>
+<div class="sect4">
+<h5 id="_run_time_limit">Run time limit</h5>
 <div class="listingblock">
 <div class="content monospaced">
 <pre>[setup]
@@ -1215,8 +1408,10 @@ reruns 5</pre>
 runtimelim 1h 2m 3s</pre>
 </div></div>
 </div>
-<div class="sect3">
-<h4 id="_tests_browser_view">Tests browser view</h4>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_tests_browser_view">Tests browser view</h3>
 <div class="paragraph"><p>The tests browser (see the Run Control tab on the dashboard) has two views for displaying the tests.</p></div>
 <div class="olist arabic"><ol class="arabic">
 <li>
@@ -1238,6 +1433,16 @@ well in that mode then use "nodot" to turn it off.</p></div>
 nodot</pre>
 </div></div>
 </div>
+<div class="sect2">
+<h3 id="_dashboard_settings">Dashboard settings</h3>
+<div class="listingblock">
+<div class="title">Runs tab buttons, font and size</div>
+<div class="content monospaced">
+<pre>[dashboard]
+btn-height x14
+btn-fontsz 10
+cell-width 60</pre>
+</div></div>
 </div>
 <div class="sect2">
 <h3 id="_database_settings">Database settings</h3>
@@ -1245,7 +1450,7 @@ nodot</pre>
 style="
 width:70%;
 ">
-<caption class="title">Table 1. Database config settings in [setup] section of megatest.config</caption>
+<caption class="title">Table 2. Database config settings in [setup] section of megatest.config</caption>
 <col style="width:14%;">
 <col style="width:28%;">
 <col style="width:28%;">
@@ -1621,7 +1826,7 @@ COMPLETED/ xterm -e bash -s --</pre>
 <div class="admonitionblock">
 <table><tr>
 <td class="icon">
-<img src="/usr/images/icons/note.png" alt="Note">
+<img src="/nfs/pdx/disks/ice.disk.002/icfadm/pkgs/asciidoc/8.6.7/images/icons/note.png" alt="Note">
 </td>
 <td class="content">There is a trailing space after the --</td>
 </tr></table>
@@ -1714,7 +1919,7 @@ megatest -envdelta original-munged -dumpmode ini -o modified.config</pre>
 style="
 width:70%;
 ">
-<caption class="title">Table 2. API Keys Related Calls</caption>
+<caption class="title">Table 3. API Keys Related Calls</caption>
 <col style="width:14%;">
 <col style="width:28%;">
 <col style="width:28%;">
@@ -1744,85 +1949,16 @@ width:70%;
 </tr>
 </tbody>
 </table>
-<div class="sect2">
-<h3 id="_megatest_internals">Megatest Internals</h3>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_megatest_internals">Megatest Internals</h2>
+<div class="sectionbody">
 <div class="imageblock graphviz">
 <div class="content">
 <img src="server.png" alt="server.png">
 </div>
 </div>
-</div>
-</div>
-</div>
-<div class="sect1">
-<h2 id="_example_appendix">Appendix A: Example Appendix</h2>
-<div class="sectionbody">
-<div class="paragraph"><p>One or more optional appendixes go here at section level zero.</p></div>
-<div class="sect2">
-<h3 id="_appendix_sub_section">Appendix Sub-section</h3>
-<div class="admonitionblock">
-<table><tr>
-<td class="icon">
-<img src="/usr/images/icons/note.png" alt="Note">
-</td>
-<td class="content">Preface and appendix subsections start out of sequence at level
-2 (level 1 is skipped).  This only applies to multi-part book
-documents.</td>
-</tr></table>
-</div>
-</div>
-</div>
-</div>
-<div class="sect1">
-<h2 id="_example_bibliography">Example Bibliography</h2>
-<div class="sectionbody">
-<div class="paragraph"><p>The bibliography list is a style of AsciiDoc bulleted list.</p></div>
-<div class="ulist bibliography"><ul>
-<li>
-<p>
-<a id="taoup"></a>[taoup] Eric Steven Raymond. <em>The Art of Unix
-  Programming</em>. Addison-Wesley. ISBN 0-13-142901-9.
-</p>
-</li>
-<li>
-<p>
-<a id="walsh-muellner"></a>[walsh-muellner] Norman Walsh &amp; Leonard Muellner.
-  <em>DocBook - The Definitive Guide</em>. O&#8217;Reilly &amp; Associates. 1999.
-  ISBN 1-56592-580-7.
-</p>
-</li>
-</ul></div>
-</div>
-</div>
-<div class="sect1">
-<h2 id="_example_glossary">Example Glossary</h2>
-<div class="sectionbody">
-<div class="paragraph"><p>Glossaries are optional. Glossaries entries are an example of a style
-of AsciiDoc labeled lists.</p></div>
-<div class="dlist glossary"><dl>
-<dt>
-A glossary term
-</dt>
-<dd>
-<p>
-  The corresponding (indented) definition.
-</p>
-</dd>
-<dt>
-A second glossary term
-</dt>
-<dd>
-<p>
-  The corresponding (indented) definition.
-</p>
-</dd>
-</dl></div>
-</div>
-</div>
-<div class="sect1">
-<h2 id="_example_colophon">Example Colophon</h2>
-<div class="sectionbody">
-<div class="paragraph"><p>Text at the end of a book describing facts about its production.</p></div>
 </div>
 </div>
 <div class="sect1">
@@ -1835,8 +1971,7 @@ A second glossary term
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br>
-Last updated
- 2016-10-14 22:36:54 MST
+Last updated 2016-10-19 10:23:07 PDT
 </div>
 </div>
 </body>
