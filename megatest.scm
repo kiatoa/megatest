@@ -143,6 +143,7 @@ Misc
   -cleanup-db             : remove any orphan records, vacuum the db
   -import-megatest.db     : migrate a database from v1.55 series to v1.60 series
   -sync-to-megatest.db    : migrate data back to megatest.db
+  -use-db-cache           : use cached access to db to reduce load
   -update-meta            : update the tests metadata for all tests
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
@@ -282,6 +283,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-rerun-all"
 			"-clean-cache"
 			"-cache-db"
+                        "-use-db-cache"
 			;; misc
 			"-repl"
 			"-lock"
@@ -1013,7 +1015,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      (lambda (target runname keys keyvals)
        (let* ((runsdat  (rmt:get-runs-by-patt keys runname 
 					(common:args-get-target)
-					#f #f #f))
+					#f #f #f #f))
 	      (header   (vector-ref runsdat 0))
 	      (rows     (vector-ref runsdat 1)))
 	 (if (null? rows)
@@ -1051,9 +1053,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   (let ((indx (hash-table-ref/default test-field-index fieldname #f)))
     (if indx
 	(if (>= indx (vector-length datavec))
-	    #f ;; index to high, should raise an error I suppose
+	    #f ;; index too high, should raise an error I suppose
 	    (vector-ref datavec indx))
 	#f)))
+
+;; Add db direct
+;;
+(define (dispatch-query access-mode rmt-cmd db-cmd . params)
+  (if (eq? access-mode 'cached)
+      (apply db:call-with-cached-db db-cmd params)
+      (apply rmt-cmd params)))
 
 ;; NOTE: list-runs and list-db-targets operate on local db!!!
 ;;
@@ -1064,6 +1073,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (if (launch:setup)
 	(let* (;; (dbstruct    (make-dbr:dbstruct path: *toppath* local: (args:get-arg "-local")))
 	       (runpatt     (args:get-arg "-list-runs"))
+               (access-mode (if (args:get-arg "-use-db-cache") 'cached 'rmt))
 	       (testpatt    (common:args-get-testpatt #f))
 	       ;; (if (args:get-arg "-testpatt") 
 	       ;;  	        (args:get-arg "-testpatt") 
@@ -1072,8 +1082,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       ;; (runsdat  (db:get-runs dbstruct runpatt #f #f '()))
 	;; (runsdat     (rmt:get-runs-by-patt keys (or runpatt "%") (common:args-get-target) ;; (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
 	;; 		           	 #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
-	       (runsdat     (db:call-with-cached-db db:get-runs-by-patt keys (or runpatt "%") (common:args-get-target) ;; (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
-						    #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
+	       (runsdat     (dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt keys (or runpatt "%") 
+                                            (common:args-get-target) #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
 	       (runstmp     (db:get-rows runsdat))
 	       (header      (db:get-header runsdat))
 	       ;; this is "-since" support. This looks at last mod times of <run-id>.db files
@@ -1143,7 +1153,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (states  (string-split (or (args:get-arg "-state") "") ","))
 			  (statuses (string-split (or (args:get-arg "-status") "") ","))
 			  (tests   (if tests-spec
-				       (db:call-with-cached-db db:get-tests-for-run run-id testpatt states statuses #f #f #f 'testname 'asc ;; (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
+				       (dispatch-query access-mode rmt:get-tests-for-run db:get-tests-for-run run-id testpatt states statuses #f #f #f 'testname 'asc ;; (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
 							     ;; use qryvals if test-spec provided
 							     (if tests-spec
 								 (string-intersperse adj-tests-spec ",")
@@ -1268,7 +1278,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					     )
 				    ;; Each test
 				    ;; DO NOT remote run
-				    (let ((steps (db:call-with-cached-db db:get-steps-for-test run-id (db:test-get-id test)))) ;; (db:get-steps-for-test dbstruct run-id (db:test-get-id test))))
+				    (let ((steps (dispatch-query access-mode rmt:get-steps-for-test db:get-steps-for-test run-id (db:test-get-id test)))) ;; (db:get-steps-for-test dbstruct run-id (db:test-get-id test))))
 				      (for-each 
 				       (lambda (step)
 					 (format #t 
