@@ -1003,7 +1003,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      (lambda (target runname keys keyvals)
        (let* ((runsdat  (rmt:get-runs-by-patt keys runname 
 					(common:args-get-target)
-					#f #f #f))
+					#f #f #f #f))
 	      (header   (vector-ref runsdat 0))
 	      (rows     (vector-ref runsdat 1)))
 	 (if (null? rows)
