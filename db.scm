@@ -282,10 +282,10 @@
 		  (dbr:dbstruct-inmem-set!  dbstruct inmem)
 		  ;; dec 14, 2014 - keep deleted records available. hunch is that they are needed for id placeholders
 		  ;; (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';") ;; they just slow us down in this context
-		  (db:sync-tables db:sync-tests-only db inmem)
+		  (db:sync-tables db:sync-tests-only #f db inmem)
 		  (db:delay-if-busy refdb) ;; dbpath: (db:dbdat-get-path refdb)) ;; What does delaying here achieve? 
 		  (dbr:dbstruct-refdb-set!  dbstruct refdb)
-		  (db:sync-tables db:sync-tests-only inmem refdb) ;; use inmem as the reference, don't read again from db
+		  (db:sync-tables db:sync-tests-only #f inmem refdb) ;; use inmem as the reference, don't read again from db
 		  ;; sync once more to deal with delays?
 		  ;; (db:sync-tables db:sync-tests-only db inmem)
 		  ;; (db:sync-tables db:sync-tests-only inmem refdb)
@@ -360,7 +360,7 @@
 		(begin
 		  (db:delay-if-busy maindb)
 		  (db:delay-if-busy olddb)
-		  (let ((num-synced (db:sync-tables (db:sync-main-list maindb) maindb olddb)))
+		  (let ((num-synced (db:sync-tables (db:sync-main-list maindb) #f maindb olddb)))
 		    (dbr:dbstruct-stime-set! dbstruct (current-milliseconds))
 		    num-synced)
 		  0))
@@ -379,7 +379,7 @@
 	      (db:delay-if-busy rundb)
 	      (db:delay-if-busy olddb)
 	      (dbr:dbstruct-stime-set! dbstruct (current-milliseconds))
-	      (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
+	      (let ((num-synced (db:sync-tables db:sync-tests-only #f inmem refdb rundb olddb)))
 		;; (mutex-unlock! *http-mutex*)
 		num-synced)
 	      (begin
@@ -578,7 +578,11 @@
 ;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
 ;; db's are dbdat's
 ;;
-(define (db:sync-tables tbls fromdb todb . slave-dbs)
+;; if last-update specified ("field-name" . time-in-seconds)
+;;    then sync only records where field-name >= time-in-seconds
+;;    IFF field-name exists
+;;
+(define (db:sync-tables tbls last-update fromdb todb . slave-dbs)
   (mutex-lock! *db-sync-mutex*)
   (handle-exceptions
    exn
@@ -626,11 +630,22 @@
 	(lambda (tabledat)
 	  (let* ((tablename  (car tabledat))
 		 (fields     (cdr tabledat))
+		 (use-last-update  (if last-update
+				       (if (pair? last-update)
+					   (member (car last-update)    ;; last-update field name
+						   (map car fields))
+					   (begin
+					     (debug:print 0 *default-log-port* "ERROR: parameter last-update for db:sync-tables must be a pair, received: " last-update) ;; found in fields
+					     #f))
+				       #f))
 		 (num-fields (length fields))
 		 (field->num (make-hash-table))
 		 (num->field (apply vector (map car fields)))
 		 (full-sel   (conc "SELECT " (string-intersperse (map car fields) ",") 
-				   " FROM " tablename ";"))
+				   " FROM " tablename (if use-last-update ;; apply last-update criteria
+							  (conc " " (car last-update) ">=" (cdr last-update))
+							  "")
+				   ";"))
 		 (full-ins   (conc "INSERT OR REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) "
 				   " VALUES ( " (string-intersperse (make-list num-fields "?") ",") " );"))
 		 (fromdat    '())
@@ -707,7 +722,8 @@
 	     (append (list todb) slave-dbs))))
 	tbls)
        (let* ((runtime      (- (current-milliseconds) start-time))
-	      (should-print (common:low-noise-print 120 "db sync" (> runtime 500)))) ;; low and high sync times treated as separate.
+	      (should-print (or (debug:debug-mode 12)
+				(common:low-noise-print 120 "db sync" (> runtime 500))))) ;; low and high sync times treated as separate.
 	 (if should-print (debug:print 3 *default-log-port* "INFO: db sync, total run time " runtime " ms"))
 	 (for-each 
 	  (lambda (dat)
@@ -784,28 +800,50 @@
                                    WHERE id=old.id;
                                END;"))
 
-(define (db:cache-for-read-only source target)
-  (let* ((toppath   (launch:setup))
-         (cache-db  (db:open-megatest-db path: target))
-         (source-db (db:open-megatest-db path: source))
-         (curr-time (current-seconds))
-         (res      '()))
-    (print source-db)
-    (begin
-      (if (not (file-exists? target)) 
-          ((db:sync-tables (db:sync-main-list source-db) source-db cache-db)
-           (db:sync-tables db:sync-tests-only source-db cache-db)
-           (db:clean-up-rundb cache-db))
-          ((sqlite3:for-each-row
-            (lambda (id release runname state status owner event_time comment fail_count pass_count )
-              (set! res (cons (id release runname state status owner event_time comment fail_count pass_count ) res)))
-            (db:dbdat-get-db source-db)
-            "SELECT id, release, runname, state, status, owner, event_time, comment, fail_count, pass_count FROM runs;"))
-          )
-      (print res)
-      (sqlite3:finalize! (db:dbdat-get-db cache-db))
-      ))
-  )
+(define *global-db-store* (make-hash-table))
+
+;; return the target db handle so it can be used
+;;
+(define (db:cache-for-read-only source target #!key (use-last-update #f))
+  (if (and (hash-table-ref/default *global-db-store* target #f)
+	   (>= (file-modification-time target)(file-modification-time source)))
+      (hash-table-ref *global-db-store* target)
+      (let* ((toppath   (launch:setup))
+	     (targ-db-last-mod (if (file-exists? target)
+				   (file-modification-time target)
+				   0))
+	     (cache-db  (or (hash-table-ref/default *global-db-store* target #f)
+			    (db:open-megatest-db path: target)))
+	     (source-db (db:open-megatest-db path: source))
+	     (curr-time (current-seconds))
+	     (res      '())
+	     (last-update (if use-last-update (cons "last_update" targ-db-last-mod) #f)))
+	(db:sync-tables (db:sync-main-list source-db) last-update source-db cache-db)
+	(db:sync-tables db:sync-tests-only last-update source-db cache-db)
+	(hash-table-set! *global-db-store* target cache-db)
+	cache-db)))
+
+;; call a proc with a cached db
+;;
+(define (db:call-with-cached-db proc . params)
+  ;; first cache the db in /tmp
+  (let* ((cname-part (conc "megatest_cache/" (common:get-testsuite-name)))
+	 (fname      (conc  (common:get-area-path-signature) ".db"))
+	 (cache-dir  (common:get-create-writeable-dir
+		      (list (conc "/tmp/" (current-user-name) "/" cname-part)
+			    (conc "/tmp/" (current-user-name) "-" cname-part)
+			    (conc "/tmp/" (current-user-name) "_" cname-part)))))
+    ;; (debug:print-info 0 *default-log-port* "Using cache dir " cache-dir)
+    (if (not cache-dir)
+	(begin
+	  (debug:print 0 *default-log-port* "ERROR: Failed to find an area to write the cache db")
+	  (exit 1))
+	(let* ((cache-db (db:cache-for-read-only
+			  (conc *toppath* "/megatest.db")
+			  (conc cache-dir "/" fname)
+			  use-last-update: #t)))
+	  (apply proc cache-db params)
+	  ))))
 
 ;; options:
 ;;
@@ -857,7 +895,7 @@
     ;;
     (if (member 'old2new options)
 	(begin
-	  (db:sync-tables (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
+	  (db:sync-tables (db:sync-main-list mtdb) #f mtdb (db:get-db dbstruct #f))
 	  (for-each 
 	   (lambda (run-id)
 	     (db:delay-if-busy mtdb)
@@ -912,11 +950,11 @@
                             (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
                        (if (eq? run-id 0)
                            (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
-                             (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
+                             (db:sync-tables (db:sync-main-list dbstruct) #f (db:get-db fromdb #f) mtdb)
                              (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f))))
                            (begin
                              ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
-                             (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
+                             (db:sync-tables db:sync-tests-only #f (db:get-db fromdb run-id) mtdb)
                              (db:clean-up-rundb (db:get-db fromdb run-id)))))
                      (set! count (+ count 1))
                      (debug:print 0 *default-log-port* "Finished clean up of "

@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest)
 (require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -366,6 +366,9 @@
           (pathname-file *toppath*)
           (pathname-file (current-directory)))))
 
+(define (common:get-area-path-signature)
+  (message-digest-string (md5-primitive) *toppath*))
+
 ;;======================================================================
 ;; E X I T   H A N D L I N G
 ;;======================================================================
@@ -522,6 +525,27 @@
 	   (pathname-directory exe-path))))
 	#f)))
 
+;; return first path that can be created or already exists and is writable
+;;
+(define (common:get-create-writeable-dir dirs)
+  (if (null? dirs)
+      #f
+      (let loop ((hed (car dirs))
+		 (tal (cdr dirs)))
+	(let ((res (or (and (directory? hed)
+			    (file-write-access? hed)
+			    hed)
+		       (handle-exceptions
+			exn
+			#f
+			(create-directory hed #t)))))
+	  (if (and (string? res)
+		   (directory? res))
+	      res
+	      (if (null? tal)
+		  #f
+		  (loop (car tal)(cdr tal))))))))
+  
 ;;======================================================================
 ;; T A R G E T S  ,   S T A T E ,   S T A T U S ,   
 ;;                    R U N N A M E    A N D   T E S T P A T T

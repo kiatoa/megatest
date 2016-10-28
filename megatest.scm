@@ -1069,9 +1069,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       ;;  	        (args:get-arg "-testpatt") 
 	       ;;  	        "%"))
 	       (keys        (rmt:get-keys)) ;; (db:get-keys dbstruct))
-	       ;; (runsda   t  (db:get-runs dbstruct runpatt #f #f '()))
-	       (runsdat     (rmt:get-runs-by-patt keys (or runpatt "%") (common:args-get-target) ;; (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
-			           	 #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
+	       ;; (runsdat  (db:get-runs dbstruct runpatt #f #f '()))
+	;; (runsdat     (rmt:get-runs-by-patt keys (or runpatt "%") (common:args-get-target) ;; (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
+	;; 		           	 #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
+	       (runsdat     (db:call-with-cached-db db:get-runs-by-patt keys (or runpatt "%") (common:args-get-target) ;; (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
+						    #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
 	       (runstmp     (db:get-rows runsdat))
 	       (header      (db:get-header runsdat))
 	       ;; this is "-since" support. This looks at last mod times of <run-id>.db files
@@ -1141,7 +1143,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (states  (string-split (or (args:get-arg "-state") "") ","))
 			  (statuses (string-split (or (args:get-arg "-status") "") ","))
 			  (tests   (if tests-spec
-				       (rmt:get-tests-for-run run-id testpatt states statuses #f #f #f 'testname 'asc ;; (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
+				       (db:call-with-cached-db db:get-tests-for-run run-id testpatt states statuses #f #f #f 'testname 'asc ;; (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
 							     ;; use qryvals if test-spec provided
 							     (if tests-spec
 								 (string-intersperse adj-tests-spec ",")
@@ -1266,7 +1268,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					     )
 				    ;; Each test
 				    ;; DO NOT remote run
-				    (let ((steps (rmt:get-steps-for-test run-id (db:test-get-id test)))) ;; (db:get-steps-for-test dbstruct run-id (db:test-get-id test))))
+				    (let ((steps (db:call-with-cached-db db:get-steps-for-test run-id (db:test-get-id test)))) ;; (db:get-steps-for-test dbstruct run-id (db:test-get-id test))))
 				      (for-each 
 				       (lambda (step)
 					 (format #t 
