@@ -802,9 +802,20 @@
 
 (define *global-db-store* (make-hash-table))
 
+(define (db:get-access-mode)
+  (if (args:get-arg "-use-db-cache") 'cached 'rmt))
+
+;; Add db direct
+;;
+(define (db:dispatch-query access-mode rmt-cmd db-cmd . params)
+  (if (eq? access-mode 'cached)
+      (apply db:call-with-cached-db db-cmd params)
+      (apply rmt-cmd params)))
+
 ;; return the target db handle so it can be used
 ;;
 (define (db:cache-for-read-only source target #!key (use-last-update #f))
+  (common:sync-to-megatest.db #t) ;; BUG!! DON'T LEAVE THIS HERE!
   (if (and (hash-table-ref/default *global-db-store* target #f)
 	   (>= (file-modification-time target)(file-modification-time source)))
       (hash-table-ref *global-db-store* target)
@@ -853,6 +864,7 @@
 ;;  'old2new      - sync megatest.db records to .db/{main,1,2 ...}.db
 ;;  'new2old      - sync .db/{main,1,2,3 ...}.db to megatest.db
 ;;  'closeall     - close all opened dbs
+;;  'schema       - attempt to apply schema changes
 ;;
 ;;  run-ids: '(1 2 3 ...) or #f (for all)
 ;;
@@ -927,10 +939,11 @@
                 (lambda ()
                   (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
                          (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
-                    (if (eq? run-id 0)
-                        (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
-                          (db:patch-schema-maindb run-id maindb))
-                        (db:patch-schema-rundb run-id frundb)))
+                    (if (member 'schema options)
+                        (if (eq? run-id 0)
+                            (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
+                              (db:patch-schema-maindb run-id maindb))
+                            (db:patch-schema-rundb run-id frundb))))
                   (set! count (+ count 1))
                   (debug:print 0 *default-log-port* "Finished patching schema for " (if (eq? run-id 0) " main.db " (conc run-id ".db")) ", " count " of " total)))))
             all-run-ids))

@@ -357,27 +357,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (let loop ()
 	     ;; sync for filesystem local db writes
 	     ;;
-	     (let ((start-time      (current-seconds))
-		   (servers-started (make-hash-table)))
-	       (for-each 
-		(lambda (run-id)
-		  (mutex-lock! *db-multi-sync-mutex*)
-		  (if (and legacy-sync 
-			   (hash-table-ref/default *db-local-sync* run-id #f))
-		      ;; (if (> (- start-time last-write) 5) ;; every five seconds
-		      (begin ;; let ((sync-time (- (current-seconds) start-time)))
-			(db:multi-db-sync (list run-id) 'new2old)
-			(let ((sync-time (- (current-seconds) start-time)))
-			  (debug:print-info 3 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
-			  (if (common:low-noise-print 30 "sync new to old")
-			      (debug:print-info 0 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
-			;; (if (> sync-time 10) ;; took more than ten seconds, start a server for this run
-			;;     (begin
-			;;       (debug:print-info 0 *default-log-port* "Sync is taking a long time, start up a server to assist for run " run-id)
-			;;       (server:kind-run run-id)))))
-			(hash-table-delete! *db-local-sync* run-id)))
-		  (mutex-unlock! *db-multi-sync-mutex*))
-		(hash-table-keys *db-local-sync*))
+             (let ((start-time   (current-seconds)))
+               (if legacy-sync (common:sync-to-megatest.db #f))
 	       (if (and debug-mode
 			(> (- start-time last-time) 60))
 		   (begin
@@ -1057,13 +1038,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (vector-ref datavec indx))
 	#f)))
 
-;; Add db direct
-;;
-(define (dispatch-query access-mode rmt-cmd db-cmd . params)
-  (if (eq? access-mode 'cached)
-      (apply db:call-with-cached-db db-cmd params)
-      (apply rmt-cmd params)))
-
 ;; NOTE: list-runs and list-db-targets operate on local db!!!
 ;;
 ;; IDEA: megatest list -runname blah% ...
@@ -1073,7 +1047,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (if (launch:setup)
 	(let* (;; (dbstruct    (make-dbr:dbstruct path: *toppath* local: (args:get-arg "-local")))
 	       (runpatt     (args:get-arg "-list-runs"))
-               (access-mode (if (args:get-arg "-use-db-cache") 'cached 'rmt))
+               (access-mode (db:get-access-mode))
 	       (testpatt    (common:args-get-testpatt #f))
 	       ;; (if (args:get-arg "-testpatt") 
 	       ;;  	        (args:get-arg "-testpatt") 
@@ -1082,7 +1056,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       ;; (runsdat  (db:get-runs dbstruct runpatt #f #f '()))
 	;; (runsdat     (rmt:get-runs-by-patt keys (or runpatt "%") (common:args-get-target) ;; (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
 	;; 		           	 #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
-	       (runsdat     (dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt keys (or runpatt "%") 
+	       (runsdat     (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt keys (or runpatt "%") 
                                             (common:args-get-target) #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
 	       (runstmp     (db:get-rows runsdat))
 	       (header      (db:get-header runsdat))
@@ -1153,7 +1127,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (states  (string-split (or (args:get-arg "-state") "") ","))
 			  (statuses (string-split (or (args:get-arg "-status") "") ","))
 			  (tests   (if tests-spec
-				       (dispatch-query access-mode rmt:get-tests-for-run db:get-tests-for-run run-id testpatt states statuses #f #f #f 'testname 'asc ;; (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
+				       (db:dispatch-query access-mode rmt:get-tests-for-run db:get-tests-for-run run-id testpatt states statuses #f #f #f 'testname 'asc ;; (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
 							     ;; use qryvals if test-spec provided
 							     (if tests-spec
 								 (string-intersperse adj-tests-spec ",")
@@ -1278,7 +1252,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					     )
 				    ;; Each test
 				    ;; DO NOT remote run
-				    (let ((steps (dispatch-query access-mode rmt:get-steps-for-test db:get-steps-for-test run-id (db:test-get-id test)))) ;; (db:get-steps-for-test dbstruct run-id (db:test-get-id test))))
+				    (let ((steps (db:dispatch-query access-mode rmt:get-steps-for-test db:get-steps-for-test run-id (db:test-get-id test)))) ;; (db:get-steps-for-test dbstruct run-id (db:test-get-id test))))
 				      (for-each 
 				       (lambda (step)
 					 (format #t 

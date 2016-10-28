@@ -170,7 +170,8 @@
    'dejunk
    ;; 'adj-testids
    ;; 'old2new
-   'new2old)
+   'new2old
+   'schema)
   (if (common:version-changed?)
       (common:set-last-run-version)))
 
@@ -379,10 +380,45 @@
       ;; (args:get-arg "-set-run-status")
       (args:get-arg "-remove-runs")
       ;; (args:get-arg "-get-run-status")
+      (args:get-arg "-use-db-cache") ;; feels like a bad idea ...
       ))
 
 (define (common:legacy-sync-required)
   (configf:lookup *configdat* "setup" "megatest-db"))
+
+;; run-ids
+;;    if #f use *db-local-sync*
+;;    if #t use timestamps
+(define (common:sync-to-megatest.db run-ids) 
+  (let ((start-time         (current-seconds))
+        (run-ids-to-process (if (list? run-ids)
+                                run-ids
+                                (if run-ids
+                                    (db:get-changed-run-ids (let* ((mtdb-fpath (conc *toppath* "/megatest.db"))
+                                                                   (mtdb-exists (file-exists? mtdb-fpath)))
+                                                              (if mtdb-exists
+                                                                  (file-modification-time mtdb-fpath)
+                                                                  0)))
+                                    (hash-table-keys *db-local-sync*)))))
+    (debug:print-info 4 *default-log-port* "Processing run-ids: " run-ids-to-process)
+    (for-each 
+     (lambda (run-id)
+       (mutex-lock! *db-multi-sync-mutex*)
+       (if (or run-ids ;; if we were provided with run-ids, proceed
+               (hash-table-ref/default *db-local-sync* run-id #f))
+           ;; (if (> (- start-time last-write) 5) ;; every five seconds
+           (begin ;; let ((sync-time (- (current-seconds) start-time)))
+             (db:multi-db-sync (list run-id) 'new2old)
+             (let ((sync-time (- (current-seconds) start-time)))
+               (debug:print-info 3 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
+               (if (common:low-noise-print 30 "sync new to old")
+                   (debug:print-info 0 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
+             (hash-table-delete! *db-local-sync* run-id)))
+       (mutex-unlock! *db-multi-sync-mutex*))
+     run-ids-to-process)))
+
+
+
 
 (define (std-exit-procedure)
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
