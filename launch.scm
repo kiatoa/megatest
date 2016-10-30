@@ -555,7 +555,7 @@
 	      (list  "MT_MEGATEST"  megatest)
 	      (list  "MT_TARGET"    target)
 	      (list  "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))
-	      (list  "MT_TESTSUITENAME" (common:get-testsuite-name))))
+	      (list  "MT_TESTSUITE_NAME" (common:get-testsuite-name))))
 
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
 	  ;; (change-directory top-path)
@@ -826,7 +826,9 @@
 	    )))
     (if (and *toppath*
 	     (directory-exists? *toppath*))
-	(setenv "MT_RUN_AREA_HOME" *toppath*)
+	(begin
+	  (setenv "MT_RUN_AREA_HOME" *toppath*)
+	  (setenv "MT_TESTSUITE_NAME" (common:get-testsuite-name)))
 	(begin
 	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")))
     *toppath*))
