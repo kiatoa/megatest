@@ -89,6 +89,11 @@ Misc
 		 args:arg-hash
 		 0))
 
+(if (not (null? remargs))
+    (begin
+      (print "Unrecognised arguments: " (string-intersperse remargs " "))
+      (exit)))
+
 (if (args:get-arg "-h")
     (begin
       (print help)
