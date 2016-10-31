@@ -387,13 +387,13 @@
   (configf:lookup *configdat* "setup" "megatest-db"))
 
 ;; run-ids
-;;    if #f use *db-local-sync*
-;;    if #t use timestamps
+;;    if #f use *db-local-sync* : or 'local-sync-flags
+;;    if #t use timestamps      : or 'timestamps
 (define (common:sync-to-megatest.db run-ids) 
   (let ((start-time         (current-seconds))
         (run-ids-to-process (if (list? run-ids)
                                 run-ids
-                                (if run-ids
+                                (if (or (eq? run-ids 'timestamps)(eq? run-ids #t))
                                     (db:get-changed-run-ids (let* ((mtdb-fpath (conc *toppath* "/megatest.db"))
                                                                    (mtdb-exists (file-exists? mtdb-fpath)))
                                                               (if mtdb-exists
@@ -417,8 +417,36 @@
        (mutex-unlock! *db-multi-sync-mutex*))
      run-ids-to-process)))
 
+(define (common:watchdog)
+  (thread-sleep! 0.05) ;; delay for startup
+  (let ((legacy-sync (common:legacy-sync-required))
+	(debug-mode  (debug:debug-mode 1))
+	(last-time   (current-seconds)))
+    (if (or (common:legacy-sync-recommended)
+	    legacy-sync)
+	(let loop ()
+	  ;; sync for filesystem local db writes
+	  ;;
+	  (let ((start-time   (current-seconds)))
+	    (common:sync-to-megatest.db 'local-sync-flags)
+	    (if (and debug-mode
+		     (> (- start-time last-time) 60))
+		(begin
+		  (set! last-time start-time)
+		  (debug:print-info 4 *default-log-port* "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
 
-
+	  ;; keep going unless time to exit
+	  ;;
+	  (if (not *time-to-exit*)
+	      (let delay-loop ((count 0))
+		(if (and (not *time-to-exit*)
+			 (< count 4)) ;; was 11, changing to 4. 
+		    (begin
+		      (thread-sleep! 1)
+		      (delay-loop (+ count 1))))
+		(loop)))
+	  (if (common:low-noise-print 30)
+	      (debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*))))))
 
 (define (std-exit-procedure)
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
