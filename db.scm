@@ -91,13 +91,16 @@
 (define (db:get-db dbstruct run-id) 
   (if (sqlite3:database? dbstruct) ;; pass sqlite3 databases on through
       dbstruct
-      (begin
+      (if (pair? dbstruct)
+	  dbstruct                 ;; pass pair ( db . path ) on through
+	  (begin
+	    ;; (assert (dbr:dbstruct? dbstruct)) ;; so much legacy, but by here we should have a genuine dbstruct
 	(let ((dbdat (if (or (not run-id)
 			     (eq? run-id 0))
 			 (db:open-main dbstruct)
 			 (db:open-rundb dbstruct run-id)
 			 )))
-	  dbdat))))
+	      dbdat)))))
 
 ;; legacy handling of structure for managing db's. Refactor this into dbr:?
 (define (db:dbdat-get-db dbdat)
@@ -323,6 +326,8 @@
     dbstruct))
 
 ;; Open the classic megatest.db file in toppath
+;;
+;;   NOTE: returns a dbdat not a dbstruct!
 ;;
 (define (db:open-megatest-db #!key (path #f))
   (let* ((dbpath       (or path (conc *toppath* "/megatest.db")))
@@ -815,7 +820,6 @@
 ;; return the target db handle so it can be used
 ;;
 (define (db:cache-for-read-only source target #!key (use-last-update #f))
-  (common:sync-to-megatest.db #t) ;; BUG!! DON'T LEAVE THIS HERE!
   (if (and (hash-table-ref/default *global-db-store* target #f)
 	   (>= (file-modification-time target)(file-modification-time source)))
       (hash-table-ref *global-db-store* target)
@@ -843,16 +847,26 @@
 	 (cache-dir  (common:get-create-writeable-dir
 		      (list (conc "/tmp/" (current-user-name) "/" cname-part)
 			    (conc "/tmp/" (current-user-name) "-" cname-part)
-			    (conc "/tmp/" (current-user-name) "_" cname-part)))))
+			     (conc "/tmp/" (current-user-name) "_" cname-part))))
+	 (megatest-db (conc *toppath* "/megatest.db")))
     ;; (debug:print-info 0 *default-log-port* "Using cache dir " cache-dir)
     (if (not cache-dir)
 	(begin
 	  (debug:print 0 *default-log-port* "ERROR: Failed to find an area to write the cache db")
 	  (exit 1))
-	(let* ((cache-db (db:cache-for-read-only
-			  (conc *toppath* "/megatest.db")
+	(let* ((th1      (make-thread
+			  (lambda ()
+			    (if (and (file-exists? megatest-db)
+				     (file-write-access? megatest-db))
+				(begin
+				  (common:sync-to-megatest.db 'timestamps) ;; internally mutexes on *db-local-sync*
+				  (debug:print-info 2 *default-log-port* "Done syncing to megatest.db"))))
+			  "call-with-cached-db sync-to-megatest.db"))
+	       (cache-db (db:cache-for-read-only
+			  megatest-db
 			  (conc cache-dir "/" fname)
 			  use-last-update: #t)))
+	  (thread-start! th1)
 	  (apply proc cache-db params)
 	  ))))
 
