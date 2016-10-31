@@ -318,7 +318,7 @@ Misc
   
   (dboard:tabdat-keys-set! tabdat (db:dispatch-query (db:get-access-mode) rmt:get-keys db:get-keys))
   (dboard:tabdat-dbkeys-set! tabdat (append (dboard:tabdat-keys tabdat) (list "runname")))
-  (dboard:tabdat-tot-runs-set! tabdat (rmt:get-num-runs "%"))
+  (dboard:tabdat-tot-runs-set! tabdat (db:dispatch-query (db:get-access-mode) rmt:get-num-runs db:get-num-runs "%"))
   )
 
 ;; RADT => Matrix defstruct addition
@@ -642,7 +642,7 @@ Misc
 	  (let* ((run-id       (db:get-value-by-header run header "id"))
 		 (run-struct   (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f))
 		 (last-update  (if run-struct (dboard:rundat-last-update run-struct) 0))
-		 (key-vals     (rmt:get-key-vals run-id))
+		 (key-vals     (db:dispatch-query (db:get-access-mode) rmt:get-key-vals db:get-key-vals run-id))
 		 (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
 		 ;; GET RID OF dboard:get-tests-dat - it is superceded by dboard:get-tests-for-run-duplicate
 		 ;;  dboard:get-tests-for-run-duplicate - returns a hash table
@@ -1022,7 +1022,7 @@ Misc
 (define (dashboard:update-target-selector tabdat #!key (action-proc #f))
   (let* ((runconf-targs (common:get-runconfig-targets))
 	 (key-lbs       (dboard:tabdat-key-listboxes tabdat))
-	 (db-target-dat (rmt:get-targets))
+	 (db-target-dat (db:dispatch-query (db:get-access-mode) rmt:get-targets db:get-targets))
 	 (header        (vector-ref db-target-dat 0))
 	 (db-targets    (vector-ref db-target-dat 1))
 	 (munge-target  (lambda (x)            ;; create a target vector from a string. Pad with na if needed.

@@ -53,6 +53,7 @@
 (define *toppath*      #f)
 (define *already-seen-runconfig-info* #f)
 
+(define *time-zero* (current-seconds))
 (define *waiting-queue*     (make-hash-table))
 (define *test-meta-updated* (make-hash-table))
 (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
@@ -389,17 +390,21 @@
 ;; run-ids
 ;;    if #f use *db-local-sync* : or 'local-sync-flags
 ;;    if #t use timestamps      : or 'timestamps
-(define (common:sync-to-megatest.db run-ids) 
-  (let ((start-time         (current-seconds))
-        (run-ids-to-process (if (list? run-ids)
-                                run-ids
-                                (if (or (eq? run-ids 'timestamps)(eq? run-ids #t))
-                                    (db:get-changed-run-ids (let* ((mtdb-fpath (conc *toppath* "/megatest.db"))
-                                                                   (mtdb-exists (file-exists? mtdb-fpath)))
-                                                              (if mtdb-exists
-                                                                  (file-modification-time mtdb-fpath)
-                                                                  0)))
-                                    (hash-table-keys *db-local-sync*)))))
+;;    
+(define (common:sync-to-megatest.db run-ids-in) 
+  (let* ((start-time         (current-seconds))
+         (run-ids            (if (hash-table-ref/default *db-local-sync* 'all #f)
+                                 'timestamps
+                                 run-ids-in))
+         (run-ids-to-process (if (list? run-ids)
+                                 run-ids
+                                 (if (or (eq? run-ids 'timestamps)(eq? run-ids #t))
+                                     (db:get-changed-run-ids (let* ((mtdb-fpath (conc *toppath* "/megatest.db"))
+                                                                    (mtdb-exists (file-exists? mtdb-fpath)))
+                                                               (if mtdb-exists
+                                                                   (file-modification-time mtdb-fpath)
+                                                                   0)))
+                                     (hash-table-keys *db-local-sync*)))))
     (debug:print-info 4 *default-log-port* "Processing run-ids: " run-ids-to-process)
     (for-each 
      (lambda (run-id)
