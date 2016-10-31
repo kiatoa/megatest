@@ -346,41 +346,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; The watchdog is to keep an eye on things like db sync etc.
 ;;
 (define *time-zero* (current-seconds))
-(define *watchdog*
-  (make-thread 
-   (lambda ()
-     (thread-sleep! 0.05) ;; delay for startup
-     (let ((legacy-sync (common:legacy-sync-required))
-	   (debug-mode  (debug:debug-mode 1))
-	   (last-time   (current-seconds)))
-       (if (common:legacy-sync-recommended)
-	   (let loop ()
-	     ;; sync for filesystem local db writes
-	     ;;
-             (let ((start-time   (current-seconds)))
-               (if legacy-sync (common:sync-to-megatest.db #f))
-	       (if (and debug-mode
-			(> (- start-time last-time) 60))
-		   (begin
-		     (set! last-time start-time)
-		     (debug:print-info 4 *default-log-port* "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
-	     
-	     ;; keep going unless time to exit
-	     ;;
-	     (if (not *time-to-exit*)
-		 (let delay-loop ((count 0))
-		   (if (and (not *time-to-exit*)
-			    (< count 11)) ;; aprox 5-6 seconds
-		       (begin
-			 (thread-sleep! 1)
-			 (delay-loop (+ count 1))))
-		   (loop)))
-	     (if (common:low-noise-print 30)
-		 (debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*)))))
-     "Watchdog thread")))
+(define *watchdog*  (make-thread common:watchdog "Watchdog thread"))
 
 (thread-start! *watchdog*)
-
 
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))

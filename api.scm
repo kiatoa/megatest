@@ -19,6 +19,7 @@
 (define api:read-only-queries
   '(get-key-val-pairs
     get-keys
+    get-key-vals
     test-toplevel-num-items
     get-test-info-by-id
     test-get-rundir-from-test-id
@@ -36,7 +37,10 @@
     get-count-tests-running-for-run-id
     get-run-info
     get-run-status
-    register-run
+    get-run-stats
+    get-targets
+    get-target
+    ;; register-run
     get-tests-for-run
     get-test-id
     get-tests-for-runs-mindata
@@ -51,6 +55,7 @@
     get-steps-for-test
     read-test-data
     login
+    tasks-get-last
     testmeta-get-record
     have-incompletes?
     synchash-get

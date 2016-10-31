@@ -102,6 +102,15 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
+;; create a watch dog to move changes from lt/.db/*.db to megatest.db
+;;
+(if (file-write-access? (conc *toppath* "/megatest.db"))
+    (thread-start! (make-thread common:watchdog "Watchdog thread"))
+    (if (not (args:get-arg "-use-db-cache"))
+	(begin
+	  (debug:print-info 0 *default-log-port* "Forcing db-cache mode due to read-only access to megatest.db")
+	  (hash-table-set! args:arg-hash "-use-db-cache" #t))))
+
 ;; data common to all tabs goes here
 ;;
 (defstruct dboard:commondat
@@ -304,7 +313,7 @@ Misc
   
   (dboard:tabdat-keys-set! tabdat (db:dispatch-query (db:get-access-mode) rmt:get-keys db:get-keys))
   (dboard:tabdat-dbkeys-set! tabdat (append (dboard:tabdat-keys tabdat) (list "runname")))
-  (dboard:tabdat-tot-runs-set! tabdat (rmt:get-num-runs "%"))
+  (dboard:tabdat-tot-runs-set! tabdat (db:dispatch-query (db:get-access-mode) rmt:get-num-runs db:get-num-runs "%"))
   )
 
 ;; RADT => Matrix defstruct addition
@@ -628,7 +637,7 @@ Misc
 	  (let* ((run-id       (db:get-value-by-header run header "id"))
 		 (run-struct   (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f))
 		 (last-update  (if run-struct (dboard:rundat-last-update run-struct) 0))
-		 (key-vals     (rmt:get-key-vals run-id))
+		 (key-vals     (rmt:get-key-vals run-id)) ;; (db:dispatch-query (db:get-access-mode) rmt:get-key-vals db:get-key-vals run-id))
 		 (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
 		 ;; GET RID OF dboard:get-tests-dat - it is superceded by dboard:get-tests-for-run-duplicate
 		 ;;  dboard:get-tests-for-run-duplicate - returns a hash table
@@ -1008,7 +1017,7 @@ Misc
 (define (dashboard:update-target-selector tabdat #!key (action-proc #f))
   (let* ((runconf-targs (common:get-runconfig-targets))
 	 (key-lbs       (dboard:tabdat-key-listboxes tabdat))
-	 (db-target-dat (rmt:get-targets))
+	 (db-target-dat (db:dispatch-query (db:get-access-mode) rmt:get-targets db:get-targets))
 	 (header        (vector-ref db-target-dat 0))
 	 (db-targets    (vector-ref db-target-dat 1))
 	 (munge-target  (lambda (x)            ;; create a target vector from a string. Pad with na if needed.
@@ -1181,7 +1190,7 @@ Misc
 (define (dashboard:update-tree-selector tabdat #!key (action-proc #f))
   (let* ((tb            (dboard:tabdat-runs-tree tabdat))
 	 (runconf-targs (common:get-runconfig-targets))
-	 (db-target-dat (rmt:get-targets))
+	 (db-target-dat (db:dispatch-query (db:get-access-mode) rmt:get-targets db:get-targets))
 	 (header        (vector-ref db-target-dat 0))
 	 (db-targets    (vector-ref db-target-dat 1))
 	 (munge-target  (lambda (x)            ;; create a target vector from a string. Pad with na if needed.
@@ -1559,7 +1568,7 @@ Misc
 
 (define (dashboard:run-id->tests-mindat run-id tabdat runs-hash)
   (let* ((run          (hash-table-ref/default runs-hash run-id #f))
-         (key-vals     (rmt:get-key-vals run-id))
+         (key-vals     (rmt:get-key-vals run-id)) ;; (db:dispatch-query (db:get-access-mode) rmt:get-key-vals db:get-key-vals run-id))
          (testnamepatt (or (dboard:tabdat-test-patts tabdat) "%/%"))
          (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
          (tests-dat    (dashboard:tests-ht->tests-dat tests-ht)) 
@@ -1833,17 +1842,18 @@ Misc
 (define (dboard:runs-summary-xor-labels-updater tabdat)
   (let ((source-runname-label (dboard:tabdat-runs-summary-source-runname-label tabdat))
         (dest-runname-label (dboard:tabdat-runs-summary-dest-runname-label tabdat))
-        (mode (dboard:tabdat-runs-summary-mode tabdat)))
+        (mode (dboard:tabdat-runs-summary-mode tabdat))
+	(access-mode (db:get-access-mode)))
     (when (and source-runname-label dest-runname-label)
       (case mode
         ((xor-two-runs xor-two-runs-hide-clean)
          (let* ((curr-run-id          (dboard:tabdat-curr-run-id tabdat))
                 (prev-run-id          (dboard:tabdat-prev-run-id tabdat))
                 (curr-runname (if curr-run-id
-                                  (rmt:get-run-name-from-id curr-run-id)
+                                  (db:dispatch-query access-mode rmt:get-run-name-from-id db:get-run-name-from-id curr-run-id)
                                   "None"))
                 (prev-runname (if prev-run-id
-                                  (rmt:get-run-name-from-id prev-run-id)
+                                  (db:dispatch-query access-mode rmt:get-run-name-from-id db:get-run-name-from-id prev-run-id)
                                   "None")))
            (iup:attribute-set! source-runname-label "TITLE" (conc " SRC: "prev-runname"  "))
            (iup:attribute-set! dest-runname-label "TITLE" (conc "DEST: "curr-runname"  "))))
@@ -1947,23 +1957,25 @@ Misc
 
                            (BB> "click-cb: obj="obj" lin="lin" col="col" status="status)
                            ;; status is corrupted on Brandon's home machine.  will have to wait until after shutdown to see if it is still broken in PDX SLES
-                           (let* ((toolpath (car (argv)))
+                           (let* ((access-mode (db:get-access-mode))
+				  (toolpath (car (argv)))
                                   (key      (conc lin ":" col))
                                   (test-id   (hash-table-ref/default cell-lookup key -1))
                                   (run-id   (dboard:tabdat-curr-run-id tabdat))
-                                  (run-info (rmt:get-run-info run-id))
-                                  (target   (rmt:get-target run-id))
+                                  (run-info (db:dispatch-query access-mode rmt:get-run-info db:get-run-info run-id))
+                                  (target   (db:dispatch-query access-mode rmt:get-target db:get-target run-id))
                                   (runname  (db:get-value-by-header (db:get-rows run-info)
                                                                     (db:get-header run-info) "runname"))
                                   (test-name (db:test-get-testname (rmt:get-test-info-by-id run-id test-id)))
-                                  (testpatt  (let ((tlast (rmt:tasks-get-last target runname)))
+                                  (testpatt  (let ((tlast (db:dispatch-query access-mode rmt:tasks-get-last tasks:get-last target runname)))
                                                 (if tlast
                                                     (let ((tpatt (tasks:task-get-testpatt tlast)))
                                                       (if (member tpatt '("0" 0)) ;; known bad historical value - remove in 2017
                                                           "%"
                                                           tpatt))
                                                     "%")))
-                                  (item-path (db:test-get-item-path (rmt:get-test-info-by-id run-id test-id)))
+				  (test-info (db:dispatch-query access-mode rmt:get-test-info-by-id db:get-test-info-by-id run-id test-id))
+                                  (item-path (db:test-get-item-path test-info))
                                   (item-test-path (conc test-name "/" (if (equal? item-path "")
 									"%" 
 									item-path)))
@@ -2421,23 +2433,26 @@ Misc
 			      ;; (print "pressed= " pressed " x= " x " y= " y " rem=" rem " btn=" btn " string? " (string? btn))
 			      (if  (substring-index "3" btn)
 				   (if (eq? pressed 1)
-				       (let* ((toolpath (car (argv)))
+				       (let* ((access-mode (db:get-access-mode))
+					      (toolpath (car (argv)))
 					      (buttndat (hash-table-ref (dboard:tabdat-buttondat runs-dat) button-key))
 					      (test-id  (db:test-get-id (vector-ref buttndat 3)))
 					      (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
-					      (run-info (rmt:get-run-info run-id))
-					      (target   (rmt:get-target run-id))
+					      (run-info (db:dispatch-query access-mode rmt:get-run-info db:get-run-info run-id))
+					      (target   (db:dispatch-query access-mode rmt:get-target db:get-target run-id))
 					      (runname  (db:get-value-by-header (db:get-rows run-info)
 										(db:get-header run-info) "runname"))
-					      (test-name (db:test-get-testname (rmt:get-test-info-by-id run-id test-id)))
-					      (testpatt  (let ((tlast (rmt:tasks-get-last target runname)))
+					      (test-info (db:dispatch-query access-mode rmt:get-test-info-by-id db:get-test-info-by-id run-id test-id))
+					      (test-name (db:test-get-testname test-info))
+					      (testpatt  (let ((tlast (db:dispatch-query access-mode rmt:tasks-get-last tasks:get-last target runname)))
 							   (if tlast
 							       (let ((tpatt (tasks:task-get-testpatt tlast)))
 								 (if (member tpatt '("0" 0)) ;; known bad historical value - remove in 2017
 								     "%"
 								     tpatt))
 							       "%")))
-                                              (item-path (db:test-get-item-path (rmt:get-test-info-by-id run-id test-id)))
+					      ;; Why are we getting the test-info over again? run-id and test-id are the same right?
+                                              (item-path (db:test-get-item-path test-info)) ;; (db:dispatch-query access-mode rmt:get-test-info-by-id db:get-test-info-by-id run-id test-id)))
                                               (item-test-path (conc test-name "/" (if (equal? item-path "")
 									"%" 
 									item-path))))
