@@ -420,7 +420,9 @@
                    (debug:print-info 0 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
              (hash-table-delete! *db-local-sync* run-id)))
        (mutex-unlock! *db-multi-sync-mutex*))
-     run-ids-to-process)))
+     run-ids-to-process)
+    (hash-table-delete! *db-local-sync* 'all) ;; just in case it was set
+    ))
 
 (define (common:watchdog)
   (thread-sleep! 0.05) ;; delay for startup
