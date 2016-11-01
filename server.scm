@@ -73,12 +73,13 @@
     (set! *transport-type* ttype)
     ttype))
 
-;; Get the transport
-(define (server:get-transport #!key (run-id #f)) ;; BB> BBTODO Shouldn't this be run-id sensitive and not a global?? (added run-id key to get this is we are supplied a run-id (added this in client:setup)
-  (if *transport-type*
-      *transport-type*
-      (server:set-transport)))
-	    
+;; Get the transport  -- DO NOT call this from client code.  In client code, this is run-id sensitive and not a global
+
+ (define (server:get-transport)
+   (if *transport-type*
+       *transport-type*
+       (server:set-transport)))
+
 ;; Generate a unique signature for this server
 (define (server:mk-signature)
   (message-digest-string (md5-primitive) 

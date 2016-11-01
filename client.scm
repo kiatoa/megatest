@@ -43,12 +43,14 @@
 		 (cdb:logout serverdat *toppath* (client:get-signature)))))
     ok))
 
-(define (client:connect iface port)
-  (case (server:get-transport)
-    ((rpc)  (rpc:client-connect  iface port))
-    ((http) (http:client-connect iface port))
-    ((zmq)  (zmq:client-connect  iface port))
-    (else   (rpc:client-connect  iface port))))
+;; BB: commenting out orphan code
+;;;;;
+;; (define (client:connect iface port)
+;;   (case (server:get-transport)
+;;     ((rpc)  (rpc:client-connect  iface port))
+;;     ((http) (http:client-connect iface port))
+;;     ((zmq)  (zmq:client-connect  iface port))
+;;     (else   (rpc:client-connect  iface port))))
 
 (define (client:setup  run-id #!key (remaining-tries 10))
   (debug:print-info 2 *default-log-port* "client:setup remaining-tries=" remaining-tries)
@@ -68,7 +70,7 @@
                (thread-sleep! (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
                (client:setup run-id remaining-tries: (- remaining-tries 1))))))
       ((http)(client:setup-http server-dat run-id remaining-tries))
-      ((rpc) (rpc-transport:client-setup run-id)) ;;(client:setup-rpc run-id))
+      ;; ((rpc) (rpc-transport:client-setup run-id)) ;;(client:setup-rpc run-id)) rpc not implemented;  want to see a failure here for now.
       (else
        (debug:print-error 0 *default-log-port* "Unknown transport ["
                           transport "] specified used by server for run-id " run-id)
@@ -201,11 +203,12 @@
 ;; lookup_server, need to remove *runremote* stuff
 ;;
 
-
-;; keep this as a function to ease future 
-(define (client:start run-id server-info)
-  (http-transport:client-connect (tasks:hostinfo-get-interface server-info)
-				 (tasks:hostinfo-get-port server-info)))
+;; BB: commenting out orphan code.  
+;;
+;; ;; keep this as a function to ease future 
+;; (define (client:start run-id server-info)
+;;   (http-transport:client-connect (tasks:hostinfo-get-interface server-info)
+;; 				 (tasks:hostinfo-get-port server-info)))
 
 ;; ;; client:signal-handler
 ;; (define (client:signal-handler signum)
