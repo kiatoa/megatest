@@ -349,10 +349,19 @@
   (rmt:send-receive 'get-key-val-pairs run-id (list run-id)))
 
 (define (rmt:get-keys)
-  (rmt:send-receive 'get-keys #f '()))
+  (if *db-keys* *db-keys* 
+     (let ((res (rmt:send-receive 'get-keys #f '())))
+       (set! *db-keys* res)
+       res)))
 
+;; we don't reuse run-id's (except possibly *after* a db cleanup) so it is safe
+;; to cache the resuls in a hash
+;;
 (define (rmt:get-key-vals run-id)
-  (rmt:send-receive 'get-key-vals #f (list run-id)))
+  (or (hash-table-ref/default *keyvals* run-id #f)
+      (let ((res (rmt:send-receive 'get-key-vals #f (list run-id))))
+        (hash-table-set! *keyvals* run-id res)
+        res)))
 
 (define (rmt:get-targets)
   (rmt:send-receive 'get-targets #f '()))
