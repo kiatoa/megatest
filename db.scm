@@ -815,7 +815,7 @@
 ;; return the target db handle so it can be used
 ;;
 (define (db:cache-for-read-only source target #!key (use-last-update #f))
-  (common:sync-to-megatest.db #t) ;; BUG!! DON'T LEAVE THIS HERE!
+  ;; (common:sync-to-megatest.db #t) ;; BUG!! DON'T LEAVE THIS HERE!
   (if (and (hash-table-ref/default *global-db-store* target #f)
 	   (>= (file-modification-time target)(file-modification-time source)))
       (hash-table-ref *global-db-store* target)
