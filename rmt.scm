@@ -86,11 +86,6 @@
         	  (< (http-transport:server-dat-get-last-access connection) expire-time)) ;; BB> BBTODO: make this generic, not http transport specific.
              (begin
                (debug:print-info 0 *default-log-port* "Discarding connection to server for run-id " run-id ", too long between accesses")
-               ;; bb- disabling nanomsg
-               ;; SHOULD CLOSE THE CONNECTION HERE 
-	       ;; (case *transport-type*
-	       ;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket 
-	       ;;  		   (hash-table-ref *runremote* run-id)))))
                (hash-table-delete! *runremote* run-id)))))
      (hash-table-keys *runremote*)))
   ;; (mutex-unlock! *db-multi-sync-mutex*)
@@ -113,7 +108,7 @@
                            (exit 1))))
 	       (success (if (vector? dat) (vector-ref dat 0) #f))
 	       (res     (if (vector? dat) (vector-ref dat 1) #f)))
-	  (if (vector? connection-info)(http-transport:server-dat-update-last-access connection-info))
+	  (if (vector? connection-info)(http-transport:server-dat-update-last-access connection-info)) ;; BB> BBTODO: make this generic, not http transport specific.
 	  (if success
 	      (begin
 		;; (mutex-unlock! *send-receive-mutex*)
@@ -124,7 +119,6 @@
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 *default-log-port* "WARNING: Communication failed, trying call to rmt:send-receive again.")
                 (case *transport-type*
-                  ;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket connection-info))))
                   ((http)
                    (hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
                    ;; NOTE: killing server causes this process to block forever. No idea why. Dec 2. 
