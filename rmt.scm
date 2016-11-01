@@ -100,16 +100,17 @@
     ;; the nmsg method does the encoding under the hood (the http method should be changed to do this also)
     (if connection-info
 	;; use the server if have connection info
-	(let* ((dat     (case *transport-type*
+	(let* ((transport-type (vector-ref connection-info 6))
+               (dat     (case transport-type ;; BB: replaced *transport-type* global with run-id specific transport-type, item 6 in server-info vector which was populated by *-transport:client-connect with >> (vector iface port api-uri api-url api-req (current-seconds) 'http  ) <<
 			  ((http)(condition-case
 				  (http-transport:client-api-send-receive run-id connection-info cmd params)
 				  ((commfail)(vector #f "communications fail"))
 				  ((exn)(vector #f "other fail"))))
-			  ;; ((nmsg)(condition-case
-			  ;;         (nmsg-transport:client-api-send-receive run-id connection-info cmd params)
-			  ;;         ((timeout)(vector #f "timeout talking to server"))))
-                          ((rpc) (rpc-transport:client-api-send-receive run-id connection-info cmd params))
-			  (else  (exit))))
+                          ;;((rpc) (rpc-transport:client-api-send-receive run-id connection-info cmd params)) ;; BB: let us error out for now
+			  (else  
+                           (debug:print-error 0 *default-log-port* "Transport ["
+                                              transport "] specified for run-id [" run-id "] is not implemented in rmt:send-receive.  Cannot proceed.")
+                           (exit 1))))
 	       (success (if (vector? dat) (vector-ref dat 0) #f))
 	       (res     (if (vector? dat) (vector-ref dat 1) #f)))
 	  (if (vector? connection-info)(http-transport:server-dat-update-last-access connection-info))

@@ -52,10 +52,11 @@
 ;;     ((zmq)  (zmq:client-connect  iface port))
 ;;     (else   (rpc:client-connect  iface port))))
 
-(define (client:setup  run-id #!key (remaining-tries 10))
+(define (client:setup run-id #!key (remaining-tries 10))
   (debug:print-info 2 *default-log-port* "client:setup remaining-tries=" remaining-tries)
   (let* ((server-dat (tasks:bb-get-server-info run-id))
-         (transport (if server-dat (tasks:hostinfo-get-transport server-dat) 'noserver)))
+         (transport (if server-dat (string->symbol (tasks:hostinfo-get-transport server-dat)) 'noserver)))
+    ;;(BB> "transport >"transport"<  string? transport >"(string? transport)"< symbol? transport >"(symbol? transport)"<")
     (case transport
       ((noserver) ;; no server registered
        (if (<= remaining-tries 0)
@@ -69,23 +70,28 @@
                    (server:try-running run-id))
                (thread-sleep! (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
                (client:setup run-id remaining-tries: (- remaining-tries 1))))))
-      ((http)(client:setup-http server-dat run-id remaining-tries))
+      ((http)(client:setup-http run-id server-dat remaining-tries))
       ;; ((rpc) (rpc-transport:client-setup run-id)) ;;(client:setup-rpc run-id)) rpc not implemented;  want to see a failure here for now.
       (else
-       (debug:print-error 0 *default-log-port* "Unknown transport ["
-                          transport "] specified used by server for run-id " run-id)
+       (debug:print-error 0 *default-log-port* "Transport ["
+                          transport "] specified for run-id [" run-id "] is not implemented in client:setup.  Cannot proceed.")
        (exit 1)))))
 
-
+;; client:setup-http
+;;
+;; For http transport, robustly ensure an advertised-running server is actually working and responding, and
+;; establish tcp connection to server.  For servers marked running but not responding, kill them and clear from mdb
+;; 
 (define (client:setup-http run-id server-dat remaining-tries)
   (let* ((iface     (tasks:hostinfo-get-interface server-dat))
          (hostname  (tasks:hostinfo-get-hostname  server-dat))
          (port      (tasks:hostinfo-get-port      server-dat))
+
          (start-res (http-transport:client-connect iface port))
          (ping-res  (rmt:login-no-auto-client-setup start-res run-id)))
     (if (and start-res ping-res)
         (begin
-          (hash-table-set! *runremote* run-id start-res)
+          (hash-table-set! *runremote* run-id start-res) ;; side-effect - *runremote* cache init fpr rmt:*
           (debug:print-info 2 *default-log-port* "connected to " (http-transport:server-dat-make-url start-res))
           start-res)
         (begin    ;; login failed but have a server record, clean out the record and try again

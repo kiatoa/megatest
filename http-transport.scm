@@ -325,7 +325,7 @@
 (define (http-transport:server-dat-get-api-url       vec)    (vector-ref  vec 3))
 (define (http-transport:server-dat-get-api-req       vec)    (vector-ref  vec 4))
 (define (http-transport:server-dat-get-last-access   vec)    (vector-ref  vec 5))
-(define (http-transport:server-dat-get-socket        vec)    (vector-ref  vec 6))
+(define (http-transport:server-dat-get-transport     vec)    (vector-ref  vec 6))
 
 (define (http-transport:server-dat-make-url vec)
   (if (and (http-transport:server-dat-get-iface vec)
@@ -350,7 +350,7 @@
   (let* ((api-url      (conc "http://" iface ":" port "/api"))
 	 (api-uri      (uri-reference (conc "http://" iface ":" port "/api")))
 	 (api-req      (make-request method: 'POST uri: api-uri))
-	 (server-dat   (vector iface port api-uri api-url api-req (current-seconds))))
+	 (server-dat   (vector iface port api-uri api-url api-req (current-seconds) 'http)))
     server-dat))
 
 ;; run http-transport:keep-running in a parallel thread to monitor that the db is being 

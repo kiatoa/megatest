@@ -333,7 +333,7 @@
 ;; BB> bb opinion - want to push responsibility into api (encapsulation), like waiting if db is busy and finding the db handle in the first place.  why should the caller need to be concerned??  If my opinion carries, we'll remove the bb- and make other needful adjustments.
 (define (bb-mdb-inserter mdb-expecting-proc mdbless-args)
   (let ((mdb (db:delay-if-busy (tasks:open-db))))
-    (apply mdb-expecting-proc (cons mdb args))))
+    (apply mdb-expecting-proc (cons mdb mdbless-args))))
 
 (define (tasks:bb-get-server-info . args)
   (bb-mdb-inserter tasks:get-server-info args))
