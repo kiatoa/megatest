@@ -74,7 +74,7 @@
     ttype))
 
 ;; Get the transport
-(define (server:get-transport)
+(define (server:get-transport #!key (run-id #f)) ;; BB> BBTODO Shouldn't this be run-id sensitive and not a global?? (added run-id key to get this is we are supplied a run-id (added this in client:setup)
   (if *transport-type*
       *transport-type*
       (server:set-transport)))
@@ -187,7 +187,7 @@
 
 (define (server:check-if-running run-id)
   (let ((tdbdat (tasks:open-db)))
-    (let loop ((server (tasks:get-server (db:delay-if-busy tdbdat) run-id))
+    (let loop ((server (tasks:get-server-info (db:delay-if-busy tdbdat) run-id))
 	       (trycount 0))
     (if server
 	;; note: client:start will set *runremote*. this needs to be changed
@@ -222,7 +222,7 @@
 			    (list (car slst)(string->number (cadr slst)))
 			    #f)))
 	   (toppath       (launch:setup))
-	   (server-db-dat (if (not host-port)(tasks:get-server (db:delay-if-busy tdbdat) run-id) #f)))
+	   (server-db-dat (if (not host-port)(tasks:get-server-info (db:delay-if-busy tdbdat) run-id) #f)))
       (if (not run-id)
 	  (begin
 	    (debug:print-error 0 *default-log-port* "must specify run-id when doing ping, -run-id n")

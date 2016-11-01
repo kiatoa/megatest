@@ -83,7 +83,7 @@
      (lambda (run-id)
        (let ((connection (hash-table-ref/default *runremote* run-id #f)))
          (if (and (vector? connection)
-        	  (< (http-transport:server-dat-get-last-access connection) expire-time))
+        	  (< (http-transport:server-dat-get-last-access connection) expire-time)) ;; BB> BBTODO: make this generic, not http transport specific.
              (begin
                (debug:print-info 0 *default-log-port* "Discarding connection to server for run-id " run-id ", too long between accesses")
                ;; bb- disabling nanomsg
@@ -108,6 +108,7 @@
 			  ;; ((nmsg)(condition-case
 			  ;;         (nmsg-transport:client-api-send-receive run-id connection-info cmd params)
 			  ;;         ((timeout)(vector #f "timeout talking to server"))))
+                          ((rpc) (rpc-transport:client-api-send-receive run-id connection-info cmd params))
 			  (else  (exit))))
 	       (success (if (vector? dat) (vector-ref dat 0) #f))
 	       (res     (if (vector? dat) (vector-ref dat 1) #f)))
@@ -116,33 +117,34 @@
 	      (begin
 		;; (mutex-unlock! *send-receive-mutex*)
 		(case *transport-type* 
-		  ((http) res) ;; (db:string->obj res))
+		  ((http rpc) res) ;; (db:string->obj res))
 		  ;; ((nmsg) res)
                   )) ;; (vector-ref res 1)))
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 *default-log-port* "WARNING: Communication failed, trying call to rmt:send-receive again.")
-		;; (case *transport-type*
-		;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket connection-info))))
-		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
-		;; NOTE: killing server causes this process to block forever. No idea why. Dec 2. 
-		;; (if (eq? (modulo attemptnum 5) 0)
-		;;     (tasks:kill-server-run-id run-id tag: "api-send-receive-failed"))
-		;; (mutex-unlock! *send-receive-mutex*) ;; close the mutex here to allow other threads access to communications
-		(tasks:start-and-wait-for-server (tasks:open-db) run-id 15)
-		;; (nmsg-transport:client-api-send-receive run-id connection-info cmd param remtries: (- remtries 1))))))
-
-		;; no longer killing the server in http-transport:client-api-send-receive
-		;; may kill it here but what are the criteria?
-		;; start with three calls then kill server
-		;; (if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
-		;; (thread-sleep! 2)
-		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))))
+                (case *transport-type*
+                  ;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket connection-info))))
+                  ((http)
+                   (hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
+                   ;; NOTE: killing server causes this process to block forever. No idea why. Dec 2. 
+                   ;; (if (eq? (modulo attemptnum 5) 0)
+                   ;;     (tasks:kill-server-run-id run-id tag: "api-send-receive-failed"))
+                   ;; (mutex-unlock! *send-receive-mutex*) ;; close the mutex here to allow other threads access to communications
+                   (tasks:start-and-wait-for-server (tasks:open-db) run-id 15)
+                   ;; (nmsg-transport:client-api-send-receive run-id connection-info cmd param remtries: (- remtries 1))))))
+                   
+                   ;; no longer killing the server in http-transport:client-api-send-receive
+                   ;; may kill it here but what are the criteria?
+                   ;; start with three calls then kill server
+                   ;; (if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
+                   ;; (thread-sleep! 2)
+                   (rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))))))
 	;; no connection info? try to start a server, or access locally if no
 	;; server and the query is read-only
 	;;
 	;; Note: The tasks db was checked for a server in starting mode in the rmt:get-connection-info call
 	;;
-	(if (and (< attemptnum 15)
+        (if (and (< attemptnum 15)
 		 (member cmd api:write-queries))
 	    (let ((faststart (configf:lookup *configdat* "server" "faststart")))
 	      (hash-table-delete! *runremote* run-id)

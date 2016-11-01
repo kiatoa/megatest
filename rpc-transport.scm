@@ -194,7 +194,7 @@
 		    (server:try-running run-id)
 		    (thread-sleep! 2)
 		    (rpc-transport:client-setup run-id (- remtries 1)))))
- 	    (let* ((server-db-info (open-run-close tasks:get-server tasks:open-db run-id)))
+ 	    (let* ((server-db-info (open-run-close tasks:get-server-info tasks:open-db run-id)))
  	      (debug:print-info 0 *default-log-port* "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
 	      (if server-db-info
  		  (let* ((iface     (tasks:hostinfo-get-interface server-db-info))
