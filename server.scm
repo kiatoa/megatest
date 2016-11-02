@@ -262,6 +262,9 @@
 	     (else       #f))
 	   (loop (read-line) inl))))))
 
+
+;; Client will call this procedure on the server via the low-level transport (http/rpc/etc) to verify its toppath matches the server's toppath.
+;; A true result means client and server are associated with same megatest instance, share the same megatest.config, etc...)  A false result means the client should not talk to this server.
 (define (server:login toppath)
   (lambda (toppath)
     (set! *last-db-access* (current-seconds))

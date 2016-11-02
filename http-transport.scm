@@ -387,7 +387,7 @@
 				    (loop start-time
 					  (equal? sdat last-sdat)
 					  sdat)))))))
-         (iface       (car server-info))
+         (iface       (car server-info)) ;; BB> this represents ip address, not interface (like eth0 as I would expect from the term)
          (port        (cadr server-info))
          (last-access 0)
 	 (server-timeout (server:get-timeout)))

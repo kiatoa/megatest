@@ -76,7 +76,9 @@
 ;; RA => e.g. usage (rmt:send-receive 'get-var #f (list varname))
 ;;
 (define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
-  ;; clean out old connections
+
+
+  ;; side-effect: clean out old connections
   ;; (mutex-lock! *db-multi-sync-mutex*)
   (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
     (for-each 
@@ -88,6 +90,7 @@
                (debug:print-info 0 *default-log-port* "Discarding connection to server for run-id " run-id ", too long between accesses")
                (hash-table-delete! *runremote* run-id)))))
      (hash-table-keys *runremote*)))
+  
   ;; (mutex-unlock! *db-multi-sync-mutex*)
   ;; (mutex-lock! *send-receive-mutex*)
   (let* ((run-id          (if rid rid 0))
@@ -95,7 +98,7 @@
     ;; the nmsg method does the encoding under the hood (the http method should be changed to do this also)
     (if connection-info
 	;; use the server if have connection info
-	(let* ((transport-type (vector-ref connection-info 6))
+	(let* ((transport-type (vector-ref connection-info 6)) ;; BB: assumes all transport-type'-servertdat vector's item 6 ids transport type
                (dat     (case transport-type ;; BB: replaced *transport-type* global with run-id specific transport-type, item 6 in server-info vector which was populated by *-transport:client-connect with >> (vector iface port api-uri api-url api-req (current-seconds) 'http  ) <<
 			  ((http)(condition-case
 				  (http-transport:client-api-send-receive run-id connection-info cmd params)

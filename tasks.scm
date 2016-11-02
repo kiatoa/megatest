@@ -293,6 +293,10 @@
 		(get-rand-port))
 	    port))))))
 
+;; there can be multiple servers spawned for the same runid.  we want exactly zero or one servers per runid.  The caller is a nascent server.  It wants to know if it should proceed or if it is redundant.  this function chooses a winner and tells me if I am the winner.  Alternative is lots of runaway servers.  Nobody wants that, trust me.
+;;
+;; algo: get all server info entries for this runid.  Each nascent server will insert an entry for its runid before getting here.  Entries are visible globally.  If current hostname and current processid match first entry, then yes I am the server;  return server-id as my prize for winning.  Otherwise, I am not the server;  return #f.
+;;
 (define (tasks:server-am-i-the-server? mdb run-id)
   (let* ((all    (tasks:server-get-servers-vying-for-run-id mdb run-id))
 	 (first  (if (null? all)
@@ -335,12 +339,29 @@
   (let ((mdb (db:delay-if-busy (tasks:open-db))))
     (apply mdb-expecting-proc (cons mdb mdbless-args))))
 
+(define (tasks:bb-server-lock-slot . args)
+  (bb-mdb-inserter tasks:server-lock-slot args))
+
+(define (tasks:bb-server-set-interface-port . args)
+  (bb-mdb-inserter tasks:server-set-interface-port args))
+
+(define (tasks:bb-server-am-i-the-server? . args)
+  (bb-mdb-inserter tasks:server-am-i-the-server? args))
+
+(define (tasks:bb-server-set-state! . args)
+  (bb-mdb-inserter tasks:server-set-state! args))
+  
 (define (tasks:bb-get-server-info . args)
   (bb-mdb-inserter tasks:get-server-info args))
 
 (define (tasks:bb-num-in-available-state . args)
   (bb-mdb-inserter tasks:num-in-available-state args))
 
+(define (tasks:bb-server-delete-records-for-this-pid . args)
+  (bb-mdb-inserter tasks:server-delete-records-for-this-pid args))
+
+(define (tasks:bb-server-delete-record . args)
+  (bb-mdb-inserter tasks:server-delete-record args))
 
 
 ;; BB: renaming tasks:get-server to get-server-info to make clear we aren't creating servers here
