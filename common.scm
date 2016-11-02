@@ -372,6 +372,7 @@
 
 (define (common:legacy-sync-recommended)
   (or (args:get-arg "-runtests")
+      (args:get-arg "-run")
       (args:get-arg "-server")
       ;; (args:get-arg "-set-run-status")
       (args:get-arg "-remove-runs")
