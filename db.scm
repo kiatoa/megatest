@@ -217,7 +217,12 @@
 	      (db      (sqlite3:open-database fname)))
 	  (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
 	  (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
-	  (if (not file-exists)(initproc db))
+	  (if (not file-exists)
+	      (begin
+		(if (string-match "^/tmp/.*" fname) ;; this is a file in /tmp
+		    (sqlite3:execute db "PRAGMA journal_mode=WAL;")
+		    (print "Creating " fname " in NON-WAL mode."))
+		(initproc db)))
 	  ;; (release-dot-lock fname)
 	  db)
 	(begin
