@@ -15,7 +15,8 @@
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
 
-(tcp-buffer-size 2048)
+;;(tcp-buffer-size 2048)
+(BB> "HEY TURNING OFF tcp-buffer-size TO TEST FOR RPC SIDE EFFECT>  TURN BACK ON BEFORE PRODUCTION")
 
 (declare (unit fs-transport))
 

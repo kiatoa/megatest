@@ -125,9 +125,22 @@
   ;;	  start of publish-procedure section
   ;;======================================================================
   (rpc:publish-procedure! 'server:login server:login) ;; this allows client to validate it is the same megatest instance as the server.  No security here, just making sure we're in the right room.
-  (rpc:publish-procedure! 'testing (lambda () "Just testing"))
+  (BB> "published 'testing")
+  (rpc:publish-procedure!
+   'testing
+   (lambda ()
+     (BB> "Current-peer=["(rpc:current-peer)"]")
+     (BB> "published rpc proc 'testing was invoked")
+     "Just testing"))
 
-  ;; BB: BBTODO: publish procedure to receive request from client's rpc:send-receive/rpc-transport:client-api-send-receive call
+  ;; procedure to receive arbitrary API request from client's rpc:send-receive/rpc-transport:client-api-send-receive 
+  (rpc:publish-procedure! 'rpc-transport:autoremote rpc-transport:autoremote)
+  ;; can use this to run most anything at the remote
+  (rpc:publish-procedure! 
+   'remote:run 
+   (lambda (procstr . params)
+     (server:autoremote procstr params)))
+  
   
   ;;======================================================================
   ;;	  end of publish-procedure section
@@ -157,12 +170,14 @@
 	 (rpc:listener    (rpc-transport:find-free-port-and-open start-port)) 
 	 (th1             (make-thread
 			   (lambda ()
-			     ((rpc:make-server rpc:listener) #t))
+                             (BB> "+++ before rpc:make-server "rpc:listener)
+                             ;;(cute (rpc:make-server rpc:listener) "rpc:server")
+			     ((rpc:make-server rpc:listener) #t)
+                             (BB> "--- after rpc:make-server"))
 			   "rpc:server"))
-         
-			   ;; (cute (rpc:make-server rpc:listener) "rpc:server")
-			   ;; 'rpc:server))
-	 (hostname        (if (string=? "-" hostn)
+
+
+         (hostname        (if (string=? "-" hostn)
 			      (get-host-name) 
 			      hostn))
 	 (ipaddrstr       (if (string=? "-" hostn)
@@ -172,23 +187,35 @@
 	 (host:port       (conc (if ipaddrstr ipaddrstr hostname) ":" portnum)))
 
     ;; if rpc found it needed a different port than portlogger provided, keep portlogger in the loop.
-    (when (not (equal? start-port portnum))
-      (BB> "portlogger proffered "start-port" but rpc grabbed "portnum)
-      (portlogger:open-run-close portlogger:set-port start-port "released")
-      (portlogger:open-run-close portlogger:take-port portnum))
+    ;; (when (not (equal? start-port portnum))
+    ;;   (BB> "portlogger proffered "start-port" but rpc grabbed "portnum)
+    ;;   (portlogger:open-run-close portlogger:set-port start-port "released")
+    ;;   (portlogger:open-run-close portlogger:take-port portnum))
+
+    (tasks:bb-server-set-interface-port server-id ipaddrstr portnum)
+
     ;;============================================================
     ;;  activate thread th1 to attach opened tcp port to rpc server
     ;;=============================================================
     (BB> "Got here before thread start of rpc listener")
     (thread-start! th1)
-
-
     (BB> "started rpc server thread th1="th1)
+
     (set! db *inmemdb*)
-o    (tasks:bb-server-set-interface-port server-id ipaddrstr portnum)
+
     (debug:print 0 *default-log-port* "Server started on " host:port)
     
 
+    (thread-sleep! 8)
+    (BB> "before self test")
+    (if (rpc-transport:self-test run-id ipaddrstr portnum)
+        (BB> "Pass self-test.")
+        (begin
+          (print "Error: rpc listener did not pass self test.  Shutting down.")
+          (exit)))
+    (BB> "after self test")
+
+    
     (on-exit (lambda ()
                (rpc-transport:server-shutdown server-id rpc:listener from-on-exit: #t)))
     
@@ -321,13 +348,16 @@ o    (tasks:bb-server-set-interface-port server-id ipaddrstr portnum)
    exn
    (begin
      (print "Failed to bind to port " (rpc:default-server-port) ", trying next port")
-     (rpc-transport:find-free-port-and-open (+ port 1)))
+     (rpc-transport:find-free-port-and-open (add1 port)))
    (rpc:default-server-port port)
    (set! *rpc-listener-port* port) ;; a bit paranoid about rpc:default-server-port parameter not changing across threads (as params are wont to do).  keeping this global in my back pocket in case this causes problems
    (set! *rpc-listener-port-bind-timestamp* (current-milliseconds)) ;; may want to test how long it has been since the last bind attempt happened...
    (tcp-read-timeout 240000)
+   (tcp-buffer-size 0) ;; gotta do this because http-transport undoes it.
    (BB> "rpc-transport> attempting to bind tcp port "port)
-   (tcp-listen (rpc:default-server-port) 10000)))
+   (tcp-listen (rpc:default-server-port) 10000)
+   ;;(tcp-listen (rpc:default-server-port) )
+   ))
   
 (define (rpc-transport:ping run-id host port)
   (handle-exceptions
@@ -336,14 +366,38 @@ o    (tasks:bb-server-set-interface-port server-id ipaddrstr portnum)
      (print "SERVER_NOT_FOUND")
      (exit 1))
    (let ((login-res ((rpc:procedure 'server:login host port) *toppath*)))
-     (if (and (list? login-res)
-	      (car login-res))
+     (if login-res
 	 (begin
 	   (print "LOGIN_OK")
 	   (exit 0))
 	 (begin
 	   (print "LOGIN_FAILED")
 	   (exit 1))))))
+
+(define (rpc-transport:self-test run-id host port)
+  (BB> "SELF TEST RPC ... *toppath*="*toppath*)
+  (BB> "local: [" (server:login *toppath*) "]")
+  ;(handle-exceptions
+   ;exn
+   ;(begin
+   ;  (BB> "SERVER_NOT_FOUND")
+   ;  #f)
+  (tcp-buffer-size 0) ;; gotta do this because http-transport undoes it.
+  (let* ((testing-res ((rpc:procedure 'testing host port)))
+         (login-res ((rpc:procedure 'server:login host port) *toppath*))
+         (res (and login-res (equal? testing-res "Just testing"))))
+
+     (BB> "testing-res = >"testing-res"<")
+     (BB> "login-res = >"testing-res"<")
+     (if login-res
+	 (begin
+	   (BB> "LOGIN_OK")
+	   #t)
+	 (begin
+	   (BB> "LOGIN_FAILED")
+	   #f))
+     (BB> "self test res="res)
+     res));)
 
 (define (rpc-transport:client-setup run-id #!key (remtries 10))
   (if *runremote*

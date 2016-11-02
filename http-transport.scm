@@ -16,7 +16,11 @@
 (use spiffy uri-common intarweb http-client spiffy-request-vars intarweb spiffy-directory-listing)
 
 ;; Configurations for server
-(tcp-buffer-size 2048)
+
+(tcp-buffer-size 2048) ;; this interferes with rpc ; compensating in rpc-transport... so far so good
+
+
+
 (max-connections 2048) 
 
 (declare (unit http-transport))
