@@ -339,6 +339,9 @@
   (let ((mdb (db:delay-if-busy (tasks:open-db))))
     (apply mdb-expecting-proc (cons mdb mdbless-args))))
 
+(define (tasks:bb-server-force-clean-run-record . args)
+  (bb-mdb-inserter tasks:server-force-clean-run-record args))
+
 (define (tasks:bb-server-lock-slot . args)
   (bb-mdb-inserter tasks:server-lock-slot args))
 

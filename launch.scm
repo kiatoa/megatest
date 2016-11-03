@@ -1124,7 +1124,7 @@
 		     (with-output-to-string
 		       (lambda () ;; (list 'hosts     hosts)
 			 (write (list (list 'testpath  test-path)
-				      (list 'transport (conc *transport-type*))
+				      (list 'transport (conc (rmt:run-id->transport-type run-id)))
 				      ;; (list 'serverinf *server-info*)
 				      (list 'toppath   *toppath*)
 				      (list 'work-area work-area)

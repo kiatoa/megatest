@@ -74,7 +74,7 @@
     ttype))
 
 ;; Get the transport  -- DO NOT call this from client code.  In client code, this is run-id sensitive and not a global
-
+;;   For code communicating with existing run-id with a server, use: (rmt:run-id->transport-type run-id)
  (define (server:get-transport)
    (if *transport-type*
        *transport-type*
@@ -196,14 +196,16 @@
 	;;
 	;; client:start returns #t if login was successful.
 	;;
-	(let ((res (case *transport-type*
+	(let* ((transport-type (rmt:run-id->transport-type run-id))
+               (res (case transport-type
 		     ((http)(server:ping-server run-id 
 						(tasks:hostinfo-get-interface server)
 						(tasks:hostinfo-get-port      server)))
-		     ;; ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
-		     ;;    			 (tasks:hostinfo-get-port      server)
-		     ;;    			 timeout: 2))
-                     )))
+                     (else  
+                      (debug:print-error 0 *default-log-port* "(5) Transport [" transport-type
+                                         "] specified for run-id [" run-id
+                                         "] is not implemented in rmt:send-receive.  Cannot proceed.")
+                      (exit 1)))))
 	  ;; if the server didn't respond we must remove the record
 	  (if res
 	      #t

@@ -73,7 +73,7 @@
       ((http)(client:setup-http run-id server-dat remaining-tries))
       ;; ((rpc) (rpc-transport:client-setup run-id)) ;;(client:setup-rpc run-id)) rpc not implemented;  want to see a failure here for now.
       (else
-       (debug:print-error 0 *default-log-port* "Transport ["
+       (debug:print-error 0 *default-log-port* "(6) Transport ["
                           transport "] specified for run-id [" run-id "] is not implemented in client:setup.  Cannot proceed.")
        (exit 1)))))
 
@@ -95,12 +95,12 @@
           (debug:print-info 2 *default-log-port* "connected to " (http-transport:server-dat-make-url start-res))
           start-res)
         (begin    ;; login failed but have a server record, clean out the record and try again
-          (debug:print-info 0 *default-log-port* "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
+          (debug:print-info 0 *default-log-port* "client:setup-http, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
           (http-transport:close-connections run-id)
           (hash-table-delete! *runremote* run-id)
           (tasks:kill-server-run-id run-id)
           (tasks:bb-server-force-clean-run-record  run-id iface port
-                                                   " client:setup (server-dat = #t)")
+                                                   " client:setup-http (server-dat = #t)")
           (if (> remaining-tries 8)
               (thread-sleep! (+ 1 (random 5))) ;; spread out the starts a little
               (thread-sleep! (+ 15 (random 20)))) ;; it isn't going well. give it plenty of time
