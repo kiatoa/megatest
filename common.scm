@@ -133,6 +133,8 @@
 ;; Generic path database
 (define *fdb* #f)
 
+(define *last-launch* (current-seconds)) ;; use for throttling the launch rate. Would be better to use the db and last time of a test in LAUNCHED state.
+
 ;;======================================================================
 ;; V E R S I O N
 ;;======================================================================
