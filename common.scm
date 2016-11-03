@@ -44,6 +44,13 @@
 (define user (getenv "USER"))
 
 ;; GLOBAL GLETCHES
+
+;; Common data structure for 
+(defstruct cxt
+  (taskdb #f))
+
+(define *contexts* (make-hash-table)) ;; toppath => cxt
+
 (define *db-keys* #f)
 
 (define *configinfo*   #f)   ;; raw results from setup, includes toppath and table from megatest.config
