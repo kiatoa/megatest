@@ -227,14 +227,9 @@
 			     (loop (car tal)(cdr tal) newmax-cmd currmax)))))))
     (mutex-unlock! *db-stats-mutex*)
     res))
-	  
+
 (define (rmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
-  (let* ((dbstruct-local (if *dbstruct-db*
-			     *dbstruct-db*
-			     (let* ((dbdir (db:dbfile-path #f)) ;;  (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
-				    (db (make-dbr:dbstruct path:  dbdir local: #t)))
-			       (set! *dbstruct-db* db)
-			       db)))
+  (let* ((dbstruct-local (db:open-local-db-handle))
 	 (db-file-path   (db:dbfile-path 0))
 	 ;; (read-only      (not (file-read-access? db-file-path)))
 	 (start          (current-milliseconds))

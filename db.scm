@@ -322,11 +322,21 @@
 
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;
+;; called in http-transport and replicated in rmt.scm for *local* access. 
+;;
 (define (db:setup run-id #!key (local #f))
   (let* ((dbdir    (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 	 (dbstruct (make-dbr:dbstruct path: dbdir local: local)))
     dbstruct))
 
+;; open the local db for direct access (no server)
+;;
+(define (db:open-local-db-handle)
+  (or *dbstruct-db*
+      (let ((dbstruct (db:setup #f local: #t)))
+	(set! *dbstruct-db* dbstruct)
+	dbstruct)))
+	  
 ;; Open the classic megatest.db file in toppath
 ;;
 (define (db:open-megatest-db)
