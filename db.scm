@@ -1407,6 +1407,11 @@
 	#f
 	#t)))
 
+;; given a launch delay (minimum time from last launch) return amount of time to wait
+;;
+;; (define (db:launch-delay-left dbstruct run-id launch-delay)
+  
+
 ;;  select end_time-now from
 ;;      (select testname,item_path,event_time+run_duration as
 ;;                          end_time,strftime('%s','now') as now from tests where state in
