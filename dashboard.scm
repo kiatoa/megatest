@@ -265,6 +265,7 @@ Misc
   ;; runs tree
   ((path-run-ids       (make-hash-table)) : hash-table) ;; path (target / runname) => id
   (runs-tree           #f)
+  ((runs-tree-ht       (make-hash-table)) : hash-table) ;; track which targets added to tree (merge functionality with path-run-ids?)
 
   ;; tab data
   ((view-changed       #t)                : boolean)   
@@ -2587,14 +2588,15 @@ Misc
 (tasks:open-db)
 
 (define (dashboard:get-youngest-run-db-mod-time tabdat)
-  (handle-exceptions
-   exn
-   (begin
-     (debug:print 0 *default-log-port* "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn))
-     (current-seconds)) ;; something went wrong - just print an error and return current-seconds
-   (common:max (map (lambda (filen)
-		     (file-modification-time filen))
-		   (glob (conc (dboard:tabdat-dbdir tabdat) "/*.db"))))))
+  (let ((dbpath (dboard:tabdat-dbdir tabdat)))
+    (handle-exceptions
+     exn
+     (begin
+       (debug:print 0 *default-log-port* "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn))
+       (current-seconds)) ;; something went wrong - just print an error and return current-seconds
+     (common:max (map (lambda (filen)
+			(file-modification-time filen))
+		      (glob (conc dbpath "/*.db")(conc dbpath "/*-shm")(conc dbpath "/*-wal")))))))
 
 (define (dashboard:monitor-changed? commondat tabdat)
   (let* ((run-update-time (current-seconds))
