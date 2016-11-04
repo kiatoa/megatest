@@ -381,7 +381,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (thread-start! *watchdog*)
 
-
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))
       (debug:print-info 0 *default-log-port* "Sending log output to " (args:get-arg "-log"))
