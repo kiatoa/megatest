@@ -713,7 +713,12 @@
 	 (rundir   (if (and runname target linktree)(conc linktree "/" target "/" runname) #f))
 	 (mtcachef (and rundir (conc rundir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	 (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
-	 (cancreate (and rundir (file-exists? rundir)(file-write-access? rundir))))
+	 (cancreate (and rundir (file-exists? rundir)(file-write-access? rundir)))
+         (cxt       (hash-table-ref/default *contexts* toppath #f)))
+
+    ;; create our cxt for this area if it doesn't already exist
+    (if (not cxt)(hash-table-set! *contexts* toppath (make-cxt)))
+
     ;; (print "runname: " runname " target: " target " mtcachef: " mtcachef " rccachef: " rccachef)
     (set! *toppath* toppath) ;; This is needed when we are running as a test using CMDINFO as a datasource
     (cond

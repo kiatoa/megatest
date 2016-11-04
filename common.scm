@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo typed-records)
 (require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -122,6 +122,10 @@
 ;; This is a cache of pre-reqs met, don't re-calc in cases where called with same params less than
 ;; five seconds ago
 (define *pre-reqs-met-cache* (make-hash-table))
+
+;; cache of verbosity given string
+;;
+(define *verbosity-cache* (make-hash-table))
 
 (define (common:clear-caches)
   (set! *target*             (make-hash-table))
