@@ -1326,7 +1326,7 @@
     (thread-sleep! 5) ;; I think there is a race condition here. Let states/statuses settle
     (let wait-loop ((num-running      (rmt:get-count-tests-running-for-run-id run-id))
 		    (prev-num-running 0))
-      (BB> "num-running=" num-running ", prev-num-running=" prev-num-running)
+      ;; (BB> "num-running=" num-running ", prev-num-running=" prev-num-running)
       (if (and (or (args:get-arg "-run-wait")
 		   (equal? (configf:lookup *configdat* "setup" "run-wait") "yes"))
 	       (> num-running 0))

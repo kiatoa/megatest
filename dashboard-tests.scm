@@ -630,11 +630,9 @@
 											   item-path))
 						      " -clean-cache"
 						      )))
-				       (common:without-vars
-					(conc (dtests:get-pre-command)
-					      cmd 
-					      (dtests:get-post-command))
-					"MT_.*"))))
+                                       (thread-start! (make-thread (lambda ()
+                                                                     (common:run-a-command cmd))
+                                                                   "clean-run-execute")))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
