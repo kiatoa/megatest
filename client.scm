@@ -71,11 +71,12 @@
                (thread-sleep! (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
                (client:setup run-id remaining-tries: (- remaining-tries 1))))))
       ((http)(client:setup-http run-id server-dat remaining-tries))
-      ;; ((rpc) (rpc-transport:client-setup run-id)) ;;(client:setup-rpc run-id)) rpc not implemented;  want to see a failure here for now.
+      ((rpc) (rpc-transport:client-setup run-id server-dat remtries: remaining-tries)) 
       (else
        (debug:print-error 0 *default-log-port* "(6) Transport ["
                           transport "] specified for run-id [" run-id "] is not implemented in client:setup.  Cannot proceed.")
        (exit 1)))))
+
 
 ;; client:setup-http
 ;;
@@ -97,8 +98,8 @@
         (begin    ;; login failed but have a server record, clean out the record and try again
           (debug:print-info 0 *default-log-port* "client:setup-http, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
           (http-transport:close-connections run-id)
-          (hash-table-delete! *runremote* run-id)
-          (tasks:kill-server-run-id run-id)
+          (hash-table-delete! *runremote* run-id) ;; BB: suspect there is nothing to delete ...
+          (tasks:kill-server-run-id run-id) ;; -9 so the hung processes dont eat 100% when not responding to sigterm.
           (tasks:bb-server-force-clean-run-record  run-id iface port
                                                    " client:setup-http (server-dat = #t)")
           (if (> remaining-tries 8)

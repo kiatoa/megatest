@@ -399,66 +399,30 @@
      (BB> "self test res="res)
      res));)
 
-(define (rpc-transport:client-setup run-id #!key (remtries 10))
-  (if *runremote*
-      (begin
-	(debug:print-error 0 *default-log-port* "Attempt to connect to server but already connected")
-	#f)
-      (let* ((host-info (hash-table-ref/default *runremote* run-id #f))) ;; (open-run-close db:get-var #f "SERVER"))
-	(if host-info
-	    (let ((iface    (car host-info))
-		  (port     (cadr host-info))
-		  (ping-res ((rpc:procedure 'server:login host port) *toppath*)))
-	      (if ping-res
-		  (let ((server-dat (list iface port #f #f #f)))
-		    (hash-table-set! *runremote* run-id server-dat)
-		    server-dat)
-		  (begin
-		    (server:try-running run-id)
-		    (thread-sleep! 2)
-		    (rpc-transport:client-setup run-id (- remtries 1)))))
- 	    (let* ((server-db-info (open-run-close tasks:get-server-info tasks:open-db run-id)))
- 	      (debug:print-info 0 *default-log-port* "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
-	      (if server-db-info
-		  (let* ((iface     (tasks:hostinfo-get-interface server-db-info))
- 			 (port      (tasks:hostinfo-get-port      server-db-info))
-			 (server-dat (list iface port #f #f #f))
- 			 (ping-res  ((rpc:procedure 'server:login host port) *toppath*)))
- 		    (if start-res
- 			(begin
- 			  (hash-table-set! *runremote* run-id server-dat)
-			  server-dat)
-			(begin
-			  (server:try-running run-id)
-			  (thread-sleep! 2)
-			  (rpc-transport:client-setup run-id (- remtries 1)))))
-		  (begin
-		    (server:try-running run-id)
-		    (thread-sleep! 2)
-		    (rpc-transport:client-setup run-id (- remtries 1)))))))))
-;; 
-;; 	     (port     (if (and hostinfo (> (length hostdat) 1))(cadr hostdat) #f)))
-;; 	(if (and port
-;; 		 (string->number port))
-;; 	    (let ((portn (string->number port)))
-;; 	      (debug:print-info 2 *default-log-port* "Setting up to connect to host " host ":" port)
-;; 	      (handle-exceptions
-;; 	       exn
-;; 	       (begin
-;; 		 (debug:print-error 0 *default-log-port* "Failed to open a connection to the server at host: " host " port: " port)
-;; 		 (debug:print 0 *default-log-port* "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
-;; 		 ;; (open-run-close 
-;; 		 ;;  (lambda (db . param) 
-;; 		 ;;    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER'"))
-;; 		 ;;  #f)
-;; 		 (set! *runremote* #f))
-;; 	       (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
-;; 			((rpc:procedure 'server:login host portn) *toppath*))
-;; 		   (begin
-;; 		     (debug:print-info 2 *default-log-port* "Logged in and connected to " host ":" port)
-;; 		     (set! *runremote* (vector host portn)))
-;; 		   (begin
-;; 		     (debug:print-info 2 *default-log-port* "Failed to login or connect to " host ":" port)
-;; 		     (set! *runremote* #f)))))
-;; 	    (debug:print-info 2 *default-log-port* "no server available")))))
-
+(define (rpc-transport:client-setup run-id server-dat #!key (remtries 10))
+  (tcp-buffer-size 0)
+  (debug:print-info 0 *default-log-port* "rpc-transport:client-setup run-id="run-id" server-dat=" server-dat ", remaining-tries=" remtries)
+  (let* ((iface     (tasks:hostinfo-get-interface server-dat))
+         (hostname  (tasks:hostinfo-get-hostname  server-dat))
+         (port      (tasks:hostinfo-get-port      server-dat))
+         (runremote-server-dat (vector iface port #f #f #f (current-seconds) 'rpc)) ;; http version := (vector iface port api-uri api-url api-req (current-seconds) 'http  )
+         (ping-res (retry-thunk (lambda ()  ;; make 3 attempts to ping.
+                                  ((rpc:procedure 'server:login iface port) *toppath*))
+                                retries: 3)))
+    ;; we got here from rmt:get-connection-info on the condition that *runremote* has no entry for run-id...
+    (if ping-res
+        (begin
+          (debug:print-info 0 *default-log-port* "rpc-transport:client-setup CONNECTION ESTABLISHED run-id="run-id" server-dat=" server-dat)
+          (hash-table-set! *runremote* run-id runremote-server-dat)  ;; side-effect - *runremote* cache init fpr rmt:*
+          runremote-server-dat)
+        (begin ;; login failed but have a server record, clean out the record and try again
+          (tasks:kill-server-run-id run-id)
+          (tasks:bb-server-force-clean-run-record  run-id iface port
+                                                   " rpc-transport:client-setup (server-dat = #t)")
+          (if (> remtries 2)
+              (thread-sleep! (+ 1 (random 5))) ;; spread out the starts a little
+              (thread-sleep! (+ 15 (random 20)))) ;; it isn't going well. give it plenty of time
+          (server:try-running run-id)
+          (thread-sleep! 5)   ;; give server a little time to start up
+          (client:setup run-id remaining-tries: (sub1 remtries))
+          " rpc-transport:client-setup (server-dat = #t)"))))

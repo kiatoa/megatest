@@ -491,7 +491,7 @@
 	      (server-id (vector-ref sdat 0)))
 	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "killed")
 	  (debug:print-info 0 *default-log-port* "Killing server " server-id " for run-id " run-id " on host " hostname " with pid " pid)
-	  (tasks:kill-server hostname pid kill-switch: "-9") ;; BB: added -9, let's not be kind here.  we need it to die
+	  (tasks:kill-server hostname pid kill-switch: "-9") ;; BB: added -9, let's not be kind here.  we need it to die so it isn't a 100% cpu zombie
 	  (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id tag) )
 	(debug:print-info 0 *default-log-port* "No server found for run-id " run-id ", nothing to kill"))
     ;; (sqlite3:finalize! tdb)
