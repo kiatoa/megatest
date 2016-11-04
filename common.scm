@@ -1197,6 +1197,14 @@
 ;;     ((NOT_STARTED)      "240 240 240")
 ;;     (else               "192 192 192")))
 
+(define (common:iup-color->rgb-hex instr)
+  (string-intersperse 
+   (map (lambda (x)
+          (number->string x 16))
+        (map string->number
+             (string-split instr)))
+   "/"))
+
 (define (common:get-color-from-status status)
   (cond
    ((equal? status "PASS")    "green")
