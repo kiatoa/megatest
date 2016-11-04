@@ -81,7 +81,7 @@
 	;; use the server if have connection info
 	(let* ((transport-type (vector-ref connection-info 6))) ;; BB: assumes all transport-type'-servertdat vector's item 6 ids transport type
           transport-type)
-        ;; otherwise pick the global default as preference.
+        ;; otherwise pick the global default as preference. (set in common.scm)
         *transport-type*)))
 
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
@@ -119,11 +119,11 @@
 				  (http-transport:client-api-send-receive run-id connection-info cmd params)
 				  ((commfail)(vector #f "communications fail"))
 				  ((exn)(vector #f "other fail"))))
-                          ;;((rpc) (rpc-transport:client-api-send-receive run-id connection-info cmd params)) ;; BB: let us error out for now
+                          ((rpc) (rpc-transport:client-api-send-receive run-id connection-info cmd params)) ;; BB: let us error out for now
 			  (else  
                            (debug:print-error 0 *default-log-port* "(1) Transport [" transport-type
                                               "] specified for run-id [" run-id
-                                              "] is not implemented in rmt:send-receive.  Cannot proceed.")
+                                              "] is not implemented in rmt:send-receive.  Cannot proceed." (symbol? transport-type))
                            (vector #f (conc "transport ["transport-type"] unimplemented")))))
 
                
@@ -140,14 +140,13 @@
                                       "] specified for run-id [" run-id
                                       "] is not implemented in rmt:send-receive.  Cannot proceed. Also unexpected since this branch follows success which would follow a suported transport...")
                    #f)
-		  ;; ((nmsg) res)
                   )) ;; (vector-ref res 1)))
 
-              
+              ;; no success...
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 *default-log-port* "WARNING: Communication failed, trying call to rmt:send-receive again.")
                 (case transport-type
-                  ((http)
+                  ((http rpc)
                    (hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
                    ;; NOTE: killing server causes this process to block forever. No idea why. Dec 2. 
                    ;; (if (eq? (modulo attemptnum 5) 0)
