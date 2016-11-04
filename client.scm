@@ -14,10 +14,10 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
+(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
 ;; (use zmq)
 
-(import (prefix sqlite3 sqlite3:))
+(use (prefix sqlite3 sqlite3:))
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars uri-common intarweb directory-utils)
 
@@ -52,9 +52,9 @@
 
 (define (client:setup  run-id #!key (remaining-tries 10) (failed-connects 0))
   (case (server:get-transport)
-    ((rpc) (rpc-transport:client-setup run-id)) ;;(client:setup-rpc run-id))
-    ((http)(client:setup-http run-id))
-    (else  (rpc-transport:client-setup run-id)))) ;; (client:setup-rpc run-id))))
+    ((rpc) (rpc-transport:client-setup run-id remaining-tries: remaining-tries failed-connects: failed-connects)) ;;(client:setup-rpc run-id))
+    ((http)(client:setup-http run-id remaining-tries: remaining-tries failed-connects: failed-connects))
+    (else  (rpc-transport:client-setup run-id remaining-tries: remaining-tries failed-connects: failed-connects)))) ;; (client:setup-rpc run-id))))
 
 ;; (define (client:login-no-auto-setup server-info run-id)
 ;;   (case (server:get-transport)
