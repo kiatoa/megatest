@@ -1188,6 +1188,7 @@ Misc
   (let* ((tb            (dboard:tabdat-runs-tree tabdat))
 	 (runconf-targs (common:get-runconfig-targets))
 	 (db-target-dat (rmt:get-targets))
+         (runs-tree-ht  (dboard:tabdat-runs-tree-ht tabdat))
 	 (header        (vector-ref db-target-dat 0))
 	 (db-targets    (vector-ref db-target-dat 1))
 	 (munge-target  (lambda (x)            ;; create a target vector from a string. Pad with na if needed.
@@ -1203,7 +1204,12 @@ Misc
 				)))
     (for-each
      (lambda (target)
-       (tree:add-node tb "Runs" target)) ;; (append key-vals (list run-name))
+       (if (not (hash-table-ref/default runs-tree-ht target #f))
+           ;; (let ((existing (tree:find-node tb target)))
+           ;;   (if (not existing)
+           (begin
+             (tree:add-node tb "Runs" target) ;; (append key-vals (list run-name))
+             (hash-table-set! runs-tree-ht target #t))))
      all-targets)))
 
 ;; Run controls panel
@@ -1531,20 +1537,21 @@ Misc
 					(dboard:tabdat-keys tabdat)))
 		       (run-name   (db:get-value-by-header run-record runs-header "runname"))
 		       (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
-		       (run-path   (append key-vals (list run-name)))
-		       (existing   (tree:find-node tb run-path)))
+		       (run-path   (append key-vals (list run-name))))
 		  (if (not (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) run-path #f))
-		      (begin
-			(hash-table-set! (dboard:tabdat-run-keys tabdat) run-id run-path)
-			;; (iup:attribute-set! (dboard:tabdat-runs-matrix tabdat)
-			;;    		 (conc rownum ":" colnum) col-name)
-			;; (hash-table-set! runid-to-col run-id (list colnum run-record))
-			;; Here we update the tests treebox and tree keys
-			(tree:add-node tb "Runs" run-path ;; (append key-vals (list run-name))
-				       userdata: (conc "run-id: " run-id))
-			(hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
-			;; (set! colnum (+ colnum 1))
-			))))
+                      ;; (let ((existing   (tree:find-node tb run-path)))
+                      ;;   (if (not existing)
+                      (begin
+                        (hash-table-set! (dboard:tabdat-run-keys tabdat) run-id run-path)
+                        ;; (iup:attribute-set! (dboard:tabdat-runs-matrix tabdat)
+                        ;;    		 (conc rownum ":" colnum) col-name)
+                        ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
+                        ;; Here we update the tests treebox and tree keys
+                        (tree:add-node tb "Runs" run-path) ;; (append key-vals (list run-name))
+                        ;;                                             userdata: (conc "run-id: " run-id))))
+                        (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
+                        ;; (set! colnum (+ colnum 1))
+                        ))))
 	      run-ids)))
 
 (define (dashboard:tests-ht->tests-dat tests-ht)
@@ -2757,14 +2764,14 @@ Misc
 				   (dboard:tabdat-keys tabdat)))
 		  (run-name   (db:get-value-by-header run-record runs-header "runname"))
 		  (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
-		  (run-path   (append key-vals (list run-name)))
-		  (existing   (tree:find-node tb run-path)))
+		  (run-path   (append key-vals (list run-name))))
+             ;; 		  (existing   (tree:find-node tb run-path)))
 	     (if (not (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) run-path #f))
 		 (begin
 		   (hash-table-set! (dboard:tabdat-run-keys tabdat) run-id run-path)
 		   ;; Here we update the tests treebox and tree keys
-		   (tree:add-node tb "Runs" run-path ;; (append key-vals (list run-name))
-				  userdata: (conc "run-id: " run-id))
+		   (tree:add-node tb "Runs" run-path) ;; (append key-vals (list run-name))
+                   ;;				  userdata: (conc "run-id: " run-id))
 		   (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
 		   ;; (set! colnum (+ colnum 1))
 		   ))))

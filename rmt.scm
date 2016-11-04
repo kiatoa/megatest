@@ -227,14 +227,9 @@
 			     (loop (car tal)(cdr tal) newmax-cmd currmax)))))))
     (mutex-unlock! *db-stats-mutex*)
     res))
-	  
+
 (define (rmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
-  (let* ((dbstruct-local (if *dbstruct-db*
-			     *dbstruct-db*
-			     (let* ((dbdir (db:dbfile-path #f)) ;;  (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
-				    (db (make-dbr:dbstruct path:  dbdir local: #t)))
-			       (set! *dbstruct-db* db)
-			       db)))
+  (let* ((dbstruct-local (db:open-local-db-handle))
 	 (db-file-path   (db:dbfile-path 0))
 	 ;; (read-only      (not (file-read-access? db-file-path)))
 	 (start          (current-milliseconds))
@@ -349,10 +344,19 @@
   (rmt:send-receive 'get-key-val-pairs run-id (list run-id)))
 
 (define (rmt:get-keys)
-  (rmt:send-receive 'get-keys #f '()))
+  (if *db-keys* *db-keys* 
+     (let ((res (rmt:send-receive 'get-keys #f '())))
+       (set! *db-keys* res)
+       res)))
 
+;; we don't reuse run-id's (except possibly *after* a db cleanup) so it is safe
+;; to cache the resuls in a hash
+;;
 (define (rmt:get-key-vals run-id)
-  (rmt:send-receive 'get-key-vals #f (list run-id)))
+  (or (hash-table-ref/default *keyvals* run-id #f)
+      (let ((res (rmt:send-receive 'get-key-vals #f (list run-id))))
+        (hash-table-set! *keyvals* run-id res)
+        res)))
 
 (define (rmt:get-targets)
   (rmt:send-receive 'get-targets #f '()))

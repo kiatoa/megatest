@@ -44,6 +44,13 @@
 (define user (getenv "USER"))
 
 ;; GLOBAL GLETCHES
+
+;; Common data structure for 
+(defstruct cxt
+  (taskdb #f))
+
+(define *contexts* (make-hash-table)) ;; toppath => cxt
+
 (define *db-keys* #f)
 
 (define *configinfo*   #f)   ;; raw results from setup, includes toppath and table from megatest.config
@@ -116,6 +123,10 @@
 ;; five seconds ago
 (define *pre-reqs-met-cache* (make-hash-table))
 
+;; cache of verbosity given string
+;;
+(define *verbosity-cache* (make-hash-table))
+
 (define (common:clear-caches)
   (set! *target*             (make-hash-table))
   (set! *keys*               (make-hash-table))
@@ -132,6 +143,8 @@
 (define sdb:qry #f) ;; (make-sdb:qry)) ;;  'init #f)
 ;; Generic path database
 (define *fdb* #f)
+
+(define *last-launch* (current-seconds)) ;; use for throttling the launch rate. Would be better to use the db and last time of a test in LAUNCHED state.
 
 ;;======================================================================
 ;; V E R S I O N
@@ -376,6 +389,7 @@
 
 (define (common:legacy-sync-recommended)
   (or (args:get-arg "-runtests")
+      (args:get-arg "-run")
       (args:get-arg "-server")
       ;; (args:get-arg "-set-run-status")
       (args:get-arg "-remove-runs")

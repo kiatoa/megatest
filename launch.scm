@@ -713,7 +713,12 @@
 	 (rundir   (if (and runname target linktree)(conc linktree "/" target "/" runname) #f))
 	 (mtcachef (and rundir (conc rundir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	 (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
-	 (cancreate (and rundir (file-exists? rundir)(file-write-access? rundir))))
+	 (cancreate (and rundir (file-exists? rundir)(file-write-access? rundir)))
+         (cxt       (hash-table-ref/default *contexts* toppath #f)))
+
+    ;; create our cxt for this area if it doesn't already exist
+    (if (not cxt)(hash-table-set! *contexts* toppath (make-cxt)))
+
     ;; (print "runname: " runname " target: " target " mtcachef: " mtcachef " rccachef: " rccachef)
     (set! *toppath* toppath) ;; This is needed when we are running as a test using CMDINFO as a datasource
     (cond
@@ -1037,6 +1042,14 @@
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
+  (let loop ((delta        (- (current-seconds) *last-launch*))
+	     (launch-delay (string->number (or (configf:lookup *configdat* "setup" "launch-delay") "5"))))
+    (if (> launch-delay delta)
+	(begin
+	  (debug:print-info 0 *default-log-port* "Delaying launch of " test-name " for " (- launch-delay delta) " seconds")
+	  (thread-sleep! (- launch-delay delta))
+	  (loop (- (current-seconds) *last-launch*) launch-delay))))
+  (set! *last-launch* (current-seconds))
   (change-directory *toppath*)
   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
    (list ;; (list "MT_TEST_RUN_DIR" work-area)
