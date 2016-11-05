@@ -19,8 +19,8 @@
 
 (use canvas-draw)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69)
-(import (prefix sqlite3 sqlite3:))
+(use srfi-1 posix regex regex-case srfi-69)
+(use (prefix sqlite3 sqlite3:))
 
 (declare (unit dashboard-tests))
 (declare (uses common))
