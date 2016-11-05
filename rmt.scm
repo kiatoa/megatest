@@ -146,6 +146,7 @@
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 *default-log-port* "WARNING: Communication failed, trying call to rmt:send-receive again.")
                 (case transport-type
+                  
                   ((http rpc)
                    (hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
                    ;; NOTE: killing server causes this process to block forever. No idea why. Dec 2. 

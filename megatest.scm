@@ -735,19 +735,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (args:get-arg "-server")
-
+    
     ;; Server? Start up here.
     ;;
-    (let ((tl        (launch:setup))
-	  (run-id    (and (args:get-arg "-run-id")
-			  (string->number (args:get-arg "-run-id"))))
-          (transport-type (string->symbol (or (args:get-arg "-transport") "http"))))
+    (let* ((tl        (launch:setup))
+           (run-id    (and (args:get-arg "-run-id")
+                           (string->number (args:get-arg "-run-id")))))
       (if run-id
-	  (begin
-	    (server:launch run-id transport-type)
+          (begin
+	    (server:launch run-id (->string *transport-type*))
 	    (set! *didsomething* #t))
 	  (debug:print-error 0 *default-log-port* "server requires run-id be specified with -run-id")))
-
+    
     ;; Not a server? This section will decide how to communicate
     ;;
     ;;  Setup client for all expect listed here
