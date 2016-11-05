@@ -229,14 +229,25 @@
     res))
 
 (define (rmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
-  (let* ((dbstruct-local (db:open-local-db-handle))
-	 (db-file-path   (db:dbfile-path 0))
-	 ;; (read-only      (not (file-read-access? db-file-path)))
+  (let* ((qry-is-write   (not (member cmd api:read-only-queries)))
+	 (dbdir          (db:dbfile-path #f))
+	 (dbstruct-local (if *dbstruct-db*
+			     *dbstruct-db*
+			     (let* ((db (make-dbr:dbstruct path:  dbdir local: #t)))
+			       (set! *dbstruct-db* db)
+			       db)))
+	 (read-only      (not (file-write-access? dbdir)))
 	 (start          (current-milliseconds))
-	 (resdat         (api:execute-requests dbstruct-local (vector (symbol->string cmd) params)))
+	 (resdat         (if (not (and read-only qry-is-write))
+			     (api:execute-requests dbstruct-local (vector (symbol->string cmd) params))
+			     (vector #t '())))
 	 (success        (vector-ref resdat 0))
 	 (res            (vector-ref resdat 1))
 	 (duration       (- (current-milliseconds) start)))
+    (if (and read-only qry-is-write)
+	(begin
+	  (debug:print 0 *default-log-port* "ERROR: attempt to write to read-only database ignored. cmd=" cmd)
+	  ))
     (if (not success)
 	(if (> remretries 0)
 	    (begin
@@ -249,14 +260,12 @@
 	(begin
 	  ;; (rmt:update-db-stats run-id cmd params duration)
 	  ;; mark this run as dirty if this was a write
-	  (if (not (member cmd api:read-only-queries))
+	  (if qry-is-write
 	      (let ((start-time (current-seconds)))
 		(mutex-lock! *db-multi-sync-mutex*)
-		;; (if (not (hash-table-ref/default *db-local-sync* run-id #f))
-		;; just set it every time. Is a write more expensive than a read and does it matter?
 		(hash-table-set! *db-local-sync* (or run-id 0) start-time) ;; the oldest "write"
-		(mutex-unlock! *db-multi-sync-mutex*)))
-	  res))))
+                (mutex-unlock! *db-multi-sync-mutex*)))))
+    res))
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
