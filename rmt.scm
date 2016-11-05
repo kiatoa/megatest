@@ -245,9 +245,7 @@
 	 (res            (vector-ref resdat 1))
 	 (duration       (- (current-milliseconds) start)))
     (if (and read-only qry-is-write)
-	(begin
-	  (debug:print 0 *default-log-port* "ERROR: attempt to write to read-only database ignored. cmd=" cmd)
-	  ))
+        (debug:print 0 *default-log-port* "ERROR: attempt to write to read-only database ignored. cmd=" cmd))
     (if (not success)
 	(if (> remretries 0)
 	    (begin
