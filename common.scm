@@ -45,12 +45,27 @@
 
 ;; GLOBAL GLETCHES
 
+(define *contexts* (make-hash-table))
+
 ;; Common data structure for 
 (defstruct cxt
-  (taskdb #f))
+  (taskdb #f)
+  (cmutex (make-mutex)))
 
-(define *contexts* (make-hash-table)) ;; toppath => cxt
-
+;; safe method for accessing a context given a toppath
+;;
+(define (common:with-cxt toppath proc)
+  (mutex-lock! *context-mutex*)
+  (let ((cxt (hash-table-ref/default *contexts* toppath #f)))
+    (if (not cxt)
+        (set! cxt (let ((x (make-cxt)))(hash-table-set! *contexts* toppath x) x)))
+    (let ((cxt-mutex (cxt-mutex cxt)))
+      (mutex-unlock! *context-mutex*)
+      (mutex-lock! cxt-mutex)
+      (let ((res (proc cxt)))
+        (mutex-unlock! cxt-mutex)
+        res))))
+        
 (define *db-keys* #f)
 
 (define *configinfo*   #f)   ;; raw results from setup, includes toppath and table from megatest.config
