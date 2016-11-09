@@ -113,30 +113,21 @@ Version: " megatest-fossil-hash)) ;; "
                       "area-admin")
                    ((equal? hed "--writer-admin")
                       "writer-admin")
+                   ((equal? hed "--read-admin")
+                      "read-admin")
+
                    ((null? tal)
                       #f) 
                    (else 
 		  	(loop (car tal)(cdr tal))))))
 
 
-(define (is-access-valid exp-str)
-    (let* ((ret-val #f )
-           (date-parts  (string-split exp-str "/"))
-           (yr (string->number (car date-parts)))
-           (month (string->number(car (cdr date-parts)))) 
-           (day (string->number(caddr date-parts)))
-           (exp-date (make-date 0 0 0 0 day month yr )))
-             ;(print  exp-date)
-             ;(print (current-date))   
-            (if (> (date-compare exp-date  (current-date)) 0)
-             (set! ret-val #t))
-   ;(print ret-val)
-   ret-val))
 
 ;; check if user can gran access to an area
 (define (can-grant-perm username access-type area)
    (let* ((isadmin (is-admin username))
           (is-area-admin (is-user "area-admin" username area ))
+          (is-read-admin (is-user "read-admin" username area) )
           (is-writer-admin (is-user "writer-admin" username area) ) )
    (cond
    ((equal? isadmin  #t)
@@ -145,6 +136,9 @@ Version: " megatest-fossil-hash)) ;; "
      #t)
    ((and (equal? is-writer-admin #t ) (equal? access-type "retrieve"))
      #t)
+   ((and (equal? is-read-admin #t ) (equal? access-type "retrieve"))
+     #t)
+
    (else  
     #f))))
 
@@ -158,23 +152,6 @@ Version: " megatest-fossil-hash)) ;; "
 					        (apply print (intersperse row " | "))))))
 					    (sql db (conc "SELECT users.username, permissions.expiration, permissions.access_type  FROM users, areas, permissions where permissions.user_id = users.id and permissions.area_id = areas.id and areas.code = '" area "'"))))))
 
-
-
-
-
-(define (get-obj-by-path path)
-   (let* ((obj '()))
-    (sauthorize:db-do  (lambda (db)
-        (let* ((data-row (query fetch (sql db (conc "SELECT  code,exe_name, id, basepath FROM  areas where areas.basepath = '" path "'")))))
-         (set!  obj data-row))))
-obj))
-
-(define (get-obj-by-code code )
-  (let* ((obj '()))
-    (sauthorize:db-do  (lambda (db)
-        (let* ((data-row (query fetch (sql db (conc "SELECT  code, exe_name,  id, basepath  FROM  areas where areas.code = '" code "'")))))
-         (set!  obj data-row))))
-obj))
 
 
 
@@ -193,8 +170,12 @@ obj))
          (sauthorize:do-as-calling-user
         (lambda ()
             (run-cmd "/bin/cp" (list spath dpath )) 
-            (run-cmd "/bin/chgrp" (list group dpath))
-            (run-cmd "/bin/chmod" (list "u+s,g+s" dpath))))
+            (if (equal? access-type "publish")
+              (run-cmd "/bin/chmod" (list "u+s,o+rx" dpath))
+              (begin
+              (run-cmd "/bin/chgrp" (list group dpath))
+              (run-cmd "/bin/chmod" (list "g+s,o+rx" dpath))))
+))
 	(run-cmd "chmod" (list "g-w" (conc *exe-path* "/" access-type)))))
 
 (define (get-exe-name path group)
@@ -244,22 +225,18 @@ name))
                 (sauthorize:db-do   (lambda (db)
              (sauthorize:db-qry db (conc "insert into areas (code, basepath, exe_name) values ('" code "', '" path "', '" exe-name "') "))))))))
 
-(define (user-has-open-perm user path)
+(define (user-has-open-perm user path access)
   (let* ((has-access #f)
          (eid (current-user-id)))
     (cond
      ((is-admin  user)
        (set! has-access #t ))
+     ((and (is-read-admin  user) (equal? access "retrieve"))
+       (set! has-access #t ))
      (else
         (print "User " user " does not have permission to open areas")))
         has-access))
 
-(define (run-cmd cmd arg-list)
-   (handle-exceptions
-	     exn
-	     (debug:print 0 "ERROR: failed to run script " conversion-script " with params " upstream-file " " package-config)
-	     (let ((pid (process-run cmd arg-list)))
-	       (process-wait pid))))
 
 ;;check if user has group access
 (define (is-group-washed req_grpid current-grp-list)
@@ -286,9 +263,10 @@ name))
      (begin
        (print "You can open areas owned by yourself. You do not have permissions to open path." path)
         (exit 1)))
-   (if (user-has-open-perm user path)
+   (if (user-has-open-perm user path access-type)
       (begin  
        (open-area group path code access-type)
+       (sauthorize:grant user user code "2017/12/25"  "read-admin" "") 
        (sauthorize:db-do   (lambda (db)
              (sauthorize:db-qry db (conc "INSERT INTO actions (cmd,user_id,area_id,action_type ) VALUES ('sauthorize open " path " --code " code " --group " group " --" access-type "'," (car (get-user user)) "," (car (get-area code)) ", 'open' )"))))
          (print "Area has " path "  been opened for " access-type ))))
@@ -316,7 +294,7 @@ name))
              (sauthorize:db-qry db (conc "update permissions set access_type = '" access-type "' , restriction = '" restrict "', expiration =  '" exp-date "' where user_id = " (car user-obj) " and area_id = " (car area-obj)))))))
              (sauthorize:db-do   (lambda (db)
              (sauthorize:db-qry db (conc "INSERT INTO actions (cmd,user_id,area_id,action_type ) VALUES ('sauthorize grant " guser " --area " area " --expiration " exp-date " --" access-type " --restrict " restrict "'," (car auser-obj) "," (car area-obj) ", 'grant' )"))))  
-             (print "Permission has been sucessfully granted to user " guser)   )))
+             (print "Permission has been sucessfully granted to user " guser))))
 
 (define (sauthorize:process-action  username action . args)
    (case (string->symbol action)
@@ -367,9 +345,9 @@ name))
               (begin
               (print "Area does not exisit!!")
               (exit 1))) 
-            (if (can-grant-perm username "retrieve" area)
-	       (sauthorize:list-areausers  area )
-               (print "User does not have access to run this cmd!"))))
+                                
+                (sauthorize:list-areausers  area )
+              ))
       ((read-shell)
           (if (not (equal? (length args) 1))
               (begin
@@ -384,7 +362,7 @@ name))
               (exit 1))) 
               (sauthorize:do-as-calling-user
              (lambda ()
-                (run-cmd (conc *exe-path* "/retrieve/" (cadr code-obj) ) (list "shell" ))))))
+                (run-cmd (conc *exe-path* "/retrieve/" (cadr code-obj) ) (list "shell" area ))))))
       ((write-shell)
           (if (not (equal? (length args) 1))
               (begin
@@ -399,7 +377,7 @@ name))
               (exit 1))) 
               (sauthorize:do-as-calling-user
              (lambda ()
-                (run-cmd (conc *exe-path* "/publish/" (cadr code-obj) ) (list "shell" ))))))
+                (run-cmd (conc *exe-path* "/publish/" (cadr code-obj) ) (list "shell" area))))))
  
  
       ((open)
@@ -422,13 +400,32 @@ name))
                 ((equal? access-type #f)
                   (print "Access type not found!! Try \"sauthorize help\" for useage ")
                   (exit 1)) 
-                ((or (equal? access-type "area-admin") 
-                  (equal? access-type "writer-admin"))
+                ((and (not (equal? access-type "publish")) 
+                  (not (equal? access-type "retrieve")))
                   (print "Access type can be eiter --retrieve or --publish !! Try \"sauthorize help\" for useage ")
                   (exit 1)))
                   
-                (sauthorize:open username path group area access-type)))  
-      (else (debug:print 0 "Unrecognised command " action))))
+                (sauthorize:open username path group area access-type)))
+         ((register-log)
+            (if (< (length args) 4)
+                (print "Invalid arguments"))
+             ;(print args)
+             (let* ((cmd-line (car args))
+                     (user-id (cadr args))
+                     (area-id (caddr args))
+                     (user-obj (get-user username))
+                      (cmd (cadddr args)))
+                
+               (if (and (not (null? user-obj)) (equal? user-id (number->string(car user-obj))))
+                (begin 
+                (sauthorize:db-do   (lambda (db)
+             (sauthorize:db-qry db (conc "INSERT INTO actions (cmd,user_id,area_id,action_type ) VALUES ('" cmd-line"', " user-id "," area-id ", '" cmd "')" )))))
+                (print "You ar not authorised to run this cmd")
+
+)))     
+
+       
+      (else (print 0 "Unrecognised command " action))))
   
 (define (main)
   (let* ((args      (argv))

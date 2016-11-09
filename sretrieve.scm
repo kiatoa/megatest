@@ -47,6 +47,9 @@
 ;; (declare (uses tbd))
 
 (include "megatest-fossil-hash.scm")
+;;; please create this file before using sautherise. For sample file is avaliable sample-sauth-paths.scm. 
+(include "sauth-paths.scm")
+(include "sauth-common.scm")
 
 ;;
 ;; GLOBALS
@@ -355,94 +358,51 @@ Version: " megatest-fossil-hash)) ;; "
 
 
 ;; function to find sheets to which use has access 
-(define (sretrieve:has-permission sheet configfile)
-  (let* ((users (get-rowcol-names  configfile sheet car))
-          (retuser ""))
-    (if (member (current-user-name) users)
-        #t
-        #f))) 
-    
- ;; function  to check if user is trying to access a restricted area
+(define (sretrieve:has-permission  area)
+  (let ((username     (current-user-name)))
+  (cond
+   ((is-admin username)
+     #t)
+   ((is-user "retrieve" username area) 
+     #t)
+    ((is-user "publish" username area) 
+     #t)
+   ((is-user "writer-admin" username area) 
+     #t)
+   ((is-user "read-admin" username area) 
+     #t)
+   ((is-user "area-admin" username area) 
+     #t)
+   (else  
+    #f))))
  
-(define (sretrieve:is-permitted-area dir allowed-list)
-    (for-each 
-        (lambda (allowed-dir)
-         (if (equal? dir allowed-dir)
-          allowed-dir))
-        (cdr allowed-list)))
-
-;; function to validate the users input for target path and resolve the path
-;; TODO: Check for restriction in subpath 
-(define (sretrieve:resolve-path  new current allowed-sheets)
-   (let* ((target-path (append  current (string-split new "/")))
-          (target-path-string (string-join target-path "/"))
-          (normal-path (normalize-pathname target-path-string))
-          (normal-list (string-split normal-path "/"))
-          ;(sheet (car normal-list))
-           (ret '()))
-   (if (string-contains   normal-path "..")
-    (begin
-      (print "ERROR: Path  " new " resolved outside target area ")
-      #f)
-    (if(equal? normal-path ".")
-      ret  
-    (if (not (member  (car normal-list) allowed-sheets))
-      (begin
-      (print "ERROR: Permision denied to  " new )
-       #f)
-    normal-list)))
-))
+    
 
 
-(define (sretrieve:is-access-valid sheet configfile)
-   (let* ((exp-str (lookup configfile sheet (current-user-name) "expiration")))
-    (if (equal? exp-str #f)
-        #f
-        (let* ((date-parts  (string-split exp-str "/"))
-                (yr (string->number (car date-parts)))
-                (month (string->number(car (cdr date-parts)))) 
-                (day (string->number(caddr date-parts)))
-                (exp-date (make-date 0 0 0 0 day month yr )))
-               (if (< (date-compare exp-date  (current-date)) 1)
-                   #f
-                   #t)))))
 
-
-(define (sretrieve:get-accessable-projects  sheets configfile)
- ;;(print sheets)
- (if (null? sheets)
-      #f
-      (let loop ((hed (car sheets))
-		 (tal (cdr sheets))
-                  (res '()))
-        (let* ((user (sretrieve:has-permission hed configfile))
-              (access-valid (sretrieve:is-access-valid  hed configfile)))
-        (if (and (equal? user #t ) (equal? access-valid #t))
-               (begin  
-               ;;(print "got perm " (sretrieve:has-permission hed configfile)) 
-               (if (null? tal)
-		 (cons hed res)
-		 (loop (car tal)(cdr tal)(cons hed res))))
-                (if (null? tal)
-                     res
-                   (loop (car tal)(cdr tal) res)))))))
-
-(define (sretrieve:shell-ls-cmd base-path-list ext-path top-areas configfile db-location tail-cmd-list)
-  (if (and (null? base-path-list) (equal? ext-path "") )
+(define (sretrieve:get-accessable-projects  area)
+   (let* ((projects `()))
+         
+        (if (sretrieve:has-permission area)
+               (set! projects (cons area projects))
+               (begin
+                 (print "User cannot access area " area "!!")  
+                (exit 1))) 
+   ; (print projects)
+    projects))
+		 
+(define (sauth-common:shell-ls-cmd base-path-list ext-path top-areas base-path tail-cmd-list)
+    (if (and (null? base-path-list) (equal? ext-path "") )
       (print (string-intersperse top-areas " "))
-  (let* ((resolved-path (sretrieve:resolve-path ext-path base-path-list top-areas )))
+  (let* ((resolved-path (sauth-common:resolve-path ext-path base-path-list top-areas )))
+           ;(print resolved-path)
            (if (not (equal? resolved-path #f))
            (if (null? resolved-path) 
              (print (string-intersperse top-areas " "))
-           (let* ((target-path (sretrieve:get-target-path  base-path-list  ext-path top-areas configfile)))
-                ;(print "Resolved path: " target-path)
+           (let* ((target-path (sauth-common:get-target-path  base-path-list  ext-path top-areas base-path)))
+                (print "Resolved path: " target-path)
                 (if (not (equal? target-path #f))
                 (begin 
-                 
-                (sretrieve:shell-db-do
-         	 db-location
-     		(lambda (db)
-       		(sretrieve:register-action db "ls" (current-user-name) target-path (conc "Executing cmd: ls "  target-path))))
                 (cond
 		  ((null? tail-cmd-list)
 		     (run (pipe
@@ -455,22 +415,18 @@ Version: " megatest-fossil-hash)) ;; "
                       (begin (system (string-join (cdr tail-cmd-list))))))
       ))))))))))
 
-(define (sretrieve:shell-cat-cmd base-pathlist ext-path top-areas configfile db-location tail-cmd-list)
-  (let* ((resolved-path (sretrieve:resolve-path ext-path base-pathlist top-areas ))
+(define (sretrieve:shell-cat-cmd base-pathlist ext-path top-areas base-path tail-cmd-list)
+  (let* ((resolved-path (sauth-common:resolve-path ext-path base-pathlist top-areas ))
           (data "") )
          (if (not (equal? resolved-path #f))
            (if (null? resolved-path) 
              (print "Path could not be resolved!!")
-           (let* ((target-path (sretrieve:get-target-path  base-pathlist  ext-path top-areas configfile)))
+           (let* ((target-path (sauth-common:get-target-path  base-pathlist  ext-path top-areas base-path)))
              (if (not (equal? target-path #f))
                (if (or (not (file-exists? target-path)) (directory? target-path))
                (print "Target path does not exist or is a directory!") 
                (begin 
-                 (sretrieve:shell-db-do
-         	    db-location
-     		    (lambda (db)
-       		      (sretrieve:register-action db "cat" (current-user-name) target-path (conc "Executing cmd: cat " target-path))))   
-		 (cond
+                 (cond
 		  ((null? tail-cmd-list)
 		     (run (pipe
       	      	      (cat  ,target-path))))
@@ -498,36 +454,26 @@ Version: " megatest-fossil-hash)) ;; "
 		  	(loop (car tal)(cdr tal)(cons hed res)))))))
 
   
-(define (sretrieve:shell-grep-cmd base-pathlist ext-path top-areas configfile db-location tail-cmd-list)
-  (let* ((resolved-path (sretrieve:resolve-path ext-path base-pathlist top-areas ))
+(define (sretrieve:shell-grep-cmd base-pathlist ext-path top-areas base-path tail-cmd-list)
+  (let* ((resolved-path (sauth-common:resolve-path ext-path base-pathlist top-areas ))
           (pattern (car tail-cmd-list))
           (pipe-cmd-list (get-options (cdr tail-cmd-list) "|"))
           (options (string-join (car pipe-cmd-list)))
           (pipe-cmd (cadr  pipe-cmd-list))
           (redirect-split (string-split (string-join  tail-cmd-list) ">"))   )
          (if(and ( > (length redirect-split) 2 ))
-            (print "grep  cmd cannot accept > " (string-join redirect-split) " as an argument!!" )  
+            (print "sgrep  cmd cannot accept > " (string-join redirect-split) " as an argument!!" )  
          (if (not (equal? resolved-path #f))
            (if (null? resolved-path) 
              (print "Path could not be resolved!!")
-           (let* ((target-path (sretrieve:get-target-path  base-pathlist  ext-path top-areas configfile))
+           (let* ((target-path (sauth-common:get-target-path  base-pathlist  ext-path top-areas base-path))
                   (restrictions (if (equal? target-path #f)
                                                  ""
-                                               (sretrieve:shell-lookup base-pathlist ext-path  top-areas configfile)))
+                                               (sretrieve:shell-lookup base-path)))
                  (rest-str  (string-split (conc " --exclude-dir=" (string-join (string-split restrictions ",") " --exclude-dir=") ))))
              (if (not (file-exists? target-path))
                (print "Target path does not exist!") 
                (begin 
-                 (sretrieve:shell-db-do
-         	    db-location
-     		    (lambda (db)
-       		      (sretrieve:register-action db "grep" (current-user-name) target-path (conc "Executing cmd: grep " target-path pattern (string-join tail-cmd-list) )))) 
-              ; (sretrieve:do-as-calling-user
-    	      ;    (lambda ()
-              ;     (if (null? pipe-cmd)
-              ;     (process-execute "/usr/bin/grep" (append (list options pattern target-path)  rest-str))
-              ;     (process-execute "/usr/bin/grep" (append (append (list options pattern target-path) rest-str) (append (list "|") pipe-cmd))))))
-               ;  (print rest-str) 
                  (cond
 	 	  ((and (null? pipe-cmd) (string-null? options))
 	 	     (run (pipe
@@ -549,20 +495,20 @@ Version: " megatest-fossil-hash)) ;; "
              (print "Path could not be resolved!!")))))
 
 
-(define (sretrieve:shell-less-cmd base-pathlist ext-path top-areas configfile db-location)
-  (let* ((resolved-path (sretrieve:resolve-path ext-path base-pathlist top-areas )))
+(define (sretrieve:shell-less-cmd base-pathlist ext-path top-areas base-path)
+  (let* ((resolved-path (sauth-common:resolve-path ext-path base-pathlist top-areas )))
          (if (not (equal? resolved-path #f))
            (if (null? resolved-path) 
              (print "Path could not be resolved!!")
-           (let* ((target-path (sretrieve:get-target-path  base-pathlist  ext-path top-areas configfile)))
+           (let* ((target-path (sauth-common:get-target-path  base-pathlist  ext-path top-areas base-path)))
                (if (not (equal? target-path #f))
            	 (if (or (not (file-exists? target-path)) (directory? target-path))
                    (print "Target path does not exist or is a directory!") 
                    (begin 
-                     (sretrieve:shell-db-do
-         	          db-location
-     			  (lambda (db)
-       				(sretrieve:register-action db "less" (current-user-name) target-path (conc "Executing cmd: less "  target-path))))   
+                     ;(sretrieve:shell-db-do
+         	     ;     db-location
+     		     ;	  (lambda (db)
+       		;		(sretrieve:register-action db "less" (current-user-name) target-path (conc "Executing cmd: less "  target-path))))   
  
                      (setenv "LESSSECURE" "1")
                      (run (pipe
@@ -570,35 +516,11 @@ Version: " megatest-fossil-hash)) ;; "
              (print "Path could not be resolved!!"))))
 
 
-(define (sretrieve:get-target-path base-path-list ext-path top-areas configfile)
-  (let* ((resolved-path (sretrieve:resolve-path ext-path base-path-list top-areas ))
-          (usr (current-user-name) ) )
-          (if (not (equal? resolved-path #f))
-           (if (null? resolved-path) 
-             #f
-           (let* ((sheet (car resolved-path))
-                   (fname  (conc  configfile "/" sheet ".dat"))
-                   (config-data (sretrieve:load-shell-config fname))  
-        	   (base-path (configf:lookup config-data "basepath" usr))
-                   (restrictions (conc ".*" (string-join (string-split (configf:lookup config-data "restricted areas" usr) ",") ".*|.*") ".*"))
-           	   (target-path (conc base-path "/" (string-join (cdr resolved-path) "/"))))
-                    
-                    (if (string-match (regexp  restrictions) target-path) 
-                        (begin
-                          (print "Access denied to " (string-join resolved-path "/"))   
-                         #f)
-                                        target-path)))
-             #f)))
 
-(define (sretrieve:shell-lookup base-path-list ext-path top-areas configfile)
-  (let* ((resolved-path (sretrieve:resolve-path ext-path base-path-list top-areas ))
-          (usr (current-user-name))
-          (sheet (car resolved-path))
-          (fname  (conc  configfile "/" sheet ".dat"))
-          (config-data (sretrieve:load-shell-config fname))  
-          (base-path (configf:lookup config-data "basepath" usr))
-          (value (configf:lookup config-data "restricted areas" usr)))
-                    value))
+(define (sretrieve:shell-lookup base-path)
+  (let* ((usr (current-user-name))
+          (value (get-restrictions base-path usr)))
+                              value))
              
 
 (define (sretrieve:load-shell-config fname)
@@ -629,34 +551,72 @@ Version: " megatest-fossil-hash)) ;; "
                    (else 
 		  	(loop (car tal)(cdr tal)(conc ret-str " --exclude='*" hed "*'"))))))    )
 
-(define (sretrieve:get-shell-cmd target-path db-location restrictions)
+(define (sretrieve:get-shell-cmd target-path base-path restrictions iport)
+     (if (not (file-exists? target-path))
+        (print "Target path does not exist!")
+    (begin
     (if (not (equal? target-path #f))
     (begin     
-    (sretrieve:shell-db-do
-    	  db-location
-     	  (lambda (db)
-       		(sretrieve:register-action db "get" (current-user-name) target-path (conc "Executing cmd: get "  target-path))))
-     (if (is_directory target-path) 
+        (if (is_directory target-path) 
         (begin
            (let* ((parent-dir target-path)
-                  (start-dir (current-directory))
+                  (last-dir-name (if  (pathname-extension target-path)  
+                                      (conc(pathname-file target-path) "." (pathname-extension target-path))
+                                      (pathname-file target-path)))
+                  (curr-dir (current-directory))   
+                  (start-dir (conc (current-directory) "/" last-dir-name))
                   (execlude (make-exclude-pattern (string-split restrictions ","))))
-                  (change-directory parent-dir)
-                                    
-                 (run (pipe
-                   (tar "chfv" "-" "." )
-                   (begin (system (conc "cd " start-dir ";tar  xf - "   execlude )))))
-                 )) 
+                   (print execlude) 
+                   (print (file-exists? start-dir))
+                  (if  (file-exists? start-dir)
+                    (begin
+                         (print last-dir-name " already exist in your work dir. Do you want to over write it? [y|n]")
+                        (let* ((inl (read-line iport)))
+                            (if (equal? inl "y")
+                              (begin
+                                 (change-directory parent-dir)
+                                  (run (pipe
+                   		   (tar "chfv" "-" "." )
+                   		   (begin (system (conc "cd " start-dir ";tar  xUf - "   execlude )))))
+                                   (change-directory curr-dir))
+			      (begin	
+                               (print  "Nothing has been retrieved!!  ")))))
+                     (begin
+                       (sretrieve:do-as-calling-user
+                    (lambda ()
+		      (create-directory start-dir #t)))
+                          (change-directory parent-dir)
+                                  (run (pipe
+                   		   (tar "chfv" "-" "." )
+                   		   (begin (system (conc "cd " start-dir ";tar  xUf - "   execlude )))))
+                           (change-directory curr-dir))))) 
         (begin
            (let*((parent-dir (pathname-directory target-path))
-                  (start-dir (current-directory))
-                (filename (if  (pathname-extension target-path)  
+                 (start-dir (current-directory))
+                 (filename (if  (pathname-extension target-path)  
                                       (conc(pathname-file target-path) "." (pathname-extension target-path))
-                                      (pathname-file target-path))))
+                                      (pathname-file target-path)))
+                 (work-dir-file (conc (current-directory) "/" filename)))
+                 (if  (file-exists? work-dir-file)
+                    (begin
+                       (print filename " already exist in your work dir. Do you want to over write it? [y|n]")
+                        (let* ((inl (read-line iport)))
+                            (if (equal? inl "y")
+                              (begin
+                                 (change-directory parent-dir)
+                                  (run (pipe
+                   		   (tar "chfv" "-" "." )
+                   		   (begin (system (conc "cd " start-dir ";tar  xUf - "   execlude )))))
+                                     (change-directory curr-dir))
+			      (begin	
+                               (print  "Nothing has been retrieved!!  ")))))
+                    (begin
                (change-directory parent-dir)  
                  (run (pipe
                    (tar "chfv" "-" ,filename)
-                   (begin (system (conc "cd " start-dir ";tar xf -")))))))))))
+                   (begin (system (conc "cd " start-dir ";tar xUf -")))))
+                    (change-directory start-dir))))))))
+                     (print (current-directory)))))
 
 (define (sretrieve:shell-help)
 (conc "Usage: " *exe-name* " [action [params ...]]
@@ -675,32 +635,32 @@ Learn more at http://www.kiatoa.com/fossils/megatest
 Version: " megatest-fossil-hash)
 )	
 (define (toplevel-command . args) #f)
-(define (sretrieve:shell)
- ;; (print (current-effective-user-id))
+(define (sretrieve:shell area)
+ ; (print area)
   (use readline)
   (let* ((path      '())
 	 (prompt    "sretrieve> ")
 	 (args      (argv))
          (usr (current-user-name) )   
-	 (prog      (car args)) 
-         (exe-name  (pathname-file (car (argv))))
-	 (exe-dir   (or (pathname-directory prog)
-			(sretrieve:find exe-name (string-split (get-environment-variable "PATH") ":"))))
-         (config-file  (conc exe-dir "/sretrieve_configs"))  
-         (db-location (conc exe-dir "/db"))
-         (sheets (list-sheets config-file)) 
-         (top-areas (sretrieve:get-accessable-projects sheets config-file))
-       
-          (close-port     #f)     
+         (top-areas (sretrieve:get-accessable-projects area))
+         (close-port     #f)
+         (area-obj  (get-obj-by-code area))
+         (user-obj (get-user usr)) 
+         (base-path (if (null? area-obj) 
+                         "" 
+                        (caddr (cdr area-obj))))      
 	 (iport     (make-readline-port prompt)))
-  ;  (install-history-file) ;;  [homedir] [filename] [nlines])
-  ;  (with-input-from-port iport
-  ;    (lambda ()
+        (if (null? area-obj)
+          (begin 
+             (print "Area " area " does not exist")
+          (exit 1)))
 	(let loop ((inl (read-line iport)))
+          ;(print 1) 
 	  (if (not (or (or (eof-object? inl)
 		       (equal? inl "exit")) (port-closed? iport)))
 	      (let* ((parts (string-split inl))
 		     (cmd   (if (null? parts) #f (car parts))))
+              ;  (print "2")
 		(if (and (not cmd) (not (port-closed? iport)))
 		    (loop (read-line))
 		    (case (string->symbol cmd)
@@ -708,12 +668,17 @@ Version: " megatest-fossil-hash)
 		       (if (> (length parts) 1) ;; have a parameter
                            (begin
                              (let*((arg (cadr parts))
-                                   (resolved-path (sretrieve:resolve-path  arg path top-areas))
-                                   (target-path (sretrieve:get-target-path path  arg top-areas config-file)))
+                                   (resolved-path (sauth-common:resolve-path  arg path top-areas))
+                                   (target-path (sauth-common:get-target-path path  arg top-areas base-path)))
                                  (if (not (equal? target-path #f))
                                  (if (or (equal? resolved-path #f) (not (file-exists? target-path)))    
                                  (print "Invalid argument " arg ".. ")
-			         (set! path resolved-path)))))  
+                                  (begin      
+			            (set! path resolved-path)
+                                     (sauthorize:do-as-calling-user
+                              (lambda ()
+			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\"" inl "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "cd"))))
+                                  )))))  
    			   (set! path '())))
                       ((pwd)
                          (if (null? path)
@@ -724,15 +689,25 @@ Version: " megatest-fossil-hash)
 					   (cdr parts)
 					   `()))
 			      (plen    (length thepath)))
-			 (cond
+                         (cond
 			  ((null? thepath)
-                           (sretrieve:shell-ls-cmd path "" top-areas config-file db-location '()))
+                           (sauth-common:shell-ls-cmd path "" top-areas base-path  '())
+                            (sauthorize:do-as-calling-user
+                              (lambda ()
+			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\"" inl "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "ls"))))   )
 			  ((< plen 2)
-                            (sretrieve:shell-ls-cmd path  (car thepath) top-areas config-file db-location  '()))
+                  
+                            (sauth-common:shell-ls-cmd path  (car thepath) top-areas base-path '())
+                              (sauthorize:do-as-calling-user
+                              (lambda ()
+			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\"" inl "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "ls")))))
                           (else 
                             (if (equal? (car thepath) "|")
-                              (sretrieve:shell-ls-cmd path "" top-areas config-file db-location thepath)
-                              (sretrieve:shell-ls-cmd path  (car thepath) top-areas config-file db-location (cdr thepath)))))))
+                              (sauth-common:shell-ls-cmd path "" top-areas base-path thepath)
+                              (sauth-common:shell-ls-cmd path  (car thepath) top-areas base-path (cdr thepath)))
+                           (sauthorize:do-as-calling-user
+                              (lambda ()
+			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\"" inl "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "ls"))))))))
                        ((cat)
 		       (let* ((thepath (if (> (length parts) 1) ;; have a parameter
 					   (cdr parts)
@@ -742,10 +717,18 @@ Version: " megatest-fossil-hash)
 			  ((null? thepath)
                           (print "Error: Missing argument to cat"))
 			  ((< plen 2)
-                            (sretrieve:shell-cat-cmd path  (car thepath) top-areas config-file db-location '()))
+                            (sretrieve:shell-cat-cmd path  (car thepath) top-areas base-path '())
+                              (sauthorize:do-as-calling-user
+                              (lambda ()
+			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\"" inl "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "cat")))))
+
 			  (else
-                             (sretrieve:shell-cat-cmd path  (car thepath) top-areas config-file db-location (cdr thepath))))))
-                       ((grep)
+                             (sretrieve:shell-cat-cmd path  (car thepath) top-areas base-path (cdr thepath))
+                             (sauthorize:do-as-calling-user
+                              (lambda ()
+			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\"" inl "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "cat"))))
+))))
+                       ((sgrep)
 		       (let* ((thepath (if (> (length parts) 1) ;; have a parameter
 					   (cdr parts)
 					   `()))
@@ -756,7 +739,10 @@ Version: " megatest-fossil-hash)
                           ((< plen  2)
                           (print "Error: Missing arguments to grep!! Useage: grep <search path> <pattern> [options] "))
 			  (else
-                             (sretrieve:shell-grep-cmd path  (car thepath) top-areas config-file db-location (cdr thepath))))))
+                             (sretrieve:shell-grep-cmd path  (car thepath) top-areas base-path  (cdr thepath))
+				(sauthorize:do-as-calling-user
+                              (lambda ()
+			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\"" inl "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "grep"))))))))
 
                       ((less)
 		       (let* ((thepath (if (> (length parts) 1) ;; have a parameter
@@ -765,13 +751,14 @@ Version: " megatest-fossil-hash)
 			      (plen    (length thepath)))
 			 (cond
 			  ((null? thepath)
-                          (print "Error: Missing argument to cat"))
+                          (print "Error: Missing argument to less"))
 			  ((< plen 2)
-                            (sretrieve:shell-less-cmd path  (car thepath) top-areas config-file db-location))
+                            (sretrieve:shell-less-cmd path  (car thepath) top-areas base-path)
+                             (sauthorize:do-as-calling-user
+                              (lambda ()
+			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\"" inl "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "less")))))
 			  (else
-                             ;(sretrieve:shell-cat-cmd path  (car thepath) top-areas config-file))
-))))
-
+                             (print "less cmd takes only one (<file path>) argument!!")))))
                       ((get)
                          (let* ((thepath (if (> (length parts) 1) ;; have a parameter
 					   (cdr parts)
@@ -781,23 +768,23 @@ Version: " megatest-fossil-hash)
 			  ((null? thepath)
                           (print "Error: Missing argument <path> to get"))
 			  ((< plen 2)
-                           (let* ((target-path (sretrieve:get-target-path path  (car thepath) top-areas config-file))
+                           (let* ((target-path (sauth-common:get-target-path path  (car thepath) top-areas base-path))
 				 (restrictions (if (equal? target-path #f)
                                                  ""
-                                               (sretrieve:shell-lookup path  (car thepath) top-areas config-file))))
-                                    
-                                  (sretrieve:get-shell-cmd target-path db-location restrictions)
-                                  ;;(print path)
-                           ))
+                                               (sretrieve:shell-lookup base-path))))
+                                 (sretrieve:get-shell-cmd target-path base-path restrictions iport)
+                                  (sauthorize:do-as-calling-user
+                              (lambda ()
+			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\"" inl "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "get")))) ))
 			  (else
-                            (print "Error: get cmd takes only one argument "))))) 
+                            (print "Error: get cmd takes only one argument ")))))
+                      ((exit)
+                          (print "got exit"))  
                       ((help)
                           (print (sretrieve:shell-help)))
 		      (else 
-		       (print "Got command: " inl)
-                       )))
-                 (loop (read-line iport))
-                )))))
+		       (print "Got command: " inl))))
+                 (loop (read-line iport)))))))
 ;;))
     
 
@@ -824,10 +811,7 @@ Version: " megatest-fossil-hash)
 	 (conversion-script (configf:lookup configdat "settings" "conversion-script"))
 	 (upstream-file     (configf:lookup configdat "settings" "upstream-file"))
 	 (package-config    (conc packages-metadir "/" package-type ".config")))
-    ;; this section here does a timestamp based rebuild of the
-    ;;   <packages-metadir>/<package-type>.config file using
-    ;;   <upstream-file> as an input
-    (if (file-exists? upstream-file)
+       (if (file-exists? upstream-file)
 	(if (or (not (file-exists? package-config)) ;; if not created call the updater, otherwise call only if upstream newer
 		(> (file-modification-time upstream-file)(file-modification-time package-config)))
 	    (handle-exceptions
@@ -846,26 +830,6 @@ Version: " megatest-fossil-hash)
       res)))
 
 (define (sretrieve:process-action configdat action . args)
-  (let* ((base-dir      (configf:lookup configdat "settings" "base-dir"))
-	 (user          (current-user-name))
-         (allowed-sub-paths (configf:lookup configdat "settings" "allowed-sub-paths")) 
-	 (allowed-users (string-split
-			 (or (configf:lookup configdat "settings" "allowed-users")
-			     "")))
-	 (default-area  (configf:lookup configdat "settings" "default-area"))) ;; otherwise known as the package
-    
-    (if (not base-dir)
-	(begin
-	  (debug:print 0 "[settings]\nbase-dir /some/path\n\n Is MISSING from the config file!")
-	  (exit)))
-    (if (null? allowed-users)
-	(begin
-	  (debug:print 0 "[setings]\nallowed-users user1 user2 ...\n\n Is MISSING from the config file!")
-	  (exit)))
-    (if (not (member user allowed-users))
-	(begin
-	  (debug:print 0 "User \"" (current-user-name) "\" does not have access. Exiting")
-	  (exit 1)))
     (case (string->symbol action)
       ((get)
        (if (< (length args) 1)
@@ -878,8 +842,6 @@ Version: " megatest-fossil-hash)
 	      (package-type (or (args:get-arg "-package")
 				default-area))
 	      (exe-dir     (configf:lookup configdat "exe-info" "exe-dir")))
-;;	      (relconfig   (sretrieve:load-packages configdat exe-dir package-type)))
-
 	 (debug:print 0 "retrieving " version " of " package-type " as tar data on stdout")
 	 (sretrieve:get configdat user version msg)))
          ((cp)
@@ -904,13 +866,14 @@ Version: " megatest-fossil-hash)
 
 	 (debug:print 0 "Listing files in " )
 	 (sretrieve:ls configdat user dir msg)))
- 
-      (else (debug:print 0 "Unrecognised command " action)))))
-  
-;; ease debugging by loading ~/.dashboardrc - REMOVE FROM PRODUCTION!
-;; (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.sretrieverc")))
-;;   (if (file-exists? debugcontrolf)
-;;       (load debugcontrolf)))
+       ((shell)
+          (if (< (length args) 1)
+             (begin 
+	     (print  "ERROR: Missing arguments area!!" )
+	     (exit 1))
+             (sretrieve:shell (car args)))
+       ) 
+      (else (debug:print 0 "Unrecognised command " action))))
 
 (define (main)
   (let* ((args      (argv))
@@ -947,8 +910,8 @@ Version: " megatest-fossil-hash)
 					     (lambda (row)
 					       (apply print (intersperse row " | "))))
 					    (sql db "SELECT * FROM actions")))))
-	((shell)
-	 (sretrieve:shell))
+	;((shell)
+	; (sretrieve:shell))
 	(else
 	 (print "ERROR: Unrecognised command. Try \"sretrieve help\""))))
      ;; multi-word commands
