@@ -29,26 +29,28 @@
 
 
 ;; procstr is the name of the procedure to be called as a string
-
-(define (rpc-transport:autoremote procstr params)
-  (print "BB> rpc-transport:autoremote entered with procstr="procstr" params="params" string?"(string? procstr)" symbol?"(symbol? procstr)" list?"(list? params)   )
+(define (rpc-transport:autoremote procstr params)  ;; may be unused, I think api-exec deprecates this one.
   (let* ((procsym (if (symbol? procstr)
                      procstr
                      (string->symbol (->string procstr))))
         (res
-         (begin (print "BB>before apply") (apply (eval procsym) params))))
-    (print "BB> after apply; rpc-transport res="res)
-    res
-    ))
+         (begin
+           (apply (eval procsym) params))))
+    res))
 
 
 ;; rpc receiver
 (define (rpc-transport:api-exec cmd params)
-  (BB> "rpc-transport:api-exec cmd="cmd" params="params" inmemdb="*inmemdb*)
   (let* ( (resdat  (api:execute-requests *inmemdb* (vector cmd params))) ;; #( flag result )
           (flag    (vector-ref resdat 0))
           (res     (vector-ref resdat 1)))
-    (BB> "rpc-transport:api-exec flag="flag" res="res)
+
+    (mutex-lock! *heartbeat-mutex*)
+
+    (set! *last-db-access* (current-seconds)) ;; bump *last-db-access*; this will renew keep-running thread's lease on life for another (server:get-timeout) seconds
+    (BB> "in api-exec; last-db-access updated to "*last-db-access*)
+    (mutex-unlock! *heartbeat-mutex*)
+
     res))
 
 
@@ -149,20 +151,16 @@
 
 
 (define (rpc-transport:server-shutdown server-id rpc:listener #!key (from-on-exit #f))
-  (BB> "rpc-transport:server-shutdown entered.")
   (on-exit (lambda () #t)) ;; turn off on-exit stuff
   ;;(tcp-close rpc:listener) ;; gotta exit nicely
   ;;(tasks:bb-server-set-state! server-id "stopped")
 
 
   ;; TODO: (low) the following is extraordinaritly slow.  Maybe we don't even need portlogger for rpc anyway??  the exception-based failover when ports are taken is fast!
-  ;;(BB> "before plog rel")
   ;;(portlogger:open-run-close portlogger:set-port (rpc:default-server-port) "released")
   
   (set! *time-to-exit* #t)
-  (BB> "before db:sync-touched")
   (if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
-  (BB> "before bb-server-delete-record")
   (tasks:bb-server-delete-record server-id " rpc-transport:keep-running complete")
   (BB> "Before (exit) (from-on-exit="from-on-exit")")
   (unless from-on-exit (exit))  ;; sometimes we hang (around) here with 100% cpu.
@@ -191,7 +189,6 @@
 ;; start_server? 
 ;;
 (define (rpc-transport:launch run-id)
-  (BB> "rpc-transport:launch fired for run-id="run-id)
   (set! *run-id*   run-id)
 
   ;; send to background if requested
@@ -210,7 +207,7 @@
   ;;   if at first we do not suceed, try 3 more times.
   (let ((server-id (retry-thunk
                     (lambda () (tasks:bb-server-lock-slot run-id 'rpc))
-                    chatty: #t
+                    chatty: #f
                     retries: 4)))
     (when (not server-id) ;; dang we couldn't get a server-id.
       ;; since we didn't get the server lock we are going to clean up and bail out
@@ -256,7 +253,6 @@
          (api-exec (rpc:procedure 'api-exec iface port))
          (send-receive (lambda ()
                          (tcp-buffer-size 0)
-                         (BB> "Entered SR run-id="run-id" cmd="cmd" params="params" iface="iface" port="port)
                          (set! res (retry-thunk
                                     (lambda ()
                                       (condition-case
@@ -264,7 +260,7 @@
                                        (vector 'success (api-exec cmd params))
                                        [x (exn i/o net) (vector 'comms-fail (conc "communications fail ["(->string x)"]") x)]
                                        [x () (vector 'other-fail "other fail ["(->string x)"]" x)]))
-                                    chatty: #t
+                                    chatty: #f
                                     accept-result?: (lambda(x)
                                                       (and (vector? x) (vector-ref x 0)))
                                     retries: 4
@@ -272,7 +268,6 @@
                                     random-wait: 0.2
                                     retry-delay: 0.1
                                     final-failure-returns-actual: #t))
-                         (BB> "Leaving SR w/ "res)
                          res
                          ))
          (th1 (make-thread send-receive "send-receive"))
@@ -297,7 +292,6 @@
                 ;;(debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
                 (vector #f (vector-ref res 1)))
                (else
-                (BB> "res="res)
                 (debug:print-error 0 *default-log-port* "error occured at server, info=" (vector-ref res 1))
                 (debug:print 0 *default-log-port* " client call chain:")
                 (print-call-chain (current-error-port))
@@ -312,7 +306,6 @@
 
 
 (define (rpc-transport:run hostn run-id server-id)
-  (BB> "rpc-transport:run fired for hostn="hostn" run-id="run-id" server-id="server-id)
   (debug:print 2 *default-log-port* "Attempting to start the rpc server ...")
    ;; (trace rpc:publish-procedure!)
 
@@ -320,12 +313,9 @@
   ;;	  start of publish-procedure section
   ;;======================================================================
   (rpc:publish-procedure! 'server:login server:login) ;; this allows client to validate it is the same megatest instance as the server.  No security here, just making sure we're in the right room.
-  (BB> "published 'testing")
   (rpc:publish-procedure!
    'testing
    (lambda ()
-     (BB> "Current-peer=["(rpc:current-peer)"]")
-     (BB> "published rpc proc 'testing was invoked")
      "Just testing"))
 
   ;; procedure to receive arbitrary API request from client's rpc:send-receive/rpc-transport:client-api-send-receive 
@@ -340,7 +330,7 @@
 
 
   (let* ((db              #f)
-	 (hostname        (let ((res (get-host-name))) (BB> "hostname="res) res))
+	 (hostname        (let ((res (get-host-name)))  res))
          (server-start-time (current-seconds))
          (server-timeout (server:get-timeout))
 	 (ipaddrstr       (let* ((ipstr (if (string=? "-" hostn)
@@ -348,9 +338,9 @@
 					   (server:get-best-guess-address hostname)
 					   #f))
                                  (res (if ipstr ipstr hostn)))
-                            (BB> "ipaddrstr="res)                             
                             res)) ;; hostname))) 
-	 (start-port      (let ((res (portlogger:open-run-close portlogger:find-port))) (BB> "start-port="res) res))
+	 (start-port      (let ((res (portlogger:open-run-close portlogger:find-port)))      ;; BB> TODO: remove portlogger!
+                            res))
 	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree"))
 
          ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -360,10 +350,7 @@
 	 (rpc:listener    (rpc-transport:find-free-port-and-open start-port)) 
 	 (th1             (make-thread
 			   (lambda ()
-                             (BB> "+++ before rpc:make-server "rpc:listener)
-                             ;;(cute (rpc:make-server rpc:listener) "rpc:server")
-			     ((rpc:make-server rpc:listener) #t)
-                             (BB> "--- after rpc:make-server"))
+			     ((rpc:make-server rpc:listener) #t) )
 			   "rpc:server"))
 
 
@@ -373,9 +360,11 @@
 	 (ipaddrstr       (if (string=? "-" hostn)
 			      (server:get-best-guess-address hostname) ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
 			      #f))
-	 (portnum         (let ((res (rpc:default-server-port))) (BB> "rpc:default-server-port="res" rpc-listener-port="*rpc-listener-port*) res))
+	 (portnum         (let ((res (rpc:default-server-port)))  res))
 	 (host:port       (conc (if ipaddrstr ipaddrstr hostname) ":" portnum)))
 
+
+    ;; BB> TODO: remove portlogger!
     ;; if rpc found it needed a different port than portlogger provided, keep portlogger in the loop.
     ;; (when (not (equal? start-port portnum))
     ;;   (BB> "portlogger proffered "start-port" but rpc grabbed "portnum)
@@ -387,24 +376,18 @@
     ;;============================================================
     ;;  activate thread th1 to attach opened tcp port to rpc server
     ;;=============================================================
-    (BB> "Got here before thread start of rpc listener")
     (thread-start! th1)
-    (BB> "started rpc server thread th1="th1)
-
     (set! db *inmemdb*)
 
     (debug:print 0 *default-log-port* "Server started on " host:port)
     
 
-    (thread-sleep! 8)
-    (BB> "before self test")
+    (thread-sleep! 2)
     (if (rpc-transport:self-test run-id ipaddrstr portnum)
-        (BB> "Pass self-test.")
+        (debug:print 0 *default-log-port* "INFO: rpc self test passed!")
         (begin
-          (print "Error: rpc listener did not pass self test.  Shutting down.")
+          (debug:print 0 *default-log-port* "Error: rpc listener did not pass self test.  Shutting down.  On: " host:port)
           (exit)))
-    (BB> "after self test")
-
     
     (on-exit (lambda ()
                (rpc-transport:server-shutdown server-id rpc:listener from-on-exit: #t)))
@@ -432,6 +415,7 @@
           ;;
 
           ;; begin new loop
+          ;; keep-running loop: polls last-db-access to see if we have timed out.  
           (let loop ((count          0)
                      (bad-sync-count 0))
 
@@ -479,6 +463,7 @@
             ;; Transfer *last-db-access* to last-access to use in checking that we are still alive
             (mutex-lock! *heartbeat-mutex*)
             (set! last-access *last-db-access*)
+            (BB> "in rpc-transport:run ; last-access="last-access)
             (mutex-unlock! *heartbeat-mutex*)
             
             ;; (debug:print 11 *default-log-port* "last-access=" last-access ", server-timeout=" server-timeout)
@@ -507,29 +492,10 @@
                     ;;     (tasks:server-set-state! tdb server-id "running"))
                     ;;
                     (loop 0 bad-sync-count))
-                  (rpc-transport:server-shutdown server-id rpc:listener))))
+                  (begin
+                    (BB> "SERVER SHUTDOWN CALLED!  last-access="last-access" current-seconds="(current-seconds)" server-timeout="server-timeout)
+                    (rpc-transport:server-shutdown server-id rpc:listener)))))
           ;; end new loop
-          
-          ;; ;; begin old loop
-          ;; (let loop ((count 0))
-          ;;   (BB> "Found top of rpc-transport:run stay-alive loop.")
-          ;;   (thread-sleep! 5) ;; no need to do this very often
-          ;;   (let ((numrunning -1)) ;; (db:get-count-tests-running db)))
-          ;;     (if (or (> numrunning 0)
-          ;;             (> (+ *last-db-access* 60)(current-seconds)))
-          ;;         (begin
-          ;;           (debug:print-info 0 *default-log-port* "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
-          ;;           (loop (+ 1 count)))
-          ;;         (begin
-          ;;           (debug:print-info 0 *default-log-port* "Starting to shutdown the server side")
-          ;;           (open-run-close tasks:server-delete-record tasks:open-db server-id " rpc-transport:try-start-server stop")
-          ;;           (thread-sleep! 10)
-          ;;           (debug:print-info 0 *default-log-port* "Max cached queries was " *max-cache-size*)
-          ;;           (debug:print-info 0 *default-log-port* "Server shutdown complete. Exiting")
-          ;;           ))))
-          ;; ;; end old loop
-
-
           ))))
 
 
@@ -544,9 +510,7 @@
    (set! *rpc-listener-port-bind-timestamp* (current-milliseconds)) ;; may want to test how long it has been since the last bind attempt happened...
    (tcp-read-timeout 240000)
    (tcp-buffer-size 0) ;; gotta do this because http-transport undoes it.
-   (BB> "rpc-transport> attempting to bind tcp port "port)
    (tcp-listen (rpc:default-server-port) 10000)
-   ;;(tcp-listen (rpc:default-server-port) )
    ))
   
 (define (rpc-transport:ping run-id host port)
@@ -565,29 +529,20 @@
 	   (exit 1))))))
 
 (define (rpc-transport:self-test run-id host port)
-  (BB> "SELF TEST RPC ... *toppath*="*toppath*)
-  (BB> "local: [" (server:login *toppath*) "]")
-  ;(handle-exceptions
-   ;exn
-   ;(begin
-   ;  (BB> "SERVER_NOT_FOUND")
-   ;  #f)
   (tcp-buffer-size 0) ;; gotta do this because http-transport undoes it.
   (let* ((testing-res ((rpc:procedure 'testing host port)))
          (login-res ((rpc:procedure 'server:login host port) *toppath*))
          (res (and login-res (equal? testing-res "Just testing"))))
-
-     (BB> "testing-res = >"testing-res"<")
-     (BB> "login-res = >"testing-res"<")
-     (if login-res
-	 (begin
-	   (BB> "LOGIN_OK")
-	   #t)
-	 (begin
-	   (BB> "LOGIN_FAILED")
-	   #f))
-     (BB> "self test res="res)
-     res));)
+    
+    (if login-res
+        (begin
+          (BB> "Self test PASS.  login-res="login-res" testing-res="testing-res" *toppath*="*toppath*)
+          #t)
+        (begin
+          (BB> "Self test fail.  login-res="login-res" testing-res="testing-res" *toppath*="*toppath*)
+           
+          #f))
+    res))
 
 (define (rpc-transport:client-setup run-id server-dat #!key (remtries 10))
   (tcp-buffer-size 0)

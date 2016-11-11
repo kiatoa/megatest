@@ -50,7 +50,6 @@
 ;; start_server
 ;;
 (define (server:launch run-id transport-type)
-  (BB> "server:launch fired for run-id="run-id" transport-type="transport-type)
   (let ((ttype (if (symbol? transport-type) transport-type (string->symbol (->string transport-type)))))
     (case ttype
       ((http)(http-transport:launch run-id))
@@ -71,7 +70,6 @@
                 (or (args:get-arg "-transport")
                     (configf:lookup *configdat* "server" "transport")
                     "rpc"))))
-    (BB> "TRANSPORT IS "ttype" string?"(string? ttype)" symbol?"(symbol? ttype))
     (set! *transport-type* ttype)
     ttype))
 
@@ -203,6 +201,8 @@
 		     ((http)(server:ping-server run-id 
 						(tasks:hostinfo-get-interface server)
 						(tasks:hostinfo-get-port      server)))
+                     ((rpc) ((rpc:procedure 'server:login (tasks:hostinfo-get-interface server) (tasks:hostinfo-get-port      server)) *toppath*))
+                     
                      (else  
                       (debug:print-error 0 *default-log-port* "(5) Transport [" transport-type
                                          "] specified for run-id [" run-id
@@ -271,7 +271,6 @@
 ;; A true result means client and server are associated with same megatest instance, share the same megatest.config, etc...)  A false result means the client should not talk to this server.
 (define (server:login toppath)
   (set! *last-db-access* (current-seconds))
-  (BB> "server:login ours="*toppath*" theirs="toppath)
   (if (equal? *toppath* toppath)
       (begin
         ;; (debug:print-info 2 *default-log-port* "login successful")

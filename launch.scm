@@ -70,10 +70,7 @@
 				 (fmt-csv (map list->csv-record csvr))))
 	       (status (configf:lookup dat "final" "exit-status"))
 	       (msg     (configf:lookup dat "final" "message")))
-          ;;(if csvt  ;; this if blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
-              (rmt:csv->test-data run-id test-id csvt)
-            ;;  (BB> "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
-            ;;  )
+          (rmt:csv->test-data run-id test-id csvt)
 	  (cond
 	   ((equal? status "PASS") "PASS") ;; skip the message part if status is pass
 	   (status (conc (configf:lookup dat "final" "exit-status") ": " (if msg msg "no message")))
@@ -830,7 +827,6 @@
 	(begin
 	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")))
     (server:set-transport)
-    ;;(BB> "Transport is >"*transport-type*"<")
     *toppath*))
 
 (define (get-best-disk confdat testconfig)

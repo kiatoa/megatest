@@ -56,7 +56,7 @@
   (debug:print-info 2 *default-log-port* "client:setup remaining-tries=" remaining-tries)
   (let* ((server-dat (tasks:bb-get-server-info run-id))
          (transport (if server-dat (string->symbol (tasks:hostinfo-get-transport server-dat)) 'noserver)))
-    ;;(BB> "transport >"transport"<  string? transport >"(string? transport)"< symbol? transport >"(symbol? transport)"<")
+
     (case transport
       ((noserver) ;; no server registered
        (if (<= remaining-tries 0)
