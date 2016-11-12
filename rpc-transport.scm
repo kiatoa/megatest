@@ -242,15 +242,27 @@
 	(debug:print-error 0 *default-log-port* "call to rpc-transport:server-dat-update-last-access with non-vector!!"))))
 
 
+(define *api-exec-ht* (make-hash-table))
+
+;; let's see if caching the rpc stub curbs thread-profusion on server side
+(define (rpc-transport:get-api-exec iface port)
+  (let* ((lu (hash-table-ref/default *api-exec-ht* '(iface . port) #f)))
+    (if lu
+        lu
+        (let ((res (rpc:procedure 'api-exec iface port)))
+          (hash-table-set! *api-exec-ht* '(iface . port) res)
+          res))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; this client-side procedure makes rpc call to server and returns result
 ;;
 (define (rpc-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 3))
+  (if (not (vector? serverdat))
+      (BB> "WHAT?? for run-id="run-id", serverdat="serverdat))
   (let* ((iface (rpc-transport:server-dat-get-iface serverdat))
          (port  (rpc-transport:server-dat-get-port serverdat))
          (res #f)
-         (run-remote (rpc:procedure 'rpc-transport:autoremote iface port))
-         (api-exec (rpc:procedure 'api-exec iface port))
+         (api-exec (rpc-transport:get-api-exec iface port))  
          (send-receive (lambda ()
                          (tcp-buffer-size 0)
                          (set! res (retry-thunk
@@ -382,7 +394,7 @@
     (debug:print 0 *default-log-port* "Server started on " host:port)
     
 
-    (thread-sleep! 2)
+    (thread-sleep! 4)
     (if (rpc-transport:self-test run-id ipaddrstr portnum)
         (debug:print 0 *default-log-port* "INFO: rpc self test passed!")
         (begin
@@ -488,8 +500,8 @@
                     ;; Consider implementing some smarts here to re-insert the record or kill self is
                     ;; the db indicates so
                     ;;
-                    ;; (if (tasks:server-am-i-the-server? tdb run-id)
-                    ;;     (tasks:server-set-state! tdb server-id "running"))
+                    (if (tasks:bb-server-am-i-the-server? run-id)
+                        (tasks:bb-server-set-state! server-id "running"))
                     ;;
                     (loop 0 bad-sync-count))
                   (begin
@@ -517,7 +529,7 @@
   (handle-exceptions
    exn
    (begin
-     (print "SERVER_NOT_FOUND")
+     (print "SERVER_NOT_FOUND exn="exn)
      (exit 1))
    (let ((login-res ((rpc:procedure 'server:login host port) *toppath*)))
      (if login-res

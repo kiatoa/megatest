@@ -201,8 +201,10 @@
 		     ((http)(server:ping-server run-id 
 						(tasks:hostinfo-get-interface server)
 						(tasks:hostinfo-get-port      server)))
-                     ((rpc) ((rpc:procedure 'server:login (tasks:hostinfo-get-interface server) (tasks:hostinfo-get-port      server)) *toppath*))
-                     
+                     ((rpc) (rpc-transport:ping  run-id 
+                                                 (tasks:hostinfo-get-interface server)
+                                                 (tasks:hostinfo-get-port      server)))
+                    
                      (else  
                       (debug:print-error 0 *default-log-port* "(5) Transport [" transport-type
                                          "] specified for run-id [" run-id
