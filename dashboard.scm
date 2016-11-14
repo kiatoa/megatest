@@ -260,7 +260,8 @@ Misc
   (runs-tree           #f)
 
   ;; tab data
-  ((view-changed       #t)                : boolean)   
+  ((view-changed       #t)                : boolean)
+  ((rebuild-dwg        #t)                : boolean)
   ((xadj               0)                 : number)     ;; x slider number (if using canvas)
   ((yadj               0)                 : number)     ;; y slider number (if using canvas)
   ;; runs-summary tab state
@@ -1432,7 +1433,7 @@ Misc
 									 (dashboard:run-times-tab-layout-updater commondat tabdat tab-num)
 									 (dboard:tabdat-running-layout-set! tabdat #f))
 								       "run-times-tab-layout-updater"))))
-                               ;;(dboard:tabdat-view-changed-set! tabdat #t)
+                               (dboard:tabdat-rebuild-dwg-set! tabdat #t)
                                )))))
         (dboard:tabdat-graph-matrix-set! tabdat graph-matrix)
         (iup:attribute-set! graph-matrix "WIDTH0" 0)
@@ -1444,14 +1445,15 @@ Misc
                                           (for-each (lambda (graph-cell)
                                                       (let* ((graph-dat   (hash-table-ref (dboard:tabdat-graph-cell-table tabdat) graph-cell)))
                                                         (dboard:graph-dat-flag-set! graph-dat #t)))
-                                                    (hash-table-keys (dboard:tabdat-graph-cell-table tabdat))))))
+                                                    (hash-table-keys (dboard:tabdat-graph-cell-table tabdat)))
+                                          (dboard:tabdat-rebuild-dwg-set! tabdat #t))))
        (iup:hbox
         (iup:button "Hide All" #:action (lambda (obj)
                                           (for-each (lambda (graph-cell)
                                                       (let* ((graph-dat   (hash-table-ref (dboard:tabdat-graph-cell-table tabdat) graph-cell)))
                                                         (dboard:graph-dat-flag-set! graph-dat #f)))
                                                     (hash-table-keys (dboard:tabdat-graph-cell-table tabdat)))
-                                          (dboard:tabdat-view-changed-set! tabdat #t)))))
+                                          (dboard:tabdat-rebuild-dwg-set! tabdat #t)))))
       ))))
 
 ;;======================================================================
@@ -2766,7 +2768,7 @@ Misc
           (print "RA => dboard:tabdat-last-filter-str " dboard:tabdat-last-filter-str "filtrstr" filtrstr "dboard:tabdat-view-changed" (dboard:tabdat-view-changed tabdat))
 
 	  (if (or (not (equal? (dboard:tabdat-last-filter-str tabdat) filtrstr))
-                  (dboard:tabdat-view-changed tabdat))
+                  (dboard:tabdat-rebuild-dwg tabdat))
 	      (let ((dwg (dboard:tabdat-drawing tabdat)))
 		(print "resetting drawing")
 		(dboard:tabdat-layout-update-ok-set! tabdat #f)
@@ -2776,7 +2778,9 @@ Misc
 		(dboard:tabdat-allruns-by-id-set! tabdat (make-hash-table))
 		;; (dboard:tabdat-allruns-set! tabdat '())
 		(dboard:tabdat-max-row-set! tabdat 0)
-		(dboard:tabdat-last-filter-str-set! tabdat filtrstr)))
+		(dboard:tabdat-last-filter-str-set! tabdat filtrstr)
+                ;; (dboard:tabdat-rebuild-dwg-set! tabdat #f)
+                ))
 	  (update-rundat tabdat
 			 runpatt
 			 ;; (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%") 
