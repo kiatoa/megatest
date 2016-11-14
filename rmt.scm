@@ -1,5 +1,5 @@
-;;======================================================================
-;; Copyright 2006-2013, Matthew Welland.
+
+;; Copyright 2006-2016, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -168,39 +168,29 @@
                                       "] is not implemented in rmt:send-receive.  Cannot proceed.")
                    #f)))))
 
-	;; no connection info; try to start a server, or access locally if no
-	;; server and the query is read-only
+	;; no connection info; try to start a server
 	;;
 	;; Note: The tasks db was checked for a server in starting mode in the rmt:get-connection-info call
 	;;
-        (if (and (< attemptnum 15)
-		 (member cmd api:write-queries))
-	    (let* ((faststart (configf:lookup *configdat* "server" "faststart")))
-	      (hash-table-delete! *runremote* run-id)
-	      ;; (mutex-unlock! *send-receive-mutex*)
-	      (if (and faststart (equal? faststart "no"))
-		  (begin
-		    (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
-		    (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
-		    (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
-		  (let ((start-time (current-milliseconds))
-			(max-query  (string->number (or (configf:lookup *configdat* "server" "server-query-threshold")
-							"300")))
-			(newres     (rmt:open-qry-close-locally cmd run-id params)))
-		    (let ((delta (- (current-milliseconds) start-time)))
-		      (if (> delta max-query)
-			  (begin
-			    (debug:print-info 0 *default-log-port* "Starting server as query time " delta " is over the limit of " max-query)
-			    (server:kind-run run-id)))
-		      ;; return the result!
-		      newres)
-		    )))
-	    (begin
-	      ;; (debug:print-error 0 *default-log-port* "Communication failed!")
-	      ;; (mutex-unlock! *send-receive-mutex*)
-	      ;; (exit)
-	      (rmt:open-qry-close-locally cmd run-id params)
-	      )))))
+        (let* ((faststart (configf:lookup *configdat* "server" "faststart")))
+          (hash-table-delete! *runremote* run-id)
+          ;; (mutex-unlock! *send-receive-mutex*)
+          (if (and faststart (equal? faststart "no"))
+              (begin
+                (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
+                (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
+                (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
+              (let ((start-time (current-milliseconds))
+                    (max-query  (string->number (or (configf:lookup *configdat* "server" "server-query-threshold")
+                                                    "300")))
+                    (newres     (rmt:open-qry-close-locally cmd run-id params)))
+                (let ((delta (- (current-milliseconds) start-time)))
+                  (if (> delta max-query)
+                      (begin
+                        (debug:print-info 0 *default-log-port* "Starting server as query time " delta " is over the limit of " max-query)
+                        (server:kind-run run-id)))
+                  ;; return the result!
+                  newres)))))))
 
 (define (rmt:update-db-stats run-id rawcmd params duration)
   (mutex-lock! *db-stats-mutex*)
