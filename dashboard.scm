@@ -2768,7 +2768,7 @@ Misc
 	  (if (or (not (equal? (dboard:tabdat-last-filter-str tabdat) filtrstr))
                   (dboard:tabdat-view-changed tabdat))
 	      (let ((dwg (dboard:tabdat-drawing tabdat)))
-		(print "reseting drawing")
+		(print "resetting drawing")
 		(dboard:tabdat-layout-update-ok-set! tabdat #f)
 		(vg:drawing-libs-set! dwg (make-hash-table))
 		(vg:drawing-insts-set! dwg (make-hash-table))
@@ -2797,6 +2797,8 @@ Misc
 			 )))))
 
 ;; run times canvas updater
+;; NOTE: this is for redrawing the canvas but does NOT change the underlying data that constitues
+;;       our charts/graphs being drawn.
 ;;
 (define (dashboard:run-times-tab-canvas-updater commondat tabdat tab-num)
   (let ((cnv (dboard:tabdat-cnv tabdat))
