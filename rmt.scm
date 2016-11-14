@@ -90,7 +90,6 @@
 ;;
 (define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
   ;; side-effect: clean out old connections
-  ;; (mutex-lock! *db-multi-sync-mutex*)
   (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
     (for-each 
      (lambda (run-id)
@@ -102,15 +101,13 @@
                (hash-table-delete! *runremote* run-id)))))
      (hash-table-keys *runremote*)))
   
-  ;; (mutex-unlock! *db-multi-sync-mutex*)
-  ;; (mutex-lock! *send-receive-mutex*)
-  (let* ((run-id          (if rid rid 0))
+  (let* ((run-id     (if rid rid 0))
 	 (connection-info (rmt:get-connection-info run-id)))
     ;; the nmsg method does the encoding under the hood (the http method should be changed to do this also)
     (if connection-info
 	;; use the server if have connection info
 	(let* ((transport-type (rmt:run-id->transport-type run-id))
-
+               
                ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
                ;;  Here, we make request to remote server
                ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -125,7 +122,7 @@
                                               "] specified for run-id [" run-id
                                               "] is not implemented in rmt:send-receive.  Cannot proceed." (symbol? transport-type))
                            (vector #f (conc "transport ["transport-type"] unimplemented")))))
-
+               
                
 	       (success (if (vector? dat) (vector-ref dat 0) #f))
 	       (res     (if (vector? dat) (vector-ref dat 1) #f)))
@@ -141,7 +138,7 @@
                                       "] is not implemented in rmt:send-receive.  Cannot proceed. Also unexpected since this branch follows success which would follow a suported transport...")
                    #f)
                   )) ;; (vector-ref res 1)))
-
+              
               ;; no success...
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 *default-log-port* "WARNING: Communication failed, trying call to rmt:send-receive again.")
@@ -167,30 +164,16 @@
                                       "] specified for run-id [" run-id
                                       "] is not implemented in rmt:send-receive.  Cannot proceed.")
                    #f)))))
-
+        
 	;; no connection info; try to start a server
 	;;
 	;; Note: The tasks db was checked for a server in starting mode in the rmt:get-connection-info call
 	;;
-        (let* ((faststart (configf:lookup *configdat* "server" "faststart")))
-          (hash-table-delete! *runremote* run-id)
-          ;; (mutex-unlock! *send-receive-mutex*)
-          (if (and faststart (equal? faststart "no"))
-              (begin
-                (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
-                (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
-                (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
-              (let ((start-time (current-milliseconds))
-                    (max-query  (string->number (or (configf:lookup *configdat* "server" "server-query-threshold")
-                                                    "300")))
-                    (newres     (rmt:open-qry-close-locally cmd run-id params)))
-                (let ((delta (- (current-milliseconds) start-time)))
-                  (if (> delta max-query)
-                      (begin
-                        (debug:print-info 0 *default-log-port* "Starting server as query time " delta " is over the limit of " max-query)
-                        (server:kind-run run-id)))
-                  ;; return the result!
-                  newres)))))))
+        (begin
+          (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
+          (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
+          (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1))))))
+  
 
 (define (rmt:update-db-stats run-id rawcmd params duration)
   (mutex-lock! *db-stats-mutex*)
@@ -249,41 +232,6 @@
     (mutex-unlock! *db-stats-mutex*)
     res))
 	  
-(define (rmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
-  (let* ((dbstruct-local (if *dbstruct-db*
-			     *dbstruct-db*
-			     (let* ((dbdir (db:dbfile-path #f)) ;;  (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
-				    (db (make-dbr:dbstruct path:  dbdir local: #t)))
-			       (set! *dbstruct-db* db)
-			       db)))
-	 (db-file-path   (db:dbfile-path 0))
-	 ;; (read-only      (not (file-read-access? db-file-path)))
-	 (start          (current-milliseconds))
-	 (resdat         (api:execute-requests dbstruct-local (vector (symbol->string cmd) params)))
-	 (success        (vector-ref resdat 0))
-	 (res            (vector-ref resdat 1))
-	 (duration       (- (current-milliseconds) start)))
-    (if (not success)
-	(if (> remretries 0)
-	    (begin
-	      (debug:print-error 0 *default-log-port* "local query failed. Trying again.")
-	      (thread-sleep! (/ (random 5000) 1000)) ;; some random delay 
-	      (rmt:open-qry-close-locally cmd run-id params remretries: (- remretries 1)))
-	    (begin
-	      (debug:print-error 0 *default-log-port* "too many retries in rmt:open-qry-close-locally, giving up")
-	      #f))
-	(begin
-	  ;; (rmt:update-db-stats run-id cmd params duration)
-	  ;; mark this run as dirty if this was a write
-	  (if (not (member cmd api:read-only-queries))
-	      (let ((start-time (current-seconds)))
-		(mutex-lock! *db-multi-sync-mutex*)
-		;; (if (not (hash-table-ref/default *db-local-sync* run-id #f))
-		;; just set it every time. Is a write more expensive than a read and does it matter?
-		(hash-table-set! *db-local-sync* (or run-id 0) start-time) ;; the oldest "write"
-		(mutex-unlock! *db-multi-sync-mutex*)))
-	  res))))
-
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
 	 ;; (jparams  (db:obj->string params)) ;; (rmt:dat->json-str params))
