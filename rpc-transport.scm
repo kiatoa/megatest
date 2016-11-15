@@ -257,6 +257,7 @@
 ;; this client-side procedure makes rpc call to server and returns result
 ;;
 (define (rpc-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 3))
+  (BB> "entered nsport:client-api-send-receive with run-id="run-id " serverdat="serverdat" cmd="cmd" params="params" numretries="numretries)
   (if (not (vector? serverdat))
       (begin
         (BB> "WHAT?? for run-id="run-id", serverdat="serverdat)
@@ -275,7 +276,7 @@
                                        (vector 'success (api-exec cmd params))
                                        [x (exn i/o net) (vector 'comms-fail (conc "communications fail ["(->string x)"]") x)]
                                        [x () (vector 'other-fail "other fail ["(->string x)"]" x)]))
-                                    chatty: #f
+                                    chatty: #t
                                     accept-result?: (lambda(x)
                                                       (and (vector? x) (vector-ref x 0)))
                                     retries: 4
@@ -283,6 +284,7 @@
                                     random-wait: 0.2
                                     retry-delay: 0.1
                                     final-failure-returns-actual: #t))
+                         (BB> "HEY res="res)
                          res
                          ))
          (th1 (make-thread send-receive "send-receive"))
@@ -298,6 +300,7 @@
 	 (thread-start! th2)
 	 (thread-join! th1)
 	 (thread-terminate! th2)
+         (BB> "alt got res="res)
 	 (debug:print-info 11 *default-log-port* "got res=" res)
 	 (if (vector? res)
              (case (vector-ref res 0)
@@ -587,5 +590,4 @@
               (thread-sleep! (+ 15 (random 20)))) ;; it isn't going well. give it plenty of time
           (server:try-running run-id)
           (thread-sleep! 5)   ;; give server a little time to start up
-          (client:setup run-id remaining-tries: (sub1 remtries))
-          " rpc-transport:client-setup (server-dat = #t)"))))
+          (client:setup run-id remaining-tries: (sub1 remtries))))))

@@ -53,7 +53,7 @@
 ;;     (else   (rpc:client-connect  iface port))))
 
 (define (client:setup run-id #!key (remaining-tries 10))
-  (BB> "Entered client:setup with run-id="run-id" and remaining-tries="remaining-tries)
+  ;;(BB> "Entered client:setup with run-id="run-id" and remaining-tries="remaining-tries)
    
   (debug:print-info 2 *default-log-port* "client:setup remaining-tries=" remaining-tries)
   (let* ((server-dat (tasks:bb-get-server-info run-id))

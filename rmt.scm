@@ -115,8 +115,12 @@
 
 ;; RA => e.g. usage (rmt:send-receive 'get-var #f (list varname))
 ;;
+
+(define *rmt:srmutex* (make-mutex))
+
 (define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
   ;; side-effect: clean out old connections
+  (mutex-lock! *rmt:srmutex*)
   (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
     (for-each 
      (lambda (run-id)
@@ -138,17 +142,19 @@
                ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
                ;;  Here, we make request to remote server
                ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-               (dat     (case transport-type ;; BB: replaced *transport-type* global with run-id specific transport-type
-			  ((http)(condition-case
-				  (http-transport:client-api-send-receive run-id connection-info cmd params)
-				  ((commfail)(vector #f "communications fail"))
-				  ((exn)(vector #f "other fail"))))
-                          ((rpc) (rpc-transport:client-api-send-receive run-id connection-info cmd params)) ;; BB: let us error out for now
-			  (else  
-                           (debug:print-error 0 *default-log-port* "(1) Transport [" transport-type
-                                              "] specified for run-id [" run-id
-                                              "] is not implemented in rmt:send-receive.  Cannot proceed." (symbol? transport-type))
-                           (vector #f (conc "transport ["transport-type"] unimplemented")))))
+               (dat     (begin
+                          
+                          (case transport-type ;; BB: replaced *transport-type* global with run-id specific transport-type
+                            ((http)(condition-case
+                                    (http-transport:client-api-send-receive run-id connection-info cmd params) 
+                                    ((commfail)(vector #f "communications fail"))
+                                    ((exn)(vector #f "other fail"))))
+                            ((rpc) (rpc-transport:client-api-send-receive run-id connection-info cmd params)) ;; BB: let us error out for now
+                            (else  
+                             (debug:print-error 0 *default-log-port* "(1) Transport [" transport-type
+                                                "] specified for run-id [" run-id
+                                                "] is not implemented in rmt:send-receive.  Cannot proceed." (symbol? transport-type))
+                             (vector #f (conc "transport ["transport-type"] unimplemented"))))))
                
                
 	       (success (if (vector? dat) (vector-ref dat 0) #f))
@@ -156,6 +162,7 @@
 	  (if (vector? connection-info)(http-transport:server-dat-update-last-access connection-info)) ;; BB> BBTODO: make this generic, not http transport specific.
 	  (if success
 	      (begin
+                (mutex-unlock! *rmt:srmutex*)
 		;; (mutex-unlock! *send-receive-mutex*)
 		(case transport-type 
 		  ((http rpc) res) ;; (db:string->obj res))
@@ -169,6 +176,7 @@
               ;; no success...
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 *default-log-port* "WARNING: Communication failed, trying call to rmt:send-receive again.")
+                (mutex-unlock! *rmt:srmutex*)
                 (case transport-type
                   
                   ((http rpc)
@@ -190,13 +198,14 @@
                    (debug:print-error 0 *default-log-port* "(3) Transport [" transport-type
                                       "] specified for run-id [" run-id
                                       "] is not implemented in rmt:send-receive.  Cannot proceed.")
-                   #f)))))
+                   (exit 1))))))
         
 	;; no connection info; try to start a server
 	;;
 	;; Note: The tasks db was checked for a server in starting mode in the rmt:get-connection-info call
 	;;
         (begin
+          (mutex-unlock! *rmt:srmutex*)
           (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
           (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
           (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1))))))

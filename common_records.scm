@@ -120,6 +120,11 @@
     (let ((dp-args (append (list 0 *default-log-port* location"   "  ) in-args)))
       (apply debug:print dp-args))))
 
+(define (BB> . in-args)
+  (apply print "BB> " in-args)
+  "shouldn't do anything")
+
+
 (define (debug:print-error n e . params)
   ;; normal print
   (if (debug:debug-mode n)
