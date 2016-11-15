@@ -258,7 +258,10 @@
 ;;
 (define (rpc-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 3))
   (if (not (vector? serverdat))
-      (BB> "WHAT?? for run-id="run-id", serverdat="serverdat))
+      (begin
+        (BB> "WHAT?? for run-id="run-id", serverdat="serverdat)
+        (print-call-chain)
+        (exit 1)))
   (let* ((iface (rpc-transport:server-dat-get-iface serverdat))
          (port  (rpc-transport:server-dat-get-port serverdat))
          (res #f)
@@ -394,7 +397,7 @@
     (debug:print 0 *default-log-port* "Server started on " host:port)
     
 
-    (thread-sleep! 4)
+    (thread-sleep! 5)
     (if (rpc-transport:self-test run-id ipaddrstr portnum)
         (debug:print 0 *default-log-port* "INFO: rpc self test passed!")
         (begin

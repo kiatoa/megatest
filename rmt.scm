@@ -235,11 +235,25 @@
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
 	 ;; (jparams  (db:obj->string params)) ;; (rmt:dat->json-str params))
-	 (res  	   (handle-exceptions
-		    exn
-		    #f
-		    (http-transport:client-api-send-receive run-id connection-info cmd params))))
-;;		    ((commfail) (vector #f "communications fail")))))
+	 (res (case (rmt:run-id->transport-type run-id)
+                ((http) 
+                 (handle-exceptions
+                  exn
+                  #f
+                  (http-transport:client-api-send-receive run-id connection-info cmd params)))
+                ((rpc)
+                 (handle-exceptions
+                  exn
+                  #f
+                  (rpc-transport:client-api-send-receive run-id connection-info cmd params)))
+                (else  
+                 (debug:print-error 0 *default-log-port* "(4) Transport [" *transport-type*
+                                    "] specified for run-id [" run-id
+                                    "] is not implemented in rmt:send-receive-no-auto-client-setup.  Cannot proceed.")
+                 (exit 1)))))
+
+              
+              ;;		    ((commfail) (vector #f "communications fail")))))
     (if (and res (vector-ref res 0))
 	(vector-ref res 1) ;;; YES!! THIS IS CORRECT!! CHANGE IT HERE, THEN CHANGE rmt:send-receive ALSO!!!
 	#f)))
@@ -286,13 +300,7 @@
 ;; Deprecated for nmsg-transport.
 ;;
 (define (rmt:login-no-auto-client-setup connection-info run-id)
-  (case (rmt:run-id->transport-type run-id)
-    ((http)(rmt:send-receive-no-auto-client-setup connection-info 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
-    (else  
-     (debug:print-error 0 *default-log-port* "(4) Transport [" *transport-type*
-                        "] specified for run-id [" run-id
-                        "] is not implemented in rmt:send-receive.  Cannot proceed.")
-     (exit 1))))
+  (rmt:send-receive-no-auto-client-setup connection-info 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
 
 ;; hand off a call to one of the db:queries statements
 ;; added run-id to make looking up the correct db possible 
