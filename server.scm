@@ -98,10 +98,6 @@
   (case (server:get-transport)
     ((rpc)  (db:obj->string (vector success/fail query-sig result)))
     ((http) (db:obj->string (vector success/fail query-sig result)))
-    ((zmq)
-     (let ((pub-socket (vector-ref *runremote* 1)))
-       (send-message pub-socket return-addr send-more: #t)
-       (send-message pub-socket (db:obj->string (vector success/fail query-sig result)))))
     ((fs)   result)
     (else 
      (debug:print-error 0 *default-log-port* "unrecognised transport type: " *transport-type*)

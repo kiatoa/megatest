@@ -53,12 +53,15 @@
 ;;     (else   (rpc:client-connect  iface port))))
 
 (define (client:setup run-id #!key (remaining-tries 10))
+  (BB> "Entered client:setup with run-id="run-id" and remaining-tries="remaining-tries)
+   
   (debug:print-info 2 *default-log-port* "client:setup remaining-tries=" remaining-tries)
   (let* ((server-dat (tasks:bb-get-server-info run-id))
-         (transport (if server-dat (string->symbol (tasks:hostinfo-get-transport server-dat)) 'noserver)))
-
+         (transport (if (and server-dat (vector? server-dat)) (string->symbol (tasks:hostinfo-get-transport server-dat)) 'noserver)))
+    
     (case transport
       ((noserver) ;; no server registered
+       (BB> "noserver")
        (if (<= remaining-tries 0)
            (begin
              (debug:print-error 0 *default-log-port* "failed to start or connect to server for run-id " run-id)
@@ -70,8 +73,8 @@
                    (server:try-running run-id))
                (thread-sleep! (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
                (client:setup run-id remaining-tries: (- remaining-tries 1))))))
-      ((http)(client:setup-http run-id server-dat remaining-tries))
-      ((rpc) (rpc-transport:client-setup run-id server-dat remtries: remaining-tries)) 
+      ((http) (BB> "have http") (client:setup-http run-id server-dat remaining-tries))
+      ((rpc) (BB> "have rpc") (rpc-transport:client-setup run-id server-dat remtries: remaining-tries)) 
       (else
        (debug:print-error 0 *default-log-port* "(6) Transport ["
                           transport "] specified for run-id [" run-id "] is not implemented in client:setup.  Cannot proceed.")
@@ -92,13 +95,13 @@
          (ping-res  (rmt:login-no-auto-client-setup start-res run-id)))
     (if (and start-res ping-res)
         (begin
-          (hash-table-set! *runremote* run-id start-res) ;; side-effect - *runremote* cache init fpr rmt:*
+          (rmt:set-cinfo run-id start-res) ;; (hash-table-set! *runremote* run-id start-res) ;; side-effect - *runremote* cache init fpr rmt:*
           (debug:print-info 2 *default-log-port* "connected to " (http-transport:server-dat-make-url start-res))
           start-res)
         (begin    ;; login failed but have a server record, clean out the record and try again
           (debug:print-info 0 *default-log-port* "client:setup-http, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
           (http-transport:close-connections run-id)
-          (hash-table-delete! *runremote* run-id) ;; BB: suspect there is nothing to delete ...
+          (rmt:del-cinfo run-id) ;; (hash-table-delete! *runremote* run-id) ;; BB: suspect there is nothing to delete ...
           (tasks:kill-server-run-id run-id) ;; -9 so the hung processes dont eat 100% when not responding to sigterm.
           (tasks:bb-server-force-clean-run-record  run-id iface port
                                                    " client:setup-http (server-dat = #t)")

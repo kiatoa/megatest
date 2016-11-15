@@ -267,7 +267,7 @@
 					     (set! success #f)
 					     (debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
 					     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-					     (hash-table-delete! *runremote* run-id)
+					     (rmt:del-cinfo run-id) ;;(hash-table-delete! *runremote* run-id)
 					     ;; Killing associated server to allow clean retry.")
 					     ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
 					     (mutex-unlock! *http-mutex*)
@@ -314,7 +314,7 @@
 ;; careful closing of connections stored in *runremote*
 ;;
 (define (http-transport:close-connections run-id)
-  (let* ((server-dat (hash-table-ref/default *runremote* run-id #f)))
+  (let* ((server-dat (rmt:get-connection-info run-id))) ;;(hash-table-ref/default *runremote* run-id #f)))
     (if (vector? server-dat)
 	(let ((api-dat (http-transport:server-dat-get-api-uri server-dat)))
 	  (close-connection! api-dat)

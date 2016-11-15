@@ -560,6 +560,7 @@
     res))
 
 (define (rpc-transport:client-setup run-id server-dat #!key (remtries 10))
+  (BB> "entered rpc-transport:client-setup with run-id="run-id" and server-dat="server-dat" and retries="remtries)
   (tcp-buffer-size 0)
   (debug:print-info 0 *default-log-port* "rpc-transport:client-setup run-id="run-id" server-dat=" server-dat ", remaining-tries=" remtries)
   (let* ((iface     (tasks:hostinfo-get-interface server-dat))
@@ -568,14 +569,16 @@
          (runremote-server-dat (vector iface port #f #f #f (current-seconds) 'rpc)) ;; http version := (vector iface port api-uri api-url api-req (current-seconds) 'http  )
          (ping-res (retry-thunk (lambda ()  ;; make 3 attempts to ping.
                                   ((rpc:procedure 'server:login iface port) *toppath*))
+                                chatty: #t
                                 retries: 3)))
     ;; we got here from rmt:get-connection-info on the condition that *runremote* has no entry for run-id...
     (if ping-res
         (begin
           (debug:print-info 0 *default-log-port* "rpc-transport:client-setup CONNECTION ESTABLISHED run-id="run-id" server-dat=" server-dat)
-          (hash-table-set! *runremote* run-id runremote-server-dat)  ;; side-effect - *runremote* cache init fpr rmt:*
+          (rmt:set-cinfo run-id runremote-server-dat) ;; (hash-table-set! *runremote* run-id runremote-server-dat)  ;; side-effect - *runremote* cache init fpr rmt:*
           runremote-server-dat)
         (begin ;; login failed but have a server record, clean out the record and try again
+          (debug:print-info 0 *default-log-port* "rpc-transport:client-setup UNABLE TO CONNECT run-id="run-id" server-dat=" server-dat)
           (tasks:kill-server-run-id run-id)
           (tasks:bb-server-force-clean-run-record  run-id iface port
                                                    " rpc-transport:client-setup (server-dat = #t)")
