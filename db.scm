@@ -217,7 +217,12 @@
 	      (db      (sqlite3:open-database fname)))
 	  (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
 	  (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
-	  (if (not file-exists)(initproc db))
+	  (if (not file-exists)
+	      (begin
+		(if (string-match "^/tmp/.*" fname) ;; this is a file in /tmp
+		    (sqlite3:execute db "PRAGMA journal_mode=WAL;")
+		    (print "Creating " fname " in NON-WAL mode."))
+		(initproc db)))
 	  ;; (release-dot-lock fname)
 	  db)
 	(begin
@@ -317,11 +322,21 @@
 
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;
+;; called in http-transport and replicated in rmt.scm for *local* access. 
+;;
 (define (db:setup run-id #!key (local #f))
   (let* ((dbdir    (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 	 (dbstruct (make-dbr:dbstruct path: dbdir local: local)))
     dbstruct))
 
+;; open the local db for direct access (no server)
+;;
+(define (db:open-local-db-handle)
+  (or *dbstruct-db*
+      (let ((dbstruct (db:setup #f local: #t)))
+	(set! *dbstruct-db* dbstruct)
+	dbstruct)))
+	  
 ;; Open the classic megatest.db file in toppath
 ;;
 (define (db:open-megatest-db)
@@ -1391,6 +1406,11 @@
 	     (null? toplevels))
 	#f
 	#t)))
+
+;; given a launch delay (minimum time from last launch) return amount of time to wait
+;;
+;; (define (db:launch-delay-left dbstruct run-id launch-delay)
+  
 
 ;;  select end_time-now from
 ;;      (select testname,item_path,event_time+run_duration as
