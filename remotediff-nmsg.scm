@@ -19,10 +19,10 @@
 
 ;; use mutex to not open/close files at same time
 ;;
-(define (checksum mtx file)
+(define (checksum mtx file #!key (cmd "shasum"))
   (mutex-lock! mtx)
   (let-values (((inp oup pid)
-                (process "shasum" (list file))))
+                (process cmd (list file))))
     (mutex-unlock! mtx)
     (let ((result (read-line inp)))
       ;; now flush out remaining output
@@ -47,8 +47,8 @@
         (req      (nn-socket 'req)))
     (print "starting client with pid " (current-process-id))
     (nn-connect req
-                "tcp://localhost:5559")
-    ;; "ipc:///tmp/test-ipc")
+                ;; "tcp://localhost:5559")
+                "ipc:///tmp/test-ipc")
     (find-files 
      path 
      ;; test: #t
@@ -73,7 +73,7 @@
                                ;; (print "num threads: " num-threads)
                                (let ((th1  (make-thread
                                             (lambda ()
-                                              (let ((cksum (checksum mtx1 p))
+                                              (let ((cksum (checksum mtx1 p cmd: "md5sum"))
                                                     (run-time (- (current-seconds) run-time-start)))
                                                 (mutex-lock! mtx1)
                                                 (client-send-receive req (conc p " " cksum))
@@ -122,8 +122,8 @@
         (p2len       (string-length path2))
         (both-seen   (make-hash-table)))
     (nn-bind    rep  
-                "tcp://*:5559")
-    ;; "ipc:///tmp/test-ipc")
+                ;; "tcp://*:5559")
+                "ipc:///tmp/test-ipc")
     ;; start clients
     (thread-sleep! 0.1)
     (system (conc "./remotediff-nmsg " path1 " &"))
