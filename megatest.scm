@@ -735,12 +735,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (args:get-arg "-server")
-    
+
     ;; Server? Start up here.
     ;;
     (let* ((tl        (launch:setup))
            (run-id    (and (args:get-arg "-run-id")
                            (string->number (args:get-arg "-run-id")))))
+      (BB> "megatest -server called; starting server")
       (if run-id
           (begin
 	    (server:launch run-id (->string *transport-type*))

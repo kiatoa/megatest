@@ -48,7 +48,7 @@
     (mutex-lock! *heartbeat-mutex*)
 
     (set! *last-db-access* (current-seconds)) ;; bump *last-db-access*; this will renew keep-running thread's lease on life for another (server:get-timeout) seconds
-    (BB> "in api-exec; last-db-access updated to "*last-db-access*)
+    ;;(BB> "in api-exec; last-db-access updated to "*last-db-access*)
     (mutex-unlock! *heartbeat-mutex*)
 
     res))
@@ -162,9 +162,9 @@
   (set! *time-to-exit* #t)
   (if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
   (tasks:bb-server-delete-record server-id " rpc-transport:keep-running complete")
-  (BB> "Before (exit) (from-on-exit="from-on-exit")")
+  ;;(BB> "Before (exit) (from-on-exit="from-on-exit")")
   (unless from-on-exit (exit))  ;; sometimes we hang (around) here with 100% cpu.
-  (BB> "After")
+  ;;(BB> "After")
   ;; strace reveals endless:
   ;; getrusage(RUSAGE_SELF, {ru_utime={413, 917868}, ru_stime={0, 60003}, ...}) = 0
   ;; getrusage(RUSAGE_SELF, {ru_utime={414, 9874}, ru_stime={0, 60003}, ...}) = 0
@@ -257,7 +257,7 @@
 ;; this client-side procedure makes rpc call to server and returns result
 ;;
 (define (rpc-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 3))
-  (BB> "entered rpc-transport:client-api-send-receive with run-id="run-id " serverdat="serverdat" cmd="cmd" params="params" numretries="numretries)
+  ;;(BB> "entered rpc-transport:client-api-send-receive with run-id="run-id " serverdat="serverdat" cmd="cmd" params="params" numretries="numretries)
   (if (not (vector? serverdat))
       (begin
         (BB> "WHAT?? for run-id="run-id", serverdat="serverdat)
@@ -276,7 +276,7 @@
                                        (vector 'success (api-exec cmd params))
                                        [x (exn i/o net) (vector 'comms-fail (conc "communications fail ["(->string x)"]") x)]
                                        [x () (vector 'other-fail "other fail ["(->string x)"]" x)]))
-                                    chatty: #t
+                                    chatty: #f
                                     accept-result?: (lambda(x)
                                                       (and (vector? x) (vector-ref x 0)))
                                     retries: 4
@@ -284,7 +284,7 @@
                                     random-wait: 0.2
                                     retry-delay: 0.1
                                     final-failure-returns-actual: #t))
-                         (BB> "HEY res="res)
+                         ;;(BB> "HEY res="res)
                          res
                          ))
          (th1 (make-thread send-receive "send-receive"))
@@ -300,7 +300,7 @@
 	 (thread-start! th2)
 	 (thread-join! th1)
 	 (thread-terminate! th2)
-         (BB> "alt got res="res)
+         ;;(BB> "alt got res="res)
 	 (debug:print-info 11 *default-log-port* "got res=" res)
 	 (if (vector? res)
              (case (vector-ref res 0)
@@ -400,8 +400,10 @@
     (debug:print 0 *default-log-port* "Server started on " host:port)
     
 
-    (thread-sleep! 5)
-    (if (rpc-transport:self-test run-id ipaddrstr portnum)
+    ;;(thread-sleep! 5)
+
+    (if (retry-thunk (lambda ()
+                       (rpc-transport:self-test run-id ipaddrstr portnum)))
         (debug:print 0 *default-log-port* "INFO: rpc self test passed!")
         (begin
           (debug:print 0 *default-log-port* "Error: rpc listener did not pass self test.  Shutting down.  On: " host:port)
@@ -481,7 +483,6 @@
             ;; Transfer *last-db-access* to last-access to use in checking that we are still alive
             (mutex-lock! *heartbeat-mutex*)
             (set! last-access *last-db-access*)
-            (BB> "in rpc-transport:run ; last-access="last-access)
             (mutex-unlock! *heartbeat-mutex*)
             
             ;; (debug:print 11 *default-log-port* "last-access=" last-access ", server-timeout=" server-timeout)
@@ -511,7 +512,7 @@
                     ;;
                     (loop 0 bad-sync-count))
                   (begin
-                    (BB> "SERVER SHUTDOWN CALLED!  last-access="last-access" current-seconds="(current-seconds)" server-timeout="server-timeout)
+                    ;;(BB> "SERVER SHUTDOWN CALLED!  last-access="last-access" current-seconds="(current-seconds)" server-timeout="server-timeout)
                     (rpc-transport:server-shutdown server-id rpc:listener)))))
           ;; end new loop
           ))))
@@ -554,16 +555,16 @@
     
     (if login-res
         (begin
-          (BB> "Self test PASS.  login-res="login-res" testing-res="testing-res" *toppath*="*toppath*)
+          ;;(BB> "Self test PASS.  login-res="login-res" testing-res="testing-res" *toppath*="*toppath*)
           #t)
         (begin
-          (BB> "Self test fail.  login-res="login-res" testing-res="testing-res" *toppath*="*toppath*)
+          ;;(BB> "Self test fail.  login-res="login-res" testing-res="testing-res" *toppath*="*toppath*)
            
           #f))
     res))
 
 (define (rpc-transport:client-setup run-id server-dat #!key (remtries 10))
-  (BB> "entered rpc-transport:client-setup with run-id="run-id" and server-dat="server-dat" and retries="remtries)
+  ;;(BB> "entered rpc-transport:client-setup with run-id="run-id" and server-dat="server-dat" and retries="remtries)
   (tcp-buffer-size 0)
   (debug:print-info 0 *default-log-port* "rpc-transport:client-setup run-id="run-id" server-dat=" server-dat ", remaining-tries=" remtries)
   (let* ((iface     (tasks:hostinfo-get-interface server-dat))
@@ -572,7 +573,7 @@
          (runremote-server-dat (vector iface port #f #f #f (current-seconds) 'rpc)) ;; http version := (vector iface port api-uri api-url api-req (current-seconds) 'http  )
          (ping-res (retry-thunk (lambda ()  ;; make 3 attempts to ping.
                                   ((rpc:procedure 'server:login iface port) *toppath*))
-                                chatty: #t
+                                chatty: #f
                                 retries: 3)))
     ;; we got here from rmt:get-connection-info on the condition that *runremote* has no entry for run-id...
     (if ping-res

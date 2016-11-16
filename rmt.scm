@@ -128,7 +128,7 @@
   (mutex-lock! *rmt:srmutex*) ;; deadlock is here!
 
   ;; expire connections
-  (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
+  (let ((expire-time (- (current-seconds) (server:get-timeout) 60))) ;; don't forget the 60 second margin
     (for-each 
      (lambda (run-id)
        (let ((connection (rmt:get-cinfo run-id)))
@@ -142,7 +142,7 @@
   (let* ((run-id     (if rid rid 0))
 	 (connection-info (rmt:get-connection-info-start-server-if-none run-id)))
     ;; the nmsg method does the encoding under the hood (the http method should be changed to do this also)
-    (BB> "in rmt:send-receive; run-id="run-id";;connection-info="connection-info)
+    ;;(BB> "in rmt:send-receive; run-id="run-id";;connection-info="connection-info)
     (if connection-info
 	;; use the server if have connection info
 	(let* ((transport-type (rmt:run-id->transport-type run-id))
@@ -167,7 +167,7 @@
                
 	       (success (if (vector? dat) (vector-ref dat 0) #f))
 	       (res     (if (vector? dat) (vector-ref dat 1) #f)))
-          (BB> "in rmt:send-receive; transport-type="transport-type" success="success" connection-info="connection-info" res="res " dat="dat)
+          ;;(BB> "in rmt:send-receive; transport-type="transport-type" success="success" connection-info="connection-info" res="res " dat="dat)
           (if (and success (vector? connection-info))
               (http-transport:server-dat-update-last-access connection-info)) ;; BB> BBTODO: make this generic, not http transport specific.
 	  (if success

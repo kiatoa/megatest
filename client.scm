@@ -73,8 +73,8 @@
                    (server:try-running run-id))
                (thread-sleep! (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
                (client:setup run-id remaining-tries: (- remaining-tries 1))))))
-      ((http) (BB> "have http") (client:setup-http run-id server-dat remaining-tries))
-      ((rpc) (BB> "have rpc") (rpc-transport:client-setup run-id server-dat remtries: remaining-tries)) 
+      ((http)  (client:setup-http run-id server-dat remaining-tries))
+      ((rpc)  (rpc-transport:client-setup run-id server-dat remtries: remaining-tries)) 
       (else
        (debug:print-error 0 *default-log-port* "(6) Transport ["
                           transport "] specified for run-id [" run-id "] is not implemented in client:setup.  Cannot proceed.")
