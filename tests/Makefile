@@ -50,30 +50,30 @@ test0 : cleanprep
 test1 : cleanprep
 
 test2 : fullprep
-	cd fullrun;$(MEGATEST) -preclean -runtests ez_pass,runfirst/a/% -reqtarg ubuntu/nfs/none :runname $(RUNNAME) -debug $(DEBUG) $(LOGGING)
-	cd fullrun;megatest -preclean -runtests % -target ubuntu/nfs/none :runname $(RUNNAME)_01 -testpatt %/,%/ai -debug $(DEBUG)
-	cd fullrun;megatest -preclean -runtests %/,%/ai -target ubuntu/nfs/none :runname $(RUNAME)_02 -debug $(DEBUG)
-	cd fullrun;megatest -preclean -runtests runfirst/%,%/ai -target ubuntu/nfs/none :runname $(RUNNAME)_02 -debug $(DEBUG)
-	cd fullrun;megatest -runtests %/,%/winter -target ubuntu/nfs/none :runname $(RUNNAME)_03  -debug $(DEBUG)
-	sleep 40;cd fullrun;megatest -target ubuntu/nfs/none :runname $(RUNNAME) -set-state-status COMPLETED,FORCED :state COMPLETED :status PASS -testpatt ez_p%s,runfirst/ -debug $(DEBUG) $(LOGGING)
+	cd fullrun;$(MEGATEST) -preclean -runtests ez_pass,runfirst/a/% -reqtarg ubuntu/nfs/none -runname $(RUNNAME) -debug $(DEBUG) $(LOGGING)
+	cd fullrun;megatest -preclean -runtests % -target ubuntu/nfs/none -runname $(RUNNAME)_01 -testpatt %/,%/ai -debug $(DEBUG)
+	cd fullrun;megatest -preclean -runtests %/,%/ai -target ubuntu/nfs/none -runname $(RUNAME)_02 -debug $(DEBUG)
+	cd fullrun;megatest -preclean -runtests runfirst/%,%/ai -target ubuntu/nfs/none -runname $(RUNNAME)_02 -debug $(DEBUG)
+	cd fullrun;megatest -runtests %/,%/winter -target ubuntu/nfs/none -runname $(RUNNAME)_03  -debug $(DEBUG)
+	sleep 40;cd fullrun;megatest -target ubuntu/nfs/none -runname $(RUNNAME) -set-state-status COMPLETED,FORCED :state COMPLETED :status PASS -testpatt ez_p%s,runfirst/ -debug $(DEBUG) $(LOGGING)
 
 
 test3 : fullprep test3a test3b
 
 test3a :
 	@echo Run runfirst and any waitons.
-	cd fullrun;$(MEGATEST) -preclean -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b 
+	cd fullrun;$(MEGATEST) -preclean -runtests runfirst -reqtarg ubuntu/nfs/none -runname $(RUNNAME)_b 
 
 test3b :
 	@echo Run all_toplevel and all waitons
-	cd fullrun;$(MEGATEST) -preclean -runtests all_toplevel -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_c
+	cd fullrun;$(MEGATEST) -preclean -runtests all_toplevel -reqtarg ubuntu/nfs/none -runname $(RUNNAME)_c
 
 test4 : cleanprep
 	@echo "WARNING: No longer running fullprep, test converage may be lessened"
-	cd fullrun;time $(MEGATEST) -debug $(DEBUG) -run-wait -runtests % -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
+	cd fullrun;time $(MEGATEST) -debug $(DEBUG) -run-wait -run -testpatt % -reqtarg ubuntu/nfs/none -runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
 
 test4a : cleanprep
-	cd fullrun;time $(MEGATEST) -debug $(DEBUG) -preclean -runtests all_toplevel -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
+	cd fullrun;time $(MEGATEST) -debug $(DEBUG) -preclean -run -testpatt all_toplevel -reqtarg ubuntu/nfs/none -runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
 
 # NOTE: Only one instance can be a server
 test5 : cleanprep

@@ -398,9 +398,8 @@
     (set! db *inmemdb*)
 
     (debug:print 0 *default-log-port* "Server started on " host:port)
-    
 
-    (thread-sleep! 5)
+    ;; (thread-sleep! 5)
     (if (rpc-transport:self-test run-id ipaddrstr portnum)
         (debug:print 0 *default-log-port* "INFO: rpc self test passed!")
         (begin
