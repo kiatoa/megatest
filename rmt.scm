@@ -125,7 +125,7 @@
     (debug:print-error 0 *default-log-port* "rmt:send-receive did not succeed after "(sub1 attemptnum)" tries.  Aborting. (cmd="cmd" rid="rid" param="params)
     (exit 1))
 
-  (mutex-lock! *rmt:srmutex*)
+  (mutex-lock! *rmt:srmutex*) ;; deadlock is here!
 
   ;; expire connections
   (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
