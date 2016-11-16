@@ -120,7 +120,14 @@
 
 (define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
   ;; side-effect: clean out old connections
+
+  (when (eq? (modulo attemptnum 5) 0)
+    (debug:print-error 0 *default-log-port* "rmt:send-receive did not succeed after "(sub1 attemptnum)" tries.  Aborting. (cmd="cmd" rid="rid" param="params)
+    (exit 1))
+
   (mutex-lock! *rmt:srmutex*)
+
+  ;; expire connections
   (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
     (for-each 
      (lambda (run-id)
@@ -135,10 +142,11 @@
   (let* ((run-id     (if rid rid 0))
 	 (connection-info (rmt:get-connection-info-start-server-if-none run-id)))
     ;; the nmsg method does the encoding under the hood (the http method should be changed to do this also)
+    (BB> "in rmt:send-receive; run-id="run-id";;connection-info="connection-info)
     (if connection-info
 	;; use the server if have connection info
 	(let* ((transport-type (rmt:run-id->transport-type run-id))
-               
+
                ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
                ;;  Here, we make request to remote server
                ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -159,7 +167,9 @@
                
 	       (success (if (vector? dat) (vector-ref dat 0) #f))
 	       (res     (if (vector? dat) (vector-ref dat 1) #f)))
-	  (if (vector? connection-info)(http-transport:server-dat-update-last-access connection-info)) ;; BB> BBTODO: make this generic, not http transport specific.
+          (BB> "in rmt:send-receive; transport-type="transport-type" success="success" connection-info="connection-info" res="res " dat="dat)
+          (if (and success (vector? connection-info))
+              (http-transport:server-dat-update-last-access connection-info)) ;; BB> BBTODO: make this generic, not http transport specific.
 	  (if success
 	      (begin
                 (mutex-unlock! *rmt:srmutex*)
@@ -177,28 +187,36 @@
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 *default-log-port* "WARNING: Communication failed, trying call to rmt:send-receive again.")
                 (mutex-unlock! *rmt:srmutex*)
-                (case transport-type
+                (rmt:del-cinfo run-id) ;; don't keep using the same connection
+                (rmt:send-receive cmd rid params attemptnum: attemptnum)
+
+
+                ;; (case transport-type
                   
-                  ((http rpc)
-                   (hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
-                   ;; NOTE: killing server causes this process to block forever. No idea why. Dec 2. 
-                   ;; (if (eq? (modulo attemptnum 5) 0)
-                   ;;     (tasks:kill-server-run-id run-id tag: "api-send-receive-failed"))
-                   ;; (mutex-unlock! *send-receive-mutex*) ;; close the mutex here to allow other threads access to communications
-                   (tasks:start-and-wait-for-server (tasks:open-db) run-id 15)
-                   ;; (nmsg-transport:client-api-send-receive run-id connection-info cmd param remtries: (- remtries 1))))))
+                ;;   ((http rpc)
+
+                ;;    ;; NOTE: killing server causes this process to block forever. No idea why. Dec 2. 
+                ;;    ;; (if (eq? (modulo attemptnum 5) 0)
+                ;;    ;;     (tasks:kill-server-run-id run-id tag: "api-send-receive-failed"))
+                ;;    ;; (mutex-unlock! *send-receive-mutex*) ;; close the mutex here to allow other threads access to communications
+                ;;    (tasks:start-and-wait-for-server (tasks:open-db) run-id 15)
+                ;;    (thread-sleep! 5)
+                                   
+                ;;    ;; (nmsg-transport:client-api-send-receive run-id connection-info cmd param remtries: (- remtries 1))))))
                    
-                   ;; no longer killing the server in http-transport:client-api-send-receive
-                   ;; may kill it here but what are the criteria?
-                   ;; start with three calls then kill server
-                   ;; (if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
-                   ;; (thread-sleep! 2)
-                   (rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))
-                  (else
-                   (debug:print-error 0 *default-log-port* "(3) Transport [" transport-type
-                                      "] specified for run-id [" run-id
-                                      "] is not implemented in rmt:send-receive.  Cannot proceed.")
-                   (exit 1))))))
+                ;;    ;; no longer killing the server in http-transport:client-api-send-receive
+                ;;    ;; may kill it here but what are the criteria?
+                ;;    ;; start with three calls then kill server
+                ;;    ;; (if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
+                ;;    ;; (thread-sleep! 2)
+                ;;    (rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))
+                ;;   (else
+                ;;    (debug:print-error 0 *default-log-port* "(3) Transport [" transport-type
+                ;;                       "] specified for run-id [" run-id
+                ;;                       "] is not implemented in rmt:send-receive.  Cannot proceed.")
+                ;;    (exit 1)))
+
+                )))
         
 	;; no connection info; try to start a server
 	;;

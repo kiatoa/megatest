@@ -784,14 +784,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (if tl 
 	  (let* ((tdbdat  (tasks:open-db))
 		 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
-		 (fmtstr  "~5a~12a~8a~20a~24a~10a~10a~10a~10a\n")
+		 (fmtstr  "~5a~6a~12a~8a~20a~24a~10a~10a~10a~10a\n")
 		 (servers-to-kill '())
                  (kill-switch  (if (args:get-arg "-kill-server") "-9" ""))
                  (killinfo   (or (args:get-arg "-stop-server") (args:get-arg "-kill-server") ))
 		 (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
 		 (sid        (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f)))
-	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface:OutPort" "InPort" "LastBeat" "State" "Transport")
-	    (format #t fmtstr "==" "=====" "===" "====" "=================" "======" "========" "=====" "=========")
+	    (format #t fmtstr "Id" "RunId" "MTver" "Pid" "Host" "Interface:OutPort" "InPort" "LastBeat" "State" "Transport")
+	    (format #t fmtstr "==" "=====" "=====" "===" "====" "=================" "======" "========" "=====" "=========")
 	    (for-each 
 	     (lambda (server)
 	       (let* ((id         (vector-ref server 0))
@@ -806,6 +806,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (mt-ver     (vector-ref server 9))
 		      (last-update (vector-ref server 10)) 
 		      (transport  (vector-ref server 11))
+                      (run-id  (vector-ref server 12))
 		      (killed     #f)
 		      (status     (< last-update 20)))
 		 ;;   (zmq-sockets (if status (server:client-connect hostname port) #f)))
@@ -816,8 +817,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid action: 'delete))
 		     (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
 			 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid)))
-		 (format #t fmtstr id mt-ver pid hostname (conc interface ":" pullport) pubport last-update
-			 (if status "alive" "dead") transport)
+		 (format #t fmtstr id run-id mt-ver pid hostname (conc interface ":" pullport) pubport last-update
+			 (if status state "dead") transport)
 		 (if (or (equal? id sid)
 			 (equal? sid 0)) ;; kill all/any
 		     (begin

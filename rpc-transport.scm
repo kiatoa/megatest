@@ -246,18 +246,18 @@
 
 ;; let's see if caching the rpc stub curbs thread-profusion on server side
 (define (rpc-transport:get-api-exec iface port)
-  (let* ((lu (hash-table-ref/default *api-exec-ht* '(iface . port) #f)))
+  (let* ((lu (hash-table-ref/default *api-exec-ht* (cons iface  port) #f)))
     (if lu
         lu
         (let ((res (rpc:procedure 'api-exec iface port)))
-          (hash-table-set! *api-exec-ht* '(iface . port) res)
+          (hash-table-set! *api-exec-ht* (cons iface port) res)
           res))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; this client-side procedure makes rpc call to server and returns result
 ;;
 (define (rpc-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 3))
-  (BB> "entered nsport:client-api-send-receive with run-id="run-id " serverdat="serverdat" cmd="cmd" params="params" numretries="numretries)
+  (BB> "entered rpc-transport:client-api-send-receive with run-id="run-id " serverdat="serverdat" cmd="cmd" params="params" numretries="numretries)
   (if (not (vector? serverdat))
       (begin
         (BB> "WHAT?? for run-id="run-id", serverdat="serverdat)
@@ -266,7 +266,7 @@
   (let* ((iface (rpc-transport:server-dat-get-iface serverdat))
          (port  (rpc-transport:server-dat-get-port serverdat))
          (res #f)
-         (api-exec (rpc-transport:get-api-exec iface port))  
+         (api-exec (rpc-transport:get-api-exec iface port))  ;; chached by host/port. may need to clear...
          (send-receive (lambda ()
                          (tcp-buffer-size 0)
                          (set! res (retry-thunk
@@ -306,7 +306,7 @@
              (case (vector-ref res 0)
                ((success) (vector #t (vector-ref res 1)))
                ((comms-fail)
-                (debug:print 0 *default-log-port* "WARNING: comms failure for rpc request")
+                (debug:print 0 *default-log-port* "WARNING: comms failure for rpc request >>"res"<<")
                 ;;(debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
                 (vector #f (vector-ref res 1)))
                (else
