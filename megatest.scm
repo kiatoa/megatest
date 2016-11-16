@@ -737,16 +737,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
     ;; Server? Start up here.
     ;;
-    (let ((tl        (launch:setup))
-	  (run-id    (and (args:get-arg "-run-id")
-			  (string->number (args:get-arg "-run-id"))))
-          (transport-type (string->symbol (or (args:get-arg "-transport") "http"))))
+    (let* ((tl        (launch:setup))
+           (run-id    (and (args:get-arg "-run-id")
+                           (string->number (args:get-arg "-run-id")))))
+      (BB> "megatest -server called; starting server")
       (if run-id
-	  (begin
-	    (server:launch run-id transport-type)
+          (begin
+	    (server:launch run-id (->string *transport-type*))
 	    (set! *didsomething* #t))
 	  (debug:print-error 0 *default-log-port* "server requires run-id be specified with -run-id")))
-
+    
     ;; Not a server? This section will decide how to communicate
     ;;
     ;;  Setup client for all expect listed here
@@ -784,14 +784,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (if tl 
 	  (let* ((tdbdat  (tasks:open-db))
 		 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
-		 (fmtstr  "~5a~12a~8a~20a~24a~10a~10a~10a~10a\n")
+		 (fmtstr  "~5a~6a~12a~8a~20a~24a~10a~10a~10a~10a\n")
 		 (servers-to-kill '())
                  (kill-switch  (if (args:get-arg "-kill-server") "-9" ""))
                  (killinfo   (or (args:get-arg "-stop-server") (args:get-arg "-kill-server") ))
 		 (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
 		 (sid        (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f)))
-	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface:OutPort" "InPort" "LastBeat" "State" "Transport")
-	    (format #t fmtstr "==" "=====" "===" "====" "=================" "======" "========" "=====" "=========")
+	    (format #t fmtstr "Id" "RunId" "MTver" "Pid" "Host" "Interface:OutPort" "InPort" "LastBeat" "State" "Transport")
+	    (format #t fmtstr "==" "=====" "=====" "===" "====" "=================" "======" "========" "=====" "=========")
 	    (for-each 
 	     (lambda (server)
 	       (let* ((id         (vector-ref server 0))
@@ -806,6 +806,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (mt-ver     (vector-ref server 9))
 		      (last-update (vector-ref server 10)) 
 		      (transport  (vector-ref server 11))
+                      (run-id  (vector-ref server 12))
 		      (killed     #f)
 		      (status     (< last-update 20)))
 		 ;;   (zmq-sockets (if status (server:client-connect hostname port) #f)))
@@ -816,8 +817,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid action: 'delete))
 		     (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
 			 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid)))
-		 (format #t fmtstr id mt-ver pid hostname (conc interface ":" pullport) pubport last-update
-			 (if status "alive" "dead") transport)
+		 (format #t fmtstr id run-id mt-ver pid hostname (conc interface ":" pullport) pubport last-update
+			 (if status state "dead") transport)
 		 (if (or (equal? id sid)
 			 (equal? sid 0)) ;; kill all/any
 		     (begin

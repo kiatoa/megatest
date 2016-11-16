@@ -101,8 +101,11 @@
 
 ;; SERVER
 (define *my-client-signature* #f)
-(define *transport-type*    'http)
-(define *transport-type*    'http)             ;; override with [server] transport http|rpc|nmsg
+
+;; default preference for transport-type is set here
+;;
+(define *transport-type*    'rpc)             ;; override with [server] transport http|rpc 
+
 (define *runremote*         (make-hash-table)) ;; if set up for server communication this will hold <host port>
 (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))

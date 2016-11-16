@@ -70,10 +70,7 @@
 				 (fmt-csv (map list->csv-record csvr))))
 	       (status (configf:lookup dat "final" "exit-status"))
 	       (msg     (configf:lookup dat "final" "message")))
-          ;;(if csvt  ;; this if blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
-              (rmt:csv->test-data run-id test-id csvt)
-            ;;  (BB> "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
-            ;;  )
+          (rmt:csv->test-data run-id test-id csvt)
 	  (cond
 	   ((equal? status "PASS") "PASS") ;; skip the message part if status is pass
 	   (status (conc (configf:lookup dat "final" "exit-status") ": " (if msg msg "no message")))
@@ -702,7 +699,7 @@
 ;;     sets; *configdat*    (megatest.config info)
 ;;           *runconfigdat* (runconfigs.config info)
 ;;           *configstatus* (status of the read data)
-;;
+;;           *transport-type*
 (define (launch:setup #!key (force #f))
   (let* ((toppath  (or *toppath* (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
 	 (runname  (common:args-get-runname))
@@ -836,6 +833,7 @@
 	  (setenv "MT_TESTSUITE_NAME" (common:get-testsuite-name)))
 	(begin
 	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")))
+    (server:set-transport)
     *toppath*))
 
 (define (get-best-disk confdat testconfig)
@@ -1137,7 +1135,7 @@
 		     (with-output-to-string
 		       (lambda () ;; (list 'hosts     hosts)
 			 (write (list (list 'testpath  test-path)
-				      (list 'transport (conc *transport-type*))
+				      (list 'transport (conc (rmt:run-id->transport-type run-id)))
 				      ;; (list 'serverinf *server-info*)
 				      (list 'toppath   *toppath*)
 				      (list 'work-area work-area)

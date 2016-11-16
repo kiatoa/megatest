@@ -172,17 +172,17 @@
 (define (tasks:hostinfo-get-pid         vec)    (vector-ref  vec 5))
 (define (tasks:hostinfo-get-hostname    vec)    (vector-ref  vec 6))
 
-(define (tasks:server-lock-slot mdb run-id)
+(define (tasks:server-lock-slot mdb run-id transport-type)
   (tasks:server-clean-out-old-records-for-run-id mdb run-id " tasks:server-lock-slot")
   (if (< (tasks:num-in-available-state mdb run-id) 4)
       (begin 
-	(tasks:server-set-available mdb run-id)
+	(tasks:server-set-available mdb run-id transport-type)
 	(thread-sleep! (/ (random 1500) 1000)) ;; (thread-sleep! 2) ;; Try removing this. It may not be needed.
 	(tasks:server-am-i-the-server? mdb run-id))
       #f))
 	
 ;; register that this server may come online (first to register goes though with the process)
-(define (tasks:server-set-available mdb run-id)
+(define (tasks:server-set-available mdb run-id transport-type)
   (sqlite3:execute 
    mdb 
    "INSERT INTO servers (pid,hostname,port,pubport,start_time,      priority,state,mt_version,heartbeat,   interface,transport,run_id)
@@ -196,7 +196,7 @@
    (common:version-signature)    ;; mt_version
    -1                            ;; interface
    ;; (conc (server:get-transport)) ;; transport
-   (conc *transport-type*)    ;; transport
+   (conc transport-type)    ;; transport
    run-id
    ))
 
@@ -293,6 +293,10 @@
 		(get-rand-port))
 	    port))))))
 
+;; there can be multiple servers spawned for the same runid.  we want exactly zero or one servers per runid.  The caller is a nascent server.  It wants to know if it should proceed or if it is redundant.  this function chooses a winner and tells me if I am the winner.  Alternative is lots of runaway servers.  Nobody wants that, trust me.
+;;
+;; algo: get all server info entries for this runid.  Each nascent server will insert an entry for its runid before getting here.  Entries are visible globally.  If current hostname and current processid match first entry, then yes I am the server;  return server-id as my prize for winning.  Otherwise, I am not the server;  return #f.
+;;
 (define (tasks:server-am-i-the-server? mdb run-id)
   (let* ((all    (tasks:server-get-servers-vying-for-run-id mdb run-id))
 	 (first  (if (null? all)
@@ -329,23 +333,58 @@
      run-id)
     (vector header res)))
 
-(define (tasks:get-server mdb run-id #!key (retries 10))
+
+;; BB> bb opinion - want to push responsibility into api (encapsulation), like waiting if db is busy and finding the db handle in the first place.  why should the caller need to be concerned??  If my opinion carries, we'll remove the bb- and make other needful adjustments.
+(define (bb-mdb-inserter mdb-expecting-proc mdbless-args)
+  (let ((mdb (db:delay-if-busy (tasks:open-db))))
+    (apply mdb-expecting-proc (cons mdb mdbless-args))))
+
+(define (tasks:bb-server-force-clean-run-record . args)
+  (bb-mdb-inserter tasks:server-force-clean-run-record args))
+
+(define (tasks:bb-server-lock-slot . args)
+  (bb-mdb-inserter tasks:server-lock-slot args))
+
+(define (tasks:bb-server-set-interface-port . args)
+  (bb-mdb-inserter tasks:server-set-interface-port args))
+
+(define (tasks:bb-server-am-i-the-server? . args)
+  (bb-mdb-inserter tasks:server-am-i-the-server? args))
+
+(define (tasks:bb-server-set-state! . args)
+  (bb-mdb-inserter tasks:server-set-state! args))
+  
+(define (tasks:bb-get-server-info . args)
+  (bb-mdb-inserter tasks:get-server-info args))
+
+(define (tasks:bb-num-in-available-state . args)
+  (bb-mdb-inserter tasks:num-in-available-state args))
+
+(define (tasks:bb-server-delete-records-for-this-pid . args)
+  (bb-mdb-inserter tasks:server-delete-records-for-this-pid args))
+
+(define (tasks:bb-server-delete-record . args)
+  (bb-mdb-inserter tasks:server-delete-record args))
+
+
+;; BB: renaming tasks:get-server to get-server-info to make clear we aren't creating servers here
+(define (tasks:get-server-info mdb run-id #!key (retries 10))
   (let ((res  #f)
 	(best #f))
     (handle-exceptions
      exn
      (begin
        (print-call-chain (current-error-port))
-       (debug:print 0 *default-log-port* "WARNING: tasks:get-server db access error.")
+       (debug:print 0 *default-log-port* "WARNING: tasks:get-server-info db access error.")
        (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
        (debug:print 0 *default-log-port* " for run " run-id)
        (print-call-chain (current-error-port))
        (if (> retries 0)
 	   (begin
-	     (debug:print 0 *default-log-port* " trying call to tasks:get-server again in 10 seconds")
+	     (debug:print 0 *default-log-port* " trying call to tasks:get-server-info again in 10 seconds")
 	     (thread-sleep! 10)
-	     (tasks:get-server mdb run-id retries: (- retries 0)))
-	   (debug:print 0 *default-log-port* "10 tries of tasks:get-server all crashed and burned. Giving up and returning \"no server found\"")))
+	     (tasks:get-server-info mdb run-id retries: (- retries 0)))
+	   (debug:print 0 *default-log-port* "10 tries of tasks:get-server-info all crashed and burned. Giving up and returning \"no server found\"")))
      (sqlite3:for-each-row
       (lambda (id interface port pubport transport pid hostname)
 	(set! res (vector id interface port pubport transport pid hostname)))
@@ -396,7 +435,7 @@
 ;;
 (define (tasks:start-and-wait-for-server tdbdat run-id delay-max-tries)
   ;; ensure a server is running for this run
-  (let loop ((server-dat (tasks:get-server (db:delay-if-busy tdbdat) run-id))
+  (let loop ((server-dat (tasks:get-server-info (db:delay-if-busy tdbdat) run-id))
 	     (delay-time 0))
       (if (and (not server-dat)
 	       (< delay-time delay-max-tries))
@@ -406,7 +445,7 @@
 	    (thread-sleep! (/ (random 2000) 1000))
 	    (server:kind-run run-id)
 	    (thread-sleep! (min delay-time 1))
-	    (loop (tasks:get-server (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))
+	    (loop (tasks:get-server-info (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))
 
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
@@ -445,14 +484,14 @@
 ;;
 (define (tasks:kill-server-run-id run-id #!key (tag "default"))
   (let* ((tdbdat  (tasks:open-db))
-	 (sdat    (tasks:get-server (db:delay-if-busy tdbdat) run-id)))
+	 (sdat    (tasks:get-server-info (db:delay-if-busy tdbdat) run-id)))
     (if sdat
 	(let ((hostname (vector-ref sdat 6))
 	      (pid      (vector-ref sdat 5))
 	      (server-id (vector-ref sdat 0)))
 	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "killed")
 	  (debug:print-info 0 *default-log-port* "Killing server " server-id " for run-id " run-id " on host " hostname " with pid " pid)
-	  (tasks:kill-server hostname pid)
+	  (tasks:kill-server hostname pid kill-switch: "-9") ;; BB: added -9, let's not be kind here.  we need it to die so it isn't a 100% cpu zombie
 	  (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id tag) )
 	(debug:print-info 0 *default-log-port* "No server found for run-id " run-id ", nothing to kill"))
     ;; (sqlite3:finalize! tdb)

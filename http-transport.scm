@@ -16,7 +16,11 @@
 (use spiffy uri-common intarweb http-client spiffy-request-vars intarweb spiffy-directory-listing)
 
 ;; Configurations for server
-(tcp-buffer-size 2048)
+
+(tcp-buffer-size 2048) ;; this interferes with rpc ; compensating in rpc-transport... so far so good
+
+
+
 (max-connections 2048) 
 
 (declare (unit http-transport))
@@ -263,7 +267,7 @@
 					     (set! success #f)
 					     (debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
 					     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-					     (hash-table-delete! *runremote* run-id)
+					     (rmt:del-cinfo run-id) ;;(hash-table-delete! *runremote* run-id)
 					     ;; Killing associated server to allow clean retry.")
 					     ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
 					     (mutex-unlock! *http-mutex*)
@@ -310,7 +314,7 @@
 ;; careful closing of connections stored in *runremote*
 ;;
 (define (http-transport:close-connections run-id)
-  (let* ((server-dat (hash-table-ref/default *runremote* run-id #f)))
+  (let* ((server-dat (rmt:get-connection-info run-id))) ;;(hash-table-ref/default *runremote* run-id #f)))
     (if (vector? server-dat)
 	(let ((api-dat (http-transport:server-dat-get-api-uri server-dat)))
 	  (close-connection! api-dat)
@@ -325,7 +329,7 @@
 (define (http-transport:server-dat-get-api-url       vec)    (vector-ref  vec 3))
 (define (http-transport:server-dat-get-api-req       vec)    (vector-ref  vec 4))
 (define (http-transport:server-dat-get-last-access   vec)    (vector-ref  vec 5))
-(define (http-transport:server-dat-get-socket        vec)    (vector-ref  vec 6))
+(define (http-transport:server-dat-get-transport     vec)    (vector-ref  vec 6))
 
 (define (http-transport:server-dat-make-url vec)
   (if (and (http-transport:server-dat-get-iface vec)
@@ -337,6 +341,7 @@
       #f))
 
 (define (http-transport:server-dat-update-last-access vec)
+  ;;(BB> "entered http-transport:server-dat-update-last-access vec="vec)
   (if (vector? vec)
       (vector-set! vec 5 (current-seconds))
       (begin
@@ -350,7 +355,7 @@
   (let* ((api-url      (conc "http://" iface ":" port "/api"))
 	 (api-uri      (uri-reference (conc "http://" iface ":" port "/api")))
 	 (api-req      (make-request method: 'POST uri: api-uri))
-	 (server-dat   (vector iface port api-uri api-url api-req (current-seconds))))
+	 (server-dat   (vector iface port api-uri api-url api-req (current-seconds) 'http)))
     server-dat))
 
 ;; run http-transport:keep-running in a parallel thread to monitor that the db is being 
@@ -387,7 +392,7 @@
 				    (loop start-time
 					  (equal? sdat last-sdat)
 					  sdat)))))))
-         (iface       (car server-info))
+         (iface       (car server-info)) ;; BB> this represents ip address, not interface (like eth0 as I would expect from the term)
          (port        (cadr server-info))
          (last-access 0)
 	 (server-timeout (server:get-timeout)))
@@ -537,13 +542,13 @@
 	(begin
 	  (debug:print 0 *default-log-port* "INFO: Server for run-id " run-id " already running")
 	  (exit 0)))
-    (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id))
+    (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id 'http))
 	       (remtries  4))
       (if (not server-id)
 	  (if (> remtries 0)
 	      (begin
 		(thread-sleep! 2)
-		(loop (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id)
+		(loop (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id 'http)
 		      (- remtries 1)))
 	      (begin
 		;; since we didn't get the server lock we are going to clean up and bail out
