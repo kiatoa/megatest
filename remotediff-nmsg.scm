@@ -12,7 +12,7 @@
   (let ((eid (current-effective-user-id))
         (cid (current-user-id)))
     (if (not (eq? eid cid)) ;; running suid
-            (set! (current-effective-user-id) cid))
+        (set! (current-effective-user-id) cid))
     (proc)
     (if (not (eq? eid cid))
         (set! (current-effective-user-id) eid))))
@@ -48,7 +48,7 @@
     (print "starting client with pid " (current-process-id))
     (nn-connect req
                 "tcp://localhost:5559")
-                ;; "ipc:///tmp/test-ipc")
+    ;; "ipc:///tmp/test-ipc")
     (find-files 
      path 
      ;; test: #t
@@ -114,41 +114,61 @@
 ;; recieve and store the file data, note: this is effectively a *server*, not a client.
 ;;
 (define (compare-directories path1 path2)
-  (let ((last-print  (current-seconds))
-        (p1dat       (make-hash-table))
+  (let ((p1dat       (make-hash-table))
         (p2dat       (make-hash-table))
         (numdone     0) ;; increment when recieved a quit. exit when > 2
-        (rep         (nn-socket 'rep)))
-     (nn-bind    rep  
-                 "tcp://*:5559")
-                 ;; "ipc:///tmp/test-ipc")
-     ;; start clients
-     (thread-sleep! 0.1)
-     (system (conc "./remotediff-nmsg " path1 " &"))
-     (system (conc "./remotediff-nmsg " path2 " &"))
-     (let loop ((msg-in (nn-recv rep)))
-       (if (equal? msg-in "quit")
-           (set! numdone (+ numdone 1)))
-       (if (and (not (equal? msg-in "quit"))
-                (< numdone 2))
-           (let* ((parts (string-split msg-in))
-                  (filen (car parts))
-                  (finfo (cadr parts))
-                  (isp1  (substring-index path1 filen 0)) ;; is this a path1?
-                  (isp2  (substring-index path2 filen 0))) ;; is this a path2?
-             (if isp1 
-                 (if (hash-table-exists? p2dat 
-                 (hash-table-set! p1dat filen finfo)
-                 (hash-table-set! p2dat filen finfo))
-             ;; (print "parts: " parts)
-             (nn-send rep "done")
-             (if (> last-print 15)
-                 (begin
-                   (set! last-print (current-seconds))
-                   (print "Processed " num-files-1 ", " num-files-2)))
-             (loop (nn-recv rep)))))
-     (print "p1: " (hash-table-size p1dat) " p2: " (hash-table-size p2dat))
-     (list p1dat p2dat)))
+        (rep         (nn-socket 'rep))
+        (p1len       (string-length path1))
+        (p2len       (string-length path2))
+        (both-seen   (make-hash-table)))
+    (nn-bind    rep  
+                "tcp://*:5559")
+    ;; "ipc:///tmp/test-ipc")
+    ;; start clients
+    (thread-sleep! 0.1)
+    (system (conc "./remotediff-nmsg " path1 " &"))
+    (system (conc "./remotediff-nmsg " path2 " &"))
+    (let loop ((msg-in (nn-recv rep))
+               (last-print 0))
+      (if (equal? msg-in "quit")
+          (set! numdone (+ numdone 1)))
+      (if (and (not (equal? msg-in "quit"))
+               (< numdone 2))
+          (let* ((parts (string-split msg-in))
+                 (filen (car parts))
+                 (finfo (cadr parts))
+                 (isp1  (substring-index path1 filen 0)) ;; is this a path1?
+                 (isp2  (substring-index path2 filen 0)) ;; is this a path2?
+                 (tpth  (substring filen (if isp1 p1len p2len) (string-length filen))))
+            (hash-table-set! (if isp1 p1dat p2dat)
+                             tpth
+                             finfo)
+            (if (and (hash-table-exists? p1dat tpth)
+                     (hash-table-exists? p2dat tpth))
+                (begin
+                  (if (not (equal? (hash-table-ref p1dat tpth)
+                                   (hash-table-ref p2dat tpth)))
+                      (print "DIFF: " tpth))
+                  (hash-table-set! both-seen tpth finfo)))
+            (nn-send rep "done")
+            (loop (nn-recv rep)
+                  (if (> (- (current-seconds) last-print) 15)
+                      (begin
+                        (print "Processed " (hash-table-size p1dat) ", " (hash-table-size p2dat))
+                        (current-seconds))
+                      last-print)))))
+    (print "p1: " (hash-table-size p1dat) " p2: " (hash-table-size p2dat))
+    (hash-table-for-each
+     p1dat
+     (lambda (k v)
+       (if (not (hash-table-exists? p2dat k))
+           (print "REMOVED: " k))))
+    (hash-table-for-each
+     p2dat
+     (lambda (k v)
+       (if (not (hash-table-exists? p1dat k))
+           (print "ADDED: " k))))
+    (list p1dat p2dat)))
 
 (if (< (length (argv)) 2)
     (begin
