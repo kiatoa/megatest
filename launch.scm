@@ -841,8 +841,8 @@
 (define (get-best-disk confdat testconfig)
   (let* ((disks   (or (and testconfig (hash-table-ref/default testconfig "disks" #f))
 		      (hash-table-ref/default confdat "disks" #f)))
-	 (minspace (let ((m (configf:lookup confdat "setup" "minspace")))
-		     (string->number (or m "10000")))))
+	 (minspace   (string->number (or (configf:lookup confdat "setup" "minspace")
+                                         "10000"))))
     (if disks 
 	(let ((res (common:get-disk-with-most-free-space disks minspace))) ;; min size of 1000, seems tad dumb
 	  (if res
@@ -850,7 +850,10 @@
 	      (begin
 		(if (common:low-noise-print 20 "No valid disks or no disk with enough space")
 		    (debug:print-error 0 *default-log-port* "No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists and has enough space!\n    You can change minspace in the [setup] section of megatest.config. Current setting is: " minspace))
-		(exit 1)))))))
+		(exit 1))))
+        (begin
+          (debug:print-error 0 *default-log-port* "No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists and has enough space!\n    You can change minspace in the [setup] section of megatest.config. Current setting is: " minspace)
+          (exit 1)))))
 
 ;; Desired directory structure:
 ;;

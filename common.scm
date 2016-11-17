@@ -979,7 +979,7 @@
 			    (get-df dirpath)))))
 	 (if (> freespc bestsize)
 	     (begin
-	       (set! best     (cons disk-num dirpath))
+	       (set! best     (cons disk-num dirpath))  ;; NOTE: different storage style!
 	       (set! bestsize freespc)))))
      (map car disks))
     (if (and best (> bestsize minsize))

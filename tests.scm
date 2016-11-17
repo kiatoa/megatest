@@ -991,6 +991,7 @@ EOF
 	cached-dat
 	(let ((dat (hash-table-ref/default *testconfigs* test-name #f)))
 	  (if (and  dat ;; have a locally cached version
+                    (not force-create)
 		    (hash-table-ref/default dat "have fulldata" #f)) ;; marked as good data?
 	      dat
 	      ;; no cached data available
