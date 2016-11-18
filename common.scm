@@ -397,6 +397,12 @@
           (pathname-file *toppath*)
           (pathname-file (current-directory)))))
 
+(define (common:get-db-tmp-area)
+  (create-directory (conc "/tmp/" (current-user-name)
+                          "/megatest/"
+                          (common:get-testsuite-name) "/"
+                          (string-translate *toppath* "/" "_")) #t))
+
 ;;======================================================================
 ;; E X I T   H A N D L I N G
 ;;======================================================================
