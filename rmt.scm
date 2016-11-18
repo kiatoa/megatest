@@ -1,5 +1,5 @@
-;;======================================================================
-;; Copyright 2006-2013, Matthew Welland.
+
+;; Copyright 2006-2016, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -15,7 +15,7 @@
 (declare (uses api))
 (declare (uses tdb))
 (declare (uses http-transport))
-(declare (uses nmsg-transport))
+(declare (uses rpc-transport))
 
 ;;
 ;; THESE ARE ALL CALLED ON THE CLIENT SIDE!!!
@@ -62,113 +62,172 @@
 ;; if a server is either running or in the process of starting call client:setup
 ;; else return #f to let the calling proc know that there is no server available
 ;;
-(define (rmt:get-connection-info run-id)
-  (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
+
+(define *rrr-mutex* (make-mutex))
+(define (rmt:get-cinfo rid)
+  (mutex-lock! *rrr-mutex*)
+  (let* ((run-id (if rid rid 0))
+         (cinfo (hash-table-ref/default *runremote* run-id #f)))
+    (mutex-unlock! *rrr-mutex*)
+    cinfo))
+
+(define (rmt:set-cinfo rid server-dat)
+  (mutex-lock! *rrr-mutex*)
+  (let* ((run-id (if rid rid 0))
+         (res (hash-table-set! *runremote* run-id server-dat)))
+    (mutex-unlock! *rrr-mutex*)
+    res))
+
+(define (rmt:del-cinfo rid)
+  (mutex-lock! *rrr-mutex*)
+  (let* ((run-id (if rid rid 0))
+         (res (hash-table-delete! *runremote* run-id)))
+    (mutex-unlock! *rrr-mutex*)
+    res))
+
+
+
+
+(define (rmt:get-connection-info-start-server-if-none run-id)
+  (let ((cinfo (rmt:get-cinfo run-id)))
     (if cinfo
-	cinfo
+        cinfo
 	;; NB// can cache the answer for server running for 10 seconds ...
 	;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
 	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)
 	    (client:setup run-id)
 	    #f))))
 
+
+
+(define (rmt:run-id->transport-type run-id)
+  (let* ((connection-info (rmt:get-cinfo run-id)))
+    ;; the nmsg method does the encoding under the hood (the http method should be changed to do this also)
+
+    (if connection-info ;; if we already have a connection for this run-id, use that precendent
+	;; use the server if have connection info
+	(let* ((transport-type (vector-ref connection-info 6))) ;; BB: assumes all transport-type'-servertdat vector's item 6 ids transport type
+          transport-type)
+        ;; otherwise pick the global default as preference. (set in common.scm)
+        *transport-type*)))
+
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
 
 ;; RA => e.g. usage (rmt:send-receive 'get-var #f (list varname))
 ;;
+
+(define *rmt:srmutex* (make-mutex))
+
 (define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
-  ;; clean out old connections
-  ;; (mutex-lock! *db-multi-sync-mutex*)
-  (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
+  ;; side-effect: clean out old connections
+
+  (when (eq? (modulo attemptnum 5) 0)
+    (debug:print-error 0 *default-log-port* "rmt:send-receive did not succeed after "(sub1 attemptnum)" tries.  Aborting. (cmd="cmd" rid="rid" param="params)
+    (exit 1))
+
+  (mutex-lock! *rmt:srmutex*) ;; deadlock is here!
+
+  ;; expire connections
+  (let ((expire-time (- (current-seconds) (server:get-timeout) 60))) ;; don't forget the 60 second margin
     (for-each 
      (lambda (run-id)
-       (let ((connection (hash-table-ref/default *runremote* run-id #f)))
+       (let ((connection (rmt:get-cinfo run-id)))
          (if (and (vector? connection)
-        	  (< (http-transport:server-dat-get-last-access connection) expire-time))
+        	  (< (http-transport:server-dat-get-last-access connection) expire-time)) ;; BB> BBTODO: make this generic, not http transport specific.
              (begin
                (debug:print-info 0 *default-log-port* "Discarding connection to server for run-id " run-id ", too long between accesses")
-               ;; SHOULD CLOSE THE CONNECTION HERE
-	       (case *transport-type*
-		 ((nmsg)(nn-close (http-transport:server-dat-get-socket 
-				   (hash-table-ref *runremote* run-id)))))
                (hash-table-delete! *runremote* run-id)))))
      (hash-table-keys *runremote*)))
-  ;; (mutex-unlock! *db-multi-sync-mutex*)
-  ;; (mutex-lock! *send-receive-mutex*)
-  (let* ((run-id          (if rid rid 0))
-	 (connection-info (rmt:get-connection-info run-id)))
+  
+  (let* ((run-id     (if rid rid 0))
+	 (connection-info (rmt:get-connection-info-start-server-if-none run-id)))
     ;; the nmsg method does the encoding under the hood (the http method should be changed to do this also)
+    ;;(BB> "in rmt:send-receive; run-id="run-id";;connection-info="connection-info)
     (if connection-info
 	;; use the server if have connection info
-	(let* ((dat     (case *transport-type*
-			  ((http)(condition-case
-				  (http-transport:client-api-send-receive run-id connection-info cmd params)
-				  ((commfail)(vector #f "communications fail"))
-				  ((exn)(vector #f "other fail"))))
-			  ((nmsg)(condition-case
-				  (nmsg-transport:client-api-send-receive run-id connection-info cmd params)
-				  ((timeout)(vector #f "timeout talking to server"))))
-			  (else  (exit))))
+	(let* ((transport-type (rmt:run-id->transport-type run-id))
+
+               ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+               ;;  Here, we make request to remote server
+               ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+               (dat     (begin
+                          
+                          (case transport-type ;; BB: replaced *transport-type* global with run-id specific transport-type
+                            ((http)(condition-case
+                                    (http-transport:client-api-send-receive run-id connection-info cmd params) 
+                                    ((commfail)(vector #f "communications fail"))
+                                    ((exn)(vector #f "other fail"))))
+                            ((rpc) (rpc-transport:client-api-send-receive run-id connection-info cmd params)) ;; BB: let us error out for now
+                            (else  
+                             (debug:print-error 0 *default-log-port* "(1) Transport [" transport-type
+                                                "] specified for run-id [" run-id
+                                                "] is not implemented in rmt:send-receive.  Cannot proceed." (symbol? transport-type))
+                             (vector #f (conc "transport ["transport-type"] unimplemented"))))))
+               
+               
 	       (success (if (vector? dat) (vector-ref dat 0) #f))
 	       (res     (if (vector? dat) (vector-ref dat 1) #f)))
-	  (if (vector? connection-info)(http-transport:server-dat-update-last-access connection-info))
+          ;;(BB> "in rmt:send-receive; transport-type="transport-type" success="success" connection-info="connection-info" res="res " dat="dat)
+          (if (and success (vector? connection-info))
+              (http-transport:server-dat-update-last-access connection-info)) ;; BB> BBTODO: make this generic, not http transport specific.
 	  (if success
 	      (begin
+                (mutex-unlock! *rmt:srmutex*)
 		;; (mutex-unlock! *send-receive-mutex*)
-		(case *transport-type* 
-		  ((http) res) ;; (db:string->obj res))
-		  ((nmsg) res))) ;; (vector-ref res 1)))
+		(case transport-type 
+		  ((http rpc) res) ;; (db:string->obj res))
+                  (else
+                   (debug:print-error 0 *default-log-port* "(2) Transport [" transport-type
+                                      "] specified for run-id [" run-id
+                                      "] is not implemented in rmt:send-receive.  Cannot proceed. Also unexpected since this branch follows success which would follow a suported transport...")
+                   #f)
+                  )) ;; (vector-ref res 1)))
+              
+              ;; no success...
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 *default-log-port* "WARNING: Communication failed, trying call to rmt:send-receive again.")
-		;; (case *transport-type*
-		;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket connection-info))))
-		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
-		;; NOTE: killing server causes this process to block forever. No idea why. Dec 2. 
-		;; (if (eq? (modulo attemptnum 5) 0)
-		;;     (tasks:kill-server-run-id run-id tag: "api-send-receive-failed"))
-		;; (mutex-unlock! *send-receive-mutex*) ;; close the mutex here to allow other threads access to communications
-		(tasks:start-and-wait-for-server (tasks:open-db) run-id 15)
-		;; (nmsg-transport:client-api-send-receive run-id connection-info cmd param remtries: (- remtries 1))))))
+                (mutex-unlock! *rmt:srmutex*)
+                (rmt:del-cinfo run-id) ;; don't keep using the same connection
+                (rmt:send-receive cmd rid params attemptnum: attemptnum)
 
-		;; no longer killing the server in http-transport:client-api-send-receive
-		;; may kill it here but what are the criteria?
-		;; start with three calls then kill server
-		;; (if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
-		;; (thread-sleep! 2)
-		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))))
-	;; no connection info? try to start a server, or access locally if no
-	;; server and the query is read-only
+
+                ;; (case transport-type
+                  
+                ;;   ((http rpc)
+
+                ;;    ;; NOTE: killing server causes this process to block forever. No idea why. Dec 2. 
+                ;;    ;; (if (eq? (modulo attemptnum 5) 0)
+                ;;    ;;     (tasks:kill-server-run-id run-id tag: "api-send-receive-failed"))
+                ;;    ;; (mutex-unlock! *send-receive-mutex*) ;; close the mutex here to allow other threads access to communications
+                ;;    (tasks:start-and-wait-for-server (tasks:open-db) run-id 15)
+                ;;    (thread-sleep! 5)
+                                   
+                ;;    ;; (nmsg-transport:client-api-send-receive run-id connection-info cmd param remtries: (- remtries 1))))))
+                   
+                ;;    ;; no longer killing the server in http-transport:client-api-send-receive
+                ;;    ;; may kill it here but what are the criteria?
+                ;;    ;; start with three calls then kill server
+                ;;    ;; (if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
+                ;;    ;; (thread-sleep! 2)
+                ;;    (rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))
+                ;;   (else
+                ;;    (debug:print-error 0 *default-log-port* "(3) Transport [" transport-type
+                ;;                       "] specified for run-id [" run-id
+                ;;                       "] is not implemented in rmt:send-receive.  Cannot proceed.")
+                ;;    (exit 1)))
+
+                )))
+        
+	;; no connection info; try to start a server
 	;;
 	;; Note: The tasks db was checked for a server in starting mode in the rmt:get-connection-info call
 	;;
-	(if (and (< attemptnum 15)
-		 (member cmd api:write-queries))
-	    (let ((faststart (configf:lookup *configdat* "server" "faststart")))
-	      (hash-table-delete! *runremote* run-id)
-	      ;; (mutex-unlock! *send-receive-mutex*)
-	      (if (and faststart (equal? faststart "no"))
-		  (begin
-		    (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
-		    (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
-		    (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
-		  (let ((start-time (current-milliseconds))
-			(max-query  (string->number (or (configf:lookup *configdat* "server" "server-query-threshold")
-							"300")))
-			(newres     (rmt:open-qry-close-locally cmd run-id params)))
-		    (let ((delta (- (current-milliseconds) start-time)))
-		      (if (> delta max-query)
-			  (begin
-			    (debug:print-info 0 *default-log-port* "Starting server as query time " delta " is over the limit of " max-query)
-			    (server:kind-run run-id)))
-		      ;; return the result!
-		      newres)
-		    )))
-	    (begin
-	      ;; (debug:print-error 0 *default-log-port* "Communication failed!")
-	      ;; (mutex-unlock! *send-receive-mutex*)
-	      ;; (exit)
-	      (rmt:open-qry-close-locally cmd run-id params)
-	      )))))
+        (begin
+          (mutex-unlock! *rmt:srmutex*)
+          (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
+          (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
+          (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1))))))
+  
 
 (define (rmt:update-db-stats run-id rawcmd params duration)
   (mutex-lock! *db-stats-mutex*)
@@ -226,50 +285,29 @@
 			     (loop (car tal)(cdr tal) newmax-cmd currmax)))))))
     (mutex-unlock! *db-stats-mutex*)
     res))
-	  
-(define (rmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
-  (let* ((dbstruct-local (if *dbstruct-db*
-			     *dbstruct-db*
-			     (let* ((dbdir (db:dbfile-path #f)) ;;  (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
-				    (db (make-dbr:dbstruct path:  dbdir local: #t)))
-			       (set! *dbstruct-db* db)
-			       db)))
-	 (db-file-path   (db:dbfile-path 0))
-	 ;; (read-only      (not (file-read-access? db-file-path)))
-	 (start          (current-milliseconds))
-	 (resdat         (api:execute-requests dbstruct-local (vector (symbol->string cmd) params)))
-	 (success        (vector-ref resdat 0))
-	 (res            (vector-ref resdat 1))
-	 (duration       (- (current-milliseconds) start)))
-    (if (not success)
-	(if (> remretries 0)
-	    (begin
-	      (debug:print-error 0 *default-log-port* "local query failed. Trying again.")
-	      (thread-sleep! (/ (random 5000) 1000)) ;; some random delay 
-	      (rmt:open-qry-close-locally cmd run-id params remretries: (- remretries 1)))
-	    (begin
-	      (debug:print-error 0 *default-log-port* "too many retries in rmt:open-qry-close-locally, giving up")
-	      #f))
-	(begin
-	  ;; (rmt:update-db-stats run-id cmd params duration)
-	  ;; mark this run as dirty if this was a write
-	  (if (not (member cmd api:read-only-queries))
-	      (let ((start-time (current-seconds)))
-		(mutex-lock! *db-multi-sync-mutex*)
-		;; (if (not (hash-table-ref/default *db-local-sync* run-id #f))
-		;; just set it every time. Is a write more expensive than a read and does it matter?
-		(hash-table-set! *db-local-sync* (or run-id 0) start-time) ;; the oldest "write"
-		(mutex-unlock! *db-multi-sync-mutex*)))
-	  res))))
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
 	 ;; (jparams  (db:obj->string params)) ;; (rmt:dat->json-str params))
-	 (res  	   (handle-exceptions
-		    exn
-		    #f
-		    (http-transport:client-api-send-receive run-id connection-info cmd params))))
-;;		    ((commfail) (vector #f "communications fail")))))
+	 (res (case (rmt:run-id->transport-type run-id)
+                ((http) 
+                 (handle-exceptions
+                  exn
+                  #f
+                  (http-transport:client-api-send-receive run-id connection-info cmd params)))
+                ((rpc)
+                 (handle-exceptions
+                  exn
+                  #f
+                  (rpc-transport:client-api-send-receive run-id connection-info cmd params)))
+                (else  
+                 (debug:print-error 0 *default-log-port* "(4) Transport [" *transport-type*
+                                    "] specified for run-id [" run-id
+                                    "] is not implemented in rmt:send-receive-no-auto-client-setup.  Cannot proceed.")
+                 (exit 1)))))
+
+              
+              ;;		    ((commfail) (vector #f "communications fail")))))
     (if (and res (vector-ref res 0))
 	(vector-ref res 1) ;;; YES!! THIS IS CORRECT!! CHANGE IT HERE, THEN CHANGE rmt:send-receive ALSO!!!
 	#f)))
@@ -316,9 +354,7 @@
 ;; Deprecated for nmsg-transport.
 ;;
 (define (rmt:login-no-auto-client-setup connection-info run-id)
-  (case *transport-type*
-    ((http)(rmt:send-receive-no-auto-client-setup connection-info 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
-    ((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info 'login (list *toppath* megatest-version run-id *my-client-signature*)))))
+  (rmt:send-receive-no-auto-client-setup connection-info 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
 
 ;; hand off a call to one of the db:queries statements
 ;; added run-id to make looking up the correct db possible 
@@ -347,10 +383,19 @@
   (rmt:send-receive 'get-key-val-pairs run-id (list run-id)))
 
 (define (rmt:get-keys)
-  (rmt:send-receive 'get-keys #f '()))
+  (if *db-keys* *db-keys* 
+     (let ((res (rmt:send-receive 'get-keys #f '())))
+       (set! *db-keys* res)
+       res)))
 
+;; we don't reuse run-id's (except possibly *after* a db cleanup) so it is safe
+;; to cache the resuls in a hash
+;;
 (define (rmt:get-key-vals run-id)
-  (rmt:send-receive 'get-key-vals #f (list run-id)))
+  (or (hash-table-ref/default *keyvals* run-id #f)
+      (let ((res (rmt:send-receive 'get-key-vals #f (list run-id))))
+        (hash-table-set! *keyvals* run-id res)
+        res)))
 
 (define (rmt:get-targets)
   (rmt:send-receive 'get-targets #f '()))

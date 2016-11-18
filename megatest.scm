@@ -13,7 +13,7 @@
 ;; fake out readline usage of toplevel-command
 (define (toplevel-command . a) #f)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc ;; (srfi 18) extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
      http-client srfi-18 extras format) ;;  zmq extras)
 
 ;; Added for csv stuff - will be removed
@@ -148,7 +148,7 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
-  -transport http|zmq     : use http or zmq for transport (default is http) 
+  -transport http|rpc     : use http or rpc for transport (default is http) 
   -daemonize              : fork into background and disconnect from stdin/out
   -log logfile            : send stdout and stderr to logfile
   -list-servers           : list the servers 
@@ -171,6 +171,7 @@ Utilities
   -archive cmd            : archive runs specified by selectors to one of disks specified
                             in the [archive-disks] section.
                             cmd: keep-html, restore, save, save-remove
+  -generate-html          : create a simple html tree for browsing your runs
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -179,8 +180,8 @@ Spreadsheet generation
                             if it contains forward slashes the path will be converted
                             to windows style
 Getting started
-  -gen-megatest-area       : create a skeleton megatest area. You will be prompted for paths
-  -gen-megatest-test tname : create a skeleton megatest test. You will be prompted for info
+  -create-megatest-area       : create a skeleton megatest area. You will be prompted for paths
+  -create-test testname       : create a skeleton megatest test. You will be prompted for info
 
 Examples
 
@@ -243,7 +244,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-set-state-status"
 			"-set-run-status"
 			"-debug" ;; for *verbosity* > 2
-			"-gen-megatest-test"
+			"-create-test"
 			"-override-timeout"
 			"-test-files"  ;; -test-paths is for listing all
 			"-load"        ;; load and exectute a scheme file
@@ -262,6 +263,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-sort"
 			) 
 		 (list  "-h" "-help" "--help"
+			"-manual"
 			"-version"
 		        "-force"
 		        "-xterm"
@@ -285,6 +287,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-list-servers"
                         "-run-wait"      ;; wait on a run to complete (i.e. no RUNNING)
 			"-local"         ;; run some commands using local db access
+                        "-generate-html"
 
 			;; misc queries
 			"-list-disks"
@@ -305,7 +308,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-cleanup-db"
 			"-rollup"
 			"-update-meta"
-			"-gen-megatest-area"
+			"-create-megatest-area"
 			"-mark-incompletes"
 
 			"-convert-to-norm"
@@ -393,7 +396,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (thread-start! *watchdog*)
 
-
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))
       (debug:print-info 0 *default-log-port* "Sending log output to " (args:get-arg "-log"))
@@ -404,6 +406,17 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(args:get-arg "--help"))
     (begin
       (print help)
+      (exit)))
+
+(if (args:get-arg "-manual")
+    (let* ((htmlviewercmd (or (configf:lookup *configdat* "setup" "htmlviewercmd")
+			      (common:which '("firefox" "arora"))))
+	   (install-home  (common:get-install-area))
+	   (manual-html   (conc install-home "/share/docs/megatest_manual.html")))
+      (if (and install-home
+	       (file-exists? manual-html))
+	  (system (conc "(" htmlviewercmd " " manual-html " ) &"))
+	  (system (conc "(" htmlviewercmd " http://www.kiatoa.com/cgi-bin/fossils/megatest/doc/tip/docs/manual/megatest_manual.html ) &")))
       (exit)))
 
 (if (args:get-arg "-start-dir")
@@ -724,15 +737,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
     ;; Server? Start up here.
     ;;
-    (let ((tl        (launch:setup))
-	  (run-id    (and (args:get-arg "-run-id")
-			  (string->number (args:get-arg "-run-id")))))
+    (let* ((tl        (launch:setup))
+           (run-id    (and (args:get-arg "-run-id")
+                           (string->number (args:get-arg "-run-id")))))
+      (BB> "megatest -server called; starting server")
       (if run-id
-	  (begin
-	    (server:launch run-id)
+          (begin
+	    (server:launch run-id (->string *transport-type*))
 	    (set! *didsomething* #t))
 	  (debug:print-error 0 *default-log-port* "server requires run-id be specified with -run-id")))
-
+    
     ;; Not a server? This section will decide how to communicate
     ;;
     ;;  Setup client for all expect listed here
@@ -741,6 +755,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(hash-table-keys args:arg-hash)
 		'("-list-servers"
 		  "-stop-server"
+                  "-kill-server"
 		  "-show-cmdinfo"
 		  "-list-runs"
 		  "-ping")))
@@ -749,7 +764,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				  (string->number (args:get-arg "-run-id")))))
 	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
 	      ;; if not list or kill then start a client (if appropriate)
-	      (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
+	      (if (or (args-defined? "-h" "-version" "-create-megatest-area" "-create-test")
 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
 		  (debug:print-info 1 *default-log-port* "Server connection not needed")
 		  (begin
@@ -763,18 +778,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))
 
 (if (or (args:get-arg "-list-servers")
-	(args:get-arg "-stop-server"))
+	(args:get-arg "-stop-server")
+        (args:get-arg "-kill-server"))
     (let ((tl (launch:setup)))
       (if tl 
 	  (let* ((tdbdat  (tasks:open-db))
 		 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
-		 (fmtstr  "~5a~12a~8a~20a~24a~10a~10a~10a~10a\n")
+		 (fmtstr  "~5a~6a~12a~8a~20a~24a~10a~10a~10a~10a\n")
 		 (servers-to-kill '())
-		 (killinfo   (args:get-arg "-stop-server"))
+                 (kill-switch  (if (args:get-arg "-kill-server") "-9" ""))
+                 (killinfo   (or (args:get-arg "-stop-server") (args:get-arg "-kill-server") ))
 		 (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
 		 (sid        (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f)))
-	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface:OutPort" "InPort" "LastBeat" "State" "Transport")
-	    (format #t fmtstr "==" "=====" "===" "====" "=================" "======" "========" "=====" "=========")
+	    (format #t fmtstr "Id" "RunId" "MTver" "Pid" "Host" "Interface:OutPort" "InPort" "LastBeat" "State" "Transport")
+	    (format #t fmtstr "==" "=====" "=====" "===" "====" "=================" "======" "========" "=====" "=========")
 	    (for-each 
 	     (lambda (server)
 	       (let* ((id         (vector-ref server 0))
@@ -789,6 +806,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (mt-ver     (vector-ref server 9))
 		      (last-update (vector-ref server 10)) 
 		      (transport  (vector-ref server 11))
+                      (run-id  (vector-ref server 12))
 		      (killed     #f)
 		      (status     (< last-update 20)))
 		 ;;   (zmq-sockets (if status (server:client-connect hostname port) #f)))
@@ -799,13 +817,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid action: 'delete))
 		     (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
 			 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid)))
-		 (format #t fmtstr id mt-ver pid hostname (conc interface ":" pullport) pubport last-update
-			 (if status "alive" "dead") transport)
+		 (format #t fmtstr id run-id mt-ver pid hostname (conc interface ":" pullport) pubport last-update
+			 (if status state "dead") transport)
 		 (if (or (equal? id sid)
 			 (equal? sid 0)) ;; kill all/any
 		     (begin
-		       (debug:print-info 0 *default-log-port* "Attempting to stop server with pid " pid)
-		       (tasks:kill-server status hostname pullport pid transport)))))
+		       (debug:print-info 0 *default-log-port* "Attempting to kill "kill-switch" server with pid " pid)
+		       (tasks:kill-server hostname pid kill-switch: kill-switch)))))
 	     servers)
 	    (debug:print-info 1 *default-log-port* "Done with listservers")
 	    (set! *didsomething* #t)
@@ -985,7 +1003,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      (lambda (target runname keys keyvals)
        (let* ((runsdat  (rmt:get-runs-by-patt keys runname 
 					(common:args-get-target)
-					#f #f #f))
+					#f #f #f #f))
 	      (header   (vector-ref runsdat 0))
 	      (rows     (vector-ref runsdat 1)))
 	 (if (null? rows)
@@ -1819,13 +1837,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ;; (megatest-gui)
       (set! *didsomething* #t)))
 
-(if (args:get-arg "-gen-megatest-area")
+(if (args:get-arg "-create-megatest-area")
     (begin
       (genexample:mk-megatest.config)
       (set! *didsomething* #t)))
 
-(if (args:get-arg "-gen-megatest-test")
-    (let ((testname (args:get-arg "-gen-megatest-test")))
+(if (args:get-arg "-create-test")
+    (let ((testname (args:get-arg "-create-test")))
       (genexample:mk-megatest-test testname)
       (set! *didsomething* #t)))
 
@@ -1990,6 +2008,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        #f ;; do all run-ids
        'new2old
        )
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-generate-html")
+    (let* ((toppath (launch:setup)))
+      (if (tests:create-html-tree #f)
+          (debug:print-info 0 *default-log-port* "HTML output created in " toppath "/lt/runs-index.html")
+          (debug:print 0 *default-log-port* "Failed to create HTML output in " toppath "/lt/runs-index.html"))
       (set! *didsomething* #t)))
 
 ;;======================================================================

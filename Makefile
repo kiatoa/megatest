@@ -1,4 +1,6 @@
 # make install CSCOPTS='-accumulate-profile -profile-name $(PWD)/profile-ww$(shell date +%V.%u)'
+# rm <files>.o ; make install CSCOPTS='-profile' ; ... ;  chicken-profile | less
+
 PREFIX=$(PWD)
 CSCOPTS= 
 INSTALL=install
@@ -6,7 +8,7 @@ SRCFILES = common.scm items.scm launch.scm \
    ods.scm runconfig.scm server.scm configf.scm \
    db.scm keys.scm margs.scm megatest-version.scm \
    process.scm runs.scm tasks.scm tests.scm genexample.scm \
-   http-transport.scm nmsg-transport.scm filedb.scm \
+   http-transport.scm filedb.scm \
    client.scm synchash.scm daemon.scm mt.scm \
    ezsteps.scm lock-queue.scm sdb.scm \
    rmt.scm api.scm tdb.scm rpc-transport.scm \
@@ -36,6 +38,8 @@ CKPATH=$(shell dirname $(shell dirname $(CSIPATH)))
 ARCHSTR=$(shell lsb_release -sr)
 # ARCHSTR=$(shell bash -c "echo \$$MACHTYPE")
 
+PNGFILES = $(shell cd docs/manual;ls *png)
+
 all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard 
 
 mtest: $(OFILES) readline-fix.scm megatest.o
@@ -47,8 +51,16 @@ dboard : $(OFILES) $(GOFILES) dashboard.scm
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
 	csc $(CSCOPTS) $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
 
-multi-dboard : multi-dboard.scm $(OFILES) $(GOFILES)
-	csc $(CSCOPTS) $(OFILES) $(GOFILES) multi-dboard.scm -o multi-dboard
+# install documentation to $(PREFIX)/docs
+# DOES NOT REBUILD DOCS
+#
+$(PREFIX)/share/docs/megatest_manual.html : docs/manual/megatest_manual.html
+	mkdir -p $(PREFIX)/share/docs
+	$(INSTALL) docs/manual/megatest_manual.html $(PREFIX)/share/docs/megatest_manual.html
+	for png in $(PNGFILES);do $(INSTALL) docs/manual/$$png $(PREFIX)/share/docs/$$png;done
+
+#multi-dboard : multi-dboard.scm $(OFILES) $(GOFILES)
+#	csc $(CSCOPTS) $(OFILES) $(GOFILES) multi-dboard.scm -o multi-dboard
 
 # 
 # $(PREFIX)/bin/revtagfsl : utils/revtagfsl.scm
@@ -65,7 +77,7 @@ megatest.o : megatest-fossil-hash.scm
 client.scm common.scm configf.scm dashboard-guimonitor.scm dashboard-tests.scm dashboard.scm db.scm dcommon.scm ezsteps.scm fs-transport.scm http-transport.scm index-tree.scm items.scm keys.scm launch.scm megatest.scm monitor.scm mt.scm newdashboard.scm runconfig.scm runs.scm server.scm tdb.scm tests.scm tree.scm : common_records.scm rpc-transport.scm
 common_records.scm : altdb.scm
 vg.o dashboard.o : vg_records.scm
-
+dcommon.o : run_records.scm
 # Temporary while transitioning to new routine
 # runs.o : run-tests-queue-classic.scm  run-tests-queue-new.scm
 
@@ -91,12 +103,12 @@ $(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard utils/mk_wrapper
 	utils/mk_wrapper $(PREFIX) ndboard $(PREFIX)/bin/newdashboard
 	chmod a+x $(PREFIX)/bin/newdashboard
 
-$(PREFIX)/bin/.$(ARCHSTR)/mdboard : multi-dboard
-	$(INSTALL) multi-dboard $(PREFIX)/bin/.$(ARCHSTR)/mdboard
+#$(PREFIX)/bin/.$(ARCHSTR)/mdboard : multi-dboard
+#	$(INSTALL) multi-dboard $(PREFIX)/bin/.$(ARCHSTR)/mdboard
 
-$(PREFIX)/bin/mdboard : $(PREFIX)/bin/.$(ARCHSTR)/mdboard  utils/mk_wrapper
-	utils/mk_wrapper $(PREFIX) mdboard $(PREFIX)/bin/mdboard
-	chmod a+x $(PREFIX)/bin/mdboard
+# $(PREFIX)/bin/mdboard : $(PREFIX)/bin/.$(ARCHSTR)/mdboard  utils/mk_wrapper
+# 	utils/mk_wrapper $(PREFIX) mdboard $(PREFIX)/bin/mdboard
+# 	chmod a+x $(PREFIX)/bin/mdboard
 
 # $(HELPERS) : utils/%
 # 	$(INSTALL) $< $@
@@ -122,6 +134,10 @@ $(PREFIX)/bin/nbfake : utils/nbfake
 	$(INSTALL) $< $@
 	chmod a+x $@
 
+$(PREFIX)/bin/viewscreen : utils/viewscreen
+	$(INSTALL) $< $@
+	chmod a+x $@
+
 $(PREFIX)/bin/nbfind : utils/nbfind
 	$(INSTALL) $< $@
 	chmod a+x $@
@@ -138,10 +154,13 @@ deploytarg/nbfake : utils/nbfake
 	$(INSTALL) $< $@
 	chmod a+x $@
 
-deploytarg/nbfind : utils/nbfind
+deploytarg/viewscreen : utils/viewscreen
 	$(INSTALL) $< $@
 	chmod a+x $@
 
+deploytarg/nbfind : utils/nbfind
+	$(INSTALL) $< $@
+	chmod a+x $@
 
 # install dashboard as dboard so wrapper script can be called dashboard
 $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
@@ -151,8 +170,8 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
-	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/mt_xterm \
-          $(PREFIX)/bin/newdashboard $(PREFIX)/bin/mdboard
+	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/viewscreen $(PREFIX)/bin/mt_xterm \
+	  $(PREFIX)/share/docs/megatest_manual.html 
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)
@@ -194,7 +213,7 @@ deploytarg/apropos.so : Makefile
 # deploytarg/libsqlite3.so : 
 # 	CSC_OPTIONS="-Ideploytarg -Ldeploytarg" $CHICKEN_INSTALL -prefix deploytarg -deploy sqlite3
 
-deploy : deploytarg/mtest deploytarg/dboard $(DEPLOYHELPERS) deploytarg/nbfake deploytarg/nbfind deploytarg/apropos.so
+deploy : deploytarg/mtest deploytarg/dboard $(DEPLOYHELPERS) deploytarg/nbfake deploytarg/viewsceen deploytarg/nbfind deploytarg/apropos.so
 
 # deploytarg/libiupcd.so : $(CKPATH)/lib/libiupcd.so
 # 	for i in iup im cd av call sqlite; do \
@@ -259,5 +278,5 @@ altdb.scm :
 	   echo "(use postgresql)(hash-table-set! *available-db* 'postgresql #t)" >> altdb.scm;\
 	fi
 
-portlogger-example : portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o nmsg-transport.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
-	csc $(CSCOPTS) portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o nmsg-transport.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
+portlogger-example : portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
+	csc $(CSCOPTS) portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o

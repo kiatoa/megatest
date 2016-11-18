@@ -70,10 +70,7 @@
 				 (fmt-csv (map list->csv-record csvr))))
 	       (status (configf:lookup dat "final" "exit-status"))
 	       (msg     (configf:lookup dat "final" "message")))
-          ;;(if csvt  ;; this if blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
-              (rmt:csv->test-data run-id test-id csvt)
-            ;;  (BB> "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
-            ;;  )
+          (rmt:csv->test-data run-id test-id csvt)
 	  (cond
 	   ((equal? status "PASS") "PASS") ;; skip the message part if status is pass
 	   (status (conc (configf:lookup dat "final" "exit-status") ": " (if msg msg "no message")))
@@ -555,7 +552,7 @@
 	      (list  "MT_MEGATEST"  megatest)
 	      (list  "MT_TARGET"    target)
 	      (list  "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))
-	      (list  "MT_TESTSUITENAME" (common:get-testsuite-name))))
+	      (list  "MT_TESTSUITE_NAME" (common:get-testsuite-name))))
 
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
 	  ;; (change-directory top-path)
@@ -702,8 +699,8 @@
 ;;     sets; *configdat*    (megatest.config info)
 ;;           *runconfigdat* (runconfigs.config info)
 ;;           *configstatus* (status of the read data)
-;;
-(define (launch:setup-new #!key (force #f))
+;;           *transport-type*
+(define (launch:setup #!key (force #f))
   (let* ((toppath  (or *toppath* (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
 	 (runname  (common:args-get-runname))
 	 (target   (common:args-get-target))
@@ -713,7 +710,12 @@
 	 (rundir   (if (and runname target linktree)(conc linktree "/" target "/" runname) #f))
 	 (mtcachef (and rundir (conc rundir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	 (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
-	 (cancreate (and rundir (file-exists? rundir)(file-write-access? rundir))))
+	 (cancreate (and rundir (file-exists? rundir)(file-write-access? rundir)))
+         (cxt       (hash-table-ref/default *contexts* toppath #f)))
+
+    ;; create our cxt for this area if it doesn't already exist
+    (if (not cxt)(hash-table-set! *contexts* toppath (make-cxt)))
+
     ;; (print "runname: " runname " target: " target " mtcachef: " mtcachef " rccachef: " rccachef)
     (set! *toppath* toppath) ;; This is needed when we are running as a test using CMDINFO as a datasource
     (cond
@@ -826,12 +828,13 @@
 	    )))
     (if (and *toppath*
 	     (directory-exists? *toppath*))
-	(setenv "MT_RUN_AREA_HOME" *toppath*)
+	(begin
+	  (setenv "MT_RUN_AREA_HOME" *toppath*)
+	  (setenv "MT_TESTSUITE_NAME" (common:get-testsuite-name)))
 	(begin
 	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")))
+    (server:set-transport)
     *toppath*))
-
-(define launch:setup launch:setup-new)
 
 (define (get-best-disk confdat testconfig)
   (let* ((disks   (or (and testconfig (hash-table-ref/default testconfig "disks" #f))
@@ -1037,6 +1040,14 @@
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
+  (let loop ((delta        (- (current-seconds) *last-launch*))
+	     (launch-delay (string->number (or (configf:lookup *configdat* "setup" "launch-delay") "5"))))
+    (if (> launch-delay delta)
+	(begin
+	  (debug:print-info 0 *default-log-port* "Delaying launch of " test-name " for " (- launch-delay delta) " seconds")
+	  (thread-sleep! (- launch-delay delta))
+	  (loop (- (current-seconds) *last-launch*) launch-delay))))
+  (set! *last-launch* (current-seconds))
   (change-directory *toppath*)
   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
    (list ;; (list "MT_TEST_RUN_DIR" work-area)
@@ -1124,7 +1135,7 @@
 		     (with-output-to-string
 		       (lambda () ;; (list 'hosts     hosts)
 			 (write (list (list 'testpath  test-path)
-				      (list 'transport (conc *transport-type*))
+				      (list 'transport (conc (rmt:run-id->transport-type run-id)))
 				      ;; (list 'serverinf *server-info*)
 				      (list 'toppath   *toppath*)
 				      (list 'work-area work-area)

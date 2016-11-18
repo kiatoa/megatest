@@ -66,7 +66,7 @@
     (debug:print-error 0 *default-log-port* " query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
     (print-call-chain (current-error-port))))
 
-;; convert to -inline
+;; convert to -inline 
 ;;
 (define (db:first-result-default db stmt default . params)
   (handle-exceptions
@@ -100,7 +100,6 @@
 	  dbdat))))
 
 ;; legacy handling of structure for managing db's. Refactor this into dbr:?
-;;
 (define (db:dbdat-get-db dbdat)
   (if (pair? dbdat)
       (car dbdat)
@@ -133,7 +132,7 @@
   (let* ((dbdat (if (dbr:dbstruct? dbstruct)
 		    (db:get-db dbstruct run-id)
 		    dbstruct)) ;; cheat, allow for passing in a dbdat
-	 (db    (db:dbdat-get-db dbdat)))
+	 (db    (db:dbdat-get-db dbdat))) 
     (handle-exceptions
      exn
      (begin
@@ -184,7 +183,7 @@
        (exit 1))
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     (if fname
-	(conc dbdir "/" fname)
+	(conc dbdir "/" fname) 
 	dbdir)))
 
 ;; Returns the database location as specified in config file
@@ -218,7 +217,12 @@
 	      (db      (sqlite3:open-database fname)))
 	  (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
 	  (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
-	  (if (not file-exists)(initproc db))
+	  (if (not file-exists)
+	      (begin
+		(if (string-match "^/tmp/.*" fname) ;; this is a file in /tmp
+		    (sqlite3:execute db "PRAGMA journal_mode=WAL;")
+		    (print "Creating " fname " in NON-WAL mode."))
+		(initproc db)))
 	  ;; (release-dot-lock fname)
 	  db)
 	(begin
@@ -318,11 +322,21 @@
 
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;
+;; called in http-transport and replicated in rmt.scm for *local* access. 
+;;
 (define (db:setup run-id #!key (local #f))
   (let* ((dbdir    (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 	 (dbstruct (make-dbr:dbstruct path: dbdir local: local)))
     dbstruct))
 
+;; open the local db for direct access (no server)
+;;
+(define (db:open-local-db-handle)
+  (or *dbstruct-db*
+      (let ((dbstruct (db:setup #f local: #t)))
+	(set! *dbstruct-db* dbstruct)
+	dbstruct)))
+	  
 ;; Open the classic megatest.db file in toppath
 ;;
 (define (db:open-megatest-db)
@@ -721,6 +735,70 @@
        tot-count)))
    (mutex-unlock! *db-sync-mutex*)))
 
+
+(define (db:patch-schema-rundb run-id frundb)
+  ;;
+  ;; remove this some time after September 2016 (added in version v1.6031
+  ;;
+  (for-each
+   (lambda (table-name)
+     (handle-exceptions
+      exn
+      (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
+          (debug:print 0 *default-log-port* "Column last_update already added to " table-name " table")
+          (db:general-sqlite-error-dump exn "alter table " table-name " ..." #f "none"))
+      (sqlite3:execute
+       frundb
+       (conc "ALTER TABLE " table-name " ADD COLUMN last_update INTEGER DEFAULT 0")))
+     (sqlite3:execute
+      frundb
+      (conc "DROP TRIGGER IF EXISTS update_" table-name "_trigger;"))
+     (sqlite3:execute
+      frundb
+      (conc "CREATE TRIGGER IF NOT EXISTS update_" table-name "_trigger AFTER UPDATE ON " table-name "
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE " table-name " SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;"))
+     )
+   '("tests" "test_steps" "test_data")))
+
+(define (db:patch-schema-maindb run-id maindb)
+  ;;
+  ;; remove all these some time after september 2016 (added in v1.6031
+  ;;
+  (handle-exceptions
+   exn
+   (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
+       (debug:print 0 *default-log-port* "Column last_update already added to runs table")
+       (db:general-sqlite-error-dump exn "alter table runs ..." run-id "none"))
+   (sqlite3:execute
+    maindb
+    "ALTER TABLE runs ADD COLUMN last_update INTEGER DEFAULT 0"))
+  ;; these schema changes don't need exception handling
+  (sqlite3:execute
+   maindb
+   "CREATE TRIGGER IF NOT EXISTS update_runs_trigger AFTER UPDATE ON runs
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE runs SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;")
+  (sqlite3:execute maindb "CREATE TABLE IF NOT EXISTS run_stats (
+                              id     INTEGER PRIMARY KEY,
+                              run_id INTEGER,
+                              state  TEXT,
+                              status TEXT,
+                              count  INTEGER,
+                              last_update INTEGER DEFAULT (strftime('%s','now')))")
+  (sqlite3:execute maindb "CREATE TRIGGER  IF NOT EXISTS update_run_stats_trigger AFTER UPDATE ON run_stats
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE run_stats SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;"))
+
 ;; options:
 ;;
 ;;  'killservers  - kills all servers
@@ -792,89 +870,53 @@
 	       (count       1)
 	       (total       (length all-run-ids))
 	       (dead-runs  '()))
-	  (for-each
-	   (lambda (run-id)
-	     (debug:print 0 *default-log-port* "Processing run " (if (eq? run-id 0) " main.db " run-id) ", " count " of " total)
-	     (set! count (+ count 1))
-	     (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
-		    (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
-	       ;; (db:delay-if-busy frundb)
-	       ;; (db:delay-if-busy mtdb)
-	       ;; (db:clean-up frundb)
-	       (if (eq? run-id 0)
-		   (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
-		     (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
-		     (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f)))
-		     ;; 
-		     ;; Feb 18, 2016: add field last_update to runs table
-		     ;;
-		     ;; remove all these some time after september 2016 (added in v1.6031
-		     ;;
-		     (handle-exceptions
-		      exn
-		      (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
-			  (debug:print 0 *default-log-port* "Column last_update already added to runs table")
-			  (db:general-sqlite-error-dump exn "alter table runs ..." run-id "none"))
-		      (sqlite3:execute
-		       maindb
-		       "ALTER TABLE runs ADD COLUMN last_update INTEGER DEFAULT 0"))
-		     ;; these schema changes don't need exception handling
-		     (sqlite3:execute
-		      maindb
-		      "CREATE TRIGGER IF NOT EXISTS update_runs_trigger AFTER UPDATE ON runs
-                             FOR EACH ROW
-                               BEGIN 
-                                 UPDATE runs SET last_update=(strftime('%s','now'))
-                                   WHERE id=old.id;
-                               END;")
-		     (sqlite3:execute maindb "CREATE TABLE IF NOT EXISTS run_stats (
-                              id     INTEGER PRIMARY KEY,
-                              run_id INTEGER,
-                              state  TEXT,
-                              status TEXT,
-                              count  INTEGER,
-                              last_update INTEGER DEFAULT (strftime('%s','now')))")
-		     (sqlite3:execute maindb "CREATE TRIGGER  IF NOT EXISTS update_run_stats_trigger AFTER UPDATE ON run_stats
-                             FOR EACH ROW
-                               BEGIN 
-                                 UPDATE run_stats SET last_update=(strftime('%s','now'))
-                                   WHERE id=old.id;
-                               END;")
-		     )
-		   (begin
-		     ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
-		     (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
-		     (db:clean-up-rundb (db:get-db fromdb run-id))
-		     ;;
-		     ;; Feb 18, 2016: add field last_update to tests, test_steps and test_data
-		     ;;
-		     ;; remove this some time after September 2016 (added in version v1.6031
-		     ;;
-		     (for-each
-		      (lambda (table-name)
-			(handle-exceptions
-			 exn
-			 (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
-			     (debug:print 0 *default-log-port* "Column last_update already added to " table-name " table")
-			     (db:general-sqlite-error-dump exn "alter table " table-name " ..." #f "none"))
-			 (sqlite3:execute
-			  frundb
-			  (conc "ALTER TABLE " table-name " ADD COLUMN last_update INTEGER DEFAULT 0")))
-			(sqlite3:execute
-			 frundb
-			 (conc "DROP TRIGGER IF EXISTS update_" table-name "_trigger;"))
-			(sqlite3:execute
-			 frundb
-			 (conc "CREATE TRIGGER IF NOT EXISTS update_" table-name "_trigger AFTER UPDATE ON " table-name "
-                             FOR EACH ROW
-                               BEGIN 
-                                 UPDATE " table-name " SET last_update=(strftime('%s','now'))
-                                   WHERE id=old.id;
-                               END;"))
-			)
-		      '("tests" "test_steps" "test_data"))))))
-	   all-run-ids)
-	  ;; removed deleted runs
+          ;; first fix schema if needed
+          (map
+           (lambda (th)
+             (thread-join! th))
+           (map
+            (lambda (run-id)
+              (thread-start! 
+               (make-thread
+                (lambda ()
+                  (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
+                         (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
+                    (if (eq? run-id 0)
+                        (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
+                          (db:patch-schema-maindb run-id maindb))
+                        (db:patch-schema-rundb run-id frundb)))
+                  (set! count (+ count 1))
+                  (debug:print 0 *default-log-port* "Finished patching schema for " (if (eq? run-id 0) " main.db " (conc run-id ".db")) ", " count " of " total)))))
+            all-run-ids))
+          ;; Then sync and fix db's
+          (set! count 0)
+          (process-fork
+           (lambda ()
+             (map
+              (lambda (th)
+                (thread-join! th))
+              (map
+               (lambda (run-id)
+                 (thread-start! 
+                  (make-thread
+                   (lambda ()
+                     (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
+                            (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
+                       (if (eq? run-id 0)
+                           (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
+                             (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
+                             (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f))))
+                           (begin
+                             ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
+                             (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
+                             (db:clean-up-rundb (db:get-db fromdb run-id)))))
+                     (set! count (+ count 1))
+                     (debug:print 0 *default-log-port* "Finished clean up of "
+                                  (if (eq? run-id 0)
+                                      " main.db " (conc run-id ".db")) ", " count " of " total)))))
+               all-run-ids))))
+
+          ;; removed deleted runs
 	  (let ((dbdir (tasks:get-task-db-path)))
 	    (for-each (lambda (run-id)
 			(let ((fullname (conc dbdir "/" run-id ".db")))
@@ -1364,6 +1406,11 @@
 	     (null? toplevels))
 	#f
 	#t)))
+
+;; given a launch delay (minimum time from last launch) return amount of time to wait
+;;
+;; (define (db:launch-delay-left dbstruct run-id launch-delay)
+  
 
 ;;  select end_time-now from
 ;;      (select testname,item_path,event_time+run_duration as
@@ -1996,7 +2043,6 @@
   (let* ((tmp      (runs:get-std-run-fields keys (or fields '("id" "runname" "state" "status" "owner" "event_time"))))
 	 (keystr   (car tmp))
 	 (header   (cadr tmp))
-	 (res     '())
 	 (key-patt "")
 	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
 	 (qry-str  #f)
@@ -2021,15 +2067,17 @@
 			(if offset (conc " OFFSET " offset) "")
 			";"))
     (debug:print-info 4 *default-log-port* "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
-    (db:with-db dbstruct #f #f ;; reads db, does not write to it.
-		(lambda (db)
-		  (sqlite3:for-each-row
-		   (lambda (a . r)
-		     (set! res (cons (list->vector (cons a r)) res)))
-		   db
-		   qry-str
-		   runnamepatt)))
-    (vector header res)))
+    (vector header 
+            (reverse
+             (db:with-db dbstruct #f #f ;; reads db, does not write to it.
+                         (lambda (db)
+                           (sqlite3:fold-row
+                            (lambda (res . r)
+                              (cons (list->vector r) res))
+                            '()
+                            db
+                            qry-str
+                            runnamepatt)))))))
 
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-rows runinfo))
 (define (db:get-run-info dbstruct run-id)
@@ -3027,10 +3075,10 @@
       (base64:base64-encode 
        (z3:encode-buffer
 	(with-output-to-string
-	  (lambda ()(serialize obj)))))
+	  (lambda ()(serialize obj))))) ;; BB: serialize - this is what causes problems between different builds of megatest communicating.  serialize is sensitive to binary image of mtest.
       #t))
     ((zmq nmsg)(with-output-to-string (lambda ()(serialize obj))))
-    (else obj)))
+    (else obj))) ;; rpc
 
 (define (db:string->obj msg #!key (transport 'http))
   (case transport
@@ -3047,7 +3095,7 @@
 	   (debug:print-error 0 *default-log-port* "reception failed. Received " msg " but cannot translate it.")
 	   msg))) ;; crude reply for when things go awry
     ((zmq nmsg)(with-input-from-string msg (lambda ()(deserialize))))
-    (else msg)))
+    (else msg))) ;; rpc
 
 (define (db:test-set-status-state dbstruct run-id test-id status state msg)
   (let ((dbdat  (db:get-db dbstruct run-id)))
@@ -3383,7 +3431,7 @@
 ;; return the sqlite3 db handle if possible
 ;; 
 (define (db:delay-if-busy dbdat #!key (count 6))
-  (if (not (configf:lookup *configdat* "server" "delay-on-busy")) ;;RADT => two conditions in a if block?? also understand what config looked up
+  (if (not (configf:lookup *configdat* "server" "delay-on-busy")) 
       (and dbdat (db:dbdat-get-db dbdat))
       (if dbdat
 	  (let* ((dbpath (db:dbdat-get-path dbdat))
@@ -3394,7 +3442,7 @@
 		 (begin
 		   (debug:print-info 0 *default-log-port* "WARNING: failed to test for existance of " dbfj)
 		   (thread-sleep! 1)
-		   (db:delay-if-busy count (- count 1)))
+		   (db:delay-if-busy count (- count 1))) 
 		 (file-exists? dbfj))
 		(case count
 		  ((6)
@@ -3418,7 +3466,7 @@
 		  (else
 		   (debug:print-info 0 *default-log-port* "delaying db access due to high database load.")
 		   (thread-sleep! 12.8))))
-	    db) ;; RADT => why does it need to return db, not #t
+	    db) 
 	  "bogus result from db:delay-if-busy")))
 
 (define (db:test-get-records-for-index-file dbstruct run-id test-name)

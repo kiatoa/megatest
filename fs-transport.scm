@@ -15,7 +15,7 @@
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
 
-(tcp-buffer-size 2048)
+;;(tcp-buffer-size 2048)
 
 (declare (unit fs-transport))
 
