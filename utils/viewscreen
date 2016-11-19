@@ -1,0 +1,19 @@
+#!/bin/bash
+
+if ! type screen &> /dev/null;then
+  xterm -geometry 180x20 -e "$*;echo Press any key to continue;bash -c 'read -n 1 -s'" &
+  exit
+fi
+
+if [[ $(screen -list | egrep 'Attached|Detached'|awk '{print $1}') == "" ]];then
+    # echo "No screen found for displaying to. Run \"screen\" in an xterm"
+    # exit 1
+    xterm -e screen -e^ff &
+    sleep 1
+    screen -X hardstatus off
+    screen -X hardstatus alwayslastline
+    screen -X hardstatus string '%{= kG}[ %{G}%H %{g}][%= %{= kw}%?%-Lw%?%{r}(%{W}%n*%f%t%?(%u)%?%{r})%{w}%?%+Lw%?%?%= %{g}][%{B} %m-%d %{W} %c %{g}]'
+fi
+
+cmd="cd $PWD;$*"
+screen -X screen bash -c "$cmd;echo \"Press any key to continue, ctrl-f <space> to see other windows\";bash -c 'read -n 1 -s'" &

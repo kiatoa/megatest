@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 nanomsg sql-de-lite hostinfo)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo typed-records)
 (require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -44,6 +44,28 @@
 (define user (getenv "USER"))
 
 ;; GLOBAL GLETCHES
+
+(define *contexts* (make-hash-table))
+
+;; Common data structure for 
+(defstruct cxt
+  (taskdb #f)
+  (cmutex (make-mutex)))
+
+;; safe method for accessing a context given a toppath
+;;
+(define (common:with-cxt toppath proc)
+  (mutex-lock! *context-mutex*)
+  (let ((cxt (hash-table-ref/default *contexts* toppath #f)))
+    (if (not cxt)
+        (set! cxt (let ((x (make-cxt)))(hash-table-set! *contexts* toppath x) x)))
+    (let ((cxt-mutex (cxt-mutex cxt)))
+      (mutex-unlock! *context-mutex*)
+      (mutex-lock! cxt-mutex)
+      (let ((res (proc cxt)))
+        (mutex-unlock! cxt-mutex)
+        res))))
+        
 (define *db-keys* #f)
 
 (define *configinfo*   #f)   ;; raw results from setup, includes toppath and table from megatest.config
@@ -116,6 +138,10 @@
 ;; five seconds ago
 (define *pre-reqs-met-cache* (make-hash-table))
 
+;; cache of verbosity given string
+;;
+(define *verbosity-cache* (make-hash-table))
+
 (define (common:clear-caches)
   (set! *target*             (make-hash-table))
   (set! *keys*               (make-hash-table))
@@ -132,6 +158,8 @@
 (define sdb:qry #f) ;; (make-sdb:qry)) ;;  'init #f)
 ;; Generic path database
 (define *fdb* #f)
+
+(define *last-launch* (current-seconds)) ;; use for throttling the launch rate. Would be better to use the db and last time of a test in LAUNCHED state.
 
 ;;======================================================================
 ;; V E R S I O N
@@ -362,7 +390,15 @@
 
 (define (common:get-testsuite-name)
   (or (configf:lookup *configdat* "setup" "testsuite" )
-      (pathname-file *toppath*)))
+      (if *toppath* 
+          (pathname-file *toppath*)
+          (pathname-file (current-directory)))))
+
+(define (common:get-db-tmp-area)
+  (create-directory (conc "/tmp/" (current-user-name)
+                          "/megatest/"
+                          (common:get-testsuite-name) "/"
+                          (string-translate *toppath* "/" "_")) #t))
 
 ;;======================================================================
 ;; E X I T   H A N D L I N G
@@ -370,6 +406,7 @@
 
 (define (common:legacy-sync-recommended)
   (or (args:get-arg "-runtests")
+      (args:get-arg "-run")
       (args:get-arg "-server")
       ;; (args:get-arg "-set-run-status")
       (args:get-arg "-remove-runs")
@@ -494,6 +531,32 @@
    (or configf (read-config "megatest.config" #f #t))
    "disks" '("none" "")))
 
+;; return first command that exists, else #f
+;;
+(define (common:which cmds)
+  (if (null? cmds)
+      #f
+      (let loop ((hed (car cmds))
+		 (tal (cdr cmds)))
+	(let ((res (with-input-from-pipe (conc "which " hed) read-line)))
+	  (if (and (string? res)
+		   (file-exists? res))
+	      res
+	      (if (null? tal)
+		  #f
+		  (loop (car tal)(cdr tal))))))))
+  
+(define (common:get-install-area)
+  (let ((exe-path (car (argv))))
+    (if (file-exists? exe-path)
+	(handle-exceptions
+	 exn
+	 #f
+	 (pathname-directory
+	  (pathname-directory 
+	   (pathname-directory exe-path))))
+	#f)))
+
 ;;======================================================================
 ;; T A R G E T S  ,   S T A T E ,   S T A T U S ,   
 ;;                    R U N N A M E    A N D   T E S T P A T T
@@ -596,6 +659,72 @@
 	      (cdr tal))
 	(max hed max-val))))
 
+;; get min or max, use > for max and < for min, this works around the limits on apply
+;;
+(define (common:min-max comp lst)
+  (if (null? lst)
+      #f ;; better than an exception for my needs
+      (fold (lambda (a b)
+	      (if (comp a b) a b))
+	    (car lst)
+	    lst)))
+
+;; path list to hash-table tree
+;;   ((a b c)(a b d)(e b c)) => ((a (b (d) (c))) (e (b (c))))
+;;
+(define (common:list->htree lst)
+  (let ((resh (make-hash-table)))
+    (for-each
+     (lambda (inlst)
+       (let loop ((ht  resh)
+		  (hed (car inlst))
+		  (tal (cdr inlst)))
+	 (if (hash-table-ref/default ht hed #f)
+	     (if (not (null? tal))
+		 (loop (hash-table-ref ht hed)
+		       (car tal)
+		       (cdr tal)))
+	     (begin
+	       (hash-table-set! ht hed (make-hash-table))
+	       (loop ht hed tal)))))
+     lst)
+    resh))
+
+;; hash-table tree to html list tree
+;;
+;;   tipfunc takes two parameters: y the tip value and path the path to that point
+;;
+(define (common:htree->html ht path tipfunc)
+  (let ((datlist 	(sort (hash-table->alist ht)
+                              (lambda (a b)
+                                (string< (car a)(car b))))))
+    (if (null? datlist)
+    	(tipfunc #f path) ;; really shouldn't get here
+	(s:ul
+	 (map (lambda (x)
+		(let* ((levelname (car x))
+		       (y         (cdr x))
+		       (newpath   (append path (list levelname)))
+		       (leaf      (or (not (hash-table? y))
+				      (null? (hash-table-keys y)))))
+		  (if leaf
+		      (s:li (tipfunc y newpath))
+		      (s:li
+		       (list 
+			levelname
+			(common:htree->html y newpath tipfunc))))))
+	      datlist)))))
+
+;; hash-table tree to alist tree
+;;
+(define (common:htree->atree ht)
+  (map (lambda (x)
+	 (cons (car x)
+	       (let ((y (cdr x)))
+		 (if (hash-table? y)
+		     (common:htree->atree y)
+		     y))))
+       (hash-table->alist ht)))
 
 ;;======================================================================
 ;; M U N G E   D A T A   I N T O   N I C E   F O R M S
@@ -675,8 +804,8 @@
       (lambda ()
 	(read-line)))))
 
-(define (get-cpu-load)
-  (car (common:get-cpu-load)))
+(define (get-cpu-load #!key (remote-host #f))
+  (car (common:get-cpu-load remote-host)))
 ;;   (let* ((load-res (process:cmd-run->list "uptime"))
 ;; 	 (load-rx  (regexp "load average:\\s+(\\d+)"))
 ;; 	 (cpu-load #f))
@@ -691,12 +820,18 @@
 
 ;; get cpu load by reading from /proc/loadavg, return all three values
 ;;
-(define (common:get-cpu-load)
-  (with-input-from-file "/proc/loadavg" 
-    (lambda ()(list (read)(read)(read)))))
+(define (common:get-cpu-load remote-host)
+  (if remote-host
+      (map (lambda (res)
+	     (if (eof-object? res) 9e99 res))
+	   (with-input-from-pipe 
+	    (conc "ssh " remote-host " cat /proc/loadavg")
+	    (lambda ()(list (read)(read)(read)))))
+      (with-input-from-file "/proc/loadavg" 
+	(lambda ()(list (read)(read)(read))))))
 
-(define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f))
-  (let* ((loadavg (common:get-cpu-load))
+(define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
+  (let* ((loadavg (common:get-cpu-load remote-host))
 	 (first   (car loadavg))
 	 (next    (cadr loadavg))
 	 (adjload (* maxload numcpus))
@@ -713,22 +848,26 @@
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
 
-(define (common:get-num-cpus)
-  (with-input-from-file "/proc/cpuinfo"
-    (lambda ()
-      (let loop ((numcpu 0)
-		 (inl    (read-line)))
-	(if (eof-object? inl)
-	    numcpu
-	    (loop (if (string-match "^processor\\s+:\\s+\\d+$" inl)
-		      (+ numcpu 1)
-		      numcpu)
-		  (read-line)))))))
+(define (common:get-num-cpus remote-host)
+  (let ((proc (lambda ()
+		(let loop ((numcpu 0)
+			   (inl    (read-line)))
+		  (if (eof-object? inl)
+		      numcpu
+		      (loop (if (string-match "^processor\\s+:\\s+\\d+$" inl)
+				(+ numcpu 1)
+				numcpu)
+			    (read-line)))))))
+    (if remote-host
+	(with-input-from-pipe 
+	 (conc "ssh " remote-host " cat /proc/cpuinfo")
+	 proc)
+	(with-input-from-file "/proc/cpuinfo" proc))))
 
 ;; wait for normalized cpu load to drop below maxload
 ;;
-(define (common:wait-for-normalized-load maxload #!key (msg #f))
-  (let ((num-cpus (common:get-num-cpus)))
+(define (common:wait-for-normalized-load maxload #!key (msg #f)(remote-host #f))
+  (let ((num-cpus (common:get-num-cpus remote-host)))
     (common:wait-for-cpuload maxload num-cpus 15 msg: msg)))
 
 (define (get-uname . params)
@@ -935,12 +1074,16 @@
        (setenv var val)))
     vars))
 
-(define (common:run-a-command cmd)
-  (let ((fullcmd  (conc (dtests:get-pre-command)
-			cmd 
-			(dtests:get-post-command))))
+(define (common:run-a-command cmd #!key (with-vars #f))
+  (let* ((pre-cmd  (dtests:get-pre-command))
+         (post-cmd (dtests:get-post-command))
+         (fullcmd  (if (or pre-cmd post-cmd)
+                       (conc pre-cmd cmd post-cmd)
+                       (conc "viewscreen " cmd))))
     (debug:print-info 02 *default-log-port* "Running command: " fullcmd)
-    (common:without-vars fullcmd "MT_.*")))
+    (if with-vars
+        (common:without-vars cmd)
+        (common:without-vars fullcmd "MT_.*"))))
 		  
 ;;======================================================================
 ;; T I M E   A N D   D A T E
@@ -1075,6 +1218,14 @@
 ;;     ((NOT_STARTED)      "240 240 240")
 ;;     (else               "192 192 192")))
 
+(define (common:iup-color->rgb-hex instr)
+  (string-intersperse 
+   (map (lambda (x)
+          (number->string x 16))
+        (map string->number
+             (string-split instr)))
+   "/"))
+
 (define (common:get-color-from-status status)
   (cond
    ((equal? status "PASS")    "green")
@@ -1103,18 +1254,6 @@
 	  (u8vector->list
 	   (if res res (hostname->ip hostname)))) ".")))
 
-(define (common:open-nm-req addr)
-  (let* ((req (nn-socket 'req))
-	 (res (nn-connect req addr)))
-    req))
-
-;; (with-output-to-string (lambda ()(serialize obj)))
-(define (common:nm-send-receive soc msg)
-  (nn-send soc msg)
-  (nn-recv soc))
-
-(define (common:close-nm-req soc)
-  (nn-close soc))
 
 (define (common:send-dboard-main-changed)
   (let* ((dashboard-ips (mddb:get-dashboards)))
@@ -1128,87 +1267,7 @@
 	 res))
      dashboard-ips)))
     
-(define (common:nm-send-receive-timeout req msg)
-  (let* ((key     "ping")
-	 (success #f)
-	 (keepwaiting #t)
-	 (result  #f)
-	 (sendrec (make-thread
-		   (lambda ()
-		     (nn-send req msg)
-		     (set! result (nn-recv req))
-		     (set! success #t))
-		   "send-receive"))
-	 (timeout (make-thread (lambda ()
-				 (let loop ((count 0))
-				   (thread-sleep! 1)
-				   (print "still waiting after count seconds...")
-				   (if (and keepwaiting (< count 10))
-				       (loop (+ count 1))))
-				 (if keepwaiting
-				     (begin
-				       (print "timeout waiting for reply")
-				       (thread-terminate! sendrec))))
-			       "timeout")))
-    (handle-exceptions
-     exn
-     (begin
-       (print-call-chain)
-       (print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-       (print "exn=" (condition->list exn)))
-     (thread-start! timeout)
-     (thread-start! sendrec)
-     (thread-join!  sendrec)
-     (if success (thread-terminate! timeout)))
-    result))
     
-(define (common:ping-nm req)
-  ;; send a random number and check that we get it back
-  (let* ((key     "ping")
-	 (success #f)
-	 (keepwaiting #t)
-	 (ping    (make-thread
-		   (lambda ()
-		     (print "ping: sending string \"" key "\", expecting " (current-process-id))
-		     (nn-send req key)
-		     (let ((result  (nn-recv req)))
-		       (if (equal? (conc (current-process-id)) result)
-			   (begin
-			     (print "ping, success: received \"" result "\"")
-			     (set! success #t))
-			   (begin
-			     (print "ping, failed: received key \"" result "\"")
-			     (set! keepwaiting #f)
-			     (set! success #f)))))
-		   "ping"))
-	 (timeout (make-thread (lambda ()
-				 (let loop ((count 0))
-				   (thread-sleep! 1)
-				   (print "still waiting after count seconds...")
-				   (if (and keepwaiting (< count 10))
-				       (loop (+ count 1))))
-				 (if keepwaiting
-				     (begin
-				       (print "timeout waiting for ping")
-				       (thread-terminate! ping))))
-			       "timeout")))
-    (handle-exceptions
-     exn
-     (begin
-       (print-call-chain)
-       (print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-       (print "exn=" (condition->list exn))
-       (print "ping failed to connect to tcp://" hostport))
-     (thread-start! timeout)
-     (thread-start! ping)
-     (thread-join! ping)
-     (if success (thread-terminate! timeout)))
-    (if return-socket
-	(if success req #f)
-	(begin
-	  (nn-close req)
-	  success))))
-
 ;;======================================================================
 ;; D A S H B O A R D   D B 
 ;;======================================================================

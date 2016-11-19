@@ -43,11 +43,11 @@
 
 (define (dtests:get-pre-command #!key (default-override #f))
   (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "pre-command")))
-    (or cfg-ovrd default-override "xterm -geometry 180x20 -e \"")))
+    (or cfg-ovrd default-override "viewscreen "))) ;; "xterm -geometry 180x20 -e \"")))
 
 (define (dtests:get-post-command #!key (default-override #f))
   (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "post-command")))
-    (or cfg-ovrd default-override ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+    (or cfg-ovrd default-override ""))) ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
 
 
 (define (test-info-panel testdat store-label widgets)
@@ -630,11 +630,9 @@
 											   item-path))
 						      " -clean-cache"
 						      )))
-				       (common:without-vars
-					(conc (dtests:get-pre-command)
-					      cmd 
-					      (dtests:get-post-command))
-					"MT_.*"))))
+                                       (thread-start! (make-thread (lambda ()
+                                                                     (common:run-a-command cmd))
+                                                                   "clean-run-execute")))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"

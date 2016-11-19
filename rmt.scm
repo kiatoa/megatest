@@ -15,8 +15,7 @@
 (declare (uses api))
 (declare (uses tdb))
 (declare (uses http-transport))
-(declare (uses nmsg-transport))
-
+;;(declare (uses nmsg-transport))
 ;;
 ;; THESE ARE ALL CALLED ON THE CLIENT SIDE!!!
 ;;
@@ -87,10 +86,11 @@
         	  (< (http-transport:server-dat-get-last-access connection) expire-time))
              (begin
                (debug:print-info 0 *default-log-port* "Discarding connection to server for run-id " run-id ", too long between accesses")
-               ;; SHOULD CLOSE THE CONNECTION HERE
-	       (case *transport-type*
-		 ((nmsg)(nn-close (http-transport:server-dat-get-socket 
-				   (hash-table-ref *runremote* run-id)))))
+               ;; bb- disabling nanomsg
+               ;; SHOULD CLOSE THE CONNECTION HERE 
+	       ;; (case *transport-type*
+	       ;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket 
+	       ;;  		   (hash-table-ref *runremote* run-id)))))
                (hash-table-delete! *runremote* run-id)))))
      (hash-table-keys *runremote*)))
   ;; (mutex-unlock! *db-multi-sync-mutex*)
@@ -105,9 +105,9 @@
 				  (http-transport:client-api-send-receive run-id connection-info cmd params)
 				  ((commfail)(vector #f "communications fail"))
 				  ((exn)(vector #f "other fail"))))
-			  ((nmsg)(condition-case
-				  (nmsg-transport:client-api-send-receive run-id connection-info cmd params)
-				  ((timeout)(vector #f "timeout talking to server"))))
+			  ;; ((nmsg)(condition-case
+			  ;;         (nmsg-transport:client-api-send-receive run-id connection-info cmd params)
+			  ;;         ((timeout)(vector #f "timeout talking to server"))))
 			  (else  (exit))))
 	       (success (if (vector? dat) (vector-ref dat 0) #f))
 	       (res     (if (vector? dat) (vector-ref dat 1) #f)))
@@ -117,7 +117,8 @@
 		;; (mutex-unlock! *send-receive-mutex*)
 		(case *transport-type* 
 		  ((http) res) ;; (db:string->obj res))
-		  ((nmsg) res))) ;; (vector-ref res 1)))
+		  ;; ((nmsg) res)
+                  )) ;; (vector-ref res 1)))
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 *default-log-port* "WARNING: Communication failed, trying call to rmt:send-receive again.")
 		;; (case *transport-type*
@@ -226,14 +227,9 @@
 			     (loop (car tal)(cdr tal) newmax-cmd currmax)))))))
     (mutex-unlock! *db-stats-mutex*)
     res))
-	  
+
 (define (rmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
-  (let* ((dbstruct-local (if *dbstruct-db*
-			     *dbstruct-db*
-			     (let* ((dbdir (db:dbfile-path #f)) ;;  (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
-				    (db (make-dbr:dbstruct path:  dbdir local: #t)))
-			       (set! *dbstruct-db* db)
-			       db)))
+  (let* ((dbstruct-local (db:open-local-db-handle))
 	 (db-file-path   (db:dbfile-path 0))
 	 ;; (read-only      (not (file-read-access? db-file-path)))
 	 (start          (current-milliseconds))
@@ -318,7 +314,8 @@
 (define (rmt:login-no-auto-client-setup connection-info run-id)
   (case *transport-type*
     ((http)(rmt:send-receive-no-auto-client-setup connection-info 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
-    ((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info 'login (list *toppath* megatest-version run-id *my-client-signature*)))))
+    ;;((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info 'login (list *toppath* megatest-version run-id *my-client-signature*)))
+    ))
 
 ;; hand off a call to one of the db:queries statements
 ;; added run-id to make looking up the correct db possible 
@@ -347,10 +344,19 @@
   (rmt:send-receive 'get-key-val-pairs run-id (list run-id)))
 
 (define (rmt:get-keys)
-  (rmt:send-receive 'get-keys #f '()))
+  (if *db-keys* *db-keys* 
+     (let ((res (rmt:send-receive 'get-keys #f '())))
+       (set! *db-keys* res)
+       res)))
 
+;; we don't reuse run-id's (except possibly *after* a db cleanup) so it is safe
+;; to cache the resuls in a hash
+;;
 (define (rmt:get-key-vals run-id)
-  (rmt:send-receive 'get-key-vals #f (list run-id)))
+  (or (hash-table-ref/default *keyvals* run-id #f)
+      (let ((res (rmt:send-receive 'get-key-vals #f (list run-id))))
+        (hash-table-set! *keyvals* run-id res)
+        res)))
 
 (define (rmt:get-targets)
   (rmt:send-receive 'get-targets #f '()))
