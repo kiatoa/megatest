@@ -172,7 +172,7 @@
 ;; If run-id is #f return to create and retrieve the path where the db will live.
 ;;
 (define (db:dbfile-path run-id)
-  (let* ((dbdir           (db:get-dbdir))
+  (let* ((dbdir           (common:get-db-tmp-area)) ;; (db:get-dbdir))
 	 (fname           (if run-id
 			      (if (eq? run-id 0) "main.db" (conc run-id ".db"))
 			      #f)))
@@ -232,7 +232,7 @@
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
 (define (db:open-rundb dbstruct run-id #!key (attemptnum 0)(do-not-open #f)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-  (let* ((local  (dbr:dbstruct-local dbstruct))
+  (let* ((local  #t) ;; (dbr:dbstruct-local dbstruct))
 	 (rdb    (if local
 		     (dbr:dbstruct-localdb dbstruct run-id)
 		     (dbr:dbstruct-inmem dbstruct)))) ;; (dbr:dbstruct-runrec dbstruct run-id 'inmem)))
@@ -241,10 +241,12 @@
 	rdb
 	(begin
 	  (mutex-lock! *rundb-mutex*)
-	  (let* ((dbpath       (db:dbfile-path run-id)) ;; (conc toppath "/db/" run-id ".db"))
+	  (let* (;; (fname        (if (or (not run-id)(eq? run-id 0)) "main.db" (conc run-id ".db")))
+                 (dbpath       (db:dbfile-path run-id)) ;; (conc toppath "/db/" run-id ".db"))
 		 (dbexists     (file-exists? dbpath))
-		 (inmem        (if local #f (db:open-inmem-db)))
-		 (refdb        (if local #f (db:open-inmem-db)))
+                 (tmppath      (common:get-db-tmp-area))
+		 (inmem        #f) ;; (if local #f (db:lock-create-open (conc tmppath "/" fname) db:initialize-run-id-db))) ;; (db:open-inmem-db)))
+		 (refdb        #f) ;; (if local #f (db:open-inmem-db)))
 		 (db           (db:lock-create-open dbpath ;; this is the database physically on disk
 						    (lambda (db)
 						      (handle-exceptions
