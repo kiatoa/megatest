@@ -147,16 +147,16 @@ fi
 cd $BUILDHOME
 #wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
 #mv 1.0.0 1.0.0.tar.gz
-if ! [[ -e $PREFIX/lib64/libnanomsg.so.1.0.0 ]]; then
-        wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
-        mv 1.0.0 1.0.0.tar.gz
-	tar xf 1.0.0.tar.gz 
-	cd nanomsg-1.0.0
-	./configure --prefix=$PREFIX
-	make
-	make install
-fi
-cd $BUILDHOME
+# if ! [[ -e $PREFIX/lib64/libnanomsg.so.1.0.0 ]]; then
+#         wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
+#         mv 1.0.0 1.0.0.tar.gz
+# 	tar xf 1.0.0.tar.gz 
+# 	cd nanomsg-1.0.0
+# 	./configure --prefix=$PREFIX
+# 	make
+# 	make install
+# fi
+# cd $BUILDHOME
 
 export SQLITE3_VERSION=3090200
 if ! [[ -e $PREFIX/bin/sqlite3 ]]; then
@@ -208,7 +208,7 @@ if [[ -e `which mysql_config` ]]; then
   $CHICKEN_INSTALL $PROX -keep-installed mysql-client
 fi
 
-for egg in "sqlite3" sql-de-lite nanomsg
+for egg in "sqlite3" sql-de-lite # nanomsg
 do
 	echo "Installing $egg"
 	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib -L$PREFIX/lib64"  $CHICKEN_INSTALL $PROX -keep-installed $egg

@@ -213,19 +213,19 @@ $(CHICKEN_EGG_DIR)/sqlite3.so : $(PREFIX)/bin/sqlite3
 # https://github.com/nanomsg/nanomsg/releases/download/0.6-beta/nanomsg-0.6-beta.tar.gz
 # https://github.com/nanomsg/nanomsg/releases/download/0.8-beta/nanomsg-0.8-beta.tar.gz
 
-nanomsg-0.6-beta.tar.gz :
-	wget http://download.nanomsg.org/nanomsg-0.6-beta.tar.gz
+# nanomsg-0.6-beta.tar.gz :
+# 	wget http://download.nanomsg.org/nanomsg-0.6-beta.tar.gz
 
-nanomsg-0.6-beta/COPYING : nanomsg-0.6-beta.tar.gz
-	tar xf nanomsg-0.6-beta.tar.gz
+# nanomsg-0.6-beta/COPYING : nanomsg-0.6-beta.tar.gz
+# 	tar xf nanomsg-0.6-beta.tar.gz
 
-$(PREFIX)/bin/nanocat : nanomsg-0.6-beta/COPYING
-	cd nanomsg-0.6-beta;./configure --prefix=$(PREFIX);make;make install
+# $(PREFIX)/bin/nanocat : nanomsg-0.6-beta/COPYING
+# 	cd nanomsg-0.6-beta;./configure --prefix=$(PREFIX);make;make install
 
-$(PREFIX)/lib/nanomsg.so : $(PREFIX)/bin/nanocat
-	CSC_OPTIONS="-I$(PREFIX)/include -L$(PREFIX)/lib" $(CHICKEN_INSTALL) $(PROX) nanomsg
+# $(PREFIX)/lib/nanomsg.so : $(PREFIX)/bin/nanocat
+# 	CSC_OPTIONS="-I$(PREFIX)/include -L$(PREFIX)/lib" $(CHICKEN_INSTALL) $(PROX) nanomsg
 
-# LD_LIBRARY_PATH=/mfs/pkgs/chicken/4.10.0-amd64/lib CSC_OPTIONS="-I/mfs/pkgs/chicken/4.10.0-amd64/include -L/mfs/pkgs/chicken/4.10.0-amd64/lib -C \"-fPIC\"" /mfs/pkgs/chicken/4.10.0-amd64/bin/chicken-install  -D no-library-checks nanomsg
+# # LD_LIBRARY_PATH=/mfs/pkgs/chicken/4.10.0-amd64/lib CSC_OPTIONS="-I/mfs/pkgs/chicken/4.10.0-amd64/include -L/mfs/pkgs/chicken/4.10.0-amd64/lib -C \"-fPIC\"" /mfs/pkgs/chicken/4.10.0-amd64/bin/chicken-install  -D no-library-checks nanomsg
 
 #======================================================================
 # M A T T S   U T I L S

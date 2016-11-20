@@ -7,11 +7,12 @@ v1.0, April 2012
 
 [preface]
 Preface
-=======
+-------
+
 This book is organised as three sub-books; getting started, writing tests and reference.
 
 Why Megatest?
-~~~~~~~~~~~~~
+-------------
 
 The Megatest project was started for two reasons, the first was an
 immediate and pressing need for a generalized tool to manage a suite
@@ -23,7 +24,7 @@ integrating and or running a complex suite of tests for release
 qualification.
 
 Megatest Design Philosophy
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+--------------------------
 
 Megatest is intended to provide the minimum needed resources to make
 writing a suite of tests and tasks for implementing continuous build
@@ -53,7 +54,7 @@ on the test outcome.
  * Deployable - anyone on the team, at any site, at any time can run the flow
 
 Megatest Architecture
-~~~~~~~~~~~~~~~~~~~~~
+---------------------
 
 All data to specify the tests and configure the system is stored in
 plain text files. All system state is stored in an sqlite3
@@ -64,13 +65,22 @@ megatest uses the network filesystem to call home to your master
 sqlite3 database.
 
 include::../plan.txt[]
+// to allow the getting_started.txt to be a stand-alone document use level
+shifting, note that the preceding blank line is needed.
+// :leveloffset: 2
+
+include::installation.txt[]
+
 include::getting_started.txt[]
+
+:leveloffset: 0
+
 include::writing_tests.txt[]
 include::howto.txt[]
 include::reference.txt[]
 
 Megatest Internals
-~~~~~~~~~~~~~~~~~~
+------------------
 
 ["graphviz", "server.png"]
 ----------------------------------------------------------------------
@@ -78,55 +88,54 @@ include::server.dot[]
 ----------------------------------------------------------------------
 
 
-[appendix]
-Example Appendix
-================
-One or more optional appendixes go here at section level zero.
-
-Appendix Sub-section
-~~~~~~~~~~~~~~~~~~~
-NOTE: Preface and appendix subsections start out of sequence at level
-2 (level 1 is skipped).  This only applies to multi-part book
-documents.
-
-
-
-[bibliography]
-Example Bibliography
-====================
-The bibliography list is a style of AsciiDoc bulleted list.
-
-[bibliography]
-- [[[taoup]]] Eric Steven Raymond. 'The Art of Unix
-  Programming'. Addison-Wesley. ISBN 0-13-142901-9.
-- [[[walsh-muellner]]] Norman Walsh & Leonard Muellner.
-  'DocBook - The Definitive Guide'. O'Reilly & Associates. 1999.
-  ISBN 1-56592-580-7.
-
-
-[glossary]
-Example Glossary
-================
-Glossaries are optional. Glossaries entries are an example of a style
-of AsciiDoc labeled lists.
-
-[glossary]
-A glossary term::
-  The corresponding (indented) definition.
-
-A second glossary term::
-  The corresponding (indented) definition.
-
-
-[colophon]
-Example Colophon
-================
-Text at the end of a book describing facts about its production.
-
+// [appendix]
+// Example Appendix
+// ================
+// One or more optional appendixes go here at section level zero.
+// 
+// Appendix Sub-section
+// ~~~~~~~~~~~~~~~~~~~
+// NOTE: Preface and appendix subsections start out of sequence at level
+// 2 (level 1 is skipped).  This only applies to multi-part book
+// documents.
+// 
+// 
+// 
+// [bibliography]
+// Example Bibliography
+// ====================
+// The bibliography list is a style of AsciiDoc bulleted list.
+// 
+// [bibliography]
+// - [[[taoup]]] Eric Steven Raymond. 'The Art of Unix
+//   Programming'. Addison-Wesley. ISBN 0-13-142901-9.
+// - [[[walsh-muellner]]] Norman Walsh & Leonard Muellner.
+//   'DocBook - The Definitive Guide'. O'Reilly & Associates. 1999.
+//   ISBN 1-56592-580-7.
+// 
+// 
+// [glossary]
+// Example Glossary
+// ================
+// Glossaries are optional. Glossaries entries are an example of a style
+// of AsciiDoc labeled lists.
+// 
+// [glossary]
+// A glossary term::
+//   The corresponding (indented) definition.
+// 
+// A second glossary term::
+//   The corresponding (indented) definition.
+// 
+// 
+// [colophon]
+// Example Colophon
+// ================
+// Text at the end of a book describing facts about its production.
 
 [index]
 Example Index
-=============
+-------------
 ////////////////////////////////////////////////////////////////
 The index is normally left completely empty, it's contents are
 generated automatically by the DocBook toolchain.

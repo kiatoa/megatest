@@ -570,6 +570,203 @@
 	;;	(append key (list val)))))
 	))))
 
+(define tests:css-jscript-block
+#<<EOF
+<style type="text/css">
+ul.LinkedList { display: block; }
+/* ul.LinkedList ul { display: none; } */
+.HandCursorStyle { cursor: pointer; cursor: hand; }  /* For IE */
+  </style>
+
+  <script type="text/JavaScript">
+    // Add this to the onload event of the BODY element
+    function addEvents() {
+      activateTree(document.getElementById("LinkedList1"));
+    }
+
+    // This function traverses the list and add links 
+    // to nested list items
+    function activateTree(oList) {
+      // Collapse the tree
+      for (var i=0; i < oList.getElementsByTagName("ul").length; i++) {
+        oList.getElementsByTagName("ul")[i].style.display="none";            
+      }                                                                  
+      // Add the click-event handler to the list items
+      if (oList.addEventListener) {
+        oList.addEventListener("click", toggleBranch, false);
+      } else if (oList.attachEvent) { // For IE
+        oList.attachEvent("onclick", toggleBranch);
+      }
+      // Make the nested items look like links
+      addLinksToBranches(oList);
+    }
+
+    // This is the click-event handler
+    function toggleBranch(event) {
+      var oBranch, cSubBranches;
+      if (event.target) {
+        oBranch = event.target;
+      } else if (event.srcElement) { // For IE
+        oBranch = event.srcElement;
+      }
+      cSubBranches = oBranch.getElementsByTagName("ul");
+      if (cSubBranches.length > 0) {
+        if (cSubBranches[0].style.display == "block") {
+          cSubBranches[0].style.display = "none";
+        } else {
+          cSubBranches[0].style.display = "block";
+        }
+      }
+    }
+
+    // This function makes nested list items look like links
+    function addLinksToBranches(oList) {
+      var cBranches = oList.getElementsByTagName("li");
+      var i, n, cSubBranches;
+      if (cBranches.length > 0) {
+        for (i=0, n = cBranches.length; i < n; i++) {
+          cSubBranches = cBranches[i].getElementsByTagName("ul");
+          if (cSubBranches.length > 0) {
+            addLinksToBranches(cSubBranches[0]);
+            cBranches[i].className = "HandCursorStyle";
+            cBranches[i].style.color = "blue";
+            cSubBranches[0].style.color = "black";
+            cSubBranches[0].style.cursor = "auto";
+          }
+        }
+      }
+    }
+  </script>
+EOF
+)
+
+(define (tests:run-record->test-path run numkeys)
+   (append (take (vector->list run) numkeys)
+	   (list (vector-ref run (+ 1 numkeys)))))
+
+;; (tests:create-html-tree "test-index.html")
+;;
+(define (tests:create-html-tree outf)
+  (let* ((lockfile  (conc outf ".lock"))
+	 (runs-to-process '()))
+    (if (common:simple-file-lock lockfile)
+	(let* ((linktree  (common:get-linktree))
+	       (oup       (open-output-file (or outf (conc linktree "/runs-index.html"))))
+	       (area-name (common:get-testsuite-name))
+	       (keys      (rmt:get-keys))
+	       (numkeys   (length keys))
+	       (runsdat   (rmt:get-runs "%" #f #f (map (lambda (x)(list x "%")) keys)))
+	       (header    (vector-ref runsdat 0))
+	       (runs      (vector-ref runsdat 1))
+	       (runtreedat (map (lambda (x)
+				  (tests:run-record->test-path x numkeys))
+				runs))
+	       (runs-htree (common:list->htree runtreedat)))
+	  (set! runs-to-process runs)
+	  (s:output-new
+	   oup
+	   (s:html tests:css-jscript-block
+		   (s:title "Summary for " area-name)
+		   (s:body 'onload "addEvents();"
+			   (s:h1 "Summary for " area-name)
+			   ;; top list
+			   (s:ul 'id "LinkedList1" 'class "LinkedList"
+				 (s:li
+				  "Runs"
+				  (common:htree->html runs-htree
+						      '()
+						      (lambda (x p)
+							(let* ((targ-path (string-intersperse p "/"))
+                                                               (full-path (conc linktree "/" targ-path))
+                                                               (run-name  (car (reverse p))))
+                                                          (if (and (file-exists? full-path)
+                                                                   (directory?   full-path)
+                                                                   (file-write-access? full-path))
+                                                              (s:a run-name 'href (conc targ-path "/run-summary.html"))
+                                                              (begin
+                                                                (debug:print 0 *default-log-port* "INFO: Can't create " targ-path "/run-summary.html")
+                                                                (conc run-name " (Not able to create summary at " targ-path ")")))))))))))
+          (close-output-port oup)
+	  (common:simple-file-release-lock lockfile)
+	  (for-each
+	   (lambda (run)
+	     (let* ((test-subpath (tests:run-record->test-path run numkeys))
+		    (run-id       (db:get-value-by-header run header "id"))
+                    (run-dir      (tests:run-record->test-path run numkeys))
+		    (test-dats    (rmt:get-tests-for-run
+				   run-id
+                                   "%/"       ;; testnamepatt
+				   '()        ;; states
+				   '()        ;; statuses
+				   #f         ;; offset
+				   #f         ;; num-to-get
+				   #f         ;; hide/not-hide
+				   #f         ;; sort-by
+				   #f         ;; sort-order
+				   #f         ;; 'shortlist                           ;; qrytype
+                                   0         ;; last update
+				   #f))
+                    (tests-tree-dat (map (lambda (test-dat)
+                                         ;; (tests:run-record->test-path x numkeys))
+                                         (let* ((test-name  (db:test-get-testname test-dat))
+                                                (item-path  (db:test-get-item-path test-dat))
+                                                (full-name  (db:test-make-full-name test-name item-path))
+                                                (path-parts (string-split full-name)))
+                                           path-parts))
+                                       test-dats))
+                    (tests-htree (common:list->htree tests-tree-dat))
+                    (html-dir    (conc linktree "/" (string-intersperse run-dir "/")))
+                    (html-path   (conc html-dir "/run-summary.html"))
+                    (oup         (if (and (file-exists? html-dir)
+                                          (directory?   html-dir)
+                                          (file-write-access? html-dir))
+                                     (open-output-file  html-path)
+                                     #f)))
+               ;; (print "run-dir: " run-dir ", tests-tree-dat: " tests-tree-dat)
+               (if oup
+                   (begin
+                     (s:output-new
+                      oup
+                      (s:html tests:css-jscript-block
+                              (s:title "Summary for " area-name)
+                              (s:body 'onload "addEvents();"
+                                      (s:h1 "Summary for " (string-intersperse run-dir "/"))
+                                      ;; top list
+                                      (s:ul 'id "LinkedList1" 'class "LinkedList"
+                                            (s:li
+                                             "Tests"
+                                             (common:htree->html tests-htree
+                                                                 '()
+                                                                 (lambda (x p)
+                                                                   (let* ((targ-path (string-intersperse p "/"))
+                                                                          (test-name (car p))
+                                                                          (item-path ;; (if (> (length p) 2) ;; test-name + run-name
+                                                                           (string-intersperse p "/"))
+                                                                          (full-targ (conc html-dir "/" targ-path))
+                                                                          (std-file  (conc full-targ "/test-summary.html"))
+                                                                          (alt-file  (conc full-targ "/megatest-rollup-" test-name ".html"))
+                                                                          (html-file (if (file-exists? alt-file)
+                                                                                         alt-file
+                                                                                         std-file))
+                                                                          (run-name  (car (reverse p))))
+                                                                     (if (and (not (file-exists? full-targ))
+                                                                              (directory? full-targ)
+                                                                              (file-write-access? full-targ))
+                                                                         (tests:summarize-test 
+                                                                          run-id 
+                                                                          (rmt:get-test-id run-id test-name item-path)))
+                                                                     (if (file-exists? full-targ)
+                                                                         (s:a run-name 'href html-file)
+                                                                         (begin
+                                                                           (debug:print 0 *default-log-port* "ERROR: can't access " full-targ)
+                                                                           (conc "No summary for " run-name)))))
+                                                                 ))))))
+                     (close-output-port oup)))))
+           runs)
+          #t)
+	#f)))
+
+
 ;; CHECK - WAS THIS ADDED OR REMOVED? MANUAL MERGE WITH API STUFF!!!
 ;;
 ;; get a pretty table to summarize steps
@@ -668,7 +865,8 @@
 		       (string<? (conc time-a)(conc time-b)))))))))
 
 
-;; summarize test
+;; summarize test in to a file test-summary.html in the test directory
+;;
 (define (tests:summarize-test run-id test-id)
   (let* ((test-dat  (rmt:get-test-info-by-id run-id test-id))
 	 (steps-dat (rmt:get-steps-for-test run-id test-id))

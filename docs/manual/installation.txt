@@ -1,0 +1,10 @@
+Installation
+------------
+
+Dependencies
+~~~~~~~~~~~~
+
+Chicken scheme and a number of "eggs" are required for building
+Megatest. See the script installall.sh in the utils directory of the
+source distribution for an automated way to install everything
+needed for building Megatest on Linux.
