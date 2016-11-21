@@ -210,7 +210,7 @@
 
 (define (rmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
   (let* ((dbstruct-local (db:open-local-db-handle))
-	 (db-file-path   (db:dbfile-path 0))
+	 (db-file-path   (db:dbfile-path)) ;;  0))
 	 ;; (read-only      (not (file-read-access? db-file-path)))
 	 (start          (current-milliseconds))
 	 (resdat         (api:execute-requests dbstruct-local (vector (symbol->string cmd) params)))
