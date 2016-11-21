@@ -298,8 +298,8 @@ Misc
     dat))
 
 (define (dboard:setup-tabdat tabdat)
-  (dboard:tabdat-dbdir-set! tabdat (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
-  (dboard:tabdat-dbfpath-set! tabdat (db:dbfile-path 0))
+  (dboard:tabdat-dbdir-set! tabdat (db:dbfile-path)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+  (dboard:tabdat-dbfpath-set! tabdat (db:dbfile-path))
   (dboard:tabdat-monitor-db-path-set! tabdat (conc (dboard:tabdat-dbdir tabdat) "/monitor.db"))
 
   ;; HACK ALERT: this is a hack, please fix.
