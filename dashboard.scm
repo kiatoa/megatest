@@ -119,7 +119,6 @@ Misc
   hide-not-hide-tabs
   )
 
-
 (define (dboard:commondat-make)
   (make-dboard:commondat
    curr-tab-num:         0
@@ -2036,7 +2035,6 @@ Misc
 				  "make-controls")))
 	 (iup:hbox
 	  (iup:button "Quit"      #:action (lambda (obj)
-					     ;; (if (dboard:tabdat-dblocal tabdat) (db:close-all (dboard:tabdat-dblocal tabdat)))
 					     (exit))
 		      #:expand "NO" #:size "40x15")
 	  (iup:button "Refresh"   #:action (lambda (obj)
@@ -2587,7 +2585,7 @@ Misc
      (current-seconds)) ;; something went wrong - just print an error and return current-seconds
    (common:max (map (lambda (filen)
 		     (file-modification-time filen))
-		   (glob (conc (dboard:tabdat-dbdir tabdat) "/*.db"))))))
+		   (glob (conc (dboard:tabdat-dbdir tabdat) "/*.db*"))))))
 
 (define (dashboard:monitor-changed? commondat tabdat)
   (let* ((run-update-time (current-seconds))
@@ -3321,7 +3319,7 @@ Misc
        ;; ((args:get-arg "-guimonitor")
        ;;  (gui-monitor (dboard:tabdat-dblocal tabdat)))
        (else
-	(dboard:commondat-uidat-set! commondat (make-dashboard-buttons commondat)) ;; (dboard:tabdat-dblocal data)
+	(dboard:commondat-uidat-set! commondat (make-dashboard-buttons commondat))
 	(dboard:commondat-curr-tab-num-set! commondat 0)
 	(dboard:commondat-add-updater 
 	 commondat 

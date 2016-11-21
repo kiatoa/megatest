@@ -98,6 +98,7 @@
 (define *task-db*             #f) ;; (vector db path-to-db)
 (define *db-access-allowed*   #t) ;; flag to allow access
 (define *db-access-mutex*     (make-mutex))
+(define *db-cache-path*       #f)
 
 ;; SERVER
 (define *my-client-signature* #f)
@@ -395,10 +396,14 @@
           (pathname-file (current-directory)))))
 
 (define (common:get-db-tmp-area)
-  (create-directory (conc "/tmp/" (current-user-name)
-                          "/megatest/"
-                          (common:get-testsuite-name) "/"
-                          (string-translate *toppath* "/" "_")) #t))
+  (if *db-cache-path*
+      *db-cache-path*
+      (let ((dbpath (create-directory (conc "/tmp/" (current-user-name)
+					    "/megatest_cachedb/"
+					    (common:get-testsuite-name) "/"
+					    (string-translate *toppath* "/" ".")) #t)))
+	(set! *db-cache-path* dbpath)
+	dbpath)))
 
 ;;======================================================================
 ;; E X I T   H A N D L I N G

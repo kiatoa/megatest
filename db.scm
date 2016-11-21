@@ -188,9 +188,9 @@
 
 ;; Returns the database location as specified in config file
 ;;
-(define (db:get-dbdir)
-  (or (configf:lookup *configdat* "setup" "dbdir")
-      (conc (configf:lookup *configdat* "setup" "linktree") "/.db")))
+(define db:get-dbdir common:get-db-tmp-area)
+;;  (or (configf:lookup *configdat* "setup" "dbdir")
+;;      (conc (configf:lookup *configdat* "setup" "linktree") "/.db")))
 	       
 (define (db:set-sync db)
   (let ((syncprag (configf:lookup *configdat* "setup" "sychronous")))
