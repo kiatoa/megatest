@@ -38,26 +38,6 @@
 ;;  S U P P O R T   F U N C T I O N S
 ;;======================================================================
 
-;;
-(define (rmt:write-frequency-over-limit? cmd run-id)
-  (and (not (member cmd api:read-only-queries))
-       (let* ((tmprec (hash-table-ref/default *write-frequency* run-id #f))
-	      (record (if tmprec tmprec 
-			  (let ((v (vector (current-seconds) 0)))
-			    (hash-table-set! *write-frequency* run-id v)
-			    v)))
-	      (count  (+ 1 (vector-ref record 1)))
-	      (start  (vector-ref record 0))
-	      (queries-per-second (/ (* count 1.0)
-				     (max (- (current-seconds) start) 1))))
-	 (vector-set! record 1 count)
-	 (if (and (> count 10)
-		  (> queries-per-second 10))
-	     (begin
-	       (debug:print-info 1 *default-log-port* "db write rate too high, starting a server, count=" count " start=" start " run-id=" run-id " queries-per-second=" queries-per-second)
-	       #t)
-	     #f))))
-
 ;; if a server is either running or in the process of starting call client:setup
 ;; else return #f to let the calling proc know that there is no server available
 ;;
@@ -65,8 +45,6 @@
   (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
     (if cinfo
 	cinfo
-	;; NB// can cache the answer for server running for 10 seconds ...
-	;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
 	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)
 	    (client:setup run-id)
 	    #f))))
@@ -144,14 +122,15 @@
 	;;
 	(if (and (< attemptnum 15)
 		 (member cmd api:write-queries))
-	    (let ((faststart (configf:lookup *configdat* "server" "faststart")))
+	    (let ((homehost  (common:get-homehost))) ;; faststart (configf:lookup *configdat* "server" "faststart")))
 	      (hash-table-delete! *runremote* run-id)
 	      ;; (mutex-unlock! *send-receive-mutex*)
-	      (if (and faststart (equal? faststart "no"))
+	      (if (not (cdr homehost)) ;; we always require a server if not on homehost ;; (and faststart (equal? faststart "no"))
 		  (begin
 		    (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
 		    (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
 		    (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
+		  ;; NB - probably can remove the query time stuff but need to discuss it ....
 		  (let ((start-time (current-milliseconds))
 			(max-query  (string->number (or (configf:lookup *configdat* "server" "server-query-threshold")
 							"300")))
@@ -159,8 +138,9 @@
 		    (let ((delta (- (current-milliseconds) start-time)))
 		      (if (> delta max-query)
 			  (begin
-			    (debug:print-info 0 *default-log-port* "Starting server as query time " delta " is over the limit of " max-query)
-			    (server:kind-run run-id)))
+			    (debug:print-info 0 *default-log-port* "WARNING: long query times, you may have an overloaded homehost.") ;; Starting server as query time " delta " is over the limit of " max-query)
+			    ;; (server:kind-run run-id)))
+			    ))
 		      ;; return the result!
 		      newres)
 		    )))

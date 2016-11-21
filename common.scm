@@ -622,6 +622,27 @@
 	      #f)
 	    #f))))
 
+;; logic for getting homehost. Returns (host . at-home)
+;;
+(define (common:get-homehost)
+  (let* ((currhost (get-host-name))
+	 (bestadrs (server:get-best-guess-address currhost))
+	 ;; first look in config, then look in file .homehost, create it if not found
+	 (homehost (or (configf:lookup *configdat* "server" "homehost" )
+		       (let ((hhf (conc *toppath* "/.homehost")))
+			 (if (file-exists? hhf)
+			     (with-input-from-file hhf read-line)
+			     (if (file-write-access? *toppath*)
+				 (begin
+				   (with-output-to-file hhf
+				     (lambda ()
+				       (print bestadrs)))
+				   (common:get-homehost))
+				 #f)))))
+	 (at-home  (or (equal? homehost currhost)
+		       (equal? homehost bestadrs))))
+    (cons homehost at-home)))
+
 ;;======================================================================
 ;; M I S C   L I S T S
 ;;======================================================================
