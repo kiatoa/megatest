@@ -116,6 +116,7 @@
 (define *server-run*        #t)
 (define *run-id*            #f)
 (define *server-kind-run*   (make-hash-table))
+(define *home-host*         #f)
 
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here
@@ -630,23 +631,26 @@
 ;; logic for getting homehost. Returns (host . at-home)
 ;;
 (define (common:get-homehost)
-  (let* ((currhost (get-host-name))
-	 (bestadrs (server:get-best-guess-address currhost))
-	 ;; first look in config, then look in file .homehost, create it if not found
-	 (homehost (or (configf:lookup *configdat* "server" "homehost" )
-		       (let ((hhf (conc *toppath* "/.homehost")))
-			 (if (file-exists? hhf)
-			     (with-input-from-file hhf read-line)
-			     (if (file-write-access? *toppath*)
-				 (begin
-				   (with-output-to-file hhf
-				     (lambda ()
-				       (print bestadrs)))
-				   (common:get-homehost))
-				 #f)))))
-	 (at-home  (or (equal? homehost currhost)
-		       (equal? homehost bestadrs))))
-    (cons homehost at-home)))
+  (if *home-host*
+      *home-host*
+      (let* ((currhost (get-host-name))
+	     (bestadrs (server:get-best-guess-address currhost))
+	     ;; first look in config, then look in file .homehost, create it if not found
+	     (homehost (or (configf:lookup *configdat* "server" "homehost" )
+			   (let ((hhf (conc *toppath* "/.homehost")))
+			     (if (file-exists? hhf)
+				 (with-input-from-file hhf read-line)
+				 (if (file-write-access? *toppath*)
+				     (begin
+				       (with-output-to-file hhf
+					 (lambda ()
+					   (print bestadrs)))
+				       (common:get-homehost))
+				     #f)))))
+	     (at-home  (or (equal? homehost currhost)
+			   (equal? homehost bestadrs))))
+	(set! *home-host* (cons homehost at-home))
+	*home-host*)))
 
 ;;======================================================================
 ;; M I S C   L I S T S
