@@ -85,6 +85,7 @@ Misc
 			"-q"
 			"-use-local"
 			"-skip-version-check"
+			"-repl"
 			)
 		 args:arg-hash
 		 0))
@@ -3357,5 +3358,7 @@ Misc
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
 
-(main)
+(if (args:get-arg "-repl")
+    (repl)
+    (main))
 

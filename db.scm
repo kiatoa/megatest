@@ -244,7 +244,7 @@
 ;;     (db:sync-tables db:sync-tests-only *megatest-db* db)
 ;;     db))
 
-;; This routine creates the db if not already present. It is only called if the db is not already ls opened
+;; This routine creates the db if not already present. It is only called if the db is not already opened
 ;;
 (define (db:open-db dbstruct) ;;  (conc *toppath* "/megatest.db") (car *configinfo*))) 
   (let ((mdb (dbr:dbstruct-tmpdb dbstruct))) ;; RA => Returns the first reference in dbstruct
