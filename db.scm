@@ -80,7 +80,7 @@
 ;;
 (define (db:get-db dbstruct . blah) ;;  run-id) 
   (or (dbr:dbstruct-tmpdb dbstruct)
-      (db:get-db (db:open-db dbstruct))))
+      (db:open-db dbstruct)))
 
 ;; ;; legacy handling of structure for managing db's. Refactor this into dbr:?
 (define (db:dbdat-get-db dbdat)
@@ -247,16 +247,15 @@
 ;; This routine creates the db if not already present. It is only called if the db is not already opened
 ;;
 (define (db:open-db dbstruct) ;;  (conc *toppath* "/megatest.db") (car *configinfo*))) 
-  (let ((mdb (dbr:dbstruct-tmpdb dbstruct))) ;; RA => Returns the first reference in dbstruct
-    (if mdb
-	mdb
+  (let ((tmpdb (dbr:dbstruct-tmpdb dbstruct))) ;; RA => Returns the first reference in dbstruct
+    (if tmpdb
+	tmpdb
         ;; (mutex-lock! *rundb-mutex*)
         (let* ((dbpath       (db:dbfile-path)) ;;  0))
                (dbexists     (file-exists? dbpath))
                (tmpdb        (db:open-megatest-db dbdir: dbpath)) ;; lock-create-open dbpath db:initialize-main-db))
                (mtdb         (db:open-megatest-db))
-               (write-access (file-write-access? dbpath))
-               (dbdat        (cons tmpdb dbpath)))
+               (write-access (file-write-access? dbpath)))
           (if (and dbexists (not write-access))
               (set! *db-write-access* #f))
           (dbr:dbstruct-mtdb-set!   dbstruct mtdb)
@@ -265,7 +264,7 @@
           (if (and (not dbexists)
                    *db-write-access*) ;; did not have a prior db and do have write access
               (db:multi-db-sync #f 'old2new))  ;; migrate data from megatest.db automatically
-          dbdat))))
+          tmpdb))))
 
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;
@@ -314,8 +313,7 @@
 	)
     (debug:print-info 4 *default-log-port* "Syncing for run-id: " run-id)
     ;; (mutex-lock! *http-mutex*)
-    (db:sync-tables (append (db:sync-main-list tmpdb)
-                            db:sync-tests-only) tmpdb mtdb)))
+    (db:sync-tables (db:sync-all-tables-list tmpdb) tmpdb mtdb)))
 ;;    (if (eq? run-id 0)
 ;;	;; runid equal to 0 is main.db
 ;;	(if maindb
@@ -443,8 +441,8 @@
 
 ;; needs db to get keys, this is for syncing all tables
 ;;
-(define (db:sync-main-list db)
-  (let ((keys  (db:get-keys db)))
+(define (db:sync-main-list dbstruct)
+  (let ((keys  (db:get-keys dbstruct)))
     (list
      (list "keys"
 	   '("id"        #f)
@@ -467,6 +465,10 @@
 	   '("avg_disk"       #f)
 	   '("tags"           #f)
 	   '("jobgroup"       #f)))))
+
+(define (db:sync-all-tables-list dbstruct)
+  (append (db:sync-main-list dbstruct)
+	  db:sync-tests-only))
 
 ;; use bunch of Unix commands to try to break the lock and recreate the db
 ;;
@@ -763,124 +765,127 @@
 ;;  run-ids: '(1 2 3 ...) or #f (for all)
 ;;
 (define (db:multi-db-sync run-ids . options)
-  (let* ((toppath  (launch:setup))
-	 (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
-	 (mtdb     (if toppath (db:open-megatest-db)))
-	 (allow-cleanup (if run-ids #f #t))
-	 (run-ids  (if run-ids 
-		       run-ids
-		       (if toppath (begin
-				     (db:delay-if-busy mtdb)
-				     (db:get-all-run-ids mtdb)))))
-	 (tdbdat  (tasks:open-db))
-	 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat))))
+  (if (not (launch:setup))
+      (debug:print 0 *default-log-port* "ERROR: not able to setup up for megatest.")
+      (let* ((dbstruct (db:setup))
+	     (mtdb     (dbr:dbstruct-mtdb dbstruct))
+	     (tmpdb    (dbr:dbstruct-tmpdb dbstruct))
+	     (allow-cleanup (if run-ids #f #t))
+;; 	     (run-ids  (if run-ids 
+;; 			   run-ids
+;; 			   (db:get-all-run-ids mtdb)))
+	     (tdbdat  (tasks:open-db))
+	     (servers (tasks:get-all-servers (db:delay-if-busy tdbdat))))
     
-    ;; kill servers
-    (if (member 'killservers options)
-	(for-each
-	 (lambda (server)
-	   (tasks:server-delete-record (db:delay-if-busy tdbdat) (vector-ref server 0) "dbmigration")
-	   (tasks:kill-server (vector-ref server 2)(vector-ref server 1)))
-	 servers))
+	;; kill servers
+	(if (member 'killservers options)
+	    (for-each
+	     (lambda (server)
+	       (tasks:server-delete-record (db:delay-if-busy tdbdat) (vector-ref server 0) "dbmigration")
+	       (tasks:kill-server (vector-ref server 2)(vector-ref server 1)))
+	     servers))
 
-    ;; clear out junk records
-    ;;
-    (if (member 'dejunk options)
-	(begin
-	  (db:delay-if-busy mtdb)
-	  (db:clean-up mtdb)))
+	;; clear out junk records
+	;;
+	(if (member 'dejunk options)
+	    (begin
+	      (db:delay-if-busy mtdb)
+	      (db:clean-up mtdb)
+	      (db:clean-up tmpdb)))
 
-    ;; adjust test-ids to fit into proper range
-    ;;
-    (if (member 'adj-testids options)
-	(begin
-	  (db:delay-if-busy mtdb)
-	  (db:prep-megatest.db-for-migration mtdb)))
+	;; adjust test-ids to fit into proper range
+	;;
+	;; (if (member 'adj-testids options)
+	;;     (begin
+	;;       (db:delay-if-busy mtdb)
+	;;       (db:prep-megatest.db-for-migration mtdb)))
 
-    ;; sync runs, test_meta etc.
-    ;;
-    (if (member 'old2new options)
-	(begin
-	  (db:sync-tables (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
-	  (for-each 
-	   (lambda (run-id)
-	     (db:delay-if-busy mtdb)
-	     (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id))
-		   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
-	       (debug:print 0 *default-log-port* "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
-	       (db:replace-test-records dbstruct run-id testrecs)
-	       (sqlite3:finalize! (db:dbdat-get-db (dbr:dbstruct-rundb dbstruct)))))
-	   run-ids)))
+	;; sync runs, test_meta etc.
+	;;
+	(if (member 'old2new options)
+	    ;; (begin
+	    (db:sync-tables (db:sync-all-tables-list dbstruct) mtdb tmpdb))
+			      ;; (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
+;; 	      (for-each 
+;; 	       (lambda (run-id)
+;; 		 (db:delay-if-busy mtdb)
+;; 		 (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id)))
+;; ;;		       (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
+;; 		   (debug:print 0 *default-log-port* "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
+;; 		   (db:replace-test-records dbstruct run-id testrecs)
+;; 		   (sqlite3:finalize! (db:dbdat-get-db (dbr:dbstruct-rundb dbstruct)))))
+;; 	       run-ids)))
 
-    ;; now ensure all newdb data are synced to megatest.db
-    ;; do not use the run-ids list passed in to the function
-    ;;
-    (if (member 'new2old options)
-	(let* ((maindb      (make-dbr:dbstruct path: toppath local: #t))
-	       (src-run-ids (if run-ids run-ids (db:get-all-run-ids (db:dbdat-get-db (db:get-db maindb 0)))))
-	       (all-run-ids (sort (delete-duplicates (cons 0 src-run-ids)) <))
-	       (count       1)
-	       (total       (length all-run-ids))
-	       (dead-runs  '()))
-          ;; first fix schema if needed
-          (map
-           (lambda (th)
-             (thread-join! th))
-           (map
-            (lambda (run-id)
-              (thread-start! 
-               (make-thread
-                (lambda ()
-                  (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
-                         (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
-                    (if (eq? run-id 0)
-                        (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
-                          (db:patch-schema-maindb run-id maindb))
-                        (db:patch-schema-rundb run-id frundb)))
-                  (set! count (+ count 1))
-                  (debug:print 0 *default-log-port* "Finished patching schema for " (if (eq? run-id 0) " main.db " (conc run-id ".db")) ", " count " of " total)))))
-            all-run-ids))
-          ;; Then sync and fix db's
-          (set! count 0)
-          (process-fork
-           (lambda ()
-             (map
-              (lambda (th)
-                (thread-join! th))
-              (map
-               (lambda (run-id)
-                 (thread-start! 
-                  (make-thread
-                   (lambda ()
-                     (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
-                            (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
-                       (if (eq? run-id 0)
-                           (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
-                             (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
-                             (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f))))
-                           (begin
-                             ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
-                             (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
-                             (db:clean-up-rundb (db:get-db fromdb run-id)))))
-                     (set! count (+ count 1))
-                     (debug:print 0 *default-log-port* "Finished clean up of "
-                                  (if (eq? run-id 0)
-                                      " main.db " (conc run-id ".db")) ", " count " of " total)))))
-               all-run-ids))))
+	;; now ensure all newdb data are synced to megatest.db
+	;; do not use the run-ids list passed in to the function
+	;;
+	(if (member 'new2old options)
+	    (db:sync-tables (db:sync-all-tables-list dbstruct) tmpdb mtdb))
+	;; (let* ((maindb      (make-dbr:dbstruct path: toppath local: #t))
+	;; 	   (src-run-ids (if run-ids run-ids (db:get-all-run-ids (db:dbdat-get-db (db:get-db maindb 0)))))
+	;; 	   (all-run-ids (sort (delete-duplicates (cons 0 src-run-ids)) <))
+	;; 	   (count       1)
+	;; 	   (total       (length all-run-ids))
+	;; 	   (dead-runs  '()))
+	;;   ;; first fix schema if needed
+	;;   (map
+	;;    (lambda (th)
+	;; 	 (thread-join! th))
+	;;    (map
+	;; 	(lambda (run-id)
+	;; 	  (thread-start! 
+	;; 	   (make-thread
+	;; 	    (lambda ()
+	;; 	      (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
+	;; 		     (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
+	;; 		(if (eq? run-id 0)
+	;; 		    (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
+	;; 		      (db:patch-schema-maindb run-id maindb))
+	;; 		    (db:patch-schema-rundb run-id frundb)))
+	;; 	      (set! count (+ count 1))
+	;; 	      (debug:print 0 *default-log-port* "Finished patching schema for " (if (eq? run-id 0) " main.db " (conc run-id ".db")) ", " count " of " total)))))
+	;; 	all-run-ids))
+	;;   ;; Then sync and fix db's
+	;;   (set! count 0)
+	;;   (process-fork
+	;;    (lambda ()
+	;; 	 (map
+	;; 	  (lambda (th)
+	;; 	    (thread-join! th))
+	;; 	  (map
+	;; 	   (lambda (run-id)
+	;; 	     (thread-start! 
+	;; 	      (make-thread
+	;; 	       (lambda ()
+	;; 		 (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
+	;; 			(frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
+	;; 		   (if (eq? run-id 0)
+	;; 		       (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
+	;; 			 (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
+	;; 			 (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f))))
+	;; 		       (begin
+	;; 			 ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
+	;; 			 (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
+	;; 			 (db:clean-up-rundb (db:get-db fromdb run-id)))))
+	;; 		 (set! count (+ count 1))
+	;; 		 (debug:print 0 *default-log-port* "Finished clean up of "
+	;; 			      (if (eq? run-id 0)
+	;; 				  " main.db " (conc run-id ".db")) ", " count " of " total)))))
+	;; 	   all-run-ids))))
 
-          ;; removed deleted runs
-	  (let ((dbdir (tasks:get-task-db-path)))
-	    (for-each (lambda (run-id)
-			(let ((fullname (conc dbdir "/" run-id ".db")))
-			  (if (file-exists? fullname)
-			      (begin
-				(debug:print 0 *default-log-port* "Removing database file for deleted run " fullname)
-				(delete-file fullname)))))
-		      dead-runs))))
-
-    ;; (db:close-all dbstruct)
-    ;; (sqlite3:finalize! mdb)
-    ))
+	;; removed deleted runs
+;; (let ((dbdir (tasks:get-task-db-path)))
+;;   (for-each (lambda (run-id)
+;; 	      (let ((fullname (conc dbdir "/" run-id ".db")))
+;; 		(if (file-exists? fullname)
+;; 		    (begin
+;; 		      (debug:print 0 *default-log-port* "Removing database file for deleted run " fullname)
+;; 		      (delete-file fullname)))))
+;; 	    dead-runs))))
+;; 
+	;; (db:close-all dbstruct)
+	;; (sqlite3:finalize! mdb)
+	)))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)

@@ -411,7 +411,9 @@
 ;;======================================================================
 
 (define (common:legacy-sync-recommended)
-  (or (args:get-arg "-runtests")
+  (or (and (common:get-homehost)
+	   (cdr (common:get-homehost)))
+      (args:get-arg "-runtests")
       (args:get-arg "-run")
       (args:get-arg "-server")
       ;; (args:get-arg "-set-run-status")
@@ -631,26 +633,28 @@
 ;; logic for getting homehost. Returns (host . at-home)
 ;;
 (define (common:get-homehost)
-  (if *home-host*
-      *home-host*
-      (let* ((currhost (get-host-name))
-	     (bestadrs (server:get-best-guess-address currhost))
-	     ;; first look in config, then look in file .homehost, create it if not found
-	     (homehost (or (configf:lookup *configdat* "server" "homehost" )
-			   (let ((hhf (conc *toppath* "/.homehost")))
-			     (if (file-exists? hhf)
-				 (with-input-from-file hhf read-line)
-				 (if (file-write-access? *toppath*)
-				     (begin
-				       (with-output-to-file hhf
-					 (lambda ()
-					   (print bestadrs)))
-				       (common:get-homehost))
-				     #f)))))
-	     (at-home  (or (equal? homehost currhost)
-			   (equal? homehost bestadrs))))
-	(set! *home-host* (cons homehost at-home))
-	*home-host*)))
+  (cond
+   (*home-host*     *home-host*)
+   ((not *toppath*) #f)            ;; don't know toppath yet? return #f
+   (else
+    (let* ((currhost (get-host-name))
+	   (bestadrs (server:get-best-guess-address currhost))
+	   ;; first look in config, then look in file .homehost, create it if not found
+	   (homehost (or (configf:lookup *configdat* "server" "homehost" )
+			 (let ((hhf (conc *toppath* "/.homehost")))
+			   (if (file-exists? hhf)
+			       (with-input-from-file hhf read-line)
+			       (if (file-write-access? *toppath*)
+				   (begin
+				     (with-output-to-file hhf
+				       (lambda ()
+					 (print bestadrs)))
+				     (common:get-homehost))
+				   #f)))))
+	   (at-home  (or (equal? homehost currhost)
+			 (equal? homehost bestadrs))))
+      (set! *home-host* (cons homehost at-home))
+      *home-host*))))
 
 ;;======================================================================
 ;; M I S C   L I S T S
@@ -961,26 +965,32 @@
 	      (car df-results))
     freespc))
 
-;; check space in dbdir
-;; returns: ok/not dbspace required-space
-;;
-(define (common:check-db-dir-space)
-  (let* ((dbdir    (db:get-dbdir))
-	 (dbspace  (if (directory? dbdir)
-		       (get-df dbdir)
-		       0))
-	 (required (string->number 
-		    (or (configf:lookup *configdat* "setup" "dbdir-space-required")
-			"100000"))))
+(define (common:check-space-in-dir dirpath required)
+  (let* ((dbspace  (if (directory? dirpath)
+		       (get-df dirpath)
+		       0)))
     (list (> dbspace required)
 	  dbspace
 	  required
-	  dbdir)))
+	  dirpath)))
 
+;; check space in dbdir and in megatest dir
+;; returns: ok/not dbspace required-space
+;;
+(define (common:check-db-dir-space)
+  (let* ((required (string->number 
+		    (or (configf:lookup *configdat* "setup" "dbdir-space-required")
+			"100000")))
+	 (dbdir    (common:get-db-tmp-area)) ;; (db:get-dbdir))
+	 (tdbspace (common:check-space-in-dir dbdir required))
+	 (mdbspace (common:check-space-in-dir *toppath* required)))
+    (sort (list tdbspace mdbspace) (lambda (a b)
+				     (< (cadr a)(cadr b))))))
+    
 ;; check available space in dbdir, exit if insufficient
 ;;
 (define (common:check-db-dir-and-exit-if-insufficient)
-  (let* ((spacedat (common:check-db-dir-space))
+  (let* ((spacedat (car (common:check-db-dir-space))) ;; look only at worst for now
 	 (is-ok    (car spacedat))
 	 (dbspace  (cadr spacedat))
 	 (required (caddr spacedat))
