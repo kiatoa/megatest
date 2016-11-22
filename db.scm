@@ -184,7 +184,7 @@
 ;; RA => Returns a db handler; sets the lock if opened in writable mode
 ;;
 (define (db:lock-create-open fname initproc)
-  (let* ((parent-dir   (pathname-directory fname))
+  (let* ((parent-dir   (or (pathname-directory fname)(current-directory))) ;; no parent? go local
 	 (dir-writable (file-write-access? parent-dir))
 	 (file-exists  (file-exists? fname))
 	 (file-write   (if file-exists
@@ -286,8 +286,10 @@
 	  
 ;; Open the classic megatest.db file (defaults to open in toppath)
 ;;
-(define (db:open-megatest-db #!key (dbdir #f))
-  (let* ((dbpath       (conc (or dbdir *toppath*) "/megatest.db"))
+;;   NOTE: returns a dbdat not a dbstruct!
+;;
+(define (db:open-megatest-db #!key (path #f))
+  (let* ((dbpath       (or path (conc *toppath* "/megatest.db")))
 	 (dbexists     (file-exists? dbpath))
 	 (db           (db:lock-create-open dbpath
 					    (lambda (db)
@@ -547,7 +549,11 @@
 ;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
 ;; db's are dbdat's
 ;;
-(define (db:sync-tables tbls fromdb todb . slave-dbs)
+;; if last-update specified ("field-name" . time-in-seconds)
+;;    then sync only records where field-name >= time-in-seconds
+;;    IFF field-name exists
+;;
+(define (db:sync-tables tbls last-update fromdb todb . slave-dbs)
   (mutex-lock! *db-sync-mutex*)
   (handle-exceptions
    exn
@@ -595,11 +601,22 @@
 	(lambda (tabledat)
 	  (let* ((tablename  (car tabledat))
 		 (fields     (cdr tabledat))
+		 (use-last-update  (if last-update
+				       (if (pair? last-update)
+					   (member (car last-update)    ;; last-update field name
+						   (map car fields))
+					   (begin
+					     (debug:print 0 *default-log-port* "ERROR: parameter last-update for db:sync-tables must be a pair, received: " last-update) ;; found in fields
+					     #f))
+				       #f))
 		 (num-fields (length fields))
 		 (field->num (make-hash-table))
 		 (num->field (apply vector (map car fields)))
 		 (full-sel   (conc "SELECT " (string-intersperse (map car fields) ",") 
-				   " FROM " tablename ";"))
+				   " FROM " tablename (if use-last-update ;; apply last-update criteria
+							  (conc " " (car last-update) ">=" (cdr last-update))
+							  "")
+				   ";"))
 		 (full-ins   (conc "INSERT OR REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) "
 				   " VALUES ( " (string-intersperse (make-list num-fields "?") ",") " );"))
 		 (fromdat    '())
@@ -676,7 +693,8 @@
 	     (append (list todb) slave-dbs))))
 	tbls)
        (let* ((runtime      (- (current-milliseconds) start-time))
-	      (should-print (common:low-noise-print 120 "db sync" (> runtime 500)))) ;; low and high sync times treated as separate.
+	      (should-print (or (debug:debug-mode 12)
+				(common:low-noise-print 120 "db sync" (> runtime 500))))) ;; low and high sync times treated as separate.
 	 (if should-print (debug:print 3 *default-log-port* "INFO: db sync, total run time " runtime " ms"))
 	 (for-each 
 	  (lambda (dat)
@@ -753,6 +771,71 @@
                                    WHERE id=old.id;
                                END;"))
 
+(define *global-db-store* (make-hash-table))
+
+(define (db:get-access-mode)
+  (if (args:get-arg "-use-db-cache") 'cached 'rmt))
+
+;; Add db direct
+;;
+(define (db:dispatch-query access-mode rmt-cmd db-cmd . params)
+  (if (eq? access-mode 'cached)
+      (apply db:call-with-cached-db db-cmd params)
+      (apply rmt-cmd params)))
+
+;; return the target db handle so it can be used
+;;
+(define (db:cache-for-read-only source target #!key (use-last-update #f))
+  (if (and (hash-table-ref/default *global-db-store* target #f)
+	   (>= (file-modification-time target)(file-modification-time source)))
+      (hash-table-ref *global-db-store* target)
+      (let* ((toppath   (launch:setup))
+	     (targ-db-last-mod (if (file-exists? target)
+				   (file-modification-time target)
+				   0))
+	     (cache-db  (or (hash-table-ref/default *global-db-store* target #f)
+			    (db:open-megatest-db path: target)))
+	     (source-db (db:open-megatest-db path: source))
+	     (curr-time (current-seconds))
+	     (res      '())
+	     (last-update (if use-last-update (cons "last_update" targ-db-last-mod) #f)))
+	(db:sync-tables (db:sync-main-list source-db) last-update source-db cache-db)
+	(db:sync-tables db:sync-tests-only last-update source-db cache-db)
+	(hash-table-set! *global-db-store* target cache-db)
+	cache-db)))
+
+;; call a proc with a cached db
+;;
+(define (db:call-with-cached-db proc . params)
+  ;; first cache the db in /tmp
+  (let* ((cname-part (conc "megatest_cache/" (common:get-testsuite-name)))
+	 (fname      (conc  (common:get-area-path-signature) ".db"))
+	 (cache-dir  (common:get-create-writeable-dir
+		      (list (conc "/tmp/" (current-user-name) "/" cname-part)
+			    (conc "/tmp/" (current-user-name) "-" cname-part)
+			     (conc "/tmp/" (current-user-name) "_" cname-part))))
+	 (megatest-db (conc *toppath* "/megatest.db")))
+    ;; (debug:print-info 0 *default-log-port* "Using cache dir " cache-dir)
+    (if (not cache-dir)
+	(begin
+	  (debug:print 0 *default-log-port* "ERROR: Failed to find an area to write the cache db")
+	  (exit 1))
+	(let* ((th1      (make-thread
+			  (lambda ()
+			    (if (and (file-exists? megatest-db)
+				     (file-write-access? megatest-db))
+				(begin
+				  (common:sync-to-megatest.db 'timestamps) ;; internally mutexes on *db-local-sync*
+				  (debug:print-info 2 *default-log-port* "Done syncing to megatest.db"))))
+			  "call-with-cached-db sync-to-megatest.db"))
+	       (cache-db (db:cache-for-read-only
+			  megatest-db
+			  (conc cache-dir "/" fname)
+			  use-last-update: #t)))
+	  (thread-start! th1)
+	  (apply proc cache-db params)
+	  ))))
+
 ;; options:
 ;;
 ;;  'killservers  - kills all servers
@@ -761,6 +844,7 @@
 ;;  'old2new      - sync megatest.db records to .db/{main,1,2 ...}.db
 ;;  'new2old      - sync .db/{main,1,2,3 ...}.db to megatest.db
 ;;  'closeall     - close all opened dbs
+;;  'schema       - attempt to apply schema changes
 ;;
 ;;  run-ids: '(1 2 3 ...) or #f (for all)
 ;;
@@ -837,7 +921,7 @@
 	;; 	   (make-thread
 	;; 	    (lambda ()
 	;; 	      (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
-	;; 		     (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
+;;                    (if (member 'schema options)
 	;; 		(if (eq? run-id 0)
 	;; 		    (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
 	;; 		      (db:patch-schema-maindb run-id maindb))
@@ -861,11 +945,11 @@
 	;; 			(frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
 	;; 		   (if (eq? run-id 0)
 	;; 		       (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
-	;; 			 (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
+;;                             (db:sync-tables (db:sync-main-list dbstruct) #f (db:get-db fromdb #f) mtdb)
 	;; 			 (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f))))
 	;; 		       (begin
 	;; 			 ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
-	;; 			 (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
+;;                             (db:sync-tables db:sync-tests-only #f (db:get-db fromdb run-id) mtdb)
 	;; 			 (db:clean-up-rundb (db:get-db fromdb run-id)))))
 	;; 		 (set! count (+ count 1))
 	;; 		 (debug:print 0 *default-log-port* "Finished clean up of "

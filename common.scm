@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo typed-records)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records)
 (require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -200,7 +200,8 @@
    'dejunk
    ;; 'adj-testids
    ;; 'old2new
-   'new2old)
+   'new2old
+   'schema)
   (if (common:version-changed?)
       (common:set-last-run-version)))
 
@@ -406,6 +407,9 @@
 	(set! *db-cache-path* dbpath)
 	dbpath)))
 
+(define (common:get-area-path-signature)
+  (message-digest-string (md5-primitive) *toppath*))
+
 ;;======================================================================
 ;; E X I T   H A N D L I N G
 ;;======================================================================
@@ -419,10 +423,73 @@
       ;; (args:get-arg "-set-run-status")
       (args:get-arg "-remove-runs")
       ;; (args:get-arg "-get-run-status")
+      (args:get-arg "-use-db-cache") ;; feels like a bad idea ...
       ))
 
 (define (common:legacy-sync-required)
   (configf:lookup *configdat* "setup" "megatest-db"))
+
+;; run-ids
+;;    if #f use *db-local-sync* : or 'local-sync-flags
+;;    if #t use timestamps      : or 'timestamps
+(define (common:sync-to-megatest.db run-ids) 
+  (let ((start-time         (current-seconds))
+        (run-ids-to-process (if (list? run-ids)
+                                run-ids
+                                (if (or (eq? run-ids 'timestamps)(eq? run-ids #t))
+                                    (db:get-changed-run-ids (let* ((mtdb-fpath (conc *toppath* "/megatest.db"))
+                                                                   (mtdb-exists (file-exists? mtdb-fpath)))
+                                                              (if mtdb-exists
+                                                                  (file-modification-time mtdb-fpath)
+                                                                  0)))
+                                    (hash-table-keys *db-local-sync*)))))
+    (debug:print-info 4 *default-log-port* "Processing run-ids: " run-ids-to-process)
+    (for-each 
+     (lambda (run-id)
+       (mutex-lock! *db-multi-sync-mutex*)
+       (if (or run-ids ;; if we were provided with run-ids, proceed
+               (hash-table-ref/default *db-local-sync* run-id #f))
+           ;; (if (> (- start-time last-write) 5) ;; every five seconds
+           (begin ;; let ((sync-time (- (current-seconds) start-time)))
+             (db:multi-db-sync (list run-id) 'new2old)
+             (let ((sync-time (- (current-seconds) start-time)))
+               (debug:print-info 3 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
+               (if (common:low-noise-print 30 "sync new to old")
+                   (debug:print-info 0 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
+             (hash-table-delete! *db-local-sync* run-id)))
+       (mutex-unlock! *db-multi-sync-mutex*))
+     run-ids-to-process)))
+
+(define (common:watchdog)
+  (thread-sleep! 0.05) ;; delay for startup
+  (let ((legacy-sync (common:legacy-sync-required))
+	(debug-mode  (debug:debug-mode 1))
+	(last-time   (current-seconds)))
+    (if (or (common:legacy-sync-recommended)
+	    legacy-sync)
+	(let loop ()
+	  ;; sync for filesystem local db writes
+	  ;;
+	  (let ((start-time   (current-seconds)))
+	    (common:sync-to-megatest.db 'local-sync-flags)
+	    (if (and debug-mode
+		     (> (- start-time last-time) 60))
+		(begin
+		  (set! last-time start-time)
+		  (debug:print-info 4 *default-log-port* "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
+
+	  ;; keep going unless time to exit
+	  ;;
+	  (if (not *time-to-exit*)
+	      (let delay-loop ((count 0))
+		(if (and (not *time-to-exit*)
+			 (< count 4)) ;; was 11, changing to 4. 
+		    (begin
+		      (thread-sleep! 1)
+		      (delay-loop (+ count 1))))
+		(loop)))
+	  (if (common:low-noise-print 30)
+	      (debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*))))))
 
 (define (std-exit-procedure)
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
@@ -565,6 +632,27 @@
 	   (pathname-directory exe-path))))
 	#f)))
 
+;; return first path that can be created or already exists and is writable
+;;
+(define (common:get-create-writeable-dir dirs)
+  (if (null? dirs)
+      #f
+      (let loop ((hed (car dirs))
+		 (tal (cdr dirs)))
+	(let ((res (or (and (directory? hed)
+			    (file-write-access? hed)
+			    hed)
+		       (handle-exceptions
+			exn
+			#f
+			(create-directory hed #t)))))
+	  (if (and (string? res)
+		   (directory? res))
+	      res
+	      (if (null? tal)
+		  #f
+		  (loop (car tal)(cdr tal))))))))
+  
 ;;======================================================================
 ;; T A R G E T S  ,   S T A T E ,   S T A T U S ,   
 ;;                    R U N N A M E    A N D   T E S T P A T T
