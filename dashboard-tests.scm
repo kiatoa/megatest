@@ -417,8 +417,8 @@
 ;;
 ;;======================================================================
 (define (dashboard-tests:examine-test run-id test-id) ;; run-id run-key origtest)
-  (let* ((db-path       (db:dbfile-path run-id)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/db/" run-id ".db"))
-	 (dbstruct      #f) ;; (make-dbr:dbstruct path:  (db:dbfile-path #f) ;; (configf:lookup *configdat* "setup" "linktree") 
+  (let* ((db-path       (db:dbfile-path)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/db/" run-id ".db"))
+	 (dbstruct      #f) ;; NOT ACTUALLY USED (db:setup)) ;; (make-dbr:dbstruct path:  (db:dbfile-path #f) ;; (configf:lookup *configdat* "setup" "linktree") 
 			    ;;		   local: #t))
 	 (testdat        (rmt:get-test-info-by-id run-id test-id)) ;; (db:get-test-info-by-id dbstruct run-id test-id))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
