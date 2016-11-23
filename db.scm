@@ -157,7 +157,7 @@
 ;; 
 ;; If run-id is #f return to create and retrieve the path where the db will live.
 ;;
-(define (db:dbfile-path) ;;  run-id)
+(define (db:dbfile-path . junk) ;;  run-id)
   (let* ((dbdir           (common:get-db-tmp-area))) ;; (db:get-dbdir))
 ;; 	 (fname           (if run-id
 ;; 			      (if (eq? run-id 0) "main.db" (conc run-id ".db"))
