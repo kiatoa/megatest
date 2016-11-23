@@ -345,7 +345,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; The watchdog is to keep an eye on things like db sync etc.
 ;;
-(define *time-zero* (current-seconds))
 (define *watchdog*
   (make-thread 
    (lambda ()

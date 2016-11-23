@@ -221,10 +221,10 @@
 	 (db-file-path   (db:dbfile-path)) ;;  0))
 	 (dbstruct-local (if *dbstruct-db*
 			     *dbstruct-db*
-			     (let* ((db (make-dbr:dbstruct path:  dbdir local: #t)))
+			     (let* ((db (db:setup))) ;; make-dbr:dbstruct path:  dbdir local: #t)))
 			       (set! *dbstruct-db* db)
 			       db)))
-	 (read-only      (not (file-write-access? dbdir)))
+	 (read-only      (not (file-write-access? db-file-path)))
 	 (start          (current-milliseconds))
 	 (resdat         (if (not (and read-only qry-is-write))
 			     (api:execute-requests dbstruct-local (vector (symbol->string cmd) params))
