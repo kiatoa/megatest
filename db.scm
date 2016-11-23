@@ -315,7 +315,7 @@
 	)
     (debug:print-info 4 *default-log-port* "Syncing for run-id: " run-id)
     ;; (mutex-lock! *http-mutex*)
-    (db:sync-tables (db:sync-all-tables-list tmpdb) tmpdb mtdb)))
+    (db:sync-tables (db:sync-all-tables-list tmpdb) #f tmpdb mtdb)))
 ;;    (if (eq? run-id 0)
 ;;	;; runid equal to 0 is main.db
 ;;	(if maindb
@@ -888,7 +888,7 @@
 	;;
 	(if (member 'old2new options)
 	    ;; (begin
-	    (db:sync-tables (db:sync-all-tables-list dbstruct) mtdb tmpdb))
+	    (db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb tmpdb))
 			      ;; (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
 ;; 	      (for-each 
 ;; 	       (lambda (run-id)
@@ -904,7 +904,7 @@
 	;; do not use the run-ids list passed in to the function
 	;;
 	(if (member 'new2old options)
-	    (db:sync-tables (db:sync-all-tables-list dbstruct) tmpdb mtdb))
+	    (db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb mtdb))
 	;; (let* ((maindb      (make-dbr:dbstruct path: toppath local: #t))
 	;; 	   (src-run-ids (if run-ids run-ids (db:get-all-run-ids (db:dbdat-get-db (db:get-db maindb 0)))))
 	;; 	   (all-run-ids (sort (delete-duplicates (cons 0 src-run-ids)) <))

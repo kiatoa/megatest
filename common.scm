@@ -83,6 +83,7 @@
 (define *alt-log-file* #f)  ;; used by -log
 (define *common:denoise*    (make-hash-table)) ;; for low noise printing
 (define *default-log-port*  (current-error-port))
+(define *time-zero* (current-seconds)) ;; for the watchdog
 
 ;; DATABASE
 (define *dbstruct-db*  #f)

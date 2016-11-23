@@ -515,7 +515,7 @@
 						     exn 
 						     (debug:print-info 0 *default-log-port* "test db access issue in examine test for run-id " run-id ", test-id " test-id ": " ((condition-property-accessor 'exn 'message) exn))
 						     (rmt:get-test-info-by-id run-id test-id )))))
-			       ;; (debug:print-info 0 *default-log-port* "need-update= " need-update " curr-mod-time = " curr-mod-time)
+			       ;; (print "INFO: need-update= " need-update " curr-mod-time = " curr-mod-time)
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
