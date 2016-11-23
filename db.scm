@@ -3192,8 +3192,8 @@
                                         (cons status statuses)
                                         statuses))
                                   *common:std-statuses* >))
-              (newstate          (car all-curr-states))
-              (newstatus         (car all-curr-statuses)))
+              (newstate          (if (null? all-curr-states) "NOT_STARTED" (car all-curr-states)))
+              (newstatus         (if (null? all-curr-statuses) "n/a" (car all-curr-statuses))))
          (db:test-set-state-status-by-id dbstruct run-id test-id newstate newstatus #f))))))
         
 (define db:roll-up-pass-fail-counts db:roll-up-items-state-status)
