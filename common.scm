@@ -351,32 +351,94 @@
 ;;======================================================================
 
 (define *common:std-states*   
-  '((0 "COMPLETED")
-    (1 "NOT_STARTED")
-    (2 "RUNNING")
-    (3 "REMOTEHOSTSTART")
-    (4 "LAUNCHED")
+  '((0 "RUNNING")
+    (1 "COMPLETED")
+    (2 "REMOTEHOSTSTART")
+    (3 "LAUNCHED")
+    (4 "NOT_STARTED")
     (5 "KILLED")
     (6 "KILLREQ")
     (7 "STUCK")
     (8 "ARCHIVED")))
 
 (define *common:std-statuses*
-  '((0 "PASS")
-    (1 "WARN")
-    (2 "FAIL")
+  '((0 "DELETED")
+    (1 "n/a")
+    (2 "PASS")
     (3 "CHECK")
-    (4 "n/a")
-    (5 "WAIVED")
-    (6 "SKIP")
-    (7 "DELETED")
-    (8 "STUCK/DEAD")
+    (4 "SKIP")
+    (5 "WARN")
+    (6 "WAIVED")
+    (7 "STUCK/DEAD")
+    (8 "FAIL")
     (9 "ABORT")))
+
+(define (common:special-sort items order comp)
+  (let ((items-order (map reverse order))
+        (acomp       (or comp >)))
+    (sort items
+        (lambda (a b)
+          (let ((a-num (cadr (or (assoc a items-order) '(0 0))))
+                (b-num (cadr (or (assoc b items-order) '(0 0)))))
+            (acomp a-num b-num))))))
 
 ;; These are stopping conditions that prevent a test from being run
 (define *common:cant-run-states-sym* 
   '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE ABORT ARCHIVED))
 
+;; given a toplevel with currstate, currstatus apply state and status
+;;  => (newstate . newstatus)
+(define (common:apply-state-status currstate currstatus state status)
+  (let* ((cstate  (string->symbol (string-downcase currstate)))
+         (cstatus (string->symbol (string-downcase currstatus)))
+         (sstate  (string->symbol (string-downcase state)))
+         (sstatus (string->symbol (string-downcase status)))
+         (nstate  #f)
+         (nstatus #f))
+    (set! nstate
+          (case cstate
+            ((completed not_started killed killreq stuck archived) 
+             (case sstate ;; completed -> sstate
+               ((completed killed killreq stuck archived) completed)
+               ((running remotehoststart launched)        running)
+               (else                                      unknown-error-1)))
+            ((running remotehoststart launched)
+             (case sstate
+               ((completed killed killreq stuck archived) #f) ;; need to look at all items
+               ((running remotehoststart launched)        running)
+               (else                                      unknown-error-2)))
+            (else unknown-error-3)))
+    (set! nstatus
+          (case sstatus
+            ((pass)
+             (case nstate
+               ((pass n/a deleted)     pass)
+               ((warn)                 warn)
+               ((fail)                 fail)
+               ((check)               check)
+               ((waived)             waived)
+               ((skip)                 skip)
+               ((stuck/dead)          stuck)
+               ((abort)               abort)
+               (else        unknown-error-4)))
+            ((warn)
+             (case nstate
+               ((pass warn n/a skip deleted)   warn)
+               ((fail)                         fail)
+               ((check)                       check)
+               ((waived)                     waived)
+               ((stuck/dead)                  stuck)
+               (else                unknown-error-5)))
+            ((fail)
+             (case nstate
+               ((pass warn fail check n/a waived skip deleted stuck/dead stuck)  fail)
+               ((abort)                                                         abort)
+               (else                                                  unknown-error-6)))
+            (else    unknown-error-7)))
+    (cons 
+     (if nstate  (symbol->string nstate)  nstate)
+     (if nstatus (symbol->string nstatus) nstatus))))
+               
 ;;======================================================================
 ;; D E B U G G I N G   S T U F F 
 ;;======================================================================
