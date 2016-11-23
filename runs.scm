@@ -224,7 +224,7 @@
 	     (> run-count config-reruns))
 	(set! run-count config-reruns))
     
-    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
+    ;; (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 
     (let ((sighand (lambda (signum)
 		     ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
