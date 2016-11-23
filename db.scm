@@ -112,9 +112,12 @@
 ;; r/w is a flag to indicate if the db is modified by this query #t = yes, #f = no
 ;;
 (define (db:with-db dbstruct run-id r/w proc . params)
-  (let* ((dbdat ;; (if (dbr:dbstruct? dbstruct)
-		    (db:get-db dbstruct run-id))
-;;		    dbstruct)) ;; cheat, allow for passing in a dbdat
+  (let* ((dbdat (if (dbr:dbstruct? dbstruct)
+		    (db:get-db dbstruct run-id)
+		    (begin
+		      (print-call-chain)
+		      (print "db:with-db called with dbdat instead of dbstruct, FIXME!!")
+		      dbstruct))) ;; cheat, allow for passing in a dbdat
 	 (db    (db:dbdat-get-db dbdat))) 
     (handle-exceptions
      exn
@@ -253,7 +256,7 @@
         ;; (mutex-lock! *rundb-mutex*)
         (let* ((dbpath       (db:dbfile-path)) ;;  0))
                (dbexists     (file-exists? dbpath))
-               (tmpdb        (db:open-megatest-db dbdir: dbpath)) ;; lock-create-open dbpath db:initialize-main-db))
+               (tmpdb        (db:open-megatest-db path: dbpath)) ;; lock-create-open dbpath db:initialize-main-db))
                (mtdb         (db:open-megatest-db))
                (write-access (file-write-access? dbpath)))
           (if (and dbexists (not write-access))
@@ -289,7 +292,7 @@
 ;;   NOTE: returns a dbdat not a dbstruct!
 ;;
 (define (db:open-megatest-db #!key (path #f))
-  (let* ((dbpath       (or path (conc *toppath* "/megatest.db")))
+  (let* ((dbpath       (conc (or path *toppath*) "/megatest.db"))
 	 (dbexists     (file-exists? dbpath))
 	 (db           (db:lock-create-open dbpath
 					    (lambda (db)
@@ -780,8 +783,10 @@
 ;;
 (define (db:dispatch-query access-mode rmt-cmd db-cmd . params)
   (if (eq? access-mode 'cached)
-      (apply db:call-with-cached-db db-cmd params)
-      (apply rmt-cmd params)))
+      (print "not doing cached calls right now"))
+;;      (apply db:call-with-cached-db db-cmd params)
+      (apply rmt-cmd params))
+;;)
 
 ;; return the target db handle so it can be used
 ;;

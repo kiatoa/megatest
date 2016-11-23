@@ -357,7 +357,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     ;; sync for filesystem local db writes
 	     ;;
              (let ((start-time   (current-seconds)))
-               (if legacy-sync (common:sync-to-megatest.db #f))
+               ;; disabling for now (if legacy-sync (common:sync-to-megatest.db #f))
 	       (if (and debug-mode
 			(> (- start-time last-time) 60))
 		   (begin
