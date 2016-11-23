@@ -402,7 +402,7 @@
   (if *db-cache-path*
       *db-cache-path*
       (let ((dbpath (create-directory (conc "/tmp/" (current-user-name)
-					    "/megatest_cachedb/"
+					    "/megatest_localdb/"
 					    (common:get-testsuite-name) "/"
 					    (string-translate *toppath* "/" ".")) #t)))
 	(set! *db-cache-path* dbpath)
@@ -502,11 +502,13 @@
     (if (and no-hurry (debug:debug-mode 18))
 	(rmt:print-db-stats))
     (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
-			      (let ((run-ids (hash-table-keys *db-local-sync*)))
-				(if (and (not (null? run-ids))
-					 (or (common:legacy-sync-recommended)
-					     (configf:lookup *configdat* "setup" "megatest-db")))
-				    (if no-hurry (db:multi-db-sync run-ids 'new2old))))
+			;; (let ((run-ids (hash-table-keys *db-local-sync*)))
+			;; 	(if (and (not (null? run-ids))
+			;; 		 (or (common:legacy-sync-recommended)
+			;; 		     (configf:lookup *configdat* "setup" "megatest-db")))
+			;; 	    (if no-hurry
+			;; 		(db:multi-db-sync run-ids 'new2old))
+			;; 	    ))
 			      (if *dbstruct-db* (db:close-all *dbstruct-db*))
 			      (if *inmemdb*     (db:close-all *inmemdb*))
 			      (if (and *megatest-db*
