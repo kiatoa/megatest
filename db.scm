@@ -1543,6 +1543,8 @@
 	 (db:top-test-set-per-pf-counts dbstruct run-id test-name)))
      toplevels)))
 
+;; BUG: Possibly broken - does not explicitly use run-id in the query
+;;
 (define (db:top-test-set-per-pf-counts dbstruct run-id test-name)
   (db:general-call (db:get-db dbstruct run-id) 'top-test-set-per-pf-counts (list test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name))) 
  
@@ -2459,6 +2461,7 @@
     (db:general-call dbdat 'delete-test-data-records (list test-id))
     (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id)))
 
+;; 
 (define (db:delete-old-deleted-test-records dbstruct)
   (let ((run-ids  (db:get-all-run-ids dbstruct))
 	(targtime (- (current-seconds)(* 30 24 60 60)))) ;; one month in the past
@@ -2631,9 +2634,9 @@
    (lambda (db)
      (db:first-result-default
       db
-      "SELECT id FROM tests WHERE testname=? AND item_path=?;"
+      "SELECT id FROM tests WHERE testname=? AND item_path=? AND run_id=?;"
       #f ;; the default
-      testname item-path))))
+      testname item-path run-id))))
 
 ;; overload the unused attemptnum field for the process id of the runscript or 
 ;; ezsteps step script in progress
@@ -2805,8 +2808,8 @@
 	(lambda (a . b)
 	  (set! res (apply vector a b)))
 	db
-	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE testname=? AND item_path=?;")
-	test-name item-path)
+	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE testname=? AND item_path=? AND run-id=?;")
+	test-name item-path run-id)
        res))))
 
 (define (db:test-get-rundir-from-test-id dbstruct run-id test-id)
@@ -3198,7 +3201,7 @@
 	      (debug:print 2 *default-log-port* "Found path: " path)
 	      (debug:print 2 *default-log-port* "No such path: " path))) ;; )
 	db
-	"SELECT rundir,final_logf FROM tests WHERE testname=? AND item_path='';"
+	"SELECT rundir,final_logf FROM tests WHERE testname=? AND item_path='' AND run_id=?;"
 	test-name)
        res))))
 
@@ -3232,7 +3235,7 @@
 	'(test-set-log            "UPDATE tests SET final_logf=? WHERE id=?;")      ;; DONE
 	;; '(test-set-rundir-by-test-id "UPDATE tests SET rundir=? WHERE id=?")        ;; DONE
 	;; '(test-set-rundir         "UPDATE tests SET rundir=? AND testname=? AND item_path=?;") ;; DONE
-	'(test-set-rundir-shortdir "UPDATE tests SET rundir=?,shortdir=? WHERE testname=? AND item_path=?;")
+	'(test-set-rundir-shortdir "UPDATE tests SET rundir=?,shortdir=? WHERE testname=? AND item_path=?;")    ;; BROKEN!!! NEEDS run-id
 	'(delete-tests-in-state   ;; "DELETE FROM tests WHERE state=?;")                  ;; DONE
 	  "UPDATE tests SET state='DELETED' WHERE state=?")
 	'(tests:test-set-toplog   "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';")
@@ -3244,9 +3247,9 @@
 	'(update-pass-fail-counts "UPDATE tests 
              SET fail_count=(SELECT count(id) FROM tests WHERE testname=? AND item_path != '' AND status IN ('FAIL','CHECK','INCOMPLETE','ABORT')),
                  pass_count=(SELECT count(id) FROM tests WHERE testname=? AND item_path != '' AND status IN ('PASS','WARN','WAIVED'))
-             WHERE testname=? AND item_path='';") ;; DONE
-	'(top-test-set          "UPDATE tests SET state=? WHERE testname=? AND item_path='';") ;; DONE
-	'(top-test-set-running  "UPDATE tests SET state='RUNNING' WHERE testname=? AND item_path='';") ;; DONE
+             WHERE testname=? AND item_path='';") ;; DONE  ;; BROKEN!!! NEEDS run-id
+	'(top-test-set          "UPDATE tests SET state=? WHERE testname=? AND item_path='';") ;; DONE   ;; BROKEN!!! NEEDS run-id
+	'(top-test-set-running  "UPDATE tests SET state='RUNNING' WHERE testname=? AND item_path='';") ;; DONE   ;; BROKEN!!! NEEDS run-id
 
 
 	;; Might be the following top-test-set-per-pf-counts query could be better based off of something like this:
@@ -3336,7 +3339,7 @@
                                               AND status = 'PASS') > 0 THEN 'PASS'
                                   WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
                                   ELSE 'UNKNOWN' END
-                       WHERE testname=? AND item_path='';") ;; DONE
+                       WHERE testname=? AND item_path='';") ;; DONE  ;; BROKEN!!! NEEDS run-id
 
 	;; STEPS
 	'(delete-test-step-records "UPDATE test_steps SET status='DELETED' WHERE test_id=?;")
