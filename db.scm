@@ -3179,19 +3179,20 @@
 ;; if test-name is an integer work off that instead of test-name test-path
 ;;
 (define (db:set-state-status-and-roll-up-items dbstruct run-id test-name item-path state status #!key (comment #f))
-  (let* ((db      (db:dbdat-get-db (dbr:dbstruct-tmpdb dbstruct)))
-	 (testdat1 (if (number? test-name)
-		       (db:get-test-info-by-id dbstruct run-id test-name)
-		       #f))
-	 (orig-test-id (db:test-get-id testdat1)) ;; the item
-	 (test-name (db:test-get-testname testdat1))
-         (testdat   (db:get-test-info dbstruct run-id test-name ""))
-         (test-id   (db:test-get-id        testdat))
-	 (item-path (db:test-get-item-path testdat1)))
+  (let* ((db           (db:dbdat-get-db (dbr:dbstruct-tmpdb dbstruct)))
+	 (testdat1     (if (number? test-name)
+			   (db:get-test-info-by-id dbstruct run-id test-name)
+			   #f))
+	 (orig-test-id (if testdat1 (db:test-get-id testdat1) #f)) ;; the item
+	 (test-name    (if testdat1 (db:test-get-testname testdat1) test-name))
+         (testdat      (db:get-test-info dbstruct run-id test-name ""))
+         (test-id      (db:test-get-id        testdat))
+	 (item-path    (db:test-get-item-path (or testdat1 testdat))))
+    (print "Got here.")
     (sqlite3:with-transaction
      db
      (lambda ()
-       (db:test-set-state-status-by-id dbstruct run-id orig-test-id state status comment)
+       (if orig-test-id (db:test-set-state-status-by-id dbstruct run-id orig-test-id state status comment))
        (if (not (equal? item-path "")) ;; only roll up IF we are an item
 	   (let* ((all-curr-states   (common:special-sort
 				      (delete-duplicates
