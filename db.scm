@@ -3176,27 +3176,40 @@
 ;; state is the priority rollup of all states
 ;; status is the priority rollup of all completed states
 ;;
-(define (db:roll-up-items-state-status dbstruct run-id test-name item-path state status)
+;; if test-name is an integer work off that instead of test-name test-path
+;;
+(define (db:set-state-status-and-roll-up-items dbstruct run-id test-name item-path state status #!key (comment #f))
   (let* ((db      (db:dbdat-get-db (dbr:dbstruct-tmpdb dbstruct)))
-         (testdat (db:get-test-info dbstruct run-id test-name ""))
-         (test-id (db:test-get-id testdat)))
+	 (testdat1 (if (number? test-name)
+		       (db:get-test-info-by-id dbstruct run-id test-name)
+		       #f))
+	 (orig-test-id (db:test-get-id testdat1)) ;; the item
+	 (test-name (db:test-get-testname testdat1))
+         (testdat   (db:get-test-info dbstruct run-id test-name ""))
+         (test-id   (db:test-get-id        testdat))
+	 (item-path (db:test-get-item-path testdat1)))
     (sqlite3:with-transaction
      db
      (lambda ()
-       (let* ((all-curr-states   (common:special-sort
-                                  (cons state (db:get-all-item-states   db run-id test-name))
-                                  *common:std-states* >))
-              (all-curr-statuses (common:special-sort
-                                  (let ((statuses (db:get-all-item-statuses db run-id test-name)))
-                                    (if (equal? state "COMPLETED")
-                                        (cons status statuses)
-                                        statuses))
-                                  *common:std-statuses* >))
-              (newstate          (if (null? all-curr-states) "NOT_STARTED" (car all-curr-states)))
-              (newstatus         (if (null? all-curr-statuses) "n/a" (car all-curr-statuses))))
-         (db:test-set-state-status-by-id dbstruct run-id test-id newstate newstatus #f))))))
+       (db:test-set-state-status-by-id dbstruct run-id orig-test-id state status comment)
+       (if (not (equal? item-path "")) ;; only roll up IF we are an item
+	   (let* ((all-curr-states   (common:special-sort
+				      (delete-duplicates
+				       (let ((states (db:get-all-item-states   db run-id test-name)))
+					 (if state (cons state states) states)))
+				      *common:std-states* >))
+		  (all-curr-statuses (common:special-sort
+				      (delete-duplicates
+				       (let ((statuses (db:get-all-item-statuses db run-id test-name)))
+					 (if (equal? state "COMPLETED")
+					     (cons status statuses)
+					     statuses)))
+				      *common:std-statuses* >))
+		  (newstate          (if (null? all-curr-states) "NOT_STARTED" (car all-curr-states)))
+		  (newstatus         (if (null? all-curr-statuses) "n/a" (car all-curr-statuses))))
+	     (db:test-set-state-status-by-id dbstruct run-id test-id newstate newstatus #f)))))))
         
-(define db:roll-up-pass-fail-counts db:roll-up-items-state-status)
+(define db:roll-up-pass-fail-counts db:set-state-status-and-roll-up-items)
 
 ;; call with state = #f to roll up with out accounting for state/status of this item
 ;;
