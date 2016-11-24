@@ -242,7 +242,7 @@
   ;; force RUNNING/n/a
 
   ;; (thread-sleep! 0.3)
-  (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
+  ;; (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
   (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "RUNNING")
   ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 

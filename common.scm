@@ -351,18 +351,19 @@
 ;;======================================================================
 
 (define *common:std-states*   
-  '((0 "RUNNING")
-    (1 "COMPLETED")
-    (2 "REMOTEHOSTSTART")
-    (3 "LAUNCHED")
+  '((0 "ARCHIVED")
+    (1 "STUCK")
+    (2 "KILLREQ")
+    (3 "KILLED")
     (4 "NOT_STARTED")
-    (5 "KILLED")
-    (6 "KILLREQ")
-    (7 "STUCK")
-    (8 "ARCHIVED")))
+    (5 "RUNNING")
+    (6 "LAUNCHED")
+    (7 "REMOTEHOSTSTART")
+    (8 "COMPLETED")
+    ))
 
 (define *common:std-statuses*
-  '((0 "DELETED")
+  '(;; (0 "DELETED")
     (1 "n/a")
     (2 "PASS")
     (3 "CHECK")
