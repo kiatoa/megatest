@@ -289,7 +289,7 @@
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
 								    ;; (rmt:test-set-state-status-by-id run-id test-id state #f #f)
-								    (rmt:roll-up-pass-fail-counts run-id test-id #f state #f) ;; test-name passed in as test-id is respected
+								    (rmt:roll-up-pass-fail-counts run-id test-id #f state #f #f) ;; test-name passed in as test-id is respected
 								    (db:test-set-state! testdat state)))))
 				    btn))
 				(map cadr *common:std-states*)))) ;; (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ"))))
@@ -323,7 +323,7 @@
 														  ))))
 									  (begin
 									    ;; (rmt:test-set-state-status-by-id run-id test-id #f status #f)
-									    (rmt:roll-up-pass-fail-counts run-id test-id #f #f status) ;; test-name passed in as test-id is respected
+									    (rmt:roll-up-pass-fail-counts run-id test-id #f #f status #f) ;; test-name passed in as test-id is respected
 									    (db:test-set-status! testdat status))))))))
 				    btn))
 				(map cadr *common:std-statuses*)))) ;; (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
