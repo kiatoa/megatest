@@ -277,19 +277,13 @@
 ;; called in http-transport and replicated in rmt.scm for *local* access. 
 ;;
 (define (db:setup #!key (areapath #f)) ;;  . junk) ;;  #!key (run-id #f) (local #f))
-  (let* (;; (dbdir    (db:dbfile-path)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
-         (dbstruct (make-dbr:dbstruct))) ;; ) ;;  path: dbdir local: local)))
-    (db:open-db dbstruct areapath: #f)
-    dbstruct))
-
-;; open the local db for direct access (no server)
-;;
-(define (db:open-local-db-handle)
   (or *dbstruct-db*
-      (let ((dbstruct (db:setup))) ;;  #f local: #t)))
+      (let* (;; (dbdir    (db:dbfile-path)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+	     (dbstruct (make-dbr:dbstruct))) ;; ) ;;  path: dbdir local: local)))
+	(db:open-db dbstruct areapath: #f)
 	(set! *dbstruct-db* dbstruct)
 	dbstruct)))
-	  
+
 ;; Open the classic megatest.db file (defaults to open in toppath)
 ;;
 ;;   NOTE: returns a dbdat not a dbstruct!
@@ -322,7 +316,7 @@
 	)
     (debug:print-info 4 *default-log-port* "Syncing for run-id: " run-id)
     ;; (mutex-lock! *http-mutex*)
-    (db:sync-tables (db:sync-all-tables-list tmpdb) #f tmpdb refndb mtdb)))
+    (db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb refndb mtdb)))
 ;;    (if (eq? run-id 0)
 ;;	;; runid equal to 0 is main.db
 ;;	(if maindb
@@ -3213,7 +3207,7 @@
 				      *common:std-statuses* >))
 		  (newstate          (if (null? all-curr-states) "NOT_STARTED" (car all-curr-states)))
 		  (newstatus         (if (null? all-curr-statuses) "n/a" (car all-curr-statuses))))
-	     (print "Setting toplevel to: " newstate "/" newstatus)
+	     ;; (print "Setting toplevel to: " newstate "/" newstatus)
 	     (db:test-set-state-status-by-id dbstruct run-id tl-test-id newstate newstatus #f)))))))
         
 (define db:roll-up-pass-fail-counts db:set-state-status-and-roll-up-items)
@@ -3290,7 +3284,7 @@
 	      (debug:print 2 *default-log-port* "No such path: " path))) ;; )
 	db
 	"SELECT rundir,final_logf FROM tests WHERE testname=? AND item_path='' AND run_id=?;"
-	test-name)
+	test-name run-id)
        res))))
 
 ;;======================================================================
@@ -3519,7 +3513,7 @@
 (define (db:get-matching-previous-test-run-records dbstruct run-id test-name item-path)
   (let* ((dbdat   (db:get-db dbstruct #f))
 	 (db      (db:dbdat-get-db dbdat))
-	 (keys    (db:get-keys db))
+	 (keys    (db:get-keys dbstruct))
 	 (selstr  (string-intersperse keys ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND "))
 	 (keyvals #f)

@@ -37,8 +37,8 @@
 ;;
 
 (define (fs:process-queue-item packet)
-  (if (not *megatest-db*) ;; we will require that (setup-for-run) has already been called
-      (set! *megatest-db* (open-db)))
+  (if (not *dbstruct-db*) ;; we will require that (setup-for-run) has already been called
+      (set! *dbstruct-db* (db:setup-db)))
   (debug:print-info 11 *default-log-port* "fs:process-queue-item called with packet=" packet)
-  (db:process-queue-item *megatest-db* packet))
+  (db:process-queue-item *dbstruct-db* packet))
       

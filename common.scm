@@ -79,23 +79,21 @@
 (define *test-meta-updated* (make-hash-table))
 (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
 (define *passnum*           0) ;; when running track calls to run-tests or similar
-(define *write-frequency*   (make-hash-table)) ;; run-id => (vector (current-seconds) 0))
 (define *alt-log-file* #f)  ;; used by -log
 (define *common:denoise*    (make-hash-table)) ;; for low noise printing
 (define *default-log-port*  (current-error-port))
 (define *time-zero* (current-seconds)) ;; for the watchdog
 
 ;; DATABASE
-(define *dbstruct-db*  #f)
+(define *dbstruct-db*         #f) ;; used when local access is triggered in rmt.scm
+
 (define *db-stats*            (make-hash-table)) ;; hash of vectors < count duration-total >
 (define *db-stats-mutex*      (make-mutex))
 (define *db-sync-mutex*       (make-mutex))
 (define *db-multi-sync-mutex* (make-mutex))
 (define *db-local-sync*       (make-hash-table)) ;; used to record last touch of db
-(define *megatest-db*         #f)
 (define *last-db-access*      (current-seconds))  ;; update when db is accessed via server
 (define *db-write-access*     #t)
-(define *inmemdb*             #f)
 (define *task-db*             #f) ;; (vector db path-to-db)
 (define *db-access-allowed*   #t) ;; flag to allow access
 (define *db-access-mutex*     (make-mutex))
@@ -108,7 +106,6 @@
 (define *runremote*         (make-hash-table)) ;; if set up for server communication this will hold <host port>
 (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))
-(define *client-non-blocking-mode* #f)
 (define *server-id*         #f)
 (define *server-info*       #f)
 (define *time-to-exit*      #f)
@@ -571,21 +568,7 @@
     (if (and no-hurry (debug:debug-mode 18))
 	(rmt:print-db-stats))
     (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
-			;; (let ((run-ids (hash-table-keys *db-local-sync*)))
-			;; 	(if (and (not (null? run-ids))
-			;; 		 (or (common:legacy-sync-recommended)
-			;; 		     (configf:lookup *configdat* "setup" "megatest-db")))
-			;; 	    (if no-hurry
-			;; 		(db:multi-db-sync run-ids 'new2old))
-			;; 	    ))
-			      (if *dbstruct-db* (db:close-all *dbstruct-db*))
-			      (if *inmemdb*     (db:close-all *inmemdb*))
-			      (if (and *megatest-db*
-				       (sqlite3:database? *megatest-db*))
-				  (begin
-				    (sqlite3:interrupt! *megatest-db*)
-				    (sqlite3:finalize! *megatest-db* #t)
-				    (set! *megatest-db* #f)))
+			      (if *dbstruct-db* (db:close-all *dbstruct-db*)) ;; one second allocated
 			      (if *task-db*    
 				  (let ((db (cdr *task-db*)))
 				    (if (sqlite3:database? db)
