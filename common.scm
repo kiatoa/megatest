@@ -356,10 +356,10 @@
     (2 "KILLREQ")
     (3 "KILLED")
     (4 "NOT_STARTED")
-    (5 "RUNNING")
+    (5 "COMPLETED")
     (6 "LAUNCHED")
     (7 "REMOTEHOSTSTART")
-    (8 "COMPLETED")
+    (8 "RUNNING")
     ))
 
 (define *common:std-statuses*
@@ -373,6 +373,9 @@
     (7 "STUCK/DEAD")
     (8 "FAIL")
     (9 "ABORT")))
+
+(define *common:ended-states* ;; states which indicate the test is stopped and will not proceed
+  '("COMPLETED" "ARCHIVED" "KILLED" "KILLREQ" "STUCK" "INCOMPLETE"))
 
 (define (common:special-sort items order comp)
   (let ((items-order (map reverse order))
