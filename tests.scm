@@ -399,7 +399,8 @@
     (if (and state status)
 	(begin
 	  (rmt:test-set-status-state run-id test-id real-status state (if waived waived comment))
-	  (mt:process-triggers run-id test-id state real-status)))
+	  (mt:process-triggers run-id test-id state real-status)
+	  ))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
@@ -444,7 +445,7 @@
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (if (not (equal? item-path ""))
-	(rmt:roll-up-pass-fail-counts run-id test-name item-path state status))
+	(rmt:roll-up-pass-fail-counts run-id test-name item-path state status #f))
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
@@ -483,7 +484,7 @@
 		(let ((script (configf:lookup *configdat* "testrollup" test-name)))
 		  (print "Obtained lock for " outputfilename)
 		  ;; (rmt:top-test-set-per-pf-counts run-id test-name)
-		  (rmt:roll-up-pass-fail-counts run-id test-name "" #f #f)
+		  (rmt:roll-up-pass-fail-counts run-id test-name "" #f #f #f)
 		  (rmt:top-test-set-per-pf-counts run-id test-name)
 		  (if script
 		      (system (conc script " > " outputfilename " & "))

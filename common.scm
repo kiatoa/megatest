@@ -377,6 +377,9 @@
 (define *common:ended-states* ;; states which indicate the test is stopped and will not proceed
   '("COMPLETED" "ARCHIVED" "KILLED" "KILLREQ" "STUCK" "INCOMPLETE"))
 
+(define *common:badly-ended-states* ;; these roll up as CHECK, i.e. results need to be checked
+  '("KILLED" "KILLREQ" "STUCK" "INCOMPLETE"))
+
 (define (common:special-sort items order comp)
   (let ((items-order (map reverse order))
         (acomp       (or comp >)))

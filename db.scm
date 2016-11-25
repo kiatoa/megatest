@@ -3178,7 +3178,7 @@
 ;;
 ;; if test-name is an integer work off that instead of test-name test-path
 ;;
-(define (db:set-state-status-and-roll-up-items dbstruct run-id test-name item-path state status #!key (comment #f))
+(define (db:set-state-status-and-roll-up-items dbstruct run-id test-name item-path state status comment)
   ;; establish info on incoming test followed by info on top level test
   (let* ((db           (db:dbdat-get-db (dbr:dbstruct-tmpdb dbstruct)))
 	 (testdat      (if (number? test-name)
@@ -3191,7 +3191,6 @@
 	 (item-path    (db:test-get-item-path testdat))
          (tl-testdat   (db:get-test-info dbstruct run-id test-name ""))
          (tl-test-id   (db:test-get-id tl-testdat)))
-    (print "Got here.")
     (sqlite3:with-transaction
      db
      (lambda ()
@@ -3206,7 +3205,10 @@
 				      (delete-duplicates
 				       (let ((statuses (db:get-all-item-statuses db run-id test-name)))
 					 (if (member state *common:ended-states*) ;; '("COMPLETED" "ARCHIVED"))
-					     (cons status statuses)
+					     (cons (if (member state *common:badly-ended-states*)
+						       "FAIL"
+						       status)
+						   statuses)
 					     statuses)))
 				      *common:std-statuses* >))
 		  (newstate          (if (null? all-curr-states) "NOT_STARTED" (car all-curr-states)))

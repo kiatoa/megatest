@@ -522,8 +522,8 @@
 
 ;; state and status are extra hints not usually used in the calculation
 ;;
-(define (rmt:roll-up-pass-fail-counts run-id test-name item-path state status)
-  (rmt:send-receive 'roll-up-pass-fail-counts run-id (list run-id test-name item-path state status)))
+(define (rmt:roll-up-pass-fail-counts run-id test-name item-path state status comment)
+  (rmt:send-receive 'roll-up-pass-fail-counts run-id (list run-id test-name item-path state status comment)))
 
 (define (rmt:update-pass-fail-counts run-id test-name)
   (rmt:general-call 'update-pass-fail-counts run-id test-name test-name test-name))
