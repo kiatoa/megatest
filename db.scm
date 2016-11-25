@@ -3179,36 +3179,40 @@
 ;; if test-name is an integer work off that instead of test-name test-path
 ;;
 (define (db:set-state-status-and-roll-up-items dbstruct run-id test-name item-path state status #!key (comment #f))
+  ;; establish info on incoming test followed by info on top level test
   (let* ((db           (db:dbdat-get-db (dbr:dbstruct-tmpdb dbstruct)))
-	 (testdat1     (if (number? test-name)
+	 (testdat      (if (number? test-name)
 			   (db:get-test-info-by-id dbstruct run-id test-name)
-			   #f))
-	 (orig-test-id (if testdat1 (db:test-get-id testdat1) #f)) ;; the item
-	 (test-name    (if testdat1 (db:test-get-testname testdat1) test-name))
-         (testdat      (db:get-test-info dbstruct run-id test-name ""))
-         (test-id      (db:test-get-id        testdat))
-	 (item-path    (db:test-get-item-path (or testdat1 testdat))))
+			   (db:get-test-info       dbstruct run-id test-name item-path)))
+	 (test-id      (db:test-get-id testdat))
+	 (test-name    (if (number? test-name)
+			   (db:test-get-testname testdat)
+			   test-name))
+	 (item-path    (db:test-get-item-path testdat))
+         (tl-testdat   (db:get-test-info dbstruct run-id test-name ""))
+         (tl-test-id   (db:test-get-id tl-testdat)))
     (print "Got here.")
     (sqlite3:with-transaction
      db
      (lambda ()
-       (if orig-test-id (db:test-set-state-status-by-id dbstruct run-id orig-test-id state status comment))
-       (if (not (equal? item-path "")) ;; only roll up IF we are an item
+       (db:test-set-state-status-by-id dbstruct run-id test-id state status comment)
+       (if (not (equal? item-path "")) ;; only roll up IF incoming test is an item
 	   (let* ((all-curr-states   (common:special-sort
 				      (delete-duplicates
-				       (let ((states (db:get-all-item-states   db run-id test-name)))
+				       (let ((states (db:get-all-item-states db run-id test-name)))
 					 (if state (cons state states) states)))
 				      *common:std-states* >))
 		  (all-curr-statuses (common:special-sort
 				      (delete-duplicates
 				       (let ((statuses (db:get-all-item-statuses db run-id test-name)))
-					 (if (equal? state "COMPLETED")
+					 (if (member state *common:ended-states*) ;; '("COMPLETED" "ARCHIVED"))
 					     (cons status statuses)
 					     statuses)))
 				      *common:std-statuses* >))
 		  (newstate          (if (null? all-curr-states) "NOT_STARTED" (car all-curr-states)))
 		  (newstatus         (if (null? all-curr-statuses) "n/a" (car all-curr-statuses))))
-	     (db:test-set-state-status-by-id dbstruct run-id test-id newstate newstatus #f)))))))
+	     (print "Setting toplevel to: " newstate "/" newstatus)
+	     (db:test-set-state-status-by-id dbstruct run-id tl-test-id newstate newstatus #f)))))))
         
 (define db:roll-up-pass-fail-counts db:set-state-status-and-roll-up-items)
 
