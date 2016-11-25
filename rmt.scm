@@ -221,9 +221,9 @@
 	 (db-file-path   (db:dbfile-path)) ;;  0))
 	 (dbstruct-local (if *dbstruct-db*
 			     *dbstruct-db*
-			     (let* ((db (db:setup))) ;; make-dbr:dbstruct path:  dbdir local: #t)))
-			       (set! *dbstruct-db* db)
-			       db)))
+			     (let* ((dbstruct (db:setup))) ;; make-dbr:dbstruct path:  dbdir local: #t)))
+			       (set! *dbstruct-db* dbstruct)
+			       dbstruct)))
 	 (read-only      (not (file-write-access? db-file-path)))
 	 (start          (current-milliseconds))
 	 (resdat         (if (not (and read-only qry-is-write))

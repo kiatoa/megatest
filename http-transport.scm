@@ -60,7 +60,6 @@
 			    (if ipstr ipstr hostn))) ;; hostname))) 
 	 (start-port      (portlogger:open-run-close portlogger:find-port))
 	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree")))
-    ;; (set! db *inmemdb*)
     (debug:print-info 0 *default-log-port* "portlogger recommended port: " start-port)
     (root-path     (if link-tree-path 
 		       link-tree-path
@@ -84,7 +83,7 @@
 				 (cond
 				  ((equal? (uri-path (request-uri (current-request)))
 					   '(/ "api"))
-				   (send-response body:    (api:process-request *inmemdb* $) ;; the $ is the request vars proc
+				   (send-response body:    (api:process-request *dbstruct-db* $) ;; the $ is the request vars proc
 						  headers: '((content-type text/plain)))
 				   (mutex-lock! *heartbeat-mutex*)
 				   (set! *last-db-access* (current-seconds))
@@ -395,14 +394,13 @@
 	       (server-state 'available)
 	       (bad-sync-count 0))
 
-      ;; Use this opportunity to sync the inmemdb to db
-      (if *inmemdb* 
+      ;; Use this opportunity to sync the tmp db to megatest.db
+      (if *dbstruct-db* 
 	  (let ((start-time (current-milliseconds))
 		(sync-time  #f)
 		(rem-time   #f))
-	    ;; inmemdb is a dbstruct
 	    (condition-case
-	     (db:sync-touched *inmemdb* *run-id* force-sync: #t)
+	     (db:sync-touched *dbstruct-db* *run-id* force-sync: #t)
 	     ((sync-failed)(cond
 			    ((> bad-sync-count 10) ;; time to give up
 			     (http-transport:server-shutdown server-id port))
@@ -423,7 +421,7 @@
 		(thread-sleep! 4))) ;; fallback for if the math is changed ...
 
 	  ;;
-	  ;; no *inmemdb* yet, set running after our first pass through and start the db
+	  ;; no *dbstruct-db* yet, set running after our first pass through and start the db
 	  ;;
 	  (if (eq? server-state 'available)
 	      (let ((new-server-id (tasks:server-am-i-the-server? (db:delay-if-busy tdbdat) run-id))) ;; try to ensure no double registering of servers
@@ -431,10 +429,7 @@
 		    (begin
 		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
 		      (thread-sleep! 0.5) ;; give some margin for queries to complete before switching from file based access to server based access
-		      (set! *inmemdb*  (db:setup)) ;;  run-id))
-		      ;; force initialization
-		      ;; (db:get-db *inmemdb* #t)
-		      ;; (db:get-db *inmemdb* run-id)
+		      (set! *dbstruct-db*  (db:setup)) ;;  run-id))
 		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running"))
 		    (begin ;; gotta exit nicely
 		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "collision")
@@ -492,8 +487,8 @@
   (let ((tdbdat (tasks:open-db)))
     (debug:print-info 0 *default-log-port* "Starting to shutdown the server.")
     ;; need to delete only *my* server entry (future use)
-    (set! *time-to-exit* #t)
-    (if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
+    (if *dbstruct-db* (db:sync-touched *dbstruct-db* *run-id* force-sync: #t))
+    (set! *time-to-exit* #t) ;; tell on-exit to be fast as we've already cleaned up
     ;;
     ;; start_shutdown
     ;;

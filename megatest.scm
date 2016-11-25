@@ -766,9 +766,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    #t
 		    ))))))
 
-;; MAY STILL NEED THIS
-;;		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))
-
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server")
         (args:get-arg "-kill-server"))
@@ -1899,7 +1896,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(args:get-arg "-repl")
 	(args:get-arg "-load"))
     (let* ((toppath (launch:setup))
-	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
+	   (dbstruct (if toppath (db:setup)))) ;; make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
       (if dbstruct
 	  (cond
 	   ((getenv "MT_RUNSCRIPT")
@@ -1917,7 +1914,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (else
 	    (begin
 	      (set! *db* dbstruct)
-	      (set! *client-non-blocking-mode* #t)
 	      (import extras) ;; might not be needed
 	      ;; (import csi)
 	      (import readline)
@@ -1936,7 +1932,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (if (args:get-arg "-repl")
 		  (repl)
 		  (load (args:get-arg "-load")))
-	      (db:close-all dbstruct))
+	      ;; (db:close-all dbstruct) <= taken care of by on-exit call
+	      )
 	    (exit)))
 	  (set! *didsomething* #t))))
 
