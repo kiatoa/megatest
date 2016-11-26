@@ -898,7 +898,7 @@
 
     ;; Update the rundir path in the test record for all, rundir=physical, shortdir=logical
     ;;                                                 rundir   shortdir
-    (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path)
+    (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path run-id)
 
     (debug:print 2 *default-log-port* "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
@@ -971,7 +971,7 @@
 				;; (resolve-pathname lnkpath)
 				(common:nice-path lnkpath)
 				lnkpath)
-			    testname "")
+			    testname "" run-id)
 	  ;; (rmt:general-call 'test-set-rundir run-id lnkpath testname "") ;; toptest-path)
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))

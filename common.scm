@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils)
 (require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -92,7 +92,8 @@
 (define *db-sync-mutex*       (make-mutex))
 (define *db-multi-sync-mutex* (make-mutex))
 (define *db-local-sync*       (make-hash-table)) ;; used to record last touch of db
-(define *last-db-access*      (current-seconds))  ;; update when db is accessed via server
+(define *db-last-sync*        0)                 ;; last time the sync to megatest.db happened 
+(define *last-db-access*      (current-seconds)) ;; update when db is accessed via server
 (define *db-write-access*     #t)
 (define *task-db*             #f) ;; (vector db path-to-db)
 (define *db-access-allowed*   #t) ;; flag to allow access
@@ -103,7 +104,7 @@
 (define *my-client-signature* #f)
 (define *transport-type*    'http)
 (define *transport-type*    'http)             ;; override with [server] transport http|rpc|nmsg
-(define *runremote*         (make-hash-table)) ;; if set up for server communication this will hold <host port>
+(define *runremote*         #f)                ;; if set up for server communication this will hold <host port>
 (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))
 (define *server-id*         #f)
@@ -202,6 +203,30 @@
    'schema)
   (if (common:version-changed?)
       (common:set-last-run-version)))
+
+;; Rotate logs, logic: 
+;;                 if > 500k and older than 1 week:
+;;                     remove previous compressed log and compress this log
+;; WARNING: This proc operates assuming that it is in the directory above the
+;;          logs directory you wish to log-rotate.
+;;
+(define (common:rotate-logs)
+  (if (not (directory-exists? "logs"))(create-directory "logs"))
+  (directory-fold 
+   (lambda (file rem)
+     (if (and (string-match "^.*.log" file)
+	      (> (file-size (conc "logs/" file)) 200000))
+	 (let ((gzfile (conc "logs/" file ".gz")))
+	   (if (file-exists? gzfile)
+	       (begin
+		 (debug:print-info 0 *default-log-port* "removing " gzfile)
+		 (delete-file gzfile)))
+	   (debug:print-info 0 *default-log-port* "compressing " file)
+	   (system (conc "gzip logs/" file)))))
+   '()
+   "logs"))
+    
+
 
 ;; Force a megatest cleanup-db if version is changed and skip-version-check not specified
 ;;
@@ -484,13 +509,13 @@
 (define (common:legacy-sync-recommended)
   (or (and (common:get-homehost)
 	   (cdr (common:get-homehost)))
-      (args:get-arg "-runtests")
-      (args:get-arg "-run")
+      ;;(args:get-arg "-runtests")
+      ;;(args:get-arg "-run")
       (args:get-arg "-server")
       ;; (args:get-arg "-set-run-status")
-      (args:get-arg "-remove-runs")
+      ;;(args:get-arg "-remove-runs")
       ;; (args:get-arg "-get-run-status")
-      (args:get-arg "-use-db-cache") ;; feels like a bad idea ...
+      ;;(args:get-arg "-use-db-cache") ;; feels like a bad idea ...
       ))
 
 (define (common:legacy-sync-required)
@@ -538,7 +563,7 @@
 	  ;; sync for filesystem local db writes
 	  ;;
 	  (let ((start-time   (current-seconds)))
-	    (common:sync-to-megatest.db 'local-sync-flags)
+	    ;; (common:sync-to-megatest.db 'local-sync-flags)
 	    (if (and debug-mode
 		     (> (- start-time last-time) 60))
 		(begin

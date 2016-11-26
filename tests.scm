@@ -399,13 +399,13 @@
     (if (and state status)
 	(begin
 	  (rmt:test-set-status-state run-id test-id real-status state (if waived waived comment))
-	  (mt:process-triggers run-id test-id state real-status)
+	  ;; (mt:process-triggers run-id test-id state real-status) ;; triggers are called in test-set-status-state
 	  ))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
-    (if (and test-id state status (equal? status "AUTO")) 
-	(rmt:test-data-rollup run-id test-id status))
+    ;; (if (and test-id state status (equal? status "AUTO")) 
+    ;; 	(rmt:test-data-rollup run-id test-id status))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
@@ -483,9 +483,8 @@
 	    (if have-lock
 		(let ((script (configf:lookup *configdat* "testrollup" test-name)))
 		  (print "Obtained lock for " outputfilename)
-		  ;; (rmt:top-test-set-per-pf-counts run-id test-name)
 		  (rmt:roll-up-pass-fail-counts run-id test-name "" #f #f #f)
-		  (rmt:top-test-set-per-pf-counts run-id test-name)
+		  ;; (rmt:test-set-status-state run-id test-name #f #f #f) ;; (rmt:top-test-set-per-pf-counts run-id test-name)
 		  (if script
 		      (system (conc script " > " outputfilename " & "))
 		      (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename))

@@ -182,14 +182,14 @@
 		(if (and start-res
 			 ping-res)
 		    (begin
-		      (hash-table-set! *runremote* run-id start-res)
+		      (set! *runremote* start-res) ;; (hash-table-set! *runremote* run-id start-res)
 		      (debug:print-info 2 *default-log-port* "connected to " (http-transport:server-dat-make-url start-res))
 		      start-res)
 		    (begin    ;; login failed but have a server record, clean out the record and try again
 		      (debug:print-info 0 *default-log-port* "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
 		      (case *transport-type* 
 			((http)(http-transport:close-connections run-id)))
-		      (hash-table-delete! *runremote* run-id)
+		      (set! *runremote* #f)  ;; (hash-table-delete! *runremote* run-id)
 		      (tasks:kill-server-run-id run-id)
 		      (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat)
 							   run-id 

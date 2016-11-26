@@ -42,7 +42,7 @@
 ;; else return #f to let the calling proc know that there is no server available
 ;;
 (define (rmt:get-connection-info run-id)
-  (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
+  (let ((cinfo *runremote*)) ;; (hash-table-ref/default *runremote* run-id #f)))
     (if cinfo
 	cinfo
 	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)
@@ -56,6 +56,19 @@
 (define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
   ;; clean out old connections
   ;; (mutex-lock! *db-multi-sync-mutex*)
+
+  ;; 1. check if server is started IFF cmd is a write OR if we are not on the homehost, store in *runremote*
+  ;; 2. check the age of the connections. refresh the connection if it is older than timeout-20 seconds.
+  ;; 3. do the query, if on homehost use local access
+
+  (if (and #f  ;; FORCE NO GO FOR RIGHT NOW
+	   (not *runremote*)                         ;; we trust *runremote* to reflect that a server was found previously
+	   (not (member cmd api:read-only-queries))) ;; we don't trust so much the list of write queries
+      (let ((serverconn (server:check-if-running *toppath*)))
+	(if serverconn
+	    (set! *runremote* serverconn) ;; the string can be consumed by the client setup if needed
+	    (server:kind-run *toppath*))))
+  
   (rmt:open-qry-close-locally cmd (if rid rid 0) params))
 
 ;;   (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
@@ -219,11 +232,7 @@
 (define (rmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
   (let* ((qry-is-write   (not (member cmd api:read-only-queries)))
 	 (db-file-path   (db:dbfile-path)) ;;  0))
-	 (dbstruct-local (if *dbstruct-db*
-			     *dbstruct-db*
-			     (let* ((dbstruct (db:setup))) ;; make-dbr:dbstruct path:  dbdir local: #t)))
-			       (set! *dbstruct-db* dbstruct)
-			       dbstruct)))
+	 (dbstruct-local (db:setup))  ;; make-dbr:dbstruct path:  dbdir local: #t)))
 	 (read-only      (not (file-write-access? db-file-path)))
 	 (start          (current-milliseconds))
 	 (resdat         (if (not (and read-only qry-is-write))
@@ -245,7 +254,7 @@
 	      #f))
 	(begin
 	  ;; (rmt:update-db-stats run-id cmd params duration)
-	  ;; mark this run as dirty if this was a write
+	  ;; mark this run as dirty if this was a write, the watchdog is responsible for syncing it
 	  (if qry-is-write
 	      (let ((start-time (current-seconds)))
 		(mutex-lock! *db-multi-sync-mutex*)
@@ -306,9 +315,9 @@
 ;; This login does no retries under the hood - it acts a bit like a ping.
 ;; Deprecated for nmsg-transport.
 ;;
-(define (rmt:login-no-auto-client-setup connection-info run-id)
-  (case *transport-type*
-    ((http)(rmt:send-receive-no-auto-client-setup connection-info 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
+(define (rmt:login-no-auto-client-setup connection-info)
+  (case *transport-type* ;; run-id of 0 is just a placeholder
+    ((http)(rmt:send-receive-no-auto-client-setup connection-info 'login 0 (list *toppath* megatest-version *my-client-signature*)))
     ;;((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info 'login (list *toppath* megatest-version run-id *my-client-signature*)))
     ))
 
