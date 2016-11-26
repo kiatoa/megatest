@@ -113,7 +113,7 @@
 (define (http-transport:try-start-server run-id ipaddrstr portnum server-id)
   (let ((config-hostname (configf:lookup *configdat* "server" "hostname"))
 	(tdbdat          (tasks:open-db)))
-    (debug:print-info 0 *default-log-port* "http-transport:try-start-server run-id=" run-id " ipaddrsstr=" ipaddrstr " portnum=" portnum " server-id=" server-id " config-hostname=" config-hostname)
+    (debug:print-info 0 *default-log-port* "http-transport:try-start-server time=" (seconds->time-string (current-seconds)) " run-id=" run-id " ipaddrsstr=" ipaddrstr " portnum=" portnum " server-id=" server-id " config-hostname=" config-hostname)
     (handle-exceptions
      exn
      (begin
@@ -262,7 +262,7 @@
 					     (set! success #f)
 					     (debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
 					     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-					     (hash-table-delete! *runremote* run-id)
+					     (set! *runremote* #f) ;; (hash-table-delete! *runremote* run-id)
 					     ;; Killing associated server to allow clean retry.")
 					     ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
 					     (mutex-unlock! *http-mutex*)
@@ -309,7 +309,7 @@
 ;; careful closing of connections stored in *runremote*
 ;;
 (define (http-transport:close-connections run-id)
-  (let* ((server-dat (hash-table-ref/default *runremote* run-id #f)))
+  (let* ((server-dat *runremote*)) ;; (hash-table-ref/default *runremote* run-id #f)))
     (if (vector? server-dat)
 	(let ((api-dat (http-transport:server-dat-get-api-uri server-dat)))
 	  (close-connection! api-dat)
@@ -400,7 +400,9 @@
 		(sync-time  #f)
 		(rem-time   #f))
 	    (condition-case
-	     (db:sync-touched *dbstruct-db* *run-id* force-sync: #t)
+	     ;; (if (and (member (mutex-state *db-sync-mutex*) '(abandoned not-abandoned))
+	     ;;	      (> (- (current-seconds) *db-last-sync*) 5)) ;; if not currently being synced nor recently synced
+	     (db:sync-touched *dbstruct-db* *run-id* force-sync: #t) ;; usually done in the watchdog, not here.
 	     ((sync-failed)(cond
 			    ((> bad-sync-count 10) ;; time to give up
 			     (http-transport:server-shutdown server-id port))
@@ -430,7 +432,8 @@
 		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
 		      (thread-sleep! 0.5) ;; give some margin for queries to complete before switching from file based access to server based access
 		      (set! *dbstruct-db*  (db:setup)) ;;  run-id))
-		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running"))
+		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")
+		      (server:write-dotserver *toppath* (conc iface ":" port)))
 		    (begin ;; gotta exit nicely
 		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "collision")
 		      (http-transport:server-shutdown server-id port))))))
@@ -487,7 +490,7 @@
   (let ((tdbdat (tasks:open-db)))
     (debug:print-info 0 *default-log-port* "Starting to shutdown the server.")
     ;; need to delete only *my* server entry (future use)
-    (if *dbstruct-db* (db:sync-touched *dbstruct-db* *run-id* force-sync: #t))
+    ;; (if *dbstruct-db* (db:sync-touched *dbstruct-db* *run-id* force-sync: #t)) ;; handled in the watchdog only
     (set! *time-to-exit* #t) ;; tell on-exit to be fast as we've already cleaned up
     ;;
     ;; start_shutdown
@@ -512,6 +515,8 @@
 		      " ms")
     (debug:print-info 0 *default-log-port* "Server shutdown complete. Exiting")
     (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running complete")
+    ;; if the .server file contained :myport then we can remove it
+    (server:remove-dotserver-file *toppath* port)
     (exit)))
 
 ;; all routes though here end in exit ...

@@ -198,7 +198,8 @@
 	(let (;; (lock    (obtain-dot-lock fname 1 5 10))
 	      (db      (sqlite3:open-database fname)))
 	  (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-	  (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
+	  ;; (db:set-sync db)
+	  (sqlite3:execute db "PRAGMA synchronous = NORMAL;")
 	  (if (not file-exists)
 	      (begin
 		(if (string-match "^/tmp/.*" fname) ;; this is a file in /tmp
@@ -312,11 +313,14 @@
         (tmpdb   (dbr:dbstruct-tmpdb dbstruct))
 	(mtdb    (dbr:dbstruct-mtdb dbstruct))
         (refndb  (dbr:dbstruct-refndb dbstruct))
+	(start-t (current-seconds))
 	;; (runid  (dbr:dbstruct-run-id dbstruct))
 	)
     (debug:print-info 4 *default-log-port* "Syncing for run-id: " run-id)
-    ;; (mutex-lock! *http-mutex*)
-    (db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb refndb mtdb)))
+    (mutex-lock! *db-sync-mutex*)
+    (db:sync-tables (db:sync-all-tables-list dbstruct) (cons *db-last-sync* "last_update") tmpdb refndb mtdb)
+    (set! *db-last-sync* start-t)
+    (mutex-unlock! *db-sync-mutex*)))
 ;;    (if (eq? run-id 0)
 ;;	;; runid equal to 0 is main.db
 ;;	(if maindb
@@ -373,7 +377,7 @@
 (define (db:close-all dbstruct)
   (if (dbr:dbstruct? dbstruct)
       (begin
-        (db:sync-touched dbstruct 0 force-sync: #t)
+        ;; (db:sync-touched dbstruct 0 force-sync: #t) ;; NO. Do not do this here. Instead we rely on a server to be started when there are writes, even if the server itself is not going to be used as a server.
         (let ((tdb (db:dbdat-get-db (dbr:dbstruct-tmpdb  dbstruct)))
               (mdb (db:dbdat-get-db (dbr:dbstruct-mtdb   dbstruct)))
               (rdb (db:dbdat-get-db (dbr:dbstruct-refndb dbstruct))))
@@ -3158,14 +3162,20 @@
     ((zmq nmsg)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg))) ;; rpc
 
+;; This is to be the big daddy call
+
 (define (db:test-set-status-state dbstruct run-id test-id status state msg)
   (let ((dbdat  (db:get-db dbstruct run-id)))
     (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
 	(db:general-call dbdat 'set-test-start-time (list test-id)))
-    (if msg
-	(db:general-call dbdat 'state-status-msg (list state status msg test-id))
-	(db:general-call dbdat 'state-status     (list state status test-id)))
-     (mt:process-triggers run-id test-id state status)))
+    ;; (if msg
+    ;; 	(db:general-call dbdat 'state-status-msg (list state status msg test-id))
+    ;; 	(db:general-call dbdat 'state-status     (list state status test-id)))
+    (db:set-state-status-and-roll-up-items dbstruct run-id test-id #f state status msg)
+    ;; process the test_data table
+    (if (and test-id state status (equal? status "AUTO")) 
+	(db:test-data-rollup dbstruct run-id test-id status))
+    (mt:process-triggers run-id test-id state status)))
 
 ;; state is the priority rollup of all states
 ;; status is the priority rollup of all completed states
@@ -3176,7 +3186,7 @@
   ;; establish info on incoming test followed by info on top level test
   (let* ((db           (db:dbdat-get-db (dbr:dbstruct-tmpdb dbstruct)))
 	 (testdat      (if (number? test-name)
-			   (db:get-test-info-by-id dbstruct run-id test-name)
+			   (db:get-test-info-by-id dbstruct run-id test-name) ;; test-name is actually a test-id
 			   (db:get-test-info       dbstruct run-id test-name item-path)))
 	 (test-id      (db:test-get-id testdat))
 	 (test-name    (if (number? test-name)
@@ -3209,7 +3219,7 @@
 		  (newstatus         (if (null? all-curr-statuses) "n/a" (car all-curr-statuses))))
 	     ;; (print "Setting toplevel to: " newstate "/" newstatus)
 	     (db:test-set-state-status-by-id dbstruct run-id tl-test-id newstate newstatus #f)))))))
-        
+
 (define db:roll-up-pass-fail-counts db:set-state-status-and-roll-up-items)
 
 ;; call with state = #f to roll up with out accounting for state/status of this item
@@ -3317,7 +3327,7 @@
 	'(test-set-log            "UPDATE tests SET final_logf=? WHERE id=?;")      ;; DONE
 	;; '(test-set-rundir-by-test-id "UPDATE tests SET rundir=? WHERE id=?")        ;; DONE
 	;; '(test-set-rundir         "UPDATE tests SET rundir=? AND testname=? AND item_path=?;") ;; DONE
-	'(test-set-rundir-shortdir "UPDATE tests SET rundir=?,shortdir=? WHERE testname=? AND item_path=?;")    ;; BROKEN!!! NEEDS run-id
+	'(test-set-rundir-shortdir "UPDATE tests SET rundir=?,shortdir=? WHERE testname=? AND item_path=? AND run_id=?;")    ;; BROKEN!!! NEEDS run-id
 	'(delete-tests-in-state   ;; "DELETE FROM tests WHERE state=?;")                  ;; DONE
 	  "UPDATE tests SET state='DELETED' WHERE state=?")
 	'(tests:test-set-toplog   "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';")
@@ -3330,8 +3340,7 @@
              SET fail_count=(SELECT count(id) FROM tests WHERE testname=? AND item_path != '' AND status IN ('FAIL','CHECK','INCOMPLETE','ABORT')),
                  pass_count=(SELECT count(id) FROM tests WHERE testname=? AND item_path != '' AND status IN ('PASS','WARN','WAIVED'))
              WHERE testname=? AND item_path='' AND run_id=?;") ;; DONE  ;; BROKEN!!! NEEDS run-id
-	'(top-test-set          "UPDATE tests SET state=? WHERE testname=? AND item_path='';") ;; DONE   ;; BROKEN!!! NEEDS run-id
-	'(top-test-set-running  "UPDATE tests SET state='RUNNING' WHERE testname=? AND item_path='';") ;; DONE   ;; BROKEN!!! NEEDS run-id
+	'(top-test-set-running  "UPDATE tests SET state='RUNNING' WHERE testname=? AND item_path='' AND run_id=?;") ;; DONE   ;; BROKEN!!! NEEDS run-id
 
 
 	;; Might be the following top-test-set-per-pf-counts query could be better based off of something like this:
@@ -3443,12 +3452,12 @@
 			       killserver
 			       ))
 
-(define (db:login dbstruct calling-path calling-version run-id client-signature)
+(define (db:login dbstruct calling-path calling-version client-signature)
   (cond 
    ((not (equal? calling-path *toppath*))
     (list #f "Login failed due to mismatch paths: " calling-path ", " *toppath*))
-   ((not (equal? *run-id* run-id))
-    (list #f "Login failed due to mismatch run-id: " run-id ", " *run-id*))
+   ;; ((not (equal? *run-id* run-id))
+   ;;  (list #f "Login failed due to mismatch run-id: " run-id ", " *run-id*))
    ((not (equal? megatest-version calling-version))
     (list #f "Login failed due to mismatch megatest version: " calling-version ", " megatest-version))
    (else
