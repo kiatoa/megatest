@@ -840,7 +840,9 @@
 				     (with-output-to-file hhf
 				       (lambda ()
 					 (print bestadrs)))
-				     (common:get-homehost))
+				     (begin
+				       (mutex-unlock! *homehost-mutex*)
+				       (car (common:get-homehost))))
 				   #f)))))
 	   (at-home  (or (equal? homehost currhost)
 			 (equal? homehost bestadrs))))

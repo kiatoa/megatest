@@ -281,11 +281,11 @@
   (or *dbstruct-db*
       (if (common:on-homehost?)
 	  (let* ((dbstruct (make-dbr:dbstruct)))
-	    (db:open-db dbstruct areapath: #f)
+	    (db:open-db dbstruct areapath: areapath)
 	    (set! *dbstruct-db* dbstruct)
 	    dbstruct)
 	  (begin
-	    (debug:print 0 *default-log-port* "ERROR: attempt to open database when not on homehost. Exiting.")
+	    (debug:print 0 *default-log-port* "ERROR: attempt to open database when not on homehost. Exiting. Homehost: " (common:get-homehost))
 	    (exit 1)))))
 
 ;; Open the classic megatest.db file (defaults to open in toppath)
@@ -2122,11 +2122,14 @@
 	 (dbdat  (db:get-db dbstruct #f))
 	 (db     (db:dbdat-get-db dbdat)))
     ;; (db:delay-if-busy rdbdat)
-    (sqlite3:execute rdb "UPDATE tests SET state='DELETED',comment='';")
-    (sqlite3:execute rdb "DELETE FROM test_steps;")
-    (sqlite3:execute rdb "DELETE FROM test_data;")
-    ;; (db:delay-if-busy dbdat)
-    (sqlite3:execute db "UPDATE runs SET state='deleted',comment='' WHERE id=?;" run-id)))
+    (sqlite3:with-transaction
+     db
+     (lambda ()
+       (sqlite3:execute rdb "DELETE FROM test_steps WHERE test_id IN (SELECT id FROM tests WHERE run_id=?);" run-id)
+       (sqlite3:execute rdb "DELETE FROM test_data WHERE test_id IN (SELECT id FROM tests WHERE run_id=?);"  run-id)
+       (sqlite3:execute rdb "UPDATE tests SET state='DELETED',comment='' WHERE run_id=?;" run-id)
+       ;; (db:delay-if-busy dbdat)
+       (sqlite3:execute db "UPDATE runs SET state='deleted',comment='' WHERE id=?;" run-id)))))
 
 (define (db:update-run-event_time dbstruct run-id)
   (db:with-db
@@ -2416,17 +2419,19 @@
 
 ;; 
 (define (db:delete-old-deleted-test-records dbstruct)
-  (let ((run-ids  (db:get-all-run-ids dbstruct))
+  (let (;; (run-ids  (db:get-all-run-ids dbstruct))
 	(targtime (- (current-seconds)(* 30 24 60 60)))) ;; one month in the past
-    (for-each
-     (lambda (run-id)
-       (db:with-db
-	dbstruct
-	run-id
-	#t
-	(lambda (db)
-	  (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime))))
-     run-ids)))
+    (db:with-db
+     dbstruct
+     0
+     #t
+     (lambda (db)
+       (sqlite3:with-transaction
+	db
+	(lambda ()
+	  (sqlite3:execute db "DELETE FROM steps WHERE test_id IN (SELECT id FROM tests WHERE state='DELETED' AND event_time<?);" targtime)
+	  (sqlite3:execute db "DELETE FROM test_data WHERE test_id IN (SELECT id FROM tests WHERE state='DELETED' AND event_time<?);" targtime)
+	  (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime)))))))
 
 ;; set tests with state currstate and status currstatus to newstate and newstatus
 ;; use currstate = #f and or currstatus = #f to apply to any state or status respectively
