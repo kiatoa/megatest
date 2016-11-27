@@ -699,41 +699,41 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ;; Server? Start up here.
     ;;
     (let ((tl        (launch:setup))
-	  (run-id    (and (args:get-arg "-run-id")
-			  (string->number (args:get-arg "-run-id"))))
+	;; (run-id    (and (args:get-arg "-run-id")
+	;; 		  (string->number (args:get-arg "-run-id"))))
           (transport-type (string->symbol (or (args:get-arg "-transport") "http"))))
-      (if run-id
-	  (begin
-	    (server:launch run-id transport-type)
-	    (set! *didsomething* #t))
-	  (debug:print-error 0 *default-log-port* "server requires run-id be specified with -run-id")))
-
-    ;; Not a server? This section will decide how to communicate
-    ;;
-    ;;  Setup client for all expect listed here
-    (if (null? (lset-intersection 
-		equal?
-		(hash-table-keys args:arg-hash)
-		'("-list-servers"
-		  "-stop-server"
-                  "-kill-server"
-		  "-show-cmdinfo"
-		  "-list-runs"
-		  "-ping")))
-	(if (launch:setup)
-	    (let ((run-id    (and (args:get-arg "-run-id")
-				  (string->number (args:get-arg "-run-id")))))
-	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
-	      ;; if not list or kill then start a client (if appropriate)
-	      (if (or (args-defined? "-h" "-version" "-create-megatest-area" "-create-test")
-		      (eq? (length (hash-table-keys args:arg-hash)) 0))
-		  (debug:print-info 1 *default-log-port* "Server connection not needed")
-		  (begin
-		    ;; (if run-id 
-		    ;;     (client:launch run-id) 
-		    ;;     (client:launch 0)      ;; without run-id we'll start a server for "0"
-		    #t
-		    ))))))
+      ;; (if run-id
+      ;;   (begin
+      (server:launch 0 transport-type)
+      (set! *didsomething* #t)))
+;;     ;; (debug:print-error 0 *default-log-port* "server requires run-id be specified with -run-id")))
+;; 
+;;     ;; Not a server? This section will decide how to communicate
+;;     ;;
+;;     ;;  Setup client for all expect listed here
+;;     (if (null? (lset-intersection 
+;; 		equal?
+;; 		(hash-table-keys args:arg-hash)
+;; 		'("-list-servers"
+;; 		  "-stop-server"
+;;                   "-kill-server"
+;; 		  "-show-cmdinfo"
+;; 		  "-list-runs"
+;; 		  "-ping")))
+;; 	(if (launch:setup)
+;; 	    (let ((run-id    (and (args:get-arg "-run-id")
+;; 				  (string->number (args:get-arg "-run-id")))))
+;; 	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
+;; 	      ;; if not list or kill then start a client (if appropriate)
+;; 	      (if (or (args-defined? "-h" "-version" "-create-megatest-area" "-create-test")
+;; 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
+;; 		  (debug:print-info 1 *default-log-port* "Server connection not needed")
+;; 		  (begin
+;; 		    ;; (if run-id 
+;; 		    ;;     (client:launch run-id) 
+;; 		    ;;     (client:launch 0)      ;; without run-id we'll start a server for "0"
+;; 		    #t
+;; 		    ))))))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server")

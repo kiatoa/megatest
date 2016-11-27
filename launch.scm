@@ -390,8 +390,8 @@
     (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f))) ;; NOTE: Checking twice for keep-going is intentional
 
 (define (launch:execute encoded-cmd)
-     (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
-	  (tconfigreg (tests:get-all)))
+  (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
+	 (tconfigreg #f))
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
@@ -438,7 +438,8 @@
 		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " top-path " not found")
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
-
+	  (launch:setup) ;; should be properly in the top-path now
+	  (set! tconfigreg (tests:get-all))
 	  (let ((sighand (lambda (signum)
 			   ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
 			   (if (eq? signum signal/stop)
@@ -705,8 +706,10 @@
 ;;
 (define (launch:setup #!key (force #f))
   (mutex-lock! *launch-setup-mutex*)
-  (if *toppath*
+  (if (and *toppath*
+	   (eq? *configstatus* 'fulldata)) ;; got it all
       (begin
+	(debug:print 0 *default-log-port* "NOTE: skipping launch:setup-body call since we have fulldata")
 	(mutex-unlock! *launch-setup-mutex*)
 	*toppath*)
       (let ((res (launch:setup-body force: force)))
