@@ -131,7 +131,8 @@
 (define *test-info*         (make-hash-table)) ;; cache the test info records, update the state, status, run_duration etc. from testdat.db
 
 (define *run-info-cache*    (make-hash-table)) ;; run info is stable, no need to reget
-
+(define *launch-setup-mutex* (make-mutex))     ;; need to be able to call launch:setup often so mutex it and re-call the real deal only if *toppath* not set
+(define *homehost-mutex*     (make-mutex))
 ;; Awful. Please FIXME
 (define *env-vars-by-run-id* (make-hash-table))
 
@@ -811,15 +812,22 @@
 ;; (this is to accomodate the watchdog)
 ;;
 (define (common:get-homehost #!key (trynum 5))
+  ;; called often especially at start up. use the launch setup mutex to eliminate collisions
+  (mutex-lock! *homehost-mutex*)
   (cond
-   (*home-host*     *home-host*)
+   (*home-host*
+    (mutex-unlock! *homehost-mutex*)
+    *home-host*)
    ((not *toppath*)
+    (mutex-unlock! *homehost-mutex*)
+    (launch:setup) ;; safely mutexed now
     (if (> trynum 0)
 	(begin
 	  (thread-sleep! 2)
 	  (common:get-homehost trynum: (- trynum 1)))
 	#f))
    (else
+    (mutex-unlock! *homehost-mutex*)
     (let* ((currhost (get-host-name))
 	   (bestadrs (server:get-best-guess-address currhost))
 	   ;; first look in config, then look in file .homehost, create it if not found
