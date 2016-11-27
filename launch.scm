@@ -704,6 +704,16 @@
 ;;           *configstatus* (status of the read data)
 ;;
 (define (launch:setup #!key (force #f))
+  (mutex-lock! *launch-setup-mutex*)
+  (if *toppath*
+      (begin
+	(mutex-unlock! *launch-setup-mutex*)
+	*toppath*)
+      (let ((res (launch:setup-body force: force)))
+	(mutex-unlock! *launch-setup-mutex*)
+	res)))
+
+(define (launch:setup-body #!key (force #f))
   (let* ((toppath  (or *toppath* (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
 	 (runname  (common:args-get-runname))
 	 (target   (common:args-get-target))
