@@ -229,8 +229,6 @@
 	   (system (conc "gzip logs/" file)))))
    '()
    "logs"))
-    
-
 
 ;; Force a megatest cleanup-db if version is changed and skip-version-check not specified
 ;;
@@ -516,19 +514,23 @@
 ;;======================================================================
 
 (define (common:run-sync?)
-  (and (common:on-homehost?)
-       (args:get-arg "-server")))
+  (let ((ohh (common:on-homehost?))
+	(srv (args:get-arg "-server")))
+    (debug:print-info 0 *default-log-port* "common:run-sync? ohh=" ohh ", srv=" srv)
+    (and (common:on-homehost?)
+	 (args:get-arg "-server"))))
 
 ;;;; run-ids
 ;;    if #f use *db-local-sync* : or 'local-sync-flags
 ;;    if #t use timestamps      : or 'timestamps
 (define (common:sync-to-megatest.db dbstruct) 
-  (let ((start-time         (current-seconds)))
-    (db:multi-db-sync dbstruct 'new2old)
+  (let ((start-time         (current-seconds))
+	(res                (db:multi-db-sync dbstruct 'new2old)))
     (let ((sync-time (- (current-seconds) start-time)))
       (debug:print-info 3 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds")
       (if (common:low-noise-print 30 "sync new to old")
-	  (debug:print-info 0 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds")))))
+	  (debug:print-info 0 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds")))
+    res))
 
 ;; currently the primary job of the watchdog is to run the sync back to megatest.db from the db in /tmp
 ;; if we are on the homehost and we are a server (by definition we are on the homehost if we are a server)
@@ -538,8 +540,10 @@
   (let ((legacy-sync (common:run-sync?))
 	(debug-mode  (debug:debug-mode 1))
 	(last-time   (current-seconds)))
+    (debug:print-info 0 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync)
     (if legacy-sync
 	(let ((dbstruct (db:setup)))
+	  (debug:print-info 0 *default-log-port* "Server running, periodic sync started.")
 	  (let loop ()
 	    ;; sync for filesystem local db writes
 	    ;;
@@ -550,13 +554,22 @@
 		   (will-sync        (and (or need-sync should-sync)
 					  (not sync-in-progress)))
 		   (start-time       (current-seconds)))
+	      ;; (debug:print-info 0 *default-log-port* "need-sync: " need-sync " sync-in-progress: " sync-in-progress " should-sync: " should-sync " will-sync: " will-sync)
 	      (if will-sync (set! *db-sync-in-progress* #t))
 	      (mutex-unlock! *db-multi-sync-mutex*)
-	      (if will-sync (common:sync-to-megatest.db dbstruct)) 
+	      (if will-sync
+		  (let ((res (common:sync-to-megatest.db dbstruct))) ;; did we sync any data? If so need to set the db touched flag to keep the server alive
+		    (if (> res 0) ;; some records were transferred, keep the db alive
+			(begin
+			  (mutex-lock! *heartbeat-mutex*)
+			  (set! *db-last-access* (current-seconds))
+			  (mutex-unlock! *heartbeat-mutex*)
+			  (debug:print-info 0 *default-log-port* "sync called, " res " records transferred."))
+			(debug:print-info 2 *default-log-port* "sync called but zero records transferred"))))
 	      (if will-sync
 		  (begin
 		    (mutex-lock! *db-multi-sync-mutex*)
-		    (set! db-sync-in-progress* #f)
+		    (set! *db-sync-in-progress* #f)
 		    (set! *db-last-sync* start-time)
 		    (mutex-unlock! *db-multi-sync-mutex*)))
 	      (if (and debug-mode
@@ -794,11 +807,18 @@
 	    #f))))
 
 ;; logic for getting homehost. Returns (host . at-home)
+;; IF *toppath* is not set, wait up to five seconds trying every two seconds
+;; (this is to accomodate the watchdog)
 ;;
-(define (common:get-homehost)
+(define (common:get-homehost #!key (trynum 5))
   (cond
    (*home-host*     *home-host*)
-   ((not *toppath*) #f)            ;; don't know toppath yet? return #f
+   ((not *toppath*)
+    (if (> trynum 0)
+	(begin
+	  (thread-sleep! 2)
+	  (common:get-homehost trynum: (- trynum 1)))
+	#f))
    (else
     (let* ((currhost (get-host-name))
 	   (bestadrs (server:get-best-guess-address currhost))
@@ -849,6 +869,7 @@
 		    (loop (car tala)
 			  (cdr tala)
 			  (car talb)
+			  
 			  (cdr talb)))
 		#f)))))
 

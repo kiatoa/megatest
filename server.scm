@@ -188,7 +188,7 @@
 		      (lambda ()
 			(print hostport)))
 		    #t)))
-	  (debug:print-info 0 *default-log-port* "server file " serverfile " for " hostport " created")
+	  (debug:print-info 0 *default-log-port* "server file " server-file " for " hostport " created")
 	  (common:simple-file-release-lock lock-file)
 	  res)
 	#f)))
