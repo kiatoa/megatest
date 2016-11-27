@@ -236,26 +236,31 @@
 ;;
 (define (common:exit-on-version-changed)
   (if (common:version-changed?)
-      (let ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config")))
-        (debug:print 0 *default-log-port*
-		     "WARNING: Version mismatch!\n"
-		     "   expected: " (common:version-signature) "\n"
-		     "   got:      " (common:get-last-run-version))
-	(if (and (file-exists? mtconf)
-		 (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
-	    (begin
-	      (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
-	      (handle-exceptions
-	       exn
-	       (begin
-		 (debug:print 0 *default-log-port* "Failed to switch versions.")
-		 (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-		 (print-call-chain (current-error-port))
-		 (exit 1))
-	       (common:cleanup-db)))
-	    (begin
-	      (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
-	      (exit 1))))))
+      (if (common:on-homehost?)
+	  (let ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config"))
+		(dbstruct (db:setup)))
+	    (debug:print 0 *default-log-port*
+			 "WARNING: Version mismatch!\n"
+			 "   expected: " (common:version-signature) "\n"
+			 "   got:      " (common:get-last-run-version))
+	    (if (and (file-exists? mtconf)
+		     (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
+		(begin
+		  (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
+		  (handle-exceptions
+		   exn
+		   (begin
+		     (debug:print 0 *default-log-port* "Failed to switch versions.")
+		     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+		     (print-call-chain (current-error-port))
+		     (exit 1))
+		   (common:cleanup-db dbstruct)))
+		(begin
+		  (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
+		  (exit 1))))
+	  (begin
+	    (debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
+	    (exit 1)))))
 
 ;;======================================================================
 ;; S P A R S E   A R R A Y S
