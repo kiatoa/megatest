@@ -800,7 +800,8 @@
              (refndb   (dbr:dbstruct-refndb dbstruct))
 	     (allow-cleanup #t) ;; (if run-ids #f #t))
 	     (tdbdat  (tasks:open-db))
-	     (servers (tasks:get-all-servers (db:delay-if-busy tdbdat))))
+	     (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
+	     (data-synced 0)) ;; count of changed records (I hope)
     
 	;; kill servers
 	(if (member 'killservers options)
@@ -846,7 +847,10 @@
 	;; do not use the run-ids list passed in to the function
 	;;
 	(if (member 'new2old options)
-	    (db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb refndb mtdb))
+	    (set! data-synced
+		  (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb refndb mtdb)
+		      data-synced)))
+
 
         (if (member 'fixschema options)
             (begin
@@ -921,7 +925,7 @@
 ;; 
 	;; (db:close-all dbstruct)
 	;; (sqlite3:finalize! mdb)
-	)))
+	data-synced)))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
