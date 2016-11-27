@@ -61,13 +61,14 @@
   ;; 2. check the age of the connections. refresh the connection if it is older than timeout-20 seconds.
   ;; 3. do the query, if on homehost use local access
   ;;
-  (if (and #f  ;; FORCE NO GO FOR RIGHT NOW
+  (if (and ;; #f  ;; FORCE NO GO FOR RIGHT NOW
 	   (not *runremote*)                         ;; we trust *runremote* to reflect that a server was found previously
 	   (not (member cmd api:read-only-queries))) ;; we don't trust so much the list of write queries
       (let ((serverconn (server:check-if-running *toppath*)))
 	(if serverconn
 	    (set! *runremote* serverconn) ;; the string can be consumed by the client setup if needed
-	    (server:kind-run *toppath*))))
+	    (if (not (server:start-attempted? *toppath*))
+		(server:kind-run *toppath*)))))
   
   (rmt:open-qry-close-locally cmd (if rid rid 0) params))
 

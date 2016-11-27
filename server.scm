@@ -109,9 +109,10 @@
   (let* ((curr-host   (get-host-name))
 	 (curr-ip     (server:get-best-guess-address curr-host))
 	 (curr-pid    (current-process-id))
-	 (target-host (configf:lookup *configdat* "server" "homehost" ))
+	 (homehost    (common:get-homehost)) ;; configf:lookup *configdat* "server" "homehost" ))
+	 (target-host (car homehost))
 	 (testsuite   (common:get-testsuite-name))
-	 (logfile     (conc *toppath* "/logs/server-" curr-pid ".log"))
+	 (logfile     (conc *toppath* "/logs/server.log"))
 	 (cmdln (conc (common:get-megatest-exe)
 		      " -server " (or target-host "-") " -run-id " 0 (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
 									      (conc " -daemonize -log " logfile)
@@ -120,7 +121,7 @@
 	 (log-rotate  (make-thread common:rotate-logs  "server run, rotate logs thread")))
     ;; we want the remote server to start in *toppath* so push there
     (push-directory *toppath*)
-    (debug:print 0 *default-log-port* "INFO: Starting server (" cmdln ") as none running ...")
+    (debug:print 0 *default-log-port* "INFO: Trying to start server (" cmdln ") ...")
     (thread-start! log-rotate)
 
     ;; host.domain.tld match host?
@@ -159,11 +160,19 @@
 
 ;; The generic run a server command. Dispatches the call to server 0 if run-id != 0
 ;; 
-(define (server:try-running run-id)
-  (if (eq? run-id 0)
-      (server:run run-id)
-      (rmt:start-server run-id)))
+;;  (define (server:try-running run-id)
+;;    (if (eq? run-id 0)
+;;        (server:run run-id)
+;;        (rmt:start-server run-id)))
+(define server:try-running server:run) ;; there is no more per-run servers ;; REMOVE ME. BUG.
 
+(define (server:start-attempted? areapath)
+  (let ((flagfile (conc areapath "/.starting-server")))
+    (and (file-exists? flagfile)
+	 (< (- (current-seconds)
+	       (file-modification-time flagfile))
+	    15)))) ;; exists and less than 15 seconds old
+    
 (define (server:read-dotserver areapath)
   (let ((dotfile (conc areapath "/.server")))
     (if (and (file-exists? dotfile)

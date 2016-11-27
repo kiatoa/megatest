@@ -133,7 +133,8 @@
 (define *run-info-cache*    (make-hash-table)) ;; run info is stable, no need to reget
 (define *launch-setup-mutex* (make-mutex))     ;; need to be able to call launch:setup often so mutex it and re-call the real deal only if *toppath* not set
 (define *homehost-mutex*     (make-mutex))
-;; Awful. Please FIXME
+
+;; cache environment vars for each run here
 (define *env-vars-by-run-id* (make-hash-table))
 
 ;; Testconfig and runconfig caches. 
@@ -517,7 +518,7 @@
 (define (common:run-sync?)
   (let ((ohh (common:on-homehost?))
 	(srv (args:get-arg "-server")))
-    (debug:print-info 0 *default-log-port* "common:run-sync? ohh=" ohh ", srv=" srv)
+    ;; (debug:print-info 0 *default-log-port* "common:run-sync? ohh=" ohh ", srv=" srv)
     (and (common:on-homehost?)
 	 (args:get-arg "-server"))))
 
