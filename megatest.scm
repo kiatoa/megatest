@@ -1953,7 +1953,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-import-megatest.db")
     (begin
       (db:multi-db-sync 
-       #f ;; do all run-ids
+       (db:setup)
        'killservers
        'dejunk
        'adj-testids
@@ -1965,7 +1965,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-sync-to-megatest.db")
     (begin
       (db:multi-db-sync 
-       #f ;; do all run-ids
+       (db:setup)
        'new2old
        )
       (set! *didsomething* #t)))

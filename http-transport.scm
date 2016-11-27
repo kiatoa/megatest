@@ -38,7 +38,6 @@
       (conc "http://" (car hostport) ":" (cadr hostport))))
 
 (define *server-loop-heart-beat* (current-seconds))
-(define *heartbeat-mutex* (make-mutex))
 
 ;;======================================================================
 ;; S E R V E R
@@ -86,7 +85,7 @@
 				   (send-response body:    (api:process-request *dbstruct-db* $) ;; the $ is the request vars proc
 						  headers: '((content-type text/plain)))
 				   (mutex-lock! *heartbeat-mutex*)
-				   (set! *last-db-access* (current-seconds))
+				   (set! *db-last-access* (current-seconds))
 				   (mutex-unlock! *heartbeat-mutex*))
 				  ((equal? (uri-path (request-uri (current-request))) 
 					   '(/ ""))
@@ -396,35 +395,12 @@
 
       ;; Use this opportunity to sync the tmp db to megatest.db
       (if *dbstruct-db* 
-	  (let ((start-time (current-milliseconds))
-		(sync-time  #f)
-		(rem-time   #f))
-	    (condition-case
-	     ;; (if (and (member (mutex-state *db-sync-mutex*) '(abandoned not-abandoned))
-	     ;;	      (> (- (current-seconds) *db-last-sync*) 5)) ;; if not currently being synced nor recently synced
-	     (db:sync-touched *dbstruct-db* *run-id* force-sync: #t) ;; usually done in the watchdog, not here.
-	     ((sync-failed)(cond
-			    ((> bad-sync-count 10) ;; time to give up
-			     (http-transport:server-shutdown server-id port))
-			    (else ;; (> bad-sync-count 0)  ;; we've had a fail or two, delay and loop
-			     (thread-sleep! 5)
-			     (loop count server-state (+ bad-sync-count 1)))))
-	     ((exn)
-	      (debug:print-error 0 *default-log-port* "error from sync code other than 'sync-failed. Attempting to gracefully shutdown the server")
-	      (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running crashed")
-	      (exit)))
-	    (set! sync-time  (- (current-milliseconds) start-time))
-	    (set! rem-time (quotient (- 4000 sync-time) 1000))
-	    (debug:print 4 *default-log-port* "SYNC: time= " sync-time ", rem-time=" rem-time)
-	    
-	    (if (and (<= rem-time 4)
-		     (> rem-time 0))
-		(thread-sleep! rem-time)
-		(thread-sleep! 4))) ;; fallback for if the math is changed ...
-
-	  ;;
+ 	  (let ((start-time (current-milliseconds))
+ 		(sync-time  #f)
+ 		(rem-time   #f))
+	    (thread-sleep! 4))
+	  ;; Removed code is pasted below (keeping it around until we are clear it is not needed).
 	  ;; no *dbstruct-db* yet, set running after our first pass through and start the db
-	  ;;
 	  (if (eq? server-state 'available)
 	      (let ((new-server-id (tasks:server-am-i-the-server? (db:delay-if-busy tdbdat) run-id))) ;; try to ensure no double registering of servers
 		(if (equal? new-server-id server-id)
@@ -453,9 +429,9 @@
 	    (set! iface (car sdat))
 	    (set! port  (cadr sdat))))
       
-      ;; Transfer *last-db-access* to last-access to use in checking that we are still alive
+      ;; Transfer *db-last-access* to last-access to use in checking that we are still alive
       (mutex-lock! *heartbeat-mutex*)
-      (set! last-access *last-db-access*)
+      (set! last-access *db-last-access*)
       (mutex-unlock! *heartbeat-mutex*)
 
       ;; (debug:print 11 *default-log-port* "last-access=" last-access ", server-timeout=" server-timeout)
@@ -485,7 +461,32 @@
 	      ;;
 	      (loop 0 server-state bad-sync-count))
 	    (http-transport:server-shutdown server-id port))))))
-  
+
+;; code cut out from above
+;;
+;; (condition-case
+;;  ;; (if (and (member (mutex-state *db-sync-mutex*) '(abandoned not-abandoned))
+;;  ;;	      (> (- (current-seconds) *db-last-sync*) 5)) ;; if not currently being synced nor recently synced
+;;  (db:sync-touched *dbstruct-db* *run-id* force-sync: #t) ;; usually done in the watchdog, not here.
+;;  ((sync-failed)(cond
+;; 		    ((> bad-sync-count 10) ;; time to give up
+;; 		     (http-transport:server-shutdown server-id port))
+;; 		    (else ;; (> bad-sync-count 0)  ;; we've had a fail or two, delay and loop
+;; 		     (thread-sleep! 5)
+;; 		     (loop count server-state (+ bad-sync-count 1)))))
+;;  ((exn)
+;;   (debug:print-error 0 *default-log-port* "error from sync code other than 'sync-failed. Attempting to gracefully shutdown the server")
+;;   (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running crashed")
+;;   (exit)))
+;; (set! sync-time  (- (current-milliseconds) start-time))
+;; (set! rem-time (quotient (- 4000 sync-time) 1000))
+;; (debug:print 4 *default-log-port* "SYNC: time= " sync-time ", rem-time=" rem-time)
+;; 
+;; (if (and (<= rem-time 4)
+;; 	     (> rem-time 0))
+;; 	(thread-sleep! rem-time)
+;; 	(thread-sleep! 4))) ;; fallback for if the math is changed ...
+
 (define (http-transport:server-shutdown server-id port)
   (let ((tdbdat (tasks:open-db)))
     (debug:print-info 0 *default-log-port* "Starting to shutdown the server.")
@@ -634,7 +635,7 @@
 								 (/ *total-non-write-delay* 
 								    *number-non-write-queries*))
 	       " ms</td></tr>"
-	       "<tr><td>Last access</td><td>"              (seconds->time-string *last-db-access*) "</td></tr>"
+	       "<tr><td>Last access</td><td>"              (seconds->time-string *db-last-access*) "</td></tr>"
 	       "</table>")))
     (mutex-unlock! *heartbeat-mutex*)
     res))

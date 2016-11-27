@@ -251,7 +251,7 @@
 
 ;; This routine creates the db if not already present. It is only called if the db is not already opened
 ;;
-(define (db:open-db dbstruct #!key (areapath #f)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*))) 
+(define (db:open-db dbstruct #!key (areapath #f))
   (let ((tmpdb (dbr:dbstruct-tmpdb dbstruct))) ;; RA => Returns the first reference in dbstruct
     (if tmpdb
 	tmpdb
@@ -270,20 +270,23 @@
           ;;	    (mutex-unlock! *rundb-mutex*)
           (if (and (not dbexists)
                    *db-write-access*) ;; did not have a prior db and do have write access
-              (db:multi-db-sync #f 'old2new))  ;; migrate data from megatest.db automatically
+              (db:multi-db-sync dbstruct 'old2new))  ;; migrate data from megatest.db automatically
           tmpdb))))
 
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;
 ;; called in http-transport and replicated in rmt.scm for *local* access. 
 ;;
-(define (db:setup #!key (areapath #f)) ;;  . junk) ;;  #!key (run-id #f) (local #f))
+(define (db:setup #!key (areapath #f))
   (or *dbstruct-db*
-      (let* (;; (dbdir    (db:dbfile-path)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
-	     (dbstruct (make-dbr:dbstruct))) ;; ) ;;  path: dbdir local: local)))
-	(db:open-db dbstruct areapath: #f)
-	(set! *dbstruct-db* dbstruct)
-	dbstruct)))
+      (if (common:on-homehost?)
+	  (let* ((dbstruct (make-dbr:dbstruct)))
+	    (db:open-db dbstruct areapath: #f)
+	    (set! *dbstruct-db* dbstruct)
+	    dbstruct)
+	  (begin
+	    (debug:print 0 *default-log-port* "ERROR: attempt to open database when not on homehost. Exiting.")
+	    (exit 1)))))
 
 ;; Open the classic megatest.db file (defaults to open in toppath)
 ;;
@@ -304,74 +307,18 @@
 ;; sync run to disk if touched
 ;;
 (define (db:sync-touched dbstruct run-id #!key (force-sync #f))
-  (let (;; (mtime  (dbr:dbstruct-mtime dbstruct))
-	;; (stime  (dbr:dbstruct-stime dbstruct))
-	;; (rundb  (dbr:dbstruct-rundb dbstruct))
-	;; (inmem  (dbr:dbstruct-inmem dbstruct))
-	;; (maindb (dbr:dbstruct-main  dbstruct))
-	;; (refdb  (dbr:dbstruct-refdb dbstruct))
-        (tmpdb   (dbr:dbstruct-tmpdb dbstruct))
-	(mtdb    (dbr:dbstruct-mtdb dbstruct))
+  (let ((tmpdb   (dbr:dbstruct-tmpdb  dbstruct))
+	(mtdb    (dbr:dbstruct-mtdb   dbstruct))
         (refndb  (dbr:dbstruct-refndb dbstruct))
-	(start-t (current-seconds))
-	;; (runid  (dbr:dbstruct-run-id dbstruct))
-	)
+	(start-t (current-seconds)))
     (debug:print-info 4 *default-log-port* "Syncing for run-id: " run-id)
-    (mutex-lock! *db-sync-mutex*)
-    (db:sync-tables (db:sync-all-tables-list dbstruct) (cons *db-last-sync* "last_update") tmpdb refndb mtdb)
+    (mutex-lock! *db-multi-sync-mutex*)
+    (let ((update_info (cons (if force-sync 0 *db-last-sync*) "last_update")))
+      (mutex-unlock! *db-multi-sync-mutex*)
+      (db:sync-tables (db:sync-all-tables-list dbstruct) update_info tmpdb refndb mtdb))
+    (mutex-lock! *db-multi-sync-mutex*)
     (set! *db-last-sync* start-t)
-    (mutex-unlock! *db-sync-mutex*)))
-;;    (if (eq? run-id 0)
-;;	;; runid equal to 0 is main.db
-;;	(if maindb
-;;	    (if (or (not (number? mtime))
-;;		    (not (number? stime))
-;;		    (> mtime stime)
-;;		    force-sync)
-;;		(begin
-;;		  (db:delay-if-busy maindb)
-;;		  (db:delay-if-busy olddb)
-;;		  (let ((num-synced (db:sync-tables (db:sync-main-list maindb) maindb olddb)))
-;;		    (dbr:dbstruct-stime-set! dbstruct (current-milliseconds))
-;;		    num-synced)
-;;		  0))
-;;	    (begin
-;;	      ;; this can occur when using local access (i.e. not in a server)
-;;	      ;; need a flag to turn it off.
-;;	      ;;
-;;	      (debug:print 3 *default-log-port* "WARNING: call to sync main.db to megatest.db but main not initialized")
-;;	      0))
-;;	;; any other runid is a run
-;;	(if (or (not (number? mtime))
-;;		(not (number? stime))
-;;		(> mtime stime)
-;;		force-sync)
-;;	    (begin
-;;	      (db:delay-if-busy rundb)
-;;	      (db:delay-if-busy olddb)
-;;	      (dbr:dbstruct-stime-set! dbstruct (current-milliseconds))
-;;	      (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
-;;		;; (mutex-unlock! *http-mutex*)
-;;		num-synced)
-;;	      (begin
-;;		;; (mutex-unlock! *http-mutex*)
-;;		0))))))
-
-;; (define (db:close-main dbstruct)
-;;   (let ((maindb (dbr:dbstruct-main dbstruct)))
-;;     (if maindb
-;; 	(begin
-;; 	  (sqlite3:finalize! (db:dbdat-get-db maindb))
-;; 	  (dbr:dbstruct-main-set! dbstruct #f)))))
-;; 
-;; (define (db:close-run-db dbstruct run-id)
-;;   (let ((rdb (db:open-rundb dbstruct run-id do-not-open: #t)))
-;;     (if (and rdb
-;; 	     (sqlite3:database? rdb))
-;; 	(begin
-;; 	  (sqlite3:finalize! rdb)
-;; 	  (dbr:dbstruct-localdb-set! dbstruct run-id #f)
-;; 	  (dbr:dbstruct-inmem-set! dbstruct #f)))))
+    (mutex-unlock! *db-multi-sync-mutex*)))
 
 ;; close all opened run-id dbs
 (define (db:close-all dbstruct)
@@ -561,11 +508,9 @@
 ;;    IFF field-name exists
 ;;
 (define (db:sync-tables tbls last-update fromdb todb . slave-dbs)
-  (mutex-lock! *db-sync-mutex*)
   (handle-exceptions
    exn
    (begin
-     (mutex-unlock! *db-sync-mutex*)
      (debug:print 0 *default-log-port* "EXCEPTION: database probably overloaded or unreadable in db:sync-tables.")
      (print-call-chain (current-error-port))
      (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
@@ -582,15 +527,7 @@
 	       (cons todb slave-dbs))
      
      0)
-;;      (if *server-run* ;; we are inside a server, throw a sync-failed error
-;; 	 (signal (make-composite-condition
-;; 		 (make-property-condition 'sync-failed 'message "db:sync-tables failed in a server context.")))
-;; 	 0)) ;; return zero for num synced
-
-	 ;; (set! *time-to-exit* #t) ;; let watch dog know that it is time to die.
-	 ;; (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "shutting-down")
-	 ;; (portlogger:open-run-close portlogger:set-port port "released")
-	 ;; (exit 1)))
+   ;; this is the work to be done
    (cond
     ((not fromdb) (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with fromdb missing") -1)
     ((not todb)   (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with todb missing") -2)
@@ -711,9 +648,7 @@
 	      (if (> count 0)
 		  (if should-print (debug:print 0 *default-log-port* (format #f "    ~10a ~5a" tblname count))))))
 	  (sort (hash-table->alist numrecs)(lambda (a b)(> (cdr a)(cdr b))))))
-       tot-count)))
-   (mutex-unlock! *db-sync-mutex*)))
-
+       tot-count)))))
 
 (define (db:patch-schema-rundb frundb)
   ;;
@@ -857,17 +792,13 @@
 ;;
 ;;  run-ids: '(1 2 3 ...) or #f (for all)
 ;;
-(define (db:multi-db-sync run-ids . options)
+(define (db:multi-db-sync dbstruct . options)
   (if (not (launch:setup))
       (debug:print 0 *default-log-port* "ERROR: not able to setup up for megatest.")
-      (let* ((dbstruct (db:setup))
-	     (mtdb     (dbr:dbstruct-mtdb dbstruct))
+      (let* ((mtdb     (dbr:dbstruct-mtdb dbstruct))
 	     (tmpdb    (dbr:dbstruct-tmpdb dbstruct))
              (refndb   (dbr:dbstruct-refndb dbstruct))
-	     (allow-cleanup (if run-ids #f #t))
-;; 	     (run-ids  (if run-ids 
-;; 			   run-ids
-;; 			   (db:get-all-run-ids mtdb)))
+	     (allow-cleanup #t) ;; (if run-ids #f #t))
 	     (tdbdat  (tasks:open-db))
 	     (servers (tasks:get-all-servers (db:delay-if-busy tdbdat))))
     
@@ -995,8 +926,10 @@
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
   (debug:print-info 11 *default-log-port* "open-run-close-no-exception-handling START given a db=" (if idb "yes " "no ") ", params=" params)
+  (print "I don't work anymore. open-run-close-no-exception-handling needs fixing or removing...")
+  (exit)
   (if (or *db-write-access*
-	  (not (member proc *db:all-write-procs*)))
+	  (not #t)) ;; was: (member proc * db:all-write-procs *)))
       (let* ((db (cond
 		  ((pair? idb)                 (db:dbdat-get-db idb))
 		  ((sqlite3:database? idb)     idb)
@@ -1378,7 +1311,7 @@
 ;; L O G G I N G    D B 
 ;;======================================================================
 
-(define (open-logging-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+(define (open-logging-db)
   (let* ((dbpath    (conc (if *toppath* (conc *toppath* "/") "") "logging.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
 	 (db        (sqlite3:open-database dbpath))
@@ -3178,7 +3111,7 @@
     (mt:process-triggers run-id test-id state status)))
 
 ;; state is the priority rollup of all states
-;; status is the priority rollup of all completed states
+;; status is the priority rollup of all completed statesfu
 ;;
 ;; if test-name is an integer work off that instead of test-name test-path
 ;;
