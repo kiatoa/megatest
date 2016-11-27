@@ -1671,7 +1671,7 @@
 	       (begin
 		 (case action
 		   ((remove-runs)
-		    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
+		    ;; (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 		    ;; seek and kill in flight -runtests with % as testpatt here
 		    ;; (if (equal? testpatt "%")
 		    (tasks:kill-runner target run-name testpatt)
