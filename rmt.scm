@@ -60,7 +60,7 @@
   ;; 1. check if server is started IFF cmd is a write OR if we are not on the homehost, store in *runremote*
   ;; 2. check the age of the connections. refresh the connection if it is older than timeout-20 seconds.
   ;; 3. do the query, if on homehost use local access
-
+  ;;
   (if (and #f  ;; FORCE NO GO FOR RIGHT NOW
 	   (not *runremote*)                         ;; we trust *runremote* to reflect that a server was found previously
 	   (not (member cmd api:read-only-queries))) ;; we don't trust so much the list of write queries

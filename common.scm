@@ -812,7 +812,7 @@
 ;; (this is to accomodate the watchdog)
 ;;
 (define (common:get-homehost #!key (trynum 5))
-  ;; called often especially at start up. use the launch setup mutex to eliminate collisions
+  ;; called often especially at start up. use mutex to eliminate collisions
   (mutex-lock! *homehost-mutex*)
   (cond
    (*home-host*
@@ -827,7 +827,6 @@
 	  (common:get-homehost trynum: (- trynum 1)))
 	#f))
    (else
-    (mutex-unlock! *homehost-mutex*)
     (let* ((currhost (get-host-name))
 	   (bestadrs (server:get-best-guess-address currhost))
 	   ;; first look in config, then look in file .homehost, create it if not found
@@ -845,6 +844,7 @@
 	   (at-home  (or (equal? homehost currhost)
 			 (equal? homehost bestadrs))))
       (set! *home-host* (cons homehost at-home))
+      (mutex-unlock! *homehost-mutex*)
       *home-host*))))
 
 ;; am I on the homehost?
