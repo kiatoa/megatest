@@ -45,12 +45,12 @@
 
 ;; GLOBAL GLETCHES
 
-(define *contexts* (make-hash-table))
-
-;; Common data structure for 
+;; CONTEXTS
 (defstruct cxt
   (taskdb #f)
   (cmutex (make-mutex)))
+(define *contexts* (make-hash-table))
+(define *context-mutex* (make-mutex))
 
 ;; safe method for accessing a context given a toppath
 ;;
@@ -75,7 +75,6 @@
 (define *toppath*      #f)
 (define *already-seen-runconfig-info* #f)
 
-(define *waiting-queue*     (make-hash-table))
 (define *test-meta-updated* (make-hash-table))
 (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
 (define *passnum*           0) ;; when running track calls to run-tests or similar
@@ -85,16 +84,19 @@
 (define *time-zero* (current-seconds)) ;; for the watchdog
 
 ;; DATABASE
-(define *dbstruct-db*         #f) ;; used when local access is triggered in rmt.scm
-
+(define *dbstruct-db*         #f) ;; used to cache the dbstruct in db:setup. Goal is to remove this.
+;; db stats
 (define *db-stats*            (make-hash-table)) ;; hash of vectors < count duration-total >
 (define *db-stats-mutex*      (make-mutex))
-(define *db-sync-mutex*       (make-mutex))
-(define *db-multi-sync-mutex* (make-mutex))
-(define *db-local-sync*       (make-hash-table)) ;; used to record last touch of db
-(define *db-last-sync*        0)                 ;; last time the sync to megatest.db happened 
-(define *last-db-access*      (current-seconds)) ;; update when db is accessed via server
+;; db access
+(define *db-last-access*      (current-seconds)) ;; last db access, used in server
 (define *db-write-access*     #t)
+;; db sync
+(define *db-last-write*       0)                 ;; used to record last touch of db
+(define *db-last-sync*        0)                 ;; last time the sync to megatest.db happened
+(define *db-sync-in-progress* #f)                ;; if there is a sync in progress do not try to start another
+(define *db-multi-sync-mutex* (make-mutex))      ;; protect access to *db-sync-in-progress*, *db-last-sync* and *db-last-write*
+;; task db
 (define *task-db*             #f) ;; (vector db path-to-db)
 (define *db-access-allowed*   #t) ;; flag to allow access
 (define *db-access-mutex*     (make-mutex))
@@ -102,7 +104,6 @@
 
 ;; SERVER
 (define *my-client-signature* #f)
-(define *transport-type*    'http)
 (define *transport-type*    'http)             ;; override with [server] transport http|rpc|nmsg
 (define *runremote*         #f)                ;; if set up for server communication this will hold <host port>
 (define *max-cache-size*    0)
@@ -110,13 +111,17 @@
 (define *server-id*         #f)
 (define *server-info*       #f)
 (define *time-to-exit*      #f)
-(define *received-response* #f)
-(define *default-numtries*  10)
 (define *server-run*        #t)
 (define *run-id*            #f)
 (define *server-kind-run*   (make-hash-table))
 (define *home-host*         #f)
+(define *total-non-write-delay* 0)
+(define *heartbeat-mutex*   (make-mutex))
 
+;; RPC transport
+(define *rpc:listener*      #f)
+
+;; KEY info
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here
 (define *keyvals*           (make-hash-table))
@@ -129,7 +134,6 @@
 
 ;; Awful. Please FIXME
 (define *env-vars-by-run-id* (make-hash-table))
-(define *current-run-name*   #f)
 
 ;; Testconfig and runconfig caches. 
 (define *testconfigs*       (make-hash-table)) ;; test-name => testconfig
@@ -191,9 +195,9 @@
 ;; Move me elsewhere ...
 ;; RADT => Why do we meed the version check here, this is called only if version misma
 ;;
-(define (common:cleanup-db)
+(define (common:cleanup-db dbstruct)
   (db:multi-db-sync 
-   #f ;; do all run-ids
+   dbstruct
    ;; 'new2old
    'killservers
    'dejunk
@@ -506,82 +510,68 @@
 ;; E X I T   H A N D L I N G
 ;;======================================================================
 
-(define (common:legacy-sync-recommended)
-  (or (and (common:get-homehost)
-	   (cdr (common:get-homehost)))
-      ;;(args:get-arg "-runtests")
-      ;;(args:get-arg "-run")
-      (args:get-arg "-server")
-      ;; (args:get-arg "-set-run-status")
-      ;;(args:get-arg "-remove-runs")
-      ;; (args:get-arg "-get-run-status")
-      ;;(args:get-arg "-use-db-cache") ;; feels like a bad idea ...
-      ))
+(define (common:run-sync?)
+  (and (common:on-homehost?)
+       (args:get-arg "-server")))
 
-(define (common:legacy-sync-required)
-  (configf:lookup *configdat* "setup" "megatest-db"))
-
-;; run-ids
+;;;; run-ids
 ;;    if #f use *db-local-sync* : or 'local-sync-flags
 ;;    if #t use timestamps      : or 'timestamps
-(define (common:sync-to-megatest.db run-ids) 
-  (let ((start-time         (current-seconds))
-        (run-ids-to-process (if (list? run-ids)
-                                run-ids
-                                (if (or (eq? run-ids 'timestamps)(eq? run-ids #t))
-                                    (db:get-changed-run-ids (let* ((mtdb-fpath (conc *toppath* "/megatest.db"))
-                                                                   (mtdb-exists (file-exists? mtdb-fpath)))
-                                                              (if mtdb-exists
-                                                                  (file-modification-time mtdb-fpath)
-                                                                  0)))
-                                    (hash-table-keys *db-local-sync*)))))
-    (debug:print-info 4 *default-log-port* "Processing run-ids: " run-ids-to-process)
-    (for-each 
-     (lambda (run-id)
-       (mutex-lock! *db-multi-sync-mutex*)
-       (if (or run-ids ;; if we were provided with run-ids, proceed
-               (hash-table-ref/default *db-local-sync* run-id #f))
-           ;; (if (> (- start-time last-write) 5) ;; every five seconds
-           (begin ;; let ((sync-time (- (current-seconds) start-time)))
-             (db:multi-db-sync (list run-id) 'new2old)
-             (let ((sync-time (- (current-seconds) start-time)))
-               (debug:print-info 3 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
-               (if (common:low-noise-print 30 "sync new to old")
-                   (debug:print-info 0 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
-             (hash-table-delete! *db-local-sync* run-id)))
-       (mutex-unlock! *db-multi-sync-mutex*))
-     run-ids-to-process)))
+(define (common:sync-to-megatest.db dbstruct) 
+  (let ((start-time         (current-seconds)))
+    (db:multi-db-sync dbstruct 'new2old)
+    (let ((sync-time (- (current-seconds) start-time)))
+      (debug:print-info 3 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds")
+      (if (common:low-noise-print 30 "sync new to old")
+	  (debug:print-info 0 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds")))))
 
+;; currently the primary job of the watchdog is to run the sync back to megatest.db from the db in /tmp
+;; if we are on the homehost and we are a server (by definition we are on the homehost if we are a server)
+;;
 (define (common:watchdog)
   (thread-sleep! 0.05) ;; delay for startup
-  (let ((legacy-sync (common:legacy-sync-required))
+  (let ((legacy-sync (common:run-sync?))
 	(debug-mode  (debug:debug-mode 1))
 	(last-time   (current-seconds)))
-    (if (or (common:legacy-sync-recommended)
-	    legacy-sync)
-	(let loop ()
-	  ;; sync for filesystem local db writes
-	  ;;
-	  (let ((start-time   (current-seconds)))
-	    ;; (common:sync-to-megatest.db 'local-sync-flags)
-	    (if (and debug-mode
-		     (> (- start-time last-time) 60))
-		(begin
-		  (set! last-time start-time)
-		  (debug:print-info 4 *default-log-port* "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
-
-	  ;; keep going unless time to exit
-	  ;;
-	  (if (not *time-to-exit*)
-	      (let delay-loop ((count 0))
-		(if (and (not *time-to-exit*)
-			 (< count 4)) ;; was 11, changing to 4. 
-		    (begin
-		      (thread-sleep! 1)
-		      (delay-loop (+ count 1))))
-		(loop)))
-	  (if (common:low-noise-print 30)
-	      (debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*))))))
+    (if legacy-sync
+	(let ((dbstruct (db:setup)))
+	  (let loop ()
+	    ;; sync for filesystem local db writes
+	    ;;
+	    (mutex-lock! *db-multi-sync-mutex*)
+	    (let* ((need-sync        (>= *db-last-write* *db-last-sync*)) ;; no sync since last write
+		   (sync-in-progress *db-sync-in-progress*)
+		   (should-sync      (> (- (current-seconds) *db-last-sync*) 5)) ;; sync every five seconds minimum
+		   (will-sync        (and (or need-sync should-sync)
+					  (not sync-in-progress)))
+		   (start-time       (current-seconds)))
+	      (if will-sync (set! *db-sync-in-progress* #t))
+	      (mutex-unlock! *db-multi-sync-mutex*)
+	      (if will-sync (common:sync-to-megatest.db dbstruct)) 
+	      (if will-sync
+		  (begin
+		    (mutex-lock! *db-multi-sync-mutex*)
+		    (set! db-sync-in-progress* #f)
+		    (set! *db-last-sync* start-time)
+		    (mutex-unlock! *db-multi-sync-mutex*)))
+	      (if (and debug-mode
+		       (> (- start-time last-time) 60))
+		  (begin
+		    (set! last-time start-time)
+		    (debug:print-info 4 *default-log-port* "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
+	    
+	    ;; keep going unless time to exit
+	    ;;
+	    (if (not *time-to-exit*)
+		(let delay-loop ((count 0))
+		  (if (and (not *time-to-exit*)
+			   (< count 4)) ;; was 11, changing to 4. 
+		      (begin
+			(thread-sleep! 1)
+			(delay-loop (+ count 1))))
+		  (loop)))
+	    (if (common:low-noise-print 30)
+		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*)))))))
 
 (define (std-exit-procedure)
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
@@ -823,6 +813,14 @@
 			 (equal? homehost bestadrs))))
       (set! *home-host* (cons homehost at-home))
       *home-host*))))
+
+;; am I on the homehost?
+;;
+(define (common:on-homehost?)
+  (let ((hh (common:get-homehost)))
+    (if hh
+	(cdr hh)
+	#f)))
 
 ;;======================================================================
 ;; M I S C   L I S T S

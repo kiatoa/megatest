@@ -125,9 +125,9 @@
       (thread-sleep! 5) ;; no need to do this very often
       (let ((numrunning -1)) ;; (db:get-count-tests-running db)))
 	(if (or (> numrunning 0)
-		(> (+ *last-db-access* 60)(current-seconds)))
+		(> (+ *db-last-access* 60)(current-seconds)))
 	    (begin
-	      (debug:print-info 0 *default-log-port* "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
+	      (debug:print-info 0 *default-log-port* "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *db-last-access*))
 	      (loop (+ 1 count)))
 	    (begin
 	      (debug:print-info 0 *default-log-port* "Starting to shutdown the server side")

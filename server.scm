@@ -36,7 +36,6 @@
       (conc "http://" (car hostport) ":" (cadr hostport))))
 
 (define  *server-loop-heart-beat* (current-seconds))
-(define *heartbeat-mutex* (make-mutex))
 
 ;;======================================================================
 ;; S E R V E R
@@ -189,6 +188,7 @@
 		      (lambda ()
 			(print hostport)))
 		    #t)))
+	  (debug:print-info 0 *default-log-port* "server file " serverfile " for " hostport " created")
 	  (common:simple-file-release-lock lock-file)
 	  res)
 	#f)))
@@ -197,13 +197,14 @@
   (let ((dotserver   (server:read-dotserver areapath))
 	(server-file (conc areapath "/.server"))
 	(lock-file   (conc areapath "/.server.lock")))
-    (if (string-match (conc ".*:" hostport "$") dotserver) ;; port matches, good enough info to decide to remove the file
+    (if (and dotserver (string-match (conc ".*:" hostport "$") dotserver)) ;; port matches, good enough info to decide to remove the file
 	(if (common:simple-file-lock lock-file)
 	    (begin
 	      (handle-exceptions
 	       exn
 	       #f
 	       (delete-file* server-file))
+	      (debug:print-info 0 *default-log-port* "server file " server-file " for " hostport " removed")
 	      (common:simple-file-release-lock lock-file))))))
 
 ;; no longer care if multiple servers are started by accident. older servers will drop off in time.
@@ -266,7 +267,7 @@
 
 (define (server:login toppath)
   (lambda (toppath)
-    (set! *last-db-access* (current-seconds))
+    (set! *db-last-access* (current-seconds)) ;; might not be needed.
     (if (equal? *toppath* toppath)
 	#t
 	#f)))
