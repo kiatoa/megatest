@@ -2429,7 +2429,7 @@
        (sqlite3:with-transaction
 	db
 	(lambda ()
-	  (sqlite3:execute db "DELETE FROM steps WHERE test_id IN (SELECT id FROM tests WHERE state='DELETED' AND event_time<?);" targtime)
+	  (sqlite3:execute db "DELETE FROM test_steps WHERE test_id IN (SELECT id FROM tests WHERE state='DELETED' AND event_time<?);" targtime)
 	  (sqlite3:execute db "DELETE FROM test_data WHERE test_id IN (SELECT id FROM tests WHERE state='DELETED' AND event_time<?);" targtime)
 	  (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime)))))))
 
