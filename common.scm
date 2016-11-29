@@ -405,11 +405,20 @@
     (8 "FAIL")
     (9 "ABORT")))
 
-(define *common:ended-states* ;; states which indicate the test is stopped and will not proceed
+(define *common:ended-states*       ;; states which indicate the test is stopped and will not proceed
   '("COMPLETED" "ARCHIVED" "KILLED" "KILLREQ" "STUCK" "INCOMPLETE"))
 
 (define *common:badly-ended-states* ;; these roll up as CHECK, i.e. results need to be checked
-  '("KILLED" "KILLREQ" "STUCK" "INCOMPLETE"))
+  '("KILLED" "KILLREQ" "STUCK" "INCOMPLETE" "DEAD"))
+
+(define *common:running-states*     ;; test is either running or can be run
+  '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED"))
+
+(define *common:cant-run-states*    ;; These are stopping conditions that prevent a test from being run
+  '("COMPLETED" "KILLED" "UNKNOWN" "INCOMPLETE" "ARCHIVED"))
+
+(define *common:not-started-ok-statuses* ;; if not one of these statuses when in not_started state treat as dead
+  '("n/a" "na" "PASS" "FAIL" "WARN" "CHECK" "WAIVED" "DEAD" "SKIP"))
 
 (define (common:special-sort items order comp)
   (let ((items-order (map reverse order))
@@ -420,62 +429,58 @@
                 (b-num (cadr (or (assoc b items-order) '(0 0)))))
             (acomp a-num b-num))))))
 
-;; These are stopping conditions that prevent a test from being run
-(define *common:cant-run-states-sym* 
-  '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE ABORT ARCHIVED))
-
-;; given a toplevel with currstate, currstatus apply state and status
-;;  => (newstate . newstatus)
-(define (common:apply-state-status currstate currstatus state status)
-  (let* ((cstate  (string->symbol (string-downcase currstate)))
-         (cstatus (string->symbol (string-downcase currstatus)))
-         (sstate  (string->symbol (string-downcase state)))
-         (sstatus (string->symbol (string-downcase status)))
-         (nstate  #f)
-         (nstatus #f))
-    (set! nstate
-          (case cstate
-            ((completed not_started killed killreq stuck archived) 
-             (case sstate ;; completed -> sstate
-               ((completed killed killreq stuck archived) completed)
-               ((running remotehoststart launched)        running)
-               (else                                      unknown-error-1)))
-            ((running remotehoststart launched)
-             (case sstate
-               ((completed killed killreq stuck archived) #f) ;; need to look at all items
-               ((running remotehoststart launched)        running)
-               (else                                      unknown-error-2)))
-            (else unknown-error-3)))
-    (set! nstatus
-          (case sstatus
-            ((pass)
-             (case nstate
-               ((pass n/a deleted)     pass)
-               ((warn)                 warn)
-               ((fail)                 fail)
-               ((check)               check)
-               ((waived)             waived)
-               ((skip)                 skip)
-               ((stuck/dead)          stuck)
-               ((abort)               abort)
-               (else        unknown-error-4)))
-            ((warn)
-             (case nstate
-               ((pass warn n/a skip deleted)   warn)
-               ((fail)                         fail)
-               ((check)                       check)
-               ((waived)                     waived)
-               ((stuck/dead)                  stuck)
-               (else                unknown-error-5)))
-            ((fail)
-             (case nstate
-               ((pass warn fail check n/a waived skip deleted stuck/dead stuck)  fail)
-               ((abort)                                                         abort)
-               (else                                                  unknown-error-6)))
-            (else    unknown-error-7)))
-    (cons 
-     (if nstate  (symbol->string nstate)  nstate)
-     (if nstatus (symbol->string nstatus) nstatus))))
+;; ;; given a toplevel with currstate, currstatus apply state and status
+;; ;;  => (newstate . newstatus)
+;; (define (common:apply-state-status currstate currstatus state status)
+;;   (let* ((cstate  (string->symbol (string-downcase currstate)))
+;;          (cstatus (string->symbol (string-downcase currstatus)))
+;;          (sstate  (string->symbol (string-downcase state)))
+;;          (sstatus (string->symbol (string-downcase status)))
+;;          (nstate  #f)
+;;          (nstatus #f))
+;;     (set! nstate
+;;           (case cstate
+;;             ((completed not_started killed killreq stuck archived) 
+;;              (case sstate ;; completed -> sstate
+;;                ((completed killed killreq stuck archived) completed)
+;;                ((running remotehoststart launched)        running)
+;;                (else                                      unknown-error-1)))
+;;             ((running remotehoststart launched)
+;;              (case sstate
+;;                ((completed killed killreq stuck archived) #f) ;; need to look at all items
+;;                ((running remotehoststart launched)        running)
+;;                (else                                      unknown-error-2)))
+;;             (else unknown-error-3)))
+;;     (set! nstatus
+;;           (case sstatus
+;;             ((pass)
+;;              (case nstate
+;;                ((pass n/a deleted)     pass)
+;;                ((warn)                 warn)
+;;                ((fail)                 fail)
+;;                ((check)               check)
+;;                ((waived)             waived)
+;;                ((skip)                 skip)
+;;                ((stuck/dead)          stuck)
+;;                ((abort)               abort)
+;;                (else        unknown-error-4)))
+;;             ((warn)
+;;              (case nstate
+;;                ((pass warn n/a skip deleted)   warn)
+;;                ((fail)                         fail)
+;;                ((check)                       check)
+;;                ((waived)                     waived)
+;;                ((stuck/dead)                  stuck)
+;;                (else                unknown-error-5)))
+;;             ((fail)
+;;              (case nstate
+;;                ((pass warn fail check n/a waived skip deleted stuck/dead stuck)  fail)
+;;                ((abort)                                                         abort)
+;;                (else                                                  unknown-error-6)))
+;;             (else    unknown-error-7)))
+;;     (cons 
+;;      (if nstate  (symbol->string nstate)  nstate)
+;;      (if nstatus (symbol->string nstatus) nstatus))))
                
 ;;======================================================================
 ;; D E B U G G I N G   S T U F F 
