@@ -20,6 +20,8 @@
 (declare (unit common))
 
 (include "common_records.scm")
+(include "thunk-utils.scm")
+
 
 ;; (require-library margs)
 ;; (include "margs.scm")
@@ -62,9 +64,20 @@
     (let ((cxt-mutex (cxt-mutex cxt)))
       (mutex-unlock! *context-mutex*)
       (mutex-lock! cxt-mutex)
-      (let ((res (proc cxt)))
-        (mutex-unlock! cxt-mutex)
-        res))))
+      ;; here we guard proc with exception handler so
+      ;; no matter how proc succeeds or fails,
+      ;; the cxt-mutex will be unlocked afterward.
+      (let* ((EXCEPTION-SYMBOL (gensym)) ;; use a generated symbol
+             (guarded-proc               ;; to avoid collision
+              (lambda args
+                (let* ((res (condition-case
+                             (apply proc args)
+                             [x () (cons EXCEPTION-SYMBOL x)])))
+                 (mutex-unlock! cxt-mutex)
+                 (if (and (pair? res) (eq? (car res) EXCEPTION))
+                     (abort cdr res)
+                     res)))))
+        (guarded-proc cxt)))))
         
 (define *db-keys* #f)
 
