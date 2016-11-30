@@ -243,14 +243,18 @@
 
 
 (define *api-exec-ht* (make-hash-table))
-
+(define *api-exec-mutex* (make-mutex))
 ;; let's see if caching the rpc stub curbs thread-profusion on server side
 (define (rpc-transport:get-api-exec iface port)
+  (mutex-lock! *api-exec-mutex*)
   (let* ((lu (hash-table-ref/default *api-exec-ht* (cons iface  port) #f)))
     (if lu
-        lu
+        (begin
+          (mutex-unlock! *api-exec-mutex*)
+          lu)
         (let ((res (rpc:procedure 'api-exec iface port)))
           (hash-table-set! *api-exec-ht* (cons iface port) res)
+          (mutex-unlock! *api-exec-mutex*)
           res))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -279,7 +283,7 @@
                                     chatty: #f
                                     accept-result?: (lambda(x)
                                                       (and (vector? x) (vector-ref x 0)))
-                                    retries: 4
+                                    retries: 8
                                     back-off-factor: 1.5
                                     random-wait: 0.2
                                     retry-delay: 0.1
@@ -305,7 +309,9 @@
 	 (if (vector? res)
              (case (vector-ref res 0)
                ((success) (vector #t (vector-ref res 1)))
-               ((comms-fail)
+               (
+                (comms-fail other-fail)
+                ;;(comms-fail) 
                 (debug:print 0 *default-log-port* "WARNING: comms failure for rpc request >>"res"<<")
                 ;;(debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
                 (vector #f (vector-ref res 1)))
