@@ -13,7 +13,7 @@
 ;; fake out readline usage of toplevel-command
 (define (toplevel-command . a) #f)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc ;; (srfi 18) extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
      http-client srfi-18 extras format) ;;  zmq extras)
 
 ;; Added for csv stuff - will be removed
@@ -148,7 +148,7 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
-  -transport http|zmq     : use http or zmq for transport (default is http) 
+  -transport http|rpc     : use http or rpc for transport (default is http) 
   -daemonize              : fork into background and disconnect from stdin/out
   -log logfile            : send stdout and stderr to logfile
   -list-servers           : list the servers 
@@ -395,7 +395,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      "Watchdog thread")))
 
 (thread-start! *watchdog*)
-
 
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))
@@ -740,10 +739,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ;;
     (let ((tl        (launch:setup))
 	  (run-id    (and (args:get-arg "-run-id")
-			  (string->number (args:get-arg "-run-id")))))
+			  (string->number (args:get-arg "-run-id"))))
+          (transport-type (string->symbol (or (args:get-arg "-transport") "http"))))
       (if run-id
 	  (begin
-	    (server:launch run-id)
+	    (server:launch run-id transport-type)
 	    (set! *didsomething* #t))
 	  (debug:print-error 0 *default-log-port* "server requires run-id be specified with -run-id")))
 
@@ -755,6 +755,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(hash-table-keys args:arg-hash)
 		'("-list-servers"
 		  "-stop-server"
+                  "-kill-server"
 		  "-show-cmdinfo"
 		  "-list-runs"
 		  "-ping")))
@@ -777,14 +778,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))
 
 (if (or (args:get-arg "-list-servers")
-	(args:get-arg "-stop-server"))
+	(args:get-arg "-stop-server")
+        (args:get-arg "-kill-server"))
     (let ((tl (launch:setup)))
       (if tl 
 	  (let* ((tdbdat  (tasks:open-db))
 		 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
 		 (fmtstr  "~5a~12a~8a~20a~24a~10a~10a~10a~10a\n")
 		 (servers-to-kill '())
-		 (killinfo   (args:get-arg "-stop-server"))
+                 (kill-switch  (if (args:get-arg "-kill-server") "-9" ""))
+                 (killinfo   (or (args:get-arg "-stop-server") (args:get-arg "-kill-server") ))
 		 (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
 		 (sid        (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f)))
 	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface:OutPort" "InPort" "LastBeat" "State" "Transport")
@@ -818,8 +821,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 (if (or (equal? id sid)
 			 (equal? sid 0)) ;; kill all/any
 		     (begin
-		       (debug:print-info 0 *default-log-port* "Attempting to stop server with pid " pid)
-		       (tasks:kill-server status hostname pullport pid transport)))))
+		       (debug:print-info 0 *default-log-port* "Attempting to kill "kill-switch" server with pid " pid)
+		       (tasks:kill-server hostname pid kill-switch: kill-switch)))))
 	     servers)
 	    (debug:print-info 1 *default-log-port* "Done with listservers")
 	    (set! *didsomething* #t)
@@ -999,7 +1002,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      (lambda (target runname keys keyvals)
        (let* ((runsdat  (rmt:get-runs-by-patt keys runname 
 					(common:args-get-target)
-					#f #f #f))
+					#f #f #f #f))
 	      (header   (vector-ref runsdat 0))
 	      (rows     (vector-ref runsdat 1)))
 	 (if (null? rows)

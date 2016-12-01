@@ -1,8 +1,6 @@
 # make install CSCOPTS='-accumulate-profile -profile-name $(PWD)/profile-ww$(shell date +%V.%u)'
-# rm <files>.o ; make install CSCOPTS='-profile' ; ... ;  chicken-profile | less
-
 PREFIX=$(PWD)
-CSCOPTS= 
+CSCOPTS= -deploy 
 INSTALL=install
 SRCFILES = common.scm items.scm launch.scm \
    ods.scm runconfig.scm server.scm configf.scm \
@@ -15,7 +13,7 @@ SRCFILES = common.scm items.scm launch.scm \
    portlogger.scm archive.scm env.scm
 
 # Eggs to install (straightforward ones)
-EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
+EGGS=crypt matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
 dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
 json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
 spiffy-directory-listing ssax sxml-serializer sxml-modifications iup canvas-draw sqlite3
@@ -40,16 +38,77 @@ ARCHSTR=$(shell lsb_release -sr)
 
 PNGFILES = $(shell cd docs/manual;ls *png)
 
-all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard 
+ARCHSIZE=64_
+IMVER=3.11
+IUPVER=3.17
+KTYPE=26g4
+CDVER=5.10
+
+all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard eggs sqlite matt iup 
 
 mtest: $(OFILES) readline-fix.scm megatest.o
-	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
+	mkdir -p $(PREFIX)/deploy
+	csc $(CSCOPTS) $(OFILES) megatest.o -o $(PREFIX)/deploy/mtest
 
-dboard : $(OFILES) $(GOFILES) dashboard.scm
-	csc $(CSCOPTS) $(OFILES) dashboard.scm $(GOFILES) -o dboard
+eggs: $(PREFIX)/deploy/mtest/fmt.so
+
+$(PREFIX)/deploy/mtest/fmt.so:
+	chicken-install -deploy -p $(PREFIX)/deploy/mtest base64 format regex-case simple-exceptions typed-records apropos directory-utils md5 spiffy http-client spiffy-request-vars spiffy-directory-listing posix-extras call-with-environment-variables csv typed-records pathname-expand json crypt dot-locking csv-xml z3 sql-de-lite hostinfo rpc directory-utils md5 spiffy http-client spiffy-request-vars spiffy-directory-listing posix-extras call-with-environment-variables rpc fmt
+
+sqlite: $(PREFIX)/deploy/mtest/sqlite3.so
+
+$(PREFIX)/deploy/mtest/sqlite3.so: 
+	wget http://www.sqlite.org/2015/sqlite-autoconf-3090200.tar.gz
+	tar xfz sqlite-autoconf-3090200.tar.gz
+	cd sqlite-autoconf-3090200
+	cd sqlite-autoconf-3090200 && ./configure --prefix=`realpath $(PREFIX)/deploy/mtest`
+	cd sqlite-autoconf-3090200 && make
+	cd sqlite-autoconf-3090200 && make install
+	CSC_OPTIONS='-I$(PREFIX)/deploy/mtest/include -L$(PREFIX)/deploy/mtest/' chicken-install -deploy -p $(PREFIX)/deploy/mtest sqlite3
+
+matt:  $(PREFIX)/deploy/mtest/stml.so
+
+$(PREFIX)/deploy/mtest/stml.so: 
+	wget -c -O stml.tar.gz 'http://www.kiatoa.com/fossils/stml/tarball?name=stml&uuid=trunk'
+	tar -xzf stml.tar.gz
+	cd stml && cp install.cfg.template install.cfg
+	cd stml && echo "TARGDIR=`realpath $(PREFIX)/deploy/mtest`" > install.cfg
+	cd stml && echo "LOGDIR=/tmp/stmlrun" >> install.cfg
+	cd stml && echo "SQLITE3=$PREFIX/bin/sqlite3" >> install.cfg
+	cd stml && cp requirements.scm.template requirements.scm
+	cd stml && make clean
+	-cd stml && CSCOPTS="-C -fPIC" make
+	cd stml && chicken-install -deploy -p $(PREFIX)/deploy/mtest
+	wget -c -O opensrc.tar.gz 'http://www.kiatoa.com/fossils/opensrc/tarball?name=opensrc&uuid=trunk'
+	tar -xzf opensrc.tar.gz
+	cd opensrc/mutils && chicken-install -deploy -p $(PREFIX)/deploy/mtest
+	cd opensrc/dbi    && chicken-install -deploy -p $(PREFIX)/deploy/mtest
+	cd opensrc/margs  && chicken-install -deploy -p $(PREFIX)/deploy/mtest
+
+iup: $(PREFIX)/deploy/mtest/iup.so
+
+$(PREFIX)/deploy/mtest/iup.so:
+	wget -c http://www.kiatoa.com/matt/chicken-build/cd/cd-${CDVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz
+	wget -c http://www.kiatoa.com/matt/chicken-build/im/im-${IMVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz
+	wget -c http://www.kiatoa.com/matt/chicken-build/iup/iup-${IUPVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz
+	tar -xzvf cd-${CDVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz -C $(PREFIX)/deploy/mtest/
+	tar -xzvf im-${IMVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz -C $(PREFIX)/deploy/mtest/
+	tar -xzvf iup-${IUPVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz -C $(PREFIX)/deploy/mtest/
+	cp $(PREFIX)/deploy/mtest/ftgl/lib/*/* $(PREFIX)/deploy/mtest/
+	wget -c -O ffcall.tar.gz 'http://www.kiatoa.com/fossils/ffcall/tarball?name=ffcall&uuid=trunk'
+	tar -xzf ffcall.tar.gz
+	cd ffcall && ./configure --prefix=`realpath $(PREFIX)/deploy/mtest/` --enable-shared
+	cd ffcall &&  make CC="gcc -fPIC"
+	cd ffcall &&  make install
+	CSC_OPTIONS="-I$(PREFIX)/deploy/mtest/include -L$(PREFIX)/deploy/mtest" chicken-install -deploy -p $(PREFIX)/deploy/mtest -D no-library-checks -feature disable-iup-web iup
+	CSC_OPTIONS="-I$(PREFIX)/deploy/mtest/include -L$(PREFIX)/deploy/mtest" chicken-install -deploy -p $(PREFIX)/deploy/mtest -D no-library-checks canvas-draw	
+ 
+dboard: $(OFILES) $(GOFILES) dashboard.scm
+	csc $(CSCOPTS) $(OFILES) dashboard.scm $(GOFILES) -o $(PREFIX)/deploy/mtest/dboard2
+	cp $(PREFIX)/deploy/mtest/dboard2/dboard2 $(PREFIX)/deploy/mtest/dboard
 
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
-	csc $(CSCOPTS) $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
+	csc $(CSCOPTS) $(OFILES) $(GOFILES) newdashboard.scm -o $(PREFIX)/deploy/mtest/newdboard
 
 # install documentation to $(PREFIX)/docs
 # DOES NOT REBUILD DOCS

@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo typed-records)
 (require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -44,6 +44,28 @@
 (define user (getenv "USER"))
 
 ;; GLOBAL GLETCHES
+
+(define *contexts* (make-hash-table))
+
+;; Common data structure for 
+(defstruct cxt
+  (taskdb #f)
+  (cmutex (make-mutex)))
+
+;; safe method for accessing a context given a toppath
+;;
+(define (common:with-cxt toppath proc)
+  (mutex-lock! *context-mutex*)
+  (let ((cxt (hash-table-ref/default *contexts* toppath #f)))
+    (if (not cxt)
+        (set! cxt (let ((x (make-cxt)))(hash-table-set! *contexts* toppath x) x)))
+    (let ((cxt-mutex (cxt-mutex cxt)))
+      (mutex-unlock! *context-mutex*)
+      (mutex-lock! cxt-mutex)
+      (let ((res (proc cxt)))
+        (mutex-unlock! cxt-mutex)
+        res))))
+        
 (define *db-keys* #f)
 
 (define *configinfo*   #f)   ;; raw results from setup, includes toppath and table from megatest.config
@@ -116,6 +138,10 @@
 ;; five seconds ago
 (define *pre-reqs-met-cache* (make-hash-table))
 
+;; cache of verbosity given string
+;;
+(define *verbosity-cache* (make-hash-table))
+
 (define (common:clear-caches)
   (set! *target*             (make-hash-table))
   (set! *keys*               (make-hash-table))
@@ -132,6 +158,8 @@
 (define sdb:qry #f) ;; (make-sdb:qry)) ;;  'init #f)
 ;; Generic path database
 (define *fdb* #f)
+
+(define *last-launch* (current-seconds)) ;; use for throttling the launch rate. Would be better to use the db and last time of a test in LAUNCHED state.
 
 ;;======================================================================
 ;; V E R S I O N
@@ -372,6 +400,7 @@
 
 (define (common:legacy-sync-recommended)
   (or (args:get-arg "-runtests")
+      (args:get-arg "-run")
       (args:get-arg "-server")
       ;; (args:get-arg "-set-run-status")
       (args:get-arg "-remove-runs")
@@ -1182,6 +1211,14 @@
 ;;     ((KILLED)           "234 101 17")
 ;;     ((NOT_STARTED)      "240 240 240")
 ;;     (else               "192 192 192")))
+
+(define (common:iup-color->rgb-hex instr)
+  (string-intersperse 
+   (map (lambda (x)
+          (number->string x 16))
+        (map string->number
+             (string-split instr)))
+   "/"))
 
 (define (common:get-color-from-status status)
   (cond
