@@ -118,6 +118,9 @@
 (define *total-non-write-delay* 0)
 (define *heartbeat-mutex*   (make-mutex))
 
+;; client
+(define *rmt-mutex*         (make-mutex))     ;; remote access calls mutex 
+
 ;; RPC transport
 (define *rpc:listener*      #f)
 
