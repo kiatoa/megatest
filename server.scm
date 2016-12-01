@@ -168,20 +168,26 @@
 
 (define (server:start-attempted? areapath)
   (let ((flagfile (conc areapath "/.starting-server")))
-    (and (file-exists? flagfile)
-	 (< (- (current-seconds)
-	       (file-modification-time flagfile))
-	    15)))) ;; exists and less than 15 seconds old
+    (handle-exceptions
+     exn
+     #f  ;; if things go wrong pretend we can't see the file
+     (and (file-exists? flagfile)
+	  (< (- (current-seconds)
+		(file-modification-time flagfile))
+	     15))))) ;; exists and less than 15 seconds old
     
 (define (server:read-dotserver areapath)
   (let ((dotfile (conc areapath "/.server")))
-    (if (and (file-exists? dotfile)
-	     (file-read-access? dotfile))
-	(with-input-from-file
-	    dotfile
-	  (lambda ()
-	    (read-line)))
-	#f)))
+    (handle-exceptions
+     exn
+     #f  ;; if things go wrong pretend we can't see the file
+     (if (and (file-exists? dotfile)
+	      (file-read-access? dotfile))
+	 (with-input-from-file
+	     dotfile
+	   (lambda ()
+	     (read-line)))
+	 #f))))
 
 ;; write a .server file in *toppath* with hostport
 ;; return #t on success, #f otherwise
