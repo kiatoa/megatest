@@ -40,6 +40,11 @@
 
 (define *max-running* 40)
 
+(define my-mutex-lock! conc)
+(define my-mutex-unlock! conc)
+;; (define my-mutex-lock! mutex-lock!)
+;; (define my-mutex-unlock! mutex-unlock!)
+
 (define (gather-dir-info path)
   (let ((mtx1     (make-mutex))
         (threads  (make-hash-table))
@@ -60,14 +65,14 @@
                             (else                        '(data)))))
                  (if (eq? (car info) 'data)
                      (let loop ((start-time (current-seconds)))
-                       (mutex-lock! mtx1)
+                       (my-mutex-lock! mtx1)
                        (let* ((num-threads (hash-table-size threads))
                               (ok-to-run   (> *max-running* num-threads)))
                          ;; (if (> (abs (- num-threads last-num)) 2)
                          ;;     (begin
                          ;;       ;; (print "num-threads:" num-threads)
                          ;;       (set! last-num num-threads)))
-                         (mutex-unlock! mtx1)
+                         (my-mutex-unlock! mtx1)
                          (if ok-to-run
                              (let ((run-time-start (current-seconds)))
                                ;; (print "num threads: " num-threads)
@@ -75,17 +80,17 @@
                                             (lambda ()
                                               (let ((cksum (checksum mtx1 p cmd: "md5sum"))
                                                     (run-time (- (current-seconds) run-time-start)))
-                                                (mutex-lock! mtx1)
+                                                (my-mutex-lock! mtx1)
                                                 (client-send-receive req (conc p " " cksum))
-                                                (mutex-unlock! mtx1))
+                                                (my-mutex-unlock! mtx1))
                                               (let loop2 ()
-                                                (mutex-lock! mtx1)
+                                                (my-mutex-lock! mtx1)
                                                 (let ((registered (hash-table-exists? threads p)))
                                                   (if registered
                                                       (begin
                                                         ;; (print "deleting thread reference for " p)
                                                         (hash-table-delete! threads p))) ;; delete myself
-                                                  (mutex-unlock! mtx1)
+                                                  (my-mutex-unlock! mtx1)
                                                   (if (not registered)
                                                       (begin
                                                         (thread-sleep! 0.5)
@@ -94,9 +99,9 @@
                                  (thread-start! th1)
                                  ;; (thread-sleep! 0.05) ;; give things a little time to get going
                                  ;; (thread-join! th1) ;; 
-                                 (mutex-lock! mtx1)
+                                 (my-mutex-lock! mtx1)
                                  (hash-table-set! threads p th1)
-                                 (mutex-unlock! mtx1)
+                                 (my-mutex-unlock! mtx1)
                                  )) ;; thread is launched
                              (let ((run-time (- (current-seconds) start-time))) ;; couldn't launch yet
                                (cond
