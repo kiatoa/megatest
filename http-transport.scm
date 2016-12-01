@@ -28,6 +28,7 @@
 (declare (uses server))
 (declare (uses daemon))
 (declare (uses portlogger))
+(declare (uses rmt))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -221,24 +222,6 @@
 	 (res        #f)
 	 (success    #t)
 	 (sparams    (db:obj->string params transport: 'http)))
-;;    (condition-case
-;;     handle-exceptions
-;;     exn
-;;     (if (> numretries 0)
-;;	 (begin
-;;	   (mutex-unlock! *http-mutex*)
-;;	   (thread-sleep! 1)
-;;	   (handle-exceptions
-;;	    exn
-;;	    (debug:print 0 *default-log-port* "WARNING: closing connections failed. Server at " fullurl " almost certainly dead")
-;;	    (close-all-connections!))
-;;	   (debug:print 0 *default-log-port* "WARNING: Failed to communicate with server, trying again, numretries left: " numretries)
-;;	   (http-transport:client-api-send-receive run-id serverdat cmd sparams numretries: (- numretries 1)))
-;;	 (begin
-;;	   (mutex-unlock! *http-mutex*)
-;;	   (tasks:kill-server-run-id run-id)
-;;	   #f))
-;;     (begin
        (debug:print-info 11 *default-log-port* "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
        ;; set up the http-client here
        (max-retry-attempts 1)
@@ -261,7 +244,8 @@
 					     (set! success #f)
 					     (debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
 					     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-					     (set! *runremote* #f) ;; (hash-table-delete! *runremote* run-id)
+					     (if *runremote*
+                                                 (remote-conndat-set! *runremote* #f))
 					     ;; Killing associated server to allow clean retry.")
 					     ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
 					     (mutex-unlock! *http-mutex*)
@@ -308,7 +292,9 @@
 ;; careful closing of connections stored in *runremote*
 ;;
 (define (http-transport:close-connections run-id)
-  (let* ((server-dat *runremote*)) ;; (hash-table-ref/default *runremote* run-id #f)))
+  (let* ((server-dat (if *runremote*
+                         (remote-conndat *runremote*)
+                         #f))) ;; (hash-table-ref/default *runremote* run-id #f)))
     (if (vector? server-dat)
 	(let ((api-dat (http-transport:server-dat-get-api-uri server-dat)))
 	  (close-connection! api-dat)

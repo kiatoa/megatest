@@ -42,12 +42,7 @@
 ;; else return #f to let the calling proc know that there is no server available
 ;;
 (define (rmt:get-connection-info run-id)
-  (let ((cinfo *runremote*)) ;; (hash-table-ref/default *runremote* run-id #f)))
-;; how about if rrr is a defstruct and we use a wrapper to access it (even better would be a macro)
-;; look in common_records for with-mutex
-;;
-;; (with-mutex *rrr-mutex* rmt:dat-host *runremote*) => returns value
-;; (with-mutex *rrr-mutex* rmt:
+  (let ((cinfo (remote-conndat *runremote*)))
     (if cinfo
 	cinfo
 	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)
@@ -77,27 +72,32 @@
      ((not *runremote*)                     
       (set! *runremote* (make-remote))
       (mutex-unlock! *rmt-mutex*)
+      ;; (print "case 1")
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; ensure we have a homehost record
      ((not (pair? (remote-hh-dat *runremote*)))  ;; have a homehost record?
       (thread-sleep! 0.1) ;; since we shouldn't get here, delay a little
       (remote-hh-dat-set! *runremote* (common:get-homehost))
       (mutex-unlock! *rmt-mutex*)
+      ;; (print "case 2")
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; on homehost and this is a read
      ((and (cdr (remote-hh-dat *runremote*))   ;; on homehost
            (member cmd api:read-only-queries)) ;; this is a read
       (mutex-unlock! *rmt-mutex*)
+      ;; (print "case 3")
       (rmt:open-qry-close-locally cmd 0 params))
      ;; on homehost and this is a write, we already have a server
      ((and (cdr (remote-hh-dat *runremote*))         ;; on homehost
            (not (member cmd api:read-only-queries))  ;; this is a write
            (remote-server-url *runremote*))          ;; have a server
       (mutex-unlock! *rmt-mutex*)
+      ;; (print "case 4")
       (rmt:open-qry-close-locally cmd 0 params))
-     ;; no server contact made and this is a write, try starting a server 
+     ;; no server contact made and this is a write, passively start a server 
      ((and (not (remote-server-url *runremote*))
 	   (not (member cmd api:read-only-queries)))
+      ;; (print "case 5")
       (let ((serverconn (server:check-if-running *toppath*)))
 	(if serverconn
 	    (remote-server-url-set! *runremote* serverconn) ;; the string can be consumed by the client setup if needed
@@ -111,39 +111,44 @@
             (mutex-unlock! *rmt-mutex*)
             (rmt:send-receive cmd rid params attemptnum: attemptnum))))
      ;; if not on homehost ensure we have a connection to a live server
-     ((or (not (pair? (remote-hh-dat *runremote*)))  ;; have a homehost record?
-	  (not (cdr (remote-hh-dat *runremote*)))    ;; have record, are we on a homehost?
-	  (not (remote-conndat *runremote*)))         ;; do we not have a connection?
-      (remote-hh-dat-set!  *runremote* (common:get-homehost))
-      (remote-conndat-set! *runremote* (rmt:get-connection-info 0))
+     ;; NOTE: we *have* a homehost record by now
+     ((and (not (cdr (remote-hh-dat *runremote*)))        ;; are we on a homehost?
+           (not (remote-conndat *runremote*)))            ;; and no connection
+      ;; (print "case 6  hh-dat: " (remote-hh-dat *runremote*) " conndat: " (remote-conndat *runremote*))
       (mutex-unlock! *rmt-mutex*)
-      (server:kind-run *toppath*) ;; we need a sever
+      (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
+      (remote-conndat-set! *runremote* (rmt:get-connection-info 0))
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; all set up if get this far, dispatch the query
      ((cdr (remote-hh-dat *runremote*)) ;; we are on homehost
       (mutex-unlock! *rmt-mutex*)
+      ;; (print "case 7")
       (rmt:open-qry-close-locally cmd (if rid rid 0) params))
      ;; reset the connection if it has been unused too long
      ((and (remote-conndat *runremote*)
 	   (let ((expire-time (- start-time (remote-server-timeout *runremote*))))
-	     (< (http-transport:server-dat-get-last-access connection) expire-time)))
-      (remote-conndatr *runremote* #f))
+	     (< (http-transport:server-dat-get-last-access (remote-conndat *runremote*)) expire-time)))
+      ;; (print "case 8")
+      (remote-conndat-set! *runremote* #f))
      ;; not on homehost, do server query
      (else
       (mutex-unlock! *rmt-mutex*)
+      ;; (print "case 9")
       (let* ((conninfo (remote-conndat *runremote*))
 	     (dat      (case (remote-transport *runremote*)
-			 ((http)(condition-case
-				 (http-transport:client-api-send-receive run-id conninfo cmd params)
-				 ((commfail)(vector #f "communications fail"))
-				 ((exn)(vector #f "other fail"))))
+			 ((http) ;; (condition-case ;; handling here has caused a lot of problems.
+                                  (http-transport:client-api-send-receive 0 conninfo cmd params)
+                                  ;; ((commfail)(vector #f "communications fail"))
+                                  ;; ((exn)(vector #f "other fail" (print-call-chain)))))
+                                  )
 			 (else
 			  (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " not supported")
 			  (exit))))
 	     (success  (if (vector? dat) (vector-ref dat 0) #f))
 	     (res      (if (vector? dat) (vector-ref dat 1) #f)))
 	(if (vector? conninfo)(http-transport:server-dat-update-last-access conninfo)) ;; refresh access time
-	(if (and success res)
+        ;; (print "case 9. conninfo=" conninfo " dat=" dat)
+	(if success
 	    (case (remote-transport *runremote*)
 	      ((http) res)
 	      (else
@@ -151,8 +156,9 @@
 	       (exit 1)))
 	    (begin
 	      (debug:print 0 *default-log-port* "WARNING: communication failed. Trying again, try num: " attemptnum)
-	      (remote-conndat-set! *runremote* #f)
-	      (server-url-set!     *runremote* #f)
+	      (remote-conndat-set!    *runremote* #f)
+	      (remote-server-url-set! *runremote* #f)
+              ;; (print "case 9.1")
 	      (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))))))))
 
@@ -248,19 +254,13 @@
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
-	 ;; (jparams  (db:obj->string params)) ;; (rmt:dat->json-str params))
 	 (res  	   (handle-exceptions
 		    exn
 		    #f
 		    (http-transport:client-api-send-receive run-id connection-info cmd params))))
-;;		    ((commfail) (vector #f "communications fail")))))
     (if (and res (vector-ref res 0))
 	(vector-ref res 1) ;;; YES!! THIS IS CORRECT!! CHANGE IT HERE, THEN CHANGE rmt:send-receive ALSO!!!
 	#f)))
-;; 	(db:string->obj (vector-ref dat 1))
-;; 	(begin
-;; 	  (debug:print-error 0 *default-log-port* "rmt:send-receive-no-auto-client-setup failed, attempting to continue. Got " dat)
-;; 	  dat))))
 
 ;; ;; Wrap json library for strings (why the ports crap in the first place?)
 ;; (define (rmt:dat->json-str dat)
