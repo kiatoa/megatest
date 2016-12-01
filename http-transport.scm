@@ -238,28 +238,29 @@
 			      (set! res (vector
 					 success
 					 (db:string->obj 
-					  (handle-exceptions
-					   exn
-					   (begin
-					     (set! success #f)
-					     (debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
-					     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-					     (if *runremote*
-                                                 (remote-conndat-set! *runremote* #f))
-					     ;; Killing associated server to allow clean retry.")
-					     ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
-					     (mutex-unlock! *http-mutex*)
-					     ;;; (signal (make-composite-condition
-					     ;;;          (make-property-condition 'commfail 'message "failed to connect to server")))
-					     ;;; "communications failed"
-					     (db:obj->string #f))
+					  ;; handle-exceptions
+					  ;; exn
+					  ;; (begin
+					  ;;   (set! success #f)
+					  ;;   (debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
+					  ;;   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+					  ;;   (if *runremote*
+                                          ;;       (remote-conndat-set! *runremote* #f))
+					  ;;   ;; Killing associated server to allow clean retry.")
+					  ;;   ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
+					  ;;   (mutex-unlock! *http-mutex*)
+					  ;;   ;;; (signal (make-composite-condition
+					  ;;   ;;;          (make-property-condition 'commfail 'message "failed to connect to server")))
+					  ;;   ;;; "communications failed"
+					  ;;   (db:obj->string #f))
 					   (with-input-from-request ;; was dat
 					    fullurl 
 					    (list (cons 'key "thekey")
 						  (cons 'cmd cmd)
 						  (cons 'params sparams))
-					    read-string))
-					  transport: 'http)))
+					    read-string)
+                                           transport: 'http)
+                                         0)) ;; added this speculatively
 			      ;; Shouldn't this be a call to the managed call-all-connections stuff above?
 			      (close-all-connections!)
 			      (mutex-unlock! *http-mutex*)
@@ -283,7 +284,7 @@
 		   (print-call-chain (current-error-port))
 		   (debug:print 0 *default-log-port* " server call chain:")
 		   (pp (vector-ref res 1) (current-error-port))
-		   (signal (vector-ref result 0))))
+		   (signal (vector-ref res 0))))
 	     (signal (make-composite-condition
 		      (make-property-condition 
 		       'timeout
