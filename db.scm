@@ -41,10 +41,16 @@
 ;;======================================================================
 
 ;; each db entry is a pair ( db . dbfilepath )
+;; I propose this record evolves into the area record
+;;
 (defstruct dbr:dbstruct 
-  (tmpdb  #f)
-  (mtdb   #f)
-  (refndb #f))
+  (tmpdb       #f)
+  (mtdb        #f)
+  (refndb      #f)
+  (homehost    #f) ;; not used yet
+  (on-homehost #f) ;; not used yet
+  )                ;; goal is to converge on one struct for an area but for now it is too confusing
+  
 
 ;; record for keeping state,status and count for doing roll-ups in
 ;; iterated tests

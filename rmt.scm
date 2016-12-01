@@ -78,6 +78,23 @@
       (set! *runremote* (make-remote))
       (mutex-unlock! *rmt-mutex*)
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
+     ;; ensure we have a homehost record
+     ((not (pair? (remote-hh-dat *runremote*)))  ;; have a homehost record?
+      (thread-sleep! 0.1) ;; since we shouldn't get here, delay a little
+      (remote-hh-dat-set! *runremote* (common:get-homehost))
+      (mutex-unlock! *rmt-mutex*)
+      (rmt:send-receive cmd rid params attemptnum: attemptnum))
+     ;; on homehost and this is a read
+     ((and (cdr (remote-hh-dat *runremote*))   ;; on homehost
+           (member cmd api:read-only-queries)) ;; this is a read
+      (mutex-unlock! *rmt-mutex*)
+      (rmt:open-qry-close-locally cmd 0 params))
+     ;; on homehost and this is a write, we already have a server
+     ((and (cdr (remote-hh-dat *runremote*))         ;; on homehost
+           (not (member cmd api:read-only-queries))  ;; this is a write
+           (remote-server-url *runremote*))          ;; have a server
+      (mutex-unlock! *rmt-mutex*)
+      (rmt:open-qry-close-locally cmd 0 params))
      ;; no server contact made and this is a write, try starting a server 
      ((and (not (remote-server-url *runremote*))
 	   (not (member cmd api:read-only-queries)))
@@ -86,8 +103,13 @@
 	    (remote-server-url-set! *runremote* serverconn) ;; the string can be consumed by the client setup if needed
 	    (if (not (server:start-attempted? *toppath*))
 		(server:kind-run *toppath*))))
-      (mutex-unlock! *rmt-mutex*)
-      (rmt:send-receive cmd rid params attemptnum: attemptnum))
+      (if (cdr (remote-hh-dat *runremote*)) ;; we are on the homehost, just do the call
+          (begin
+            (mutex-unlock! *rmt-mutex*)
+            (rmt:open-qry-close-locally cmd 0 params))
+          (begin
+            (mutex-unlock! *rmt-mutex*)
+            (rmt:send-receive cmd rid params attemptnum: attemptnum))))
      ;; if not on homehost ensure we have a connection to a live server
      ((or (not (pair? (remote-hh-dat *runremote*)))  ;; have a homehost record?
 	  (not (cdr (remote-hh-dat *runremote*)))    ;; have record, are we on a homehost?
@@ -100,7 +122,7 @@
      ;; all set up if get this far, dispatch the query
      ((cdr (remote-hh-dat *runremote*)) ;; we are on homehost
       (mutex-unlock! *rmt-mutex*)
-      (rmt:open-qry-close-locally cmd (if rid rid 0) params)      )
+      (rmt:open-qry-close-locally cmd (if rid rid 0) params))
      ;; reset the connection if it has been unused too long
      ((and (remote-conndat *runremote*)
 	   (let ((expire-time (- start-time (remote-server-timeout *runremote*))))
@@ -133,7 +155,6 @@
 	      (server-url-set!     *runremote* #f)
 	      (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))))))))
-
 
 (define (rmt:update-db-stats run-id rawcmd params duration)
   (mutex-lock! *db-stats-mutex*)
