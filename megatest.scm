@@ -1865,8 +1865,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(args:get-arg "-repl")
 	(args:get-arg "-load"))
     (let* ((toppath (launch:setup))
-	   (dbstruct (if toppath (db:setup)))) ;; make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
-      (if dbstruct
+	   (dbstruct (if (and toppath
+                              (common:on-homehost?))
+                         (db:setup)
+                         #f))) ;; make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
+      (if *toppath*
 	  (cond
 	   ((getenv "MT_RUNSCRIPT")
 	    ;; How to run megatest scripts
