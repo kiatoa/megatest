@@ -316,6 +316,7 @@ Misc
 (defstruct dboard:graph-dat
     ((id           #f) : string)
     ((color        #f) : vector)
+    ((color-rgb    #f) : string)
     ((flag         #t) : boolean)
     ((cell         #f) : number)
     )
@@ -2962,22 +2963,33 @@ Misc
                                (graph-dat (make-dboard:graph-dat
                                                   id: fieldn
                                                   color: graph-color
+                                                  color-rgb: graph-color-rgb
                                                   flag: #t
                                                   cell: graph-cell
                                                   )))
                           (hash-table-set! graph-matrix-table fieldn graph-dat)
                           (hash-table-set! graph-cell-table graph-cell graph-dat)
-                          ;; (print "Graph data " graph-matrix-row " " graph-matrix-col " " fieldn " " graph-color " " graph-color-rgb " ")
-                          ;; (print "Graph data " graph-matrix-row " " graph-matrix-col " " fieldn " " graph-color " " graph-color-rgb " ")
                           (set! changed #t)
                           (iup:attribute-set! graph-matrix (conc graph-matrix-row ":"  graph-matrix-col) fieldn)
-                          (iup:attribute-set! graph-matrix (conc "BGCOLOR" (conc graph-matrix-row ":"  graph-matrix-col)) graph-color-rgb)
+                          (iup:attribute-set! graph-matrix (conc "BGCOLOR" graph-cell) graph-color-rgb)
                           (if (> graph-matrix-col 10)
                               (begin
                                 (dboard:tabdat-graph-matrix-col-set! tabdat 1)
                                 (dboard:tabdat-graph-matrix-row-set! tabdat (+ graph-matrix-row 1)))
                               (dboard:tabdat-graph-matrix-col-set! tabdat (+ graph-matrix-col 1)))
-                          )))
+                          ))
+                      (begin
+                        (let* ((graph-dat  (hash-table-ref graph-matrix-table fieldn))
+                               (graph-flag (dboard:graph-dat-flag graph-dat))
+                               (graph-cell (dboard:graph-dat-cell graph-dat))
+                               (graph-color-rgb (dboard:graph-dat-color-rgb graph-dat)))
+                          (if graph-flag
+                              (begin
+                                (set! changed #t)
+                                (iup:attribute-set! graph-matrix (conc "BGCOLOR" graph-cell) graph-color-rgb))
+                              (begin
+                                (set! changed #t)
+                                (iup:attribute-set! graph-matrix (conc "BGCOLOR" graph-cell) "255 255 255"))))))
 		  (if (not (null? vals)) 
 		      (let* (;; (maxval   (apply max vals))
 			     ;; (minval   (min 0 (apply min vals)))
