@@ -241,29 +241,36 @@
 ;; NOTE: This is NOT called directly from clients as not all transports support a client running
 ;;       in the same process as the server.
 ;;
-(define (server:ping host:port)
-  (let ((tdbdat (tasks:open-db)))
+(define (server:ping host-port-in #!key (do-exit #f))
+  (let ((host:port (if (number? host-port-in) ;; we were handed a server-id
+		       (let ((srec (tasks:get-server-by-id (db:delay-if-busy (tasks:open-db)) host-port-in)))
+			 ;; (print "srec: " srec " host-port-in: " host-port-in)
+			 (if srec
+			     (conc (vector-ref srec 3) ":" (vector-ref srec 4))
+			     (conc "no such server-id " host-port-in)))
+		       host-port-in)))
     (let* ((host-port (let ((slst (string-split   host:port ":")))
 			(if (eq? (length slst) 2)
 			    (list (car slst)(string->number (cadr slst)))
 			    #f)))
 	   (toppath       (launch:setup)))
+      ;; (print "host-port=" host-port)
       (if (not host-port)
 	  (begin
-	    (print "ERROR: bad host:port")
-	    (exit 1))
-	  (let* ((iface      (if host-port (car host-port) (tasks:hostinfo-get-interface server-db-dat)))
-		 (port       (if host-port (cadr host-port)(tasks:hostinfo-get-port      server-db-dat)))
+	    (debug:print 0 *default-log-port*  "ERROR: bad host:port")
+	    (if do-exit (exit 1)))
+	  (let* ((iface      (car host-port))
+		 (port       (cadr host-port))
 		 (server-dat (http-transport:client-connect iface port))
 		 (login-res  (rmt:login-no-auto-client-setup server-dat)))
 	    (if (and (list? login-res)
 		     (car login-res))
 		(begin
 		  (print "LOGIN_OK")
-		  (exit 0))
+		  (if do-exit (exit 0)))
 		(begin
 		  (print "LOGIN_FAILED")
-		  (exit 1))))))))
+		  (if do-exit (exit 1)))))))))
 
 ;; run ping in separate process, safest way in some cases
 ;;

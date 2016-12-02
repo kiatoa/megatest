@@ -419,6 +419,18 @@
         FROM servers WHERE state NOT LIKE 'defunct%' ORDER BY start_time DESC;")
     res))
 
+(define (tasks:get-server-by-id mdb id)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id)
+       ;;                       0  1     2         3      4     5          6        7     8          9          10        11     12
+       (set! res (vector id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id)))
+     mdb
+     "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update,transport,run_id 
+        FROM servers WHERE id=?;"
+     id)
+    res))
+
 (define (tasks:get-server-records mdb run-id)
   (let ((res '()))
     (sqlite3:for-each-row

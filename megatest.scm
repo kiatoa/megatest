@@ -644,9 +644,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ))
 
 (if (args:get-arg "-ping")
-    (let* (;; (run-id        (string->number (args:get-arg "-run-id")))
+    (let* ((server-id     (string->number (args:get-arg "-ping"))) ;; extract run-id (i.e. no ":"
 	   (host:port     (args:get-arg "-ping")))
-      (server:ping host:port)))
+      (server:ping (or server-id host:port) do-exit: #t)))
 
 ;;======================================================================
 ;; Capture, save and manipulate environments
