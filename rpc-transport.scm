@@ -63,6 +63,92 @@
   ;;  ;;    (apply (eval (string->symbol (conc "remote:" procstr))) params)
   ;;  (apply (eval (string->symbol procstr)) params)))
 
+;; retry an operation (depends on srfi-18)
+;; ==================
+;; idea here is to avoid spending time on coding retrying something.  Trying to be generic here.
+;;
+;; Exception handling:
+;; -------------------
+;; if evaluating the thunk results in exception, it will be retried.
+;; on last try, if final-failure-returns-actual is true, the exception will be re-thrown to caller.
+;;
+;; look at options below #!key to see how to configure behavior
+;;
+;;
+(define (retry-thunk
+         the-thunk
+         #!key ;;;; options below
+         (accept-result?   (lambda (x) x)) ;; retry if predicate applied to thunk's result is false 
+         (retries                       4) ;; how many tries
+         (failure-value                #f) ;; return this on final failure, unless following option is enabled:
+         (final-failure-returns-actual #f) ;; on failure, on the last try, just return the result, not failure-value
+
+         (retry-delay                 0.1) ;; delay between tries
+         (back-off-factor               1) ;; multiply retry-delay by this factor on retry
+         (random-delay                0.1) ;; add a random portion of this value to wait
+
+         (chatty                       #f) ;; print status as we go, for debugging.
+         )
+  
+  (when chatty (print) (print "Entered retry-thunk") (print "-=-=-=-=-=-"))
+  (let* ((guarded-thunk ;; we are guarding the thunk against exceptions.  We will record whether result of evaluation is an exception or a regular result.
+          (lambda ()
+           (let* ((EXCEPTION (gensym)) ;; using gensym to avoid potential collision
+                  (res
+                   (condition-case
+                    (the-thunk) ;; this is what we are guarding the execution of
+                    [x () (cons EXCEPTION x)]
+                    )))
+             (cond
+              ((and (pair? res) (eq? (car res) EXCEPTION))
+               (if chatty
+                   (print " - the-thunk threw exception >"(cdr res)"<"))
+               (cons 'exception (cdr res)))
+               (else
+                (if chatty
+                    (print " - the-thunk returned result >"res"<"))
+                (cons 'regular-result res)))))))
+    
+    (let loop ((guarded-res (guarded-thunk))
+               (retries-left retries)
+               (fail-wait retry-delay))
+      (if chatty (print "   =========="))
+      (let* ((wait-time (+ fail-wait (+ (* fail-wait back-off-factor)
+                                        (* random-delay
+                                           (/ (random 1024) 1024) ))))
+             (res-type (car guarded-res))
+             (res-value (cdr guarded-res)))
+        (cond
+         ((and (eq? res-type 'regular-result) (accept-result? res-value))
+                   (if chatty (print " + return result that satisfied accept-result? >"res-value"<"))
+                   res-value)
+
+         ((> retries-left 0)
+          (if chatty (print " - sleep "wait-time))
+          (thread-sleep! wait-time)
+          (if chatty (print " + retry ["retries-left" tries left]"))
+          (loop (guarded-thunk)
+                (sub1 retries-left)
+                wait-time))
+         
+         ((eq? res-type 'regular-result)
+          (if final-failure-returns-actual
+              (begin
+                (if chatty (print " + last try failed- return the result >"res-value"<"))
+                res-value)
+              (begin
+                (if chatty (print " + last try failed- return canned failure value >"failure-value"<"))
+              failure-value)))
+         
+         (else ;; no retries left; result was not accepted and res-type can only be 'exception
+          (if final-failure-returns-actual 
+              (begin
+                (if chatty (print " + last try failed with exception- re-throw it >"res-value"<"))
+                (abort res-value)); re-raise the exception. TODO: find a way for call-history to show as though from entry to this function
+              (begin
+                (if chatty (print " + last try failed with exception- return canned failure value >"failure-value"<"))
+                failure-value))))))))
+
 
 (define (rpc-transport:server-shutdown server-id rpc:listener #!key (from-on-exit #f))
   (on-exit (lambda () #t)) ;; turn off on-exit stuff
@@ -157,14 +243,18 @@
 
 
 (define *api-exec-ht* (make-hash-table))
-
+(define *api-exec-mutex* (make-mutex))
 ;; let's see if caching the rpc stub curbs thread-profusion on server side
 (define (rpc-transport:get-api-exec iface port)
+  (mutex-lock! *api-exec-mutex*)
   (let* ((lu (hash-table-ref/default *api-exec-ht* (cons iface  port) #f)))
     (if lu
-        lu
+        (begin
+          (mutex-unlock! *api-exec-mutex*)
+          lu)
         (let ((res (rpc:procedure 'api-exec iface port)))
           (hash-table-set! *api-exec-ht* (cons iface port) res)
+          (mutex-unlock! *api-exec-mutex*)
           res))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -193,7 +283,7 @@
                                     chatty: #f
                                     accept-result?: (lambda(x)
                                                       (and (vector? x) (vector-ref x 0)))
-                                    retries: 4
+                                    retries: 8
                                     back-off-factor: 1.5
                                     random-wait: 0.2
                                     retry-delay: 0.1
@@ -219,7 +309,9 @@
 	 (if (vector? res)
              (case (vector-ref res 0)
                ((success) (vector #t (vector-ref res 1)))
-               ((comms-fail)
+               (
+                (comms-fail other-fail)
+                ;;(comms-fail) 
                 (debug:print 0 *default-log-port* "WARNING: comms failure for rpc request >>"res"<<")
                 ;;(debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
                 (vector #f (vector-ref res 1)))

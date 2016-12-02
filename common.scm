@@ -75,7 +75,7 @@
                              [x () (cons EXCEPTION-SYMBOL x)])))
                  (mutex-unlock! cxt-mutex)
                  (if (and (pair? res) (eq? (car res) EXCEPTION))
-                     (abort cdr res)
+                     (abort (cdr res))
                      res)))))
         (guarded-proc cxt)))))
         
