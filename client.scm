@@ -48,13 +48,17 @@
     ((rpc)  (rpc:client-connect  iface port))
     ((http) (http:client-connect iface port))
     ((zmq)  (zmq:client-connect  iface port))
-    (else   (rpc:client-connect  iface port))))
+    (else
+     (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " not supported (5)")
+     (exit))))
 
 (define (client:setup  run-id #!key (remaining-tries 10) (failed-connects 0))
   (case (server:get-transport)
     ((rpc) (rpc-transport:client-setup run-id remaining-tries: remaining-tries failed-connects: failed-connects)) ;;(client:setup-rpc run-id))
     ((http)(client:setup-http run-id remaining-tries: remaining-tries failed-connects: failed-connects))
-    (else  (rpc-transport:client-setup run-id remaining-tries: remaining-tries failed-connects: failed-connects)))) ;; (client:setup-rpc run-id))))
+    (else
+     (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " not supported (6)")
+     (exit)))) ;; (client:setup-rpc run-id))))
 
 ;; (define (client:login-no-auto-setup server-info run-id)
 ;;   (case (server:get-transport)
@@ -167,18 +171,8 @@
 	      (let* ((iface     (tasks:hostinfo-get-interface server-dat))
 		     (hostname  (tasks:hostinfo-get-hostname  server-dat))
 		     (port      (tasks:hostinfo-get-port      server-dat))
-		     (start-res (case *transport-type*
-				  ((http)(http-transport:client-connect iface port))
-				  ;;((nmsg)(nmsg-transport:client-connect hostname port))
-                                  ))
-		     (ping-res  (case *transport-type* 
-				  ((http)(rmt:login-no-auto-client-setup start-res))
-				  ;; ((nmsg)(let ((logininfo (rmt:login-no-auto-client-setup start-res run-id)))
- 				  ;;          (if logininfo
- 				  ;;              (car (vector-ref logininfo 1))
- 				  ;;              #f)))
-                                  
-                                  )))
+		     (start-res (http-transport:client-connect iface port))
+		     (ping-res  (rmt:login-no-auto-client-setup start-res)))
 		(if (and start-res
 			 ping-res)
 		    (begin
@@ -211,7 +205,7 @@
 		  (thread-sleep! (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
 		  (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))
 
-;; keep this as a function to ease future 
+;; keep this as a function to ease future ;; this is unused, not porting for rpc -BB
 (define (client:start run-id server-info)
   (http-transport:client-connect (tasks:hostinfo-get-interface server-info)
 				 (tasks:hostinfo-get-port server-info)))

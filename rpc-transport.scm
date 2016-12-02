@@ -153,7 +153,7 @@
 (define (rpc-transport:server-shutdown server-id rpc:listener #!key (from-on-exit #f))
   (on-exit (lambda () #t)) ;; turn off on-exit stuff
   ;;(tcp-close rpc:listener) ;; gotta exit nicely
-  ;;(tasks:bb-server-set-state! server-id "stopped")
+  ;;(tasks:server-set-state! (db:delay-if-busy (tasks:open-db)) server-id "stopped")
 
 
   ;; TODO: (low) the following is extraordinaritly slow.  Maybe we don't even need portlogger for rpc anyway??  the exception-based failover when ports are taken is fast!
@@ -161,7 +161,11 @@
   
   (set! *time-to-exit* #t)
   (if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
-  (tasks:bb-server-delete-record server-id " rpc-transport:keep-running complete")
+
+
+  (tasks:server-delete-record (db:delay-if-busy (tasks:open-db)) server-id " rpc-transport:keep-running complete")
+  
+
   ;;(BB> "Before (exit) (from-on-exit="from-on-exit")")
   (unless from-on-exit (exit))  ;; sometimes we hang (around) here with 100% cpu.
   ;;(BB> "After")
@@ -206,13 +210,13 @@
   ;; let's get a server-id for this server
   ;;   if at first we do not suceed, try 3 more times.
   (let ((server-id (retry-thunk
-                    (lambda () (tasks:bb-server-lock-slot run-id 'rpc))
+                    (lambda () (tasks:server-lock-slot (db:delay-if-busy (tasks:open-db)) run-id 'rpc))
                     chatty: #f
                     retries: 4)))
     (when (not server-id) ;; dang we couldn't get a server-id.
       ;; since we didn't get the server lock we are going to clean up and bail out
       (debug:print-info 2 *default-log-port* "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
-      (tasks:bb-server-delete-records-for-this-pid " rpc-transport:launch")
+      (tasks:server-delete-records-for-this-pid (db:delay-if-busy (tasks:open-db)) " rpc-transport:launch")
       (exit 1))
 
     ;; we got a server-id (and a corresponding entry in servers table in globally shared mdb)
@@ -395,7 +399,7 @@
     ;;   (portlogger:open-run-close portlogger:set-port start-port "released")
     ;;   (portlogger:open-run-close portlogger:take-port portnum))
 
-    (tasks:bb-server-set-interface-port server-id ipaddrstr portnum)
+    (tasks:server-set-interface-port (db:delay-if-busy (tasks:open-db)) server-id ipaddrstr portnum)
 
     ;;============================================================
     ;;  activate thread th1 to attach opened tcp port to rpc server
@@ -418,10 +422,10 @@
                (rpc-transport:server-shutdown server-id rpc:listener from-on-exit: #t)))
     
     ;; check again for running servers for this run-id in case one has snuck in since we checked last in rpc-transport:launch
-    (if (not (equal? server-id (tasks:bb-server-am-i-the-server? run-id)));; try to ensure no double registering of servers
+    (if (not (equal? server-id (tasks:server-am-i-the-server? (db:delay-if-busy (tasks:open-db)) run-id)));; try to ensure no double registering of servers
         (begin ;; i am not the server, another server snuck in and beat this one to the punch
           (tcp-close rpc:listener) ;; gotta exit nicely and free up that tcp port
-          (tasks:bb-server-set-state! server-id "collision"))
+          (tasks:server-set-state! (db:delay-if-busy (tasks:open-db)) server-id "collision"))
 
         (begin ;; i am the server
           ;; setup the in-memory db
@@ -430,7 +434,7 @@
 
           ;; let's make it official
           (set! *rpc:listener* rpc:listener) 
-          (tasks:bb-server-set-state! server-id "running") ;; update our mdb servers entry
+          (tasks:server-set-state! (db:delay-if-busy (tasks:open-db)) server-id "running") ;; update our mdb servers entry
 
           
           
@@ -512,8 +516,8 @@
                     ;; Consider implementing some smarts here to re-insert the record or kill self is
                     ;; the db indicates so
                     ;;
-                    (if (tasks:bb-server-am-i-the-server? run-id)
-                        (tasks:bb-server-set-state! server-id "running"))
+                    (if (tasks:server-am-i-the-server? (db:delay-if-busy (tasks:open-db)) run-id)
+                        (tasks:server-set-state! (db:delay-if-busy (tasks:open-db)) server-id "running"))
                     ;;
                     (loop 0 bad-sync-count))
                   (begin
@@ -589,7 +593,7 @@
         (begin ;; login failed but have a server record, clean out the record and try again
           (debug:print-info 0 *default-log-port* "rpc-transport:client-setup UNABLE TO CONNECT run-id="run-id" server-dat=" server-dat)
           (tasks:kill-server-run-id run-id)
-          (tasks:bb-server-force-clean-run-record  run-id iface port
+          (tasks:server-force-clean-run-record  (db:delay-if-busy (tasks:open-db)) run-id iface port
                                                    " rpc-transport:client-setup (server-dat = #t)")
           (if (> remtries 2)
               (thread-sleep! (+ 1 (random 5))) ;; spread out the starts a little

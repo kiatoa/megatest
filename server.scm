@@ -228,7 +228,7 @@
   (let* ((dotserver (server:read-dotserver areapath))) ;; tdbdat (tasks:open-db)))
     (if dotserver
 	(let* ((res (case *transport-type*
-		      ((http)(server:ping-server dotserver))
+		      ((http rpc)(server:ping-server dotserver))
 		      ;; ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
 		      )))
 	  (if res
@@ -261,7 +261,13 @@
 	    (if do-exit (exit 1)))
 	  (let* ((iface      (car host-port))
 		 (port       (cadr host-port))
-		 (server-dat (http-transport:client-connect iface port))
+		 (server-dat
+                  (case (remote-transport *runremote*)
+                    ((http) (http-transport:client-connect iface port))
+                    ((rpc) (rpc-transport:client-connect iface port))
+                    (else
+                     (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " not supported (4)")
+                     (exit))))
 		 (login-res  (rmt:login-no-auto-client-setup server-dat)))
 	    (if (and (list? login-res)
 		     (car login-res))
