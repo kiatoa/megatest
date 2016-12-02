@@ -46,6 +46,15 @@
 	 (print "Full condition info:\n" (condition->list exn)))))
    (proc)))
 
+;; Need a mutex protected way to get and set values
+;; or use (define-simple-syntax ??
+;;
+(define-inline (with-mutex mtx accessor record . val)
+  (mutex-lock! mtx)
+  (let ((res (apply accessor record val)))
+    (mutex-unlock! mtx)
+    res))
+
 ;; this was cached based on results from profiling but it turned out the profiling
 ;; somehow went wrong - perhaps too many processes writing to it. Leaving the caching
 ;; in for now but can probably take it out later.

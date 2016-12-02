@@ -131,6 +131,9 @@
 (define *total-non-write-delay* 0)
 (define *heartbeat-mutex*   (make-mutex))
 
+;; client
+(define *rmt-mutex*         (make-mutex))     ;; remote access calls mutex 
+
 ;; RPC transport
 (define *rpc:listener*      #f)
 
@@ -628,7 +631,8 @@
 					(begin
 					  (sqlite3:interrupt! db)
 					  (sqlite3:finalize! db #t)
-					  (vector-set! *task-db* 0 #f)))))
+					  ;; (vector-set! *task-db* 0 #f)
+					  (set! *task-db* #f)))))
 			      (close-output-port *default-log-port*)
 			      (set! *default-log-port* (current-error-port))) "Cleanup db exit thread"))
 	  (th2 (make-thread (lambda ()

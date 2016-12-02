@@ -1020,74 +1020,76 @@ EOF
 ;; sort tests by priority and waiton
 ;; Move test specific stuff to a test unit FIXME one of these days
 (define (tests:sort-by-priority-and-waiton test-records)
-  (let* ((mungepriority (lambda (priority)
-			  (if priority
-			      (let ((tmp (any->number priority)))
-				(if tmp tmp (begin (debug:print-error 0 *default-log-port* "bad priority value " priority ", using 0") 0)))
-			      0)))
-	 (all-tests      (hash-table-keys test-records))
-	 (all-waited-on  (let loop ((hed (car all-tests))
-				    (tal (cdr all-tests))
-				    (res '()))
-			   (let* ((trec    (hash-table-ref test-records hed))
-				  (waitons (or (tests:testqueue-get-waitons trec) '())))
-			     (if (null? tal)
-				 (append res waitons)
-				 (loop (car tal)(cdr tal)(append res waitons))))))
-	 (sort-fn1 
-	  (lambda (a b)
-	    (let* ((a-record   (hash-table-ref test-records a))
-		   (b-record   (hash-table-ref test-records b))
-		   (a-waitons  (or (tests:testqueue-get-waitons a-record) '()))
-		   (b-waitons  (or (tests:testqueue-get-waitons b-record) '()))
-		   (a-config   (tests:testqueue-get-testconfig  a-record))
-		   (b-config   (tests:testqueue-get-testconfig  b-record))
-		   (a-raw-pri  (config-lookup a-config "requirements" "priority"))
-		   (b-raw-pri  (config-lookup b-config "requirements" "priority"))
-		   (a-priority (mungepriority a-raw-pri))
-		   (b-priority (mungepriority b-raw-pri)))
-	      (tests:testqueue-set-priority! a-record a-priority)
-	      (tests:testqueue-set-priority! b-record b-priority)
-	      ;; (debug:print 0 *default-log-port* "a=" a ", b=" b ", a-waitons=" a-waitons ", b-waitons=" b-waitons)
-	      (cond
-	       ;; is 
-	       ((member a b-waitons)          ;; is b waiting on a?
-		;; (debug:print 0 *default-log-port* "case1")
-		#t)
-	       ((member b a-waitons)          ;; is a waiting on b?
-		;; (debug:print 0 *default-log-port* "case2")
-		#f)
-	       ((and (not (null? a-waitons))  ;; both have waitons - do not disturb
-		     (not (null? b-waitons)))
-		;; (debug:print 0 *default-log-port* "case2.1")
-		#t)
-	       ((and (null? a-waitons)        ;; no waitons for a but b has waitons
-		     (not (null? b-waitons)))
-		;; (debug:print 0 *default-log-port* "case3")
-		#f)
-	       ((and (not (null? a-waitons))  ;; a has waitons but b does not
-		     (null? b-waitons)) 
-		;; (debug:print 0 *default-log-port* "case4")
-		#t)
-	       ((not (eq? a-priority b-priority)) ;; use
-		(> a-priority b-priority))
-	       (else
-		;; (debug:print 0 *default-log-port* "case5")
-		(string>? a b))))))
-	 
-	 (sort-fn2
-	  (lambda (a b)
-	    (> (mungepriority (tests:testqueue-get-priority (hash-table-ref test-records a)))
-	       (mungepriority (tests:testqueue-get-priority (hash-table-ref test-records b)))))))
-    ;; (let ((dot-res (tests:run-dot (tests:tests->dot test-records) "plain")))
-    ;;   (debug:print "dot-res=" dot-res))
-    ;; (let ((data (map cdr (filter
-    ;;     		  (lambda (x)(equal? "node" (car x)))
-    ;;     		  (map string-split (tests:easy-dot test-records "plain"))))))
-    ;;   (map car (sort data (lambda (a b)
-    ;;     		    (> (string->number (caddr a))(string->number (caddr b)))))))
-    ;; ))
-    (sort all-tests sort-fn1))) ;; avoid dealing with deleted tests, look at the hash table
+  (if (eq? (hash-table-size test-records) 0)
+      '()
+      (let* ((mungepriority (lambda (priority)
+			      (if priority
+				  (let ((tmp (any->number priority)))
+				    (if tmp tmp (begin (debug:print-error 0 *default-log-port* "bad priority value " priority ", using 0") 0)))
+				  0)))
+	     (all-tests      (hash-table-keys test-records))
+	     (all-waited-on  (let loop ((hed (car all-tests))
+					(tal (cdr all-tests))
+					(res '()))
+			       (let* ((trec    (hash-table-ref test-records hed))
+				      (waitons (or (tests:testqueue-get-waitons trec) '())))
+				 (if (null? tal)
+				     (append res waitons)
+				     (loop (car tal)(cdr tal)(append res waitons))))))
+	     (sort-fn1 
+	      (lambda (a b)
+		(let* ((a-record   (hash-table-ref test-records a))
+		       (b-record   (hash-table-ref test-records b))
+		       (a-waitons  (or (tests:testqueue-get-waitons a-record) '()))
+		       (b-waitons  (or (tests:testqueue-get-waitons b-record) '()))
+		       (a-config   (tests:testqueue-get-testconfig  a-record))
+		       (b-config   (tests:testqueue-get-testconfig  b-record))
+		       (a-raw-pri  (config-lookup a-config "requirements" "priority"))
+		       (b-raw-pri  (config-lookup b-config "requirements" "priority"))
+		       (a-priority (mungepriority a-raw-pri))
+		       (b-priority (mungepriority b-raw-pri)))
+		  (tests:testqueue-set-priority! a-record a-priority)
+		  (tests:testqueue-set-priority! b-record b-priority)
+		  ;; (debug:print 0 *default-log-port* "a=" a ", b=" b ", a-waitons=" a-waitons ", b-waitons=" b-waitons)
+		  (cond
+		   ;; is 
+		   ((member a b-waitons)          ;; is b waiting on a?
+		    ;; (debug:print 0 *default-log-port* "case1")
+		    #t)
+		   ((member b a-waitons)          ;; is a waiting on b?
+		    ;; (debug:print 0 *default-log-port* "case2")
+		    #f)
+		   ((and (not (null? a-waitons))  ;; both have waitons - do not disturb
+			 (not (null? b-waitons)))
+		    ;; (debug:print 0 *default-log-port* "case2.1")
+		    #t)
+		   ((and (null? a-waitons)        ;; no waitons for a but b has waitons
+			 (not (null? b-waitons)))
+		    ;; (debug:print 0 *default-log-port* "case3")
+		    #f)
+		   ((and (not (null? a-waitons))  ;; a has waitons but b does not
+			 (null? b-waitons)) 
+		    ;; (debug:print 0 *default-log-port* "case4")
+		    #t)
+		   ((not (eq? a-priority b-priority)) ;; use
+		    (> a-priority b-priority))
+		   (else
+		    ;; (debug:print 0 *default-log-port* "case5")
+		    (string>? a b))))))
+	     
+	     (sort-fn2
+	      (lambda (a b)
+		(> (mungepriority (tests:testqueue-get-priority (hash-table-ref test-records a)))
+		   (mungepriority (tests:testqueue-get-priority (hash-table-ref test-records b)))))))
+	;; (let ((dot-res (tests:run-dot (tests:tests->dot test-records) "plain")))
+	;;   (debug:print "dot-res=" dot-res))
+	;; (let ((data (map cdr (filter
+	;;     		  (lambda (x)(equal? "node" (car x)))
+	;;     		  (map string-split (tests:easy-dot test-records "plain"))))))
+	;;   (map car (sort data (lambda (a b)
+	;;     		    (> (string->number (caddr a))(string->number (caddr b)))))))
+	;; ))
+	(sort all-tests sort-fn1)))) ;; avoid dealing with deleted tests, look at the hash table
 
 (define (tests:easy-dot test-records outtype)
   (let-values (((fd temp-path) (file-mkstemp (conc "/tmp/" (current-user-name) ".XXXXXX"))))

@@ -644,9 +644,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ))
 
 (if (args:get-arg "-ping")
-    (let* (;; (run-id        (string->number (args:get-arg "-run-id")))
+    (let* ((server-id     (string->number (args:get-arg "-ping"))) ;; extract run-id (i.e. no ":"
 	   (host:port     (args:get-arg "-ping")))
-      (server:ping host:port)))
+      (server:ping (or server-id host:port) do-exit: #t)))
 
 ;;======================================================================
 ;; Capture, save and manipulate environments
@@ -1865,8 +1865,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(args:get-arg "-repl")
 	(args:get-arg "-load"))
     (let* ((toppath (launch:setup))
-	   (dbstruct (if toppath (db:setup)))) ;; make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
-      (if dbstruct
+	   (dbstruct (if (and toppath
+                              (common:on-homehost?))
+                         (db:setup)
+                         #f))) ;; make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
+      (if *toppath*
 	  (cond
 	   ((getenv "MT_RUNSCRIPT")
 	    ;; How to run megatest scripts
