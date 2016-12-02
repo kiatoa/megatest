@@ -39,32 +39,6 @@
 ;;  S U P P O R T   F U N C T I O N S
 ;;======================================================================
 
-;; thread-safe interface to *runremote* hash
-(define *rrr-mutex* (make-mutex))
-(define (rmt:get-cinfo rid)
-  (mutex-lock! *rrr-mutex*)
-  (let* ((run-id (if rid rid 0))
-         (cinfo (hash-table-ref/default *runremote* run-id #f)))
-    (mutex-unlock! *rrr-mutex*)
-    cinfo))
-
-(define (rmt:set-cinfo rid server-dat)
-  (mutex-lock! *rrr-mutex*)
-  (let* ((run-id (if rid rid 0))
-         (res (hash-table-set! *runremote* run-id server-dat)))
-    (mutex-unlock! *rrr-mutex*)
-    res))
-
-(define (rmt:del-cinfo rid)
-  (mutex-lock! *rrr-mutex*)
-  (let* ((run-id (if rid rid 0))
-         (res (hash-table-delete! *runremote* run-id)))
-    (mutex-unlock! *rrr-mutex*)
-    res))
-
-
-
-
 ;; if a server is either running or in the process of starting call client:setup
 ;; else return #f to let the calling proc know that there is no server available
 ;;
