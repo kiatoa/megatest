@@ -618,7 +618,8 @@
 					(begin
 					  (sqlite3:interrupt! db)
 					  (sqlite3:finalize! db #t)
-					  (vector-set! *task-db* 0 #f)))))
+					  ;; (vector-set! *task-db* 0 #f)
+					  (set! *task-db* #f)))))
 			      (close-output-port *default-log-port*)
 			      (set! *default-log-port* (current-error-port))) "Cleanup db exit thread"))
 	  (th2 (make-thread (lambda ()
