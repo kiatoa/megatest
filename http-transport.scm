@@ -572,17 +572,17 @@
 	    (thread-join! th2)
 	    (exit))))))
 
-(define (http:ping run-id host-port)
-  (let* ((server-dat (http-transport:client-connect (car host-port)(cadr host-port)))
-	 (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
-    (if (and (list? login-res)
-	     (car login-res))
-	(begin
-	  (print "LOGIN_OK")
-	  (exit 0))
-	(begin
-	  (print "LOGIN_FAILED")
-	  (exit 1)))))
+;; (define (http:ping run-id host-port)
+;;   (let* ((server-dat (http-transport:client-connect (car host-port)(cadr host-port)))
+;; 	 (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
+;;     (if (and (list? login-res)
+;; 	     (car login-res))
+;; 	(begin
+;; 	  (print "LOGIN_OK")
+;; 	  (exit 0))
+;; 	(begin
+;; 	  (print "LOGIN_FAILED")
+;; 	  (exit 1)))))
 
 (define (http-transport:server-signal-handler signum)
   (signal-mask! signum)

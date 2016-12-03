@@ -303,7 +303,7 @@
 ;;
 (define (rmt:login-no-auto-client-setup connection-info)
   (case *transport-type* ;; run-id of 0 is just a placeholder
-    ((http)(rmt:send-receive-no-auto-client-setup connection-info 'login 0 (list *toppath* megatest-version *my-client-signature*)))
+    ((http)(rmt:send-receive-no-auto-client-setup connection-info 'login 0 (list *toppath* megatest-version 0 *my-client-signature*)))
     ;;((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info 'login (list *toppath* megatest-version run-id *my-client-signature*)))
     ))
 

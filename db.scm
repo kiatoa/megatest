@@ -3113,7 +3113,8 @@
 		(regexp "_") "=" msg #t)))
 	   (lambda ()(deserialize)))
 	 (begin
-	   (debug:print-error 0 *default-log-port* "reception failed. Received " msg " but cannot translate it.")
+	   (debug:print-error 0 *default-log-port* "reception failed. Received \"" msg "\" but cannot translate it.")
+           (print-call-chain (current-error-port))
 	   msg))) ;; crude reply for when things go awry
     ((zmq nmsg)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg))) ;; rpc
