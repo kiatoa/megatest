@@ -258,8 +258,8 @@
 					    (list (cons 'key "thekey")
 						  (cons 'cmd cmd)
 						  (cons 'params sparams))
-					    read-string)
-                                           transport: 'http))
+					    read-string))
+					  transport: 'http)
                                          0)) ;; added this speculatively
 			      ;; Shouldn't this be a call to the managed call-all-connections stuff above?
 			      (close-all-connections!)

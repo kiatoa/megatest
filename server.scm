@@ -242,23 +242,29 @@
 ;;       in the same process as the server.
 ;;
 (define (server:ping host-port-in #!key (do-exit #f))
-  (let ((host:port (if (number? host-port-in) ;; we were handed a server-id
-		       (let ((srec (tasks:get-server-by-id (db:delay-if-busy (tasks:open-db)) host-port-in)))
-			 ;; (print "srec: " srec " host-port-in: " host-port-in)
-			 (if srec
-			     (conc (vector-ref srec 3) ":" (vector-ref srec 4))
-			     (conc "no such server-id " host-port-in)))
-		       host-port-in)))
-    (let* ((host-port (let ((slst (string-split   host:port ":")))
-			(if (eq? (length slst) 2)
-			    (list (car slst)(string->number (cadr slst)))
-			    #f)))
+  (let ((host:port (if (not host-port-in) ;; use read-dotserver to find
+		       (server:read-dotserver *toppath*)
+		       (if (number? host-port-in) ;; we were handed a server-id
+			   (let ((srec (tasks:get-server-by-id (db:delay-if-busy (tasks:open-db)) host-port-in)))
+			     ;; (print "srec: " srec " host-port-in: " host-port-in)
+			     (if srec
+				 (conc (vector-ref srec 3) ":" (vector-ref srec 4))
+				 (conc "no such server-id " host-port-in)))
+			   host-port-in))))
+    (let* ((host-port (if host:port
+			  (let ((slst (string-split   host:port ":")))
+			    (if (eq? (length slst) 2)
+				(list (car slst)(string->number (cadr slst)))
+				#f))
+			  #f))
 	   (toppath       (launch:setup)))
       ;; (print "host-port=" host-port)
       (if (not host-port)
 	  (begin
-	    (debug:print 0 *default-log-port*  "ERROR: bad host:port")
-	    (if do-exit (exit 1)))
+	    (if host-port-in
+		(debug:print 0 *default-log-port*  "ERROR: bad host:port"))
+	    (if do-exit (exit 1))
+	    #f)
 	  (let* ((iface      (car host-port))
 		 (port       (cadr host-port))
 		 (server-dat (http-transport:client-connect iface port))
