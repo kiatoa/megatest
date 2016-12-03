@@ -94,6 +94,12 @@
       (mutex-unlock! *rmt-mutex*)
       (print "case 4")
       (rmt:open-qry-close-locally cmd 0 params))
+     ;; on homehost and this is a write, we have a server (we know because case 4 checked)
+     ((and (cdr (remote-hh-dat *runremote*))         ;; on homehost
+	   (not (member cmd api:read-only-queries)))
+      (mutex-unlock! *rmt-mutex*)
+      (print "case 4.1")
+      (rmt:open-qry-close-locally cmd 0 params))
      ;; no server contact made and this is a write, passively start a server 
      ((and (not (remote-server-url *runremote*))
 	   (not (member cmd api:read-only-queries)))
@@ -113,6 +119,13 @@
 	    (print "case 5.2")
 	    (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
             (rmt:send-receive cmd rid params attemptnum: attemptnum))))
+     ;; reset the connection if it has been unused too long
+     ((and (remote-conndat *runremote*)
+	   (let ((expire-time (- start-time (remote-server-timeout *runremote*))))
+	     (< (http-transport:server-dat-get-last-access (remote-conndat *runremote*)) expire-time)))
+      (print "case 8")
+      (remote-conndat-set! *runremote* #f)
+      (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; if not on homehost ensure we have a connection to a live server
      ;; NOTE: we *have* a homehost record by now
      ((and (not (cdr (remote-hh-dat *runremote*)))        ;; are we on a homehost?
@@ -120,19 +133,13 @@
       (print "case 6  hh-dat: " (remote-hh-dat *runremote*) " conndat: " (remote-conndat *runremote*))
       (mutex-unlock! *rmt-mutex*)
       (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
-      (remote-conndat-set! *runremote* (rmt:get-connection-info 0))
+      (remote-conndat-set! *runremote* (rmt:get-connection-info 0)) ;; calls client:setup which calls client:setup-http
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; all set up if get this far, dispatch the query
      ((cdr (remote-hh-dat *runremote*)) ;; we are on homehost
       (mutex-unlock! *rmt-mutex*)
       (print "case 7")
       (rmt:open-qry-close-locally cmd (if rid rid 0) params))
-     ;; reset the connection if it has been unused too long
-     ((and (remote-conndat *runremote*)
-	   (let ((expire-time (- start-time (remote-server-timeout *runremote*))))
-	     (< (http-transport:server-dat-get-last-access (remote-conndat *runremote*)) expire-time)))
-      (print "case 8")
-      (remote-conndat-set! *runremote* #f))
      ;; not on homehost, do server query
      (else
       (mutex-unlock! *rmt-mutex*)
