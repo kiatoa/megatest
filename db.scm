@@ -272,6 +272,7 @@
         ;; (mutex-lock! *rundb-mutex*)
         (let* ((dbpath       (db:dbfile-path)) ;;  0))
                (dbexists     (file-exists? dbpath))
+	       (dbfexists    (file-exists? (conc dbpath "/megatest.db")))
                (tmpdb        (db:open-megatest-db path: dbpath)) ;; lock-create-open dbpath db:initialize-main-db))
                (mtdb         (db:open-megatest-db))
                (refndb       (db:open-megatest-db path: dbpath name: "megatest_ref.db"))
@@ -282,9 +283,13 @@
           (dbr:dbstruct-tmpdb-set!  dbstruct tmpdb) ;; olddb is already a (cons db path)
           (dbr:dbstruct-refndb-set! dbstruct refndb)
           ;;	    (mutex-unlock! *rundb-mutex*)
-          (if (and (not dbexists)
-                   *db-write-access*) ;; did not have a prior db and do have write access
-              (db:multi-db-sync dbstruct 'old2new))  ;; migrate data from megatest.db automatically
+          (if (and (not dbfexists)
+                   write-access) ;; *db-write-access*) ;; did not have a prior db and do have write access
+	      (begin
+		(debug:print 0 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data from " (db:dbdat-get-path mtdb))
+		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb))
+	      (debug:print 0 *default-log-port* " db, " (db:dbdat-get-path tmpdb) " already exists, not propogating data from " (db:dbdat-get-path mtdb)))
+	  ;; (db:multi-db-sync dbstruct 'old2new))  ;; migrate data from megatest.db automatically
           tmpdb))))
 
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
@@ -3113,7 +3118,8 @@
 		(regexp "_") "=" msg #t)))
 	   (lambda ()(deserialize)))
 	 (begin
-	   (debug:print-error 0 *default-log-port* "reception failed. Received " msg " but cannot translate it.")
+	   (debug:print-error 0 *default-log-port* "reception failed. Received \"" msg "\" but cannot translate it.")
+           (print-call-chain (current-error-port))
 	   msg))) ;; crude reply for when things go awry
     ((zmq nmsg)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg))) ;; rpc

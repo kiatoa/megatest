@@ -258,8 +258,8 @@
 					    (list (cons 'key "thekey")
 						  (cons 'cmd cmd)
 						  (cons 'params sparams))
-					    read-string)
-                                           transport: 'http))
+					    read-string))
+					  transport: 'http)
                                          0)) ;; added this speculatively
 			      ;; Shouldn't this be a call to the managed call-all-connections stuff above?
 			      (close-all-connections!)
@@ -278,13 +278,15 @@
 	 (if (vector? res)
 	     (if (vector-ref res 0)
 		 res
-		 (begin ;; note: this code also called in nmsg-transport - consider consolidating it
-		   (debug:print-error 0 *default-log-port* "error occured at server, info=" (vector-ref res 2))
-		   (debug:print 0 *default-log-port* " client call chain:")
-		   (print-call-chain (current-error-port))
-		   (debug:print 0 *default-log-port* " server call chain:")
-		   (pp (vector-ref res 1) (current-error-port))
-		   (signal (vector-ref res 0))))
+                 (if (debug:debug-mode 11)
+                     (begin ;; note: this code also called in nmsg-transport - consider consolidating it
+                       (debug:print-error 11 *default-log-port* "error occured at server, info=" (vector-ref res 2))
+                       (debug:print 11 *default-log-port* " client call chain:")
+                       (print-call-chain (current-error-port))
+                       (debug:print 11 *default-log-port* " server call chain:")
+                       (pp (vector-ref res 1) (current-error-port))
+                       (signal (vector-ref res 0)))
+                     res))
 	     (signal (make-composite-condition
 		      (make-property-condition 
 		       'timeout
@@ -533,7 +535,8 @@
 	      (begin
 		(current-error-port *alt-log-file*)
 		(current-output-port *alt-log-file*)))))
-    (if (server:check-if-running run-id)
+    (if (and (server:read-dotserver *toppath*)
+             (server:check-if-running run-id))
 	(begin
 	  (debug:print 0 *default-log-port* "INFO: Server for run-id " run-id " already running")
 	  (exit 0))
@@ -572,17 +575,17 @@
 	    (thread-join! th2)
 	    (exit))))))
 
-(define (http:ping run-id host-port)
-  (let* ((server-dat (http-transport:client-connect (car host-port)(cadr host-port)))
-	 (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
-    (if (and (list? login-res)
-	     (car login-res))
-	(begin
-	  (print "LOGIN_OK")
-	  (exit 0))
-	(begin
-	  (print "LOGIN_FAILED")
-	  (exit 1)))))
+;; (define (http:ping run-id host-port)
+;;   (let* ((server-dat (http-transport:client-connect (car host-port)(cadr host-port)))
+;; 	 (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
+;;     (if (and (list? login-res)
+;; 	     (car login-res))
+;; 	(begin
+;; 	  (print "LOGIN_OK")
+;; 	  (exit 0))
+;; 	(begin
+;; 	  (print "LOGIN_FAILED")
+;; 	  (exit 1)))))
 
 (define (http-transport:server-signal-handler signum)
   (signal-mask! signum)
