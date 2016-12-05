@@ -28,7 +28,7 @@
 
 (defstruct remote
   (hh-dat            (common:get-homehost)) ;; homehost record ( addr . hhflag )
-  (server-url        (if *toppath* (server:check-if-running *toppath*) #f))
+  (server-url        (if *toppath* (server:read-dotserver *toppath*))) ;; (server:check-if-running *toppath*) #f))
   (last-server-check 0)  ;; last time we checked to see if the server was alive
   (conndat           #f)
   (transport         *transport-type*)
@@ -113,7 +113,7 @@
      ((and (not (remote-server-url *runremote*))
 	   (not (member cmd api:read-only-queries)))
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5")
-      (let ((serverconn (server:check-if-running *toppath*)))
+      (let ((serverconn (server:read-dotserver *toppath*))) ;; (server:check-if-running *toppath*))) ;; Do NOT want to run server:check-if-running - very expensive to do for every write call
 	(if serverconn
 	    (remote-server-url-set! *runremote* serverconn) ;; the string can be consumed by the client setup if needed
 	    (if (not (server:start-attempted? *toppath*))
@@ -123,7 +123,7 @@
             (mutex-unlock! *rmt-mutex*)
 	    (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5.1")
             (rmt:open-qry-close-locally cmd 0 params))
-          (begin
+          (begin                            ;; not on homehost, start server and wait
             (mutex-unlock! *rmt-mutex*)
 	    (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5.2")
 	    (tasks:start-and-wait-for-server (tasks:open-db) 0 15)

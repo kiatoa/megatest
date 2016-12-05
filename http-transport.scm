@@ -535,7 +535,8 @@
 	      (begin
 		(current-error-port *alt-log-file*)
 		(current-output-port *alt-log-file*)))))
-    (if (server:check-if-running run-id)
+    (if (and (server:read-dotserver *toppath*)
+             (server:check-if-running run-id))
 	(begin
 	  (debug:print 0 *default-log-port* "INFO: Server for run-id " run-id " already running")
 	  (exit 0))
