@@ -278,13 +278,15 @@
 	 (if (vector? res)
 	     (if (vector-ref res 0)
 		 res
-		 (begin ;; note: this code also called in nmsg-transport - consider consolidating it
-		   (debug:print-error 0 *default-log-port* "error occured at server, info=" (vector-ref res 2))
-		   (debug:print 0 *default-log-port* " client call chain:")
-		   (print-call-chain (current-error-port))
-		   (debug:print 0 *default-log-port* " server call chain:")
-		   (pp (vector-ref res 1) (current-error-port))
-		   (signal (vector-ref res 0))))
+                 (if (debug:debug-mode 11)
+                     (begin ;; note: this code also called in nmsg-transport - consider consolidating it
+                       (debug:print-error 11 *default-log-port* "error occured at server, info=" (vector-ref res 2))
+                       (debug:print 11 *default-log-port* " client call chain:")
+                       (print-call-chain (current-error-port))
+                       (debug:print 11 *default-log-port* " server call chain:")
+                       (pp (vector-ref res 1) (current-error-port))
+                       (signal (vector-ref res 0)))
+                     res))
 	     (signal (make-composite-condition
 		      (make-property-condition 
 		       'timeout

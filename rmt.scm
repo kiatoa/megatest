@@ -68,6 +68,15 @@
      ((> attemptnum 15)
       (debug:print 0 *default-log-port* "ERROR: 15 tries to start/connect to server. Giving up.")
       (exit 1))
+     ;; reset the connection if it has been unused too long
+     ((and *runremote*
+           (remote-conndat *runremote*)
+	   (let ((expire-time (- start-time (remote-server-timeout *runremote*))))
+	     (< (http-transport:server-dat-get-last-access (remote-conndat *runremote*)) expire-time)))
+      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  8")
+      (remote-conndat-set! *runremote* #f)
+      (mutex-unlock! *rmt-mutex*)
+      (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; ensure we have a record for our connection for given area
      ((not *runremote*)                     
       (set! *runremote* (make-remote))
@@ -119,13 +128,6 @@
 	    (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5.2")
 	    (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
             (rmt:send-receive cmd rid params attemptnum: attemptnum))))
-     ;; reset the connection if it has been unused too long
-     ((and (remote-conndat *runremote*)
-	   (let ((expire-time (- start-time (remote-server-timeout *runremote*))))
-	     (< (http-transport:server-dat-get-last-access (remote-conndat *runremote*)) expire-time)))
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  8")
-      (remote-conndat-set! *runremote* #f)
-      (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; if not on homehost ensure we have a connection to a live server
      ;; NOTE: we *have* a homehost record by now
      ((and (not (cdr (remote-hh-dat *runremote*)))        ;; are we on a homehost?
