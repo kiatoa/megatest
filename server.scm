@@ -36,7 +36,6 @@
       (conc "http://" (car hostport) ":" (cadr hostport))))
 
 (define  *server-loop-heart-beat* (current-seconds))
-(define *heartbeat-mutex* (make-mutex))
 
 ;;======================================================================
 ;; S E R V E R
@@ -106,39 +105,25 @@
 ;; try running on that host
 ;;   incidental: rotate logs in logs/ dir.
 ;;
-(define  (server:run run-id)
+(define  (server:run areapath) ;; areapath is ignored for now.
   (let* ((curr-host   (get-host-name))
 	 (curr-ip     (server:get-best-guess-address curr-host))
-	 (target-host (configf:lookup *configdat* "server" "homehost" ))
+	 (curr-pid    (current-process-id))
+	 (homehost    (common:get-homehost)) ;; configf:lookup *configdat* "server" "homehost" ))
+	 (target-host (car homehost))
 	 (testsuite   (common:get-testsuite-name))
-	 (logfile     (conc *toppath* "/logs/" run-id ".log"))
+	 (logfile     (conc *toppath* "/logs/server.log"))
 	 (cmdln (conc (common:get-megatest-exe)
-		      " -server " (or target-host "-") " -run-id " run-id (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
+		      " -server " (or target-host "-") " -run-id " 0 (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
 									      (conc " -daemonize -log " logfile)
 									      "")
-		      " -m testsuite:" testsuite))) ;; (conc " >> " logfile " 2>&1 &")))))
-    (debug:print 0 *default-log-port* "INFO: Starting server (" cmdln ") as none running ...")
+		      " -m testsuite:" testsuite)) ;; (conc " >> " logfile " 2>&1 &")))))
+	 (log-rotate  (make-thread common:rotate-logs  "server run, rotate logs thread")))
+    ;; we want the remote server to start in *toppath* so push there
     (push-directory *toppath*)
-    (if (not (directory-exists? "logs"))(create-directory "logs"))
-    
-    ;; Rotate logs, logic: 
-    ;;                 if > 500k and older than 1 week:
-    ;;                     remove previous compressed log and compress this log
-    ;;
-    (directory-fold 
-     (lambda (file rem)
-       (if (and (string-match "^.*.log" file)
-		(> (file-size (conc "logs/" file)) 200000))
-	   (let ((gzfile (conc "logs/" file ".gz")))
-	     (if (file-exists? gzfile)
-		 (begin
-		   (debug:print-info 0 *default-log-port* "removing " gzfile)
-		   (delete-file gzfile)))
-	     (debug:print-info 0 *default-log-port* "compressing " file)
-	     (system (conc "gzip logs/" file)))))
-     '()
-     "logs")
-    
+    (debug:print 0 *default-log-port* "INFO: Trying to start server (" cmdln ") ...")
+    (thread-start! log-rotate)
+
     ;; host.domain.tld match host?
     (if (and target-host 
 	     ;; look at target host, is it host.domain.tld or ip address and does it 
@@ -154,7 +139,7 @@
     (system (conc "nbfake " cmdln))
     (unsetenv "TARGETHOST_LOGF")
     (if (get-environment-variable "TARGETHOST")(unsetenv "TARGETHOST"))
-    ;; (system cmdln)
+    (thread-join! log-rotate)
     (pop-directory)))
 
 (define (server:get-client-signature) ;; BB> why is this proc named "get-"?  it returns nothing -- set! has not return value.
@@ -165,87 +150,139 @@
 
 ;; kind start up of servers, wait 40 seconds before allowing another server for a given
 ;; run-id to be launched
-(define (server:kind-run run-id)
-  (let ((last-run-time (hash-table-ref/default *server-kind-run* run-id #f)))
+(define (server:kind-run areapath)
+  (let ((last-run-time (hash-table-ref/default *server-kind-run* areapath #f)))
     (if (or (not last-run-time)
 	    (> (- (current-seconds) last-run-time) 30))
 	(begin
-	  (server:run run-id)
-	  (hash-table-set! *server-kind-run* run-id (current-seconds))))))
+	  (server:run areapath)
+	  (hash-table-set! *server-kind-run* areapath (current-seconds))))))
 
 ;; The generic run a server command. Dispatches the call to server 0 if run-id != 0
 ;; 
-(define (server:try-running run-id)
-  (if (eq? run-id 0)
-      (server:run run-id)
-      (rmt:start-server run-id)))
+;;  (define (server:try-running run-id)
+;;    (if (eq? run-id 0)
+;;        (server:run run-id)
+;;        (rmt:start-server run-id)))
+(define server:try-running server:run) ;; there is no more per-run servers ;; REMOVE ME. BUG.
 
-(define (server:check-if-running run-id)
-  (let ((tdbdat (tasks:open-db)))
-    (let loop ((server (tasks:get-server (db:delay-if-busy tdbdat) run-id))
-	       (trycount 0))
-    (if server
-	;; note: client:start will set *runremote*. this needs to be changed
-	;;       also, client:start will login to the server, also need to change that.
-	;;
-	;; client:start returns #t if login was successful.
-	;;
-	(let ((res (case *transport-type*
-		     ((http)(server:ping-server run-id 
-						(tasks:hostinfo-get-interface server)
-						(tasks:hostinfo-get-port      server)))
-		     ;; ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
-		     ;;    			 (tasks:hostinfo-get-port      server)
-		     ;;    			 timeout: 2))
-                     )))
-	  ;; if the server didn't respond we must remove the record
+(define (server:start-attempted? areapath)
+  (let ((flagfile (conc areapath "/.starting-server")))
+    (handle-exceptions
+     exn
+     #f  ;; if things go wrong pretend we can't see the file
+     (and (file-exists? flagfile)
+	  (< (- (current-seconds)
+		(file-modification-time flagfile))
+	     15))))) ;; exists and less than 15 seconds old
+    
+(define (server:read-dotserver areapath)
+  (let ((dotfile (conc areapath "/.server")))
+    (handle-exceptions
+     exn
+     #f  ;; if things go wrong pretend we can't see the file
+     (if (and (file-exists? dotfile)
+	      (file-read-access? dotfile))
+	 (with-input-from-file
+	     dotfile
+	   (lambda ()
+	     (read-line)))
+	 #f))))
+
+;; write a .server file in *toppath* with hostport
+;; return #t on success, #f otherwise
+;;
+(define (server:write-dotserver areapath hostport)
+  (let ((lock-file   (conc areapath "/.server.lock"))
+	(server-file (conc areapath "/.server")))
+    (if (common:simple-file-lock lock-file)
+	(let ((res (handle-exceptions
+		    exn
+		    #f ;; failed for some reason, for the moment simply return #f
+		    (with-output-to-file server-file
+		      (lambda ()
+			(print hostport)))
+		    #t)))
+	  (debug:print-info 0 *default-log-port* "server file " server-file " for " hostport " created")
+	  (common:simple-file-release-lock lock-file)
+	  res)
+	#f)))
+
+(define (server:remove-dotserver-file areapath hostport)
+  (let ((dotserver   (server:read-dotserver areapath))
+	(server-file (conc areapath "/.server"))
+	(lock-file   (conc areapath "/.server.lock")))
+    (if (and dotserver (string-match (conc ".*:" hostport "$") dotserver)) ;; port matches, good enough info to decide to remove the file
+	(if (common:simple-file-lock lock-file)
+	    (begin
+	      (handle-exceptions
+	       exn
+	       #f
+	       (delete-file* server-file))
+	      (debug:print-info 0 *default-log-port* "server file " server-file " for " hostport " removed")
+	      (common:simple-file-release-lock lock-file))))))
+
+;; no longer care if multiple servers are started by accident. older servers will drop off in time.
+;;
+(define (server:check-if-running areapath)
+  (let* ((dotserver (server:read-dotserver areapath))) ;; tdbdat (tasks:open-db)))
+    (if dotserver
+	(let* ((res (case *transport-type*
+		      ((http)(server:ping-server dotserver))
+		      ;; ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
+		      )))
 	  (if res
-	      #t
-	      (begin
-		(debug:print-info 0 *default-log-port* "server at " server " not responding, removing record")
-		(tasks:server-force-clean-running-records-for-run-id (db:delay-if-busy tdbdat) run-id 
-				" server:check-if-running")
-		res)))
-	#f))))
+	      dotserver
+	      #f))
+	#f)))
 
 ;; called in megatest.scm, host-port is string hostname:port
 ;;
-(define (server:ping run-id host:port)
-  (let ((tdbdat (tasks:open-db)))
-    (let* ((host-port (let ((slst (string-split   host:port ":")))
-			(if (eq? (length slst) 2)
-			    (list (car slst)(string->number (cadr slst)))
-			    #f)))
-	   (toppath       (launch:setup))
-	   (server-db-dat (if (not host-port)(tasks:get-server (db:delay-if-busy tdbdat) run-id) #f)))
-      (if (not run-id)
+;; NOTE: This is NOT called directly from clients as not all transports support a client running
+;;       in the same process as the server.
+;;
+(define (server:ping host-port-in #!key (do-exit #f))
+  (let ((host:port (if (not host-port-in) ;; use read-dotserver to find
+		       (server:read-dotserver *toppath*)
+		       (if (number? host-port-in) ;; we were handed a server-id
+			   (let ((srec (tasks:get-server-by-id (db:delay-if-busy (tasks:open-db)) host-port-in)))
+			     ;; (print "srec: " srec " host-port-in: " host-port-in)
+			     (if srec
+				 (conc (vector-ref srec 3) ":" (vector-ref srec 4))
+				 (conc "no such server-id " host-port-in)))
+			   host-port-in))))
+    (let* ((host-port (if host:port
+			  (let ((slst (string-split   host:port ":")))
+			    (if (eq? (length slst) 2)
+				(list (car slst)(string->number (cadr slst)))
+				#f))
+			  #f))
+	   (toppath       (launch:setup)))
+      ;; (print "host-port=" host-port)
+      (if (not host-port)
 	  (begin
-	    (debug:print-error 0 *default-log-port* "must specify run-id when doing ping, -run-id n")
-	    (print "ERROR: No run-id")
-	    (exit 1))
-	  (if (and (not host-port)
-		   (not server-db-dat))
-	      (begin
-		(print "ERROR: bad host:port")
-		(exit 1))
-	      (let* ((iface      (if host-port (car host-port) (tasks:hostinfo-get-interface server-db-dat)))
-		     (port       (if host-port (cadr host-port)(tasks:hostinfo-get-port      server-db-dat)))
-		     (server-dat (http-transport:client-connect iface port))
-		     (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
-		(if (and (list? login-res)
-			 (car login-res))
-		    (begin
-		      (print "LOGIN_OK")
-		      (exit 0))
-		    (begin
-		      (print "LOGIN_FAILED")
-		      (exit 1)))))))))
+	    (if host-port-in
+		(debug:print 0 *default-log-port*  "ERROR: bad host:port"))
+	    (if do-exit (exit 1))
+	    #f)
+	  (let* ((iface      (car host-port))
+		 (port       (cadr host-port))
+		 (server-dat (http-transport:client-connect iface port))
+		 (login-res  (rmt:login-no-auto-client-setup server-dat)))
+	    (if (and (list? login-res)
+		     (car login-res))
+		(begin
+		  (print "LOGIN_OK")
+		  (if do-exit (exit 0)))
+		(begin
+		  (print "LOGIN_FAILED")
+		  (if do-exit (exit 1)))))))))
 
 ;; run ping in separate process, safest way in some cases
 ;;
-(define (server:ping-server run-id iface port)
+(define (server:ping-server ifaceport)
   (with-input-from-pipe 
-   (conc (common:get-megatest-exe) " -run-id " run-id " -ping " (conc iface ":" port))
+   (conc (common:get-megatest-exe) " -ping " ifaceport)
    (lambda ()
      (let loop ((inl (read-line))
 		(res "NOREPLY"))
@@ -258,14 +295,10 @@
 
 (define (server:login toppath)
   (lambda (toppath)
-    (set! *last-db-access* (current-seconds))
+    (set! *db-last-access* (current-seconds)) ;; might not be needed.
     (if (equal? *toppath* toppath)
-	(begin
-	  ;; (debug:print-info 2 *default-log-port* "login successful")
-	  #t)
-	(begin
-	  ;; (debug:print-info 2 *default-log-port* "login failed")
-	  #f))))
+	#t
+	#f)))
 
 (define (server:get-timeout)
   (let ((tmo (configf:lookup  *configdat* "server" "timeout")))

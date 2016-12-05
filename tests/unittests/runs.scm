@@ -1,5 +1,7 @@
 (define keys (rmt:get-keys))
 
+(test #f #t (and (server:kind-run *toppath*) #t))
+
 (test "get all legal tests" (list "test1" "test2") (sort (hash-table-keys (tests:get-all)) string<=?))
 
 (test "register-run" #t (number?
@@ -11,8 +13,8 @@
 					  "bob")))
 
 (test #f #t             (rmt:register-test 1 "nada" ""))
-(test #f 30001          (rmt:get-test-id 1 "nada" ""))
-(test #f "NOT_STARTED"  (vector-ref (rmt:get-test-info-by-id 1 30001) 3)) ;; "nada" "") 3))
+(test #f 1              (rmt:get-test-id 1 "nada" ""))
+(test #f "NOT_STARTED"  (vector-ref (rmt:get-test-info-by-id 1 1) 3))
 
 (test #f "FOO LIKE 'abc%def'" (db:patt->like "FOO" "abc%def"))
 (test #f "key2" (vector-ref (car (vector-ref (mt:get-runs-by-patt '("SYSTEM" "RELEASE") "%" "key1/key2") 1)) 1))
@@ -51,7 +53,7 @@
 (hash-table-set! args:arg-hash "-testpatt" "%")
 (hash-table-set! args:arg-hash "-target" "ubuntu/r1.2") ;; SYSTEM/RELEASE
 (hash-table-set! args:arg-hash "-runname" "testrun")
-(test "Setup for a run"       #t (begin (launch:setup-for-run) #t))
+(test "Setup for a run"       #t (string? (launch:setup)))
 
 (define *tdb* #f)
 (define keyvals #f)
@@ -153,7 +155,7 @@
       (string? 
        (file-exists?
 	;; (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
-	(launch-test 30001 1 rinfo keyvals "run1" tconfig "test1" test-path '() (make-hash-table)))))
+	(launch-test 1 1 rinfo keyvals "run1" tconfig "test1" test-path '() (make-hash-table)))))
 
 ;;======================================================================
 ;; M O R E   R E M O T E   C A L  L S
@@ -171,9 +173,14 @@
 
 (test #f "a/b/c"       (db:multi-pattern-apply   "d/e/f" "d a\ne b\nf c"))
 (test #f "blah/foo/bar/baz" (db:convert-test-itempath "blah/baz/bar/foo" "^([^/]+)/([^/]+)/([^/]+)$ \\3/\\2/\\1"))
-(test #f #t (db:compare-itempaths "abc/def/123" "abc/ghi/123" "ghi def"))
-(test #f #f (db:compare-itempaths "some/5" "item/5" ".*/"))
-(test #f #t (db:compare-itempaths "some/5" "item/5" ".*/ some/"))
+(define itemmaps (alist->hash-table
+		  '(("test1" "ghi def")
+		    ("test2" ".*/")
+		    ("test3" ".*/ some/"))))
+
+(test #f #t (db:compare-itempaths "test1" "abc/def/123" "abc/ghi/123" itemmaps))
+(test #f #f (db:compare-itempaths "test2" "some/5" "item/5" ".*/" itemmaps))
+(test #f #t (db:compare-itempaths "test3" "some/5" "item/5" ".*/ some/" itemmaps))
 
 (test #f '() (rmt:get-prereqs-not-met 1 '("rollup") "some/5" mode: '(toplevel)  itemmap: ".*/" "/"))
 (test #f '() (rmt:get-prereqs-not-met 1 '("rollup") "some/5" mode: '(normal)    itemmap: ".*/" "/"))

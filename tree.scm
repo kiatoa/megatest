@@ -137,7 +137,7 @@
                             (run-id   (tree-path->run-id (cdr run-path))))
                        (if run-id
                            (begin
-                             (dboard:data-curr-run-id-set! *data* run-id)
+                             (dboard:data-curr-run-id-set! data run-id)
                              (dashboard:update-run-summary-tab)))
                        ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
                        ))))

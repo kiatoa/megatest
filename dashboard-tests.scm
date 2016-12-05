@@ -19,8 +19,8 @@
 
 (use canvas-draw)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69)
-(import (prefix sqlite3 sqlite3:))
+(use srfi-1 posix regex regex-case srfi-69)
+(use (prefix sqlite3 sqlite3:))
 
 (declare (unit dashboard-tests))
 (declare (uses common))
@@ -160,7 +160,7 @@
 ;;======================================================================
 (define (run-info-panel db keydat testdat runname)
   (let* ((run-id     (db:test-get-run_id testdat))
-	 (rundat     (db:get-run-info db run-id))
+	 (rundat     (rmt:get-run-info run-id))
 	 (header     (db:get-header rundat))
 	 (event_time (db:get-value-by-header (db:get-rows rundat)
 					     (db:get-header rundat)
@@ -288,7 +288,8 @@
 				  (let ((btn (iup:button state
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (rmt:test-set-state-status-by-id run-id test-id state #f #f)
+								    ;; (rmt:test-set-state-status-by-id run-id test-id state #f #f)
+								    (rmt:roll-up-pass-fail-counts run-id test-id #f state #f #f) ;; test-name passed in as test-id is respected
 								    (db:test-set-state! testdat state)))))
 				    btn))
 				(map cadr *common:std-states*)))) ;; (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ"))))
@@ -321,7 +322,8 @@
 															(set! *dashboard-comment-share-slot* wtxtbox)))
 														  ))))
 									  (begin
-									    (rmt:test-set-state-status-by-id run-id test-id #f status #f)
+									    ;; (rmt:test-set-state-status-by-id run-id test-id #f status #f)
+									    (rmt:roll-up-pass-fail-counts run-id test-id #f #f status #f) ;; test-name passed in as test-id is respected
 									    (db:test-set-status! testdat status))))))))
 				    btn))
 				(map cadr *common:std-statuses*)))) ;; (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
@@ -417,9 +419,9 @@
 ;;
 ;;======================================================================
 (define (dashboard-tests:examine-test run-id test-id) ;; run-id run-key origtest)
-  (let* ((db-path       (db:dbfile-path run-id)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/db/" run-id ".db"))
-	 (dbstruct      (make-dbr:dbstruct path:  (db:dbfile-path #f) ;; (configf:lookup *configdat* "setup" "linktree") 
-					   local: #t))
+  (let* ((db-path       (db:dbfile-path)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/db/" run-id ".db"))
+	 (dbstruct      #f) ;; NOT ACTUALLY USED (db:setup)) ;; (make-dbr:dbstruct path:  (db:dbfile-path #f) ;; (configf:lookup *configdat* "setup" "linktree") 
+			    ;;		   local: #t))
 	 (testdat        (rmt:get-test-info-by-id run-id test-id)) ;; (db:get-test-info-by-id dbstruct run-id test-id))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
 	 (last-update   0) ;; (current-seconds))
@@ -515,7 +517,7 @@
 						     exn 
 						     (debug:print-info 0 *default-log-port* "test db access issue in examine test for run-id " run-id ", test-id " test-id ": " ((condition-property-accessor 'exn 'message) exn))
 						     (rmt:get-test-info-by-id run-id test-id )))))
-			       ;; (debug:print-info 0 *default-log-port* "need-update= " need-update " curr-mod-time = " curr-mod-time)
+			       ;; (print "INFO: need-update= " need-update " curr-mod-time = " curr-mod-time)
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)

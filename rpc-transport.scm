@@ -98,7 +98,7 @@
 	 (host:port       (conc (if ipaddrstr ipaddrstr hostname) ":" portnum))
 	 (tdb             (tasks:open-db)))
     (thread-start! th1)
-    (set! db *inmemdb*)
+    (set! db *dbstruct-db*)
     (open-run-close tasks:server-set-interface-port 
 		    tasks:open-db 
 		    server-id 
@@ -118,16 +118,16 @@
 
     (set! *rpc:listener* rpc:listener)
     (tasks:server-set-state! tdb server-id "running")
-    (set! *inmemdb*  (db:setup run-id))
+    (set! *dbstruct-db*  (db:setup run-id))
     ;; if none running or if > 20 seconds since 
     ;; server last used then start shutdown
     (let loop ((count 0))
       (thread-sleep! 5) ;; no need to do this very often
       (let ((numrunning -1)) ;; (db:get-count-tests-running db)))
 	(if (or (> numrunning 0)
-		(> (+ *last-db-access* 60)(current-seconds)))
+		(> (+ *db-last-access* 60)(current-seconds)))
 	    (begin
-	      (debug:print-info 0 *default-log-port* "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
+	      (debug:print-info 0 *default-log-port* "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *db-last-access*))
 	      (loop (+ 1 count)))
 	    (begin
 	      (debug:print-info 0 *default-log-port* "Starting to shutdown the server side")

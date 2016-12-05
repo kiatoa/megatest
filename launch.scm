@@ -242,8 +242,8 @@
   ;; force RUNNING/n/a
 
   ;; (thread-sleep! 0.3)
-  (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
-  (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "RUNNING")
+  ;; (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
+  (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "RUNNING" #f) 
   ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
   ;; if there is a runscript do it first
@@ -390,8 +390,8 @@
     (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f))) ;; NOTE: Checking twice for keep-going is intentional
 
 (define (launch:execute encoded-cmd)
-     (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
-	  (tconfigreg (tests:get-all)))
+  (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
+	 (tconfigreg #f))
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
@@ -438,7 +438,8 @@
 		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " top-path " not found")
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
-
+	  (launch:setup) ;; should be properly in the top-path now
+	  (set! tconfigreg (tests:get-all))
 	  (let ((sighand (lambda (signum)
 			   ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
 			   (if (eq? signum signal/stop)
@@ -704,6 +705,18 @@
 ;;           *configstatus* (status of the read data)
 ;;
 (define (launch:setup #!key (force #f))
+  (mutex-lock! *launch-setup-mutex*)
+  (if (and *toppath*
+	   (eq? *configstatus* 'fulldata)) ;; got it all
+      (begin
+	(debug:print 0 *default-log-port* "NOTE: skipping launch:setup-body call since we have fulldata")
+	(mutex-unlock! *launch-setup-mutex*)
+	*toppath*)
+      (let ((res (launch:setup-body force: force)))
+	(mutex-unlock! *launch-setup-mutex*)
+	res)))
+
+(define (launch:setup-body #!key (force #f))
   (let* ((toppath  (or *toppath* (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
 	 (runname  (common:args-get-runname))
 	 (target   (common:args-get-target))
@@ -898,7 +911,7 @@
 
     ;; Update the rundir path in the test record for all, rundir=physical, shortdir=logical
     ;;                                                 rundir   shortdir
-    (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path)
+    (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path run-id)
 
     (debug:print 2 *default-log-port* "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
@@ -971,7 +984,7 @@
 				;; (resolve-pathname lnkpath)
 				(common:nice-path lnkpath)
 				lnkpath)
-			    testname "")
+			    testname "" run-id)
 	  ;; (rmt:general-call 'test-set-rundir run-id lnkpath testname "") ;; toptest-path)
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
@@ -1120,8 +1133,9 @@
 
     ;; prevent overlapping actions - set to LAUNCHED as early as possible
     ;;
+    ;; the following call handles waiver propogation. cannot yet condense into roll-up-pass-fail
     (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
-    (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "LAUNCHED")
+    (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "LAUNCHED" #f)
     (set! diskpath (get-best-disk *configdat* tconfig))
     (if diskpath
 	(let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
