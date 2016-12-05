@@ -406,7 +406,11 @@
 	    (thread-sleep! (/ (random 2000) 1000))
 	    (server:kind-run run-id)
 	    (thread-sleep! (min delay-time 1))
-	    (loop (tasks:get-server (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))
+            (if (not (or (server:start-attempted? *toppath*)
+                         (server:read-dotserver *toppath*))) ;; no point in trying
+                (loop (tasks:get-server (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))
+                #f))
+          #f)))
 
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
