@@ -54,7 +54,9 @@
 
 (define (client:setup  run-id #!key (remaining-tries 10) (failed-connects 0))
   (case (server:get-transport)
-    ((rpc) (rpc-transport:client-setup run-id remaining-tries: remaining-tries failed-connects: failed-connects)) ;;(client:setup-rpc run-id))
+    ((rpc) (let ((res (rpc-transport:client-setup run-id remaining-tries: remaining-tries failed-connects: failed-connects)))
+             (remote-conndat-set! *runremote* runremote-server-dat)
+             res))
     ((http)(client:setup-http run-id remaining-tries: remaining-tries failed-connects: failed-connects))
     (else
      (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " not supported (6)")
@@ -158,6 +160,26 @@
 ;;
 ;; lookup_server, need to remove *runremote* stuff
 ;;
+
+(define (client:setup-rpc run-id #!key (remaining-tries 10) (failed-connects 0))
+  (debug:print-info 2 *default-log-port* "client:setup-rpc remaining-tries=" remaining-tries)
+  (let* ((server-dat (tasks:get-server (db:delay-if-busy (tasks:open-db)) run-id))
+         (num-available (tasks:num-in-available-state (db:delay-if-busy (tasks:open-db)) run-id)))
+    (cond
+     ((<= remaining-tries 0)
+      (debug:print-error 0 *default-log-port* "failed to start or connect to server for run-id " run-id)
+      (exit 1))
+     (server-dat
+      (debug:print-info 4 *default-log-port* "client:setup-rpc server-dat=" server-dat ", remaining-tries=" remaining-tries)
+
+      (rpc-transport:client-setup run-id server-dat remaining-tries: remaining-tries))
+     (else
+      (if (< num-available 2)
+          (server:try-running run-id))
+      (thread-sleep! (+ 2 (random (- 20 remaining-tries)))) ;; give server a little time to start up, randomize a little to avoid start storms.
+      (client:setup run-id remaining-tries: (- remaining-tries 1))))))
+
+
 (define (client:setup-http run-id #!key (remaining-tries 10) (failed-connects 0))
   (debug:print-info 2 *default-log-port* "client:setup remaining-tries=" remaining-tries)
   (let* ((tdbdat (tasks:open-db)))

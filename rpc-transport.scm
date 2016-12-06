@@ -54,15 +54,6 @@
     res))
 
 
-  ;; (handle-exceptions
-  ;;  exn
-  ;;  (begin
-  ;;    (debug:print 0 *default-log-port* "Remote failed for " proc " " params " exn="exn)
-  ;;    (apply (eval (string->symbol procstr)) params))
-  ;;  ;; (if *runremote*
-  ;;  ;;    (apply (eval (string->symbol (conc "remote:" procstr))) params)
-  ;;  (apply (eval (string->symbol procstr)) params)))
-
 ;; retry an operation (depends on srfi-18)
 ;; ==================
 ;; idea here is to avoid spending time on coding retrying something.  Trying to be generic here.
@@ -621,10 +612,10 @@
           #f))
     res))
 
-(define (rpc-transport:client-setup run-id server-dat #!key (remtries 10))
-  ;;(BB> "entered rpc-transport:client-setup with run-id="run-id" and server-dat="server-dat" and retries="remtries)
+(define (rpc-transport:client-setup run-id server-dat #!key (remaining-tries 10))
+  ;;(BB> "entered rpc-transport:client-setup with run-id="run-id" and server-dat="server-dat" and retries="remaining-tries)
   (tcp-buffer-size 0)
-  (debug:print-info 0 *default-log-port* "rpc-transport:client-setup run-id="run-id" server-dat=" server-dat ", remaining-tries=" remtries)
+  (debug:print-info 0 *default-log-port* "rpc-transport:client-setup run-id="run-id" server-dat=" server-dat ", remaining-tries=" remaining-tries)
   (let* ((iface     (tasks:hostinfo-get-interface server-dat))
          (hostname  (tasks:hostinfo-get-hostname  server-dat))
          (port      (tasks:hostinfo-get-port      server-dat))
@@ -637,16 +628,15 @@
     (if ping-res
         (begin
           (debug:print-info 0 *default-log-port* "rpc-transport:client-setup CONNECTION ESTABLISHED run-id="run-id" server-dat=" server-dat)
-          (rmt:set-cinfo run-id runremote-server-dat) ;; (hash-table-set! *runremote* run-id runremote-server-dat)  ;; side-effect - *runremote* cache init fpr rmt:*
           runremote-server-dat)
         (begin ;; login failed but have a server record, clean out the record and try again
           (debug:print-info 0 *default-log-port* "rpc-transport:client-setup UNABLE TO CONNECT run-id="run-id" server-dat=" server-dat)
           (tasks:kill-server-run-id run-id)
           (tasks:server-force-clean-run-record  (db:delay-if-busy (tasks:open-db)) run-id iface port
                                                    " rpc-transport:client-setup (server-dat = #t)")
-          (if (> remtries 2)
+          (if (> remaining-tries 2)
               (thread-sleep! (+ 1 (random 5))) ;; spread out the starts a little
               (thread-sleep! (+ 15 (random 20)))) ;; it isn't going well. give it plenty of time
           (server:try-running run-id)
           (thread-sleep! 5)   ;; give server a little time to start up
-          (client:setup run-id remaining-tries: (sub1 remtries))))))
+          (client:setup run-id remaining-tries: (sub1 remaining-tries))))))
