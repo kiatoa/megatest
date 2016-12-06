@@ -86,7 +86,7 @@
 				   (send-response body:    (api:process-request *dbstruct-db* $) ;; the $ is the request vars proc
 						  headers: '((content-type text/plain)))
 				   (mutex-lock! *heartbeat-mutex*)
-				   (set! *db-last-access* (current-seconds))
+				   (set! *last-db-access* (current-seconds))
 				   (mutex-unlock! *heartbeat-mutex*))
 				  ((equal? (uri-path (request-uri (current-request))) 
 					   '(/ ""))
@@ -428,9 +428,9 @@
 	    (set! iface (car sdat))
 	    (set! port  (cadr sdat))))
       
-      ;; Transfer *db-last-access* to last-access to use in checking that we are still alive
+      ;; Transfer *last-db-access* to last-access to use in checking that we are still alive
       (mutex-lock! *heartbeat-mutex*)
-      (set! last-access *db-last-access*)
+      (set! last-access *last-db-access*)
       (mutex-unlock! *heartbeat-mutex*)
 
       ;; (debug:print 11 *default-log-port* "last-access=" last-access ", server-timeout=" server-timeout)
@@ -542,13 +542,13 @@
 	  (exit 0))
 	(begin ;; ok, no server detected, clean out any lingering records
 	   (tasks:server-force-clean-running-records-for-run-id  (db:delay-if-busy tdbdat) run-id "notresponding")))
-    (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id))
+    (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id 'http))
 	       (remtries  4))
       (if (not server-id)
 	  (if (> remtries 0)
 	      (begin
 		(thread-sleep! 2)
-		(loop (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id)
+		(loop (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id 'http)
 		      (- remtries 1)))
 	      (begin
 		;; since we didn't get the server lock we are going to clean up and bail out
@@ -640,7 +640,7 @@
 								 (/ *total-non-write-delay* 
 								    *number-non-write-queries*))
 	       " ms</td></tr>"
-	       "<tr><td>Last access</td><td>"              (seconds->time-string *db-last-access*) "</td></tr>"
+	       "<tr><td>Last access</td><td>"              (seconds->time-string *last-db-access*) "</td></tr>"
 	       "</table>")))
     (mutex-unlock! *heartbeat-mutex*)
     res))

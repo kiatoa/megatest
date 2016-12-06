@@ -150,8 +150,8 @@
                 failure-value))))))))
 
 
-(define (rpc-transport:server-shutdown server-id rpc:listener #!key (from-on-exit #f))
-  (on-exit (lambda () #t)) ;; turn off on-exit stuff
+(define (rpc-transport:server-shutdown server-id rpc:listener ) ;;#!key (from-on-exit #f))
+  ;;(on-exit (lambda () #t)) ;; turn off on-exit stuff
   ;;(tcp-close rpc:listener) ;; gotta exit nicely
   ;;(tasks:server-set-state! (db:delay-if-busy (tasks:open-db)) server-id "stopped")
 
@@ -160,14 +160,14 @@
   ;;(portlogger:open-run-close portlogger:set-port (rpc:default-server-port) "released")
   
   (set! *time-to-exit* #t)
-  (if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
+  ;;(if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
 
 
   (tasks:server-delete-record (db:delay-if-busy (tasks:open-db)) server-id " rpc-transport:keep-running complete")
   
 
   ;;(BB> "Before (exit) (from-on-exit="from-on-exit")")
-  (unless from-on-exit (exit))  ;; sometimes we hang (around) here with 100% cpu.
+  ;;(unless from-on-exit (exit))  ;; sometimes we hang (around) here with 100% cpu.
   ;;(BB> "After")
   ;; strace reveals endless:
   ;; getrusage(RUSAGE_SELF, {ru_utime={413, 917868}, ru_stime={0, 60003}, ...}) = 0
@@ -182,9 +182,12 @@
   ;; getrusage(RUSAGE_SELF, {ru_utime={414, 393898}, ru_stime={0, 60003}, ...}) = 0
   ;; getrusage(RUSAGE_SELF, {ru_utime={414, 397898}, ru_stime={0, 60003}, ...}) = 0
   ;; make a post to chicken-users w/ http://paste.call-cc.org/paste?id=60a4b66a29ccf7d11359ea866db642c970735978
-  (if from-on-exit
-      ;; avoid above condition!  End current process externally  since 1 in 20 (exit)'s result in hung, 100% cpu zombies. (see above)
-      (system (conc  "kill -9  "(current-process-id))))
+
+
+  ;; (if from-on-exit
+  ;;     ;; avoid above condition!  End current process externally  since 1 in 20 (exit)'s result in hung, 100% cpu zombies. (see above)
+  
+  (system (conc  "kill -9  "(current-process-id)))
   )
 
 
@@ -207,11 +210,49 @@
     (debug:print 0 *default-log-port* "INFO: Server for run-id " run-id " already running")
     (exit 0))
 
+
+  ;; clean up dead servers (duped in megatest.scm in -list-servers processing; may want to consolidate into proc)
+  (for-each
+   (lambda (server)
+     (let* ((id         (vector-ref server 0))
+            (pid        (vector-ref server 1))
+            (hostname   (vector-ref server 2))
+            (interface  (vector-ref server 3)) 
+            (pullport   (vector-ref server 4))
+            (pubport    (vector-ref server 5))
+            (start-time (vector-ref server 6))
+            (priority   (vector-ref server 7))
+            (state      (vector-ref server 8))
+            (mt-ver     (vector-ref server 9))
+            (last-update (vector-ref server 10)) 
+            (transport  (vector-ref server 11))
+            (killed     #f)
+            (status     (< last-update 20)))
+
+       (if (equal? state "dead")
+           (if (> last-update (* 25 60 60)) ;; keep records around for slighly over a day.
+               (tasks:server-deregister (db:delay-if-busy (tasks:open-db)) hostname pullport: pullport pid: pid action: 'delete))
+           (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
+               (tasks:server-deregister (db:delay-if-busy (tasks:open-db)) hostname pullport: pullport pid: pid)))
+       ;;(format #t fmtstr id mt-ver pid hostname (conc interface ":" pullport) pubport last-update
+       ;;        (if status "alive" "dead") transport)
+       ;; (if (or (equal? id sid)
+       ;;         (equal? sid 0)) ;; kill all/any
+       ;;     (begin
+       ;;       (debug:print-info 0 *default-log-port* "Attempting to kill "kill-switch" server with pid " pid)
+       ;;       (tasks:kill-server hostname pid kill-switch: kill-switch)))
+
+       )
+       
+     )
+   (tasks:get-all-servers (db:delay-if-busy (tasks:open-db))))
+   
   ;; let's get a server-id for this server
   ;;   if at first we do not suceed, try 3 more times.
   (let ((server-id (retry-thunk
                     (lambda () (tasks:server-lock-slot (db:delay-if-busy (tasks:open-db)) run-id 'rpc))
                     chatty: #f
+                    final-failure-returns-actual: #t
                     retries: 4)))
     (when (not server-id) ;; dang we couldn't get a server-id.
       ;; since we didn't get the server lock we are going to clean up and bail out
@@ -392,13 +433,6 @@
 	 (host:port       (conc (if ipaddrstr ipaddrstr hostname) ":" portnum)))
 
 
-    ;; BB> TODO: remove portlogger!
-    ;; if rpc found it needed a different port than portlogger provided, keep portlogger in the loop.
-    ;; (when (not (equal? start-port portnum))
-    ;;   (BB> "portlogger proffered "start-port" but rpc grabbed "portnum)
-    ;;   (portlogger:open-run-close portlogger:set-port start-port "released")
-    ;;   (portlogger:open-run-close portlogger:take-port portnum))
-
     (tasks:server-set-interface-port (db:delay-if-busy (tasks:open-db)) server-id ipaddrstr portnum)
 
     ;;============================================================
@@ -412,14 +446,25 @@
     ;; (thread-sleep! 5)
 
     (if (retry-thunk (lambda ()
-                       (rpc-transport:self-test run-id ipaddrstr portnum)))
+                       (rpc-transport:self-test run-id ipaddrstr portnum))
+                     final-failure-returns-actual: #t
+                     )
         (debug:print 0 *default-log-port* "INFO: rpc self test passed!")
         (begin
           (debug:print 0 *default-log-port* "Error: rpc listener did not pass self test.  Shutting down.  On: " host:port)
+          (BB> 1)
+          (tasks:server-set-state! (db:delay-if-busy (tasks:open-db)) server-id "dead")
+          (BB> 2)
+          (tcp-close rpc:listener) ;; gotta exit nicely and free up that tcp port
+          (BB> 3)
+          (rpc-transport:server-shutdown server-id rpc:listener)
           (exit)))
-    
-    (on-exit (lambda ()
-               (rpc-transport:server-shutdown server-id rpc:listener from-on-exit: #t)))
+    (mutex-lock! *heartbeat-mutex*)
+    (set! *last-db-access* (current-seconds))
+    (mutex-unlock! *heartbeat-mutex*)
+
+    ;;(on-exit (lambda ()
+    ;;           (rpc-transport:server-shutdown server-id rpc:listener from-on-exit: #t)))
     
     ;; check again for running servers for this run-id in case one has snuck in since we checked last in rpc-transport:launch
     (if (not (equal? server-id (tasks:server-am-i-the-server? (db:delay-if-busy (tasks:open-db)) run-id)));; try to ensure no double registering of servers
@@ -557,6 +602,10 @@
 	   (exit 1))))))
 
 (define (rpc-transport:self-test run-id host port)
+  (if (not host)
+      (abort "host not set."))
+  (if (not port)
+      (abort "port not set."))
   (tcp-buffer-size 0) ;; gotta do this because http-transport undoes it.
   (let* ((testing-res ((rpc:procedure 'testing host port)))
          (login-res ((rpc:procedure 'server:login host port) *toppath*))
@@ -564,10 +613,10 @@
     
     (if login-res
         (begin
-          ;;(BB> "Self test PASS.  login-res="login-res" testing-res="testing-res" *toppath*="*toppath*)
+          (BB> "Self test PASS.  login-res="login-res" testing-res="testing-res" *toppath*="*toppath*)
           #t)
         (begin
-          ;;(BB> "Self test fail.  login-res="login-res" testing-res="testing-res" *toppath*="*toppath*)
+          (BB> "Self test fail.  login-res="login-res" testing-res="testing-res" *toppath*="*toppath*)
            
           #f))
     res))

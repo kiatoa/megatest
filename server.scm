@@ -48,16 +48,20 @@
 ;;
 ;; start_server
 ;;
-(define (server:launch run-id transport-type)
-  (BB> "server:launch fired for run-id="run-id" transport-type="transport-type)
-  (case transport-type
-    ((http)(http-transport:launch run-id))
-    ;;((nmsg)(nmsg-transport:launch run-id))
-    ((rpc)  (rpc-transport:launch run-id))
-    (else (debug:print-error 0 *default-log-port* "unknown server type " transport-type))))
-;;       (else   (debug:print-error 0 *default-log-port* "No known transport set, transport=" transport ", using rpc")
-;; 	      (rpc-transport:launch run-id)))))
+(define (server:launch run-id transport-type-raw)
+  (let ((transport-type
+         (cond
+          ((string? transport-type-raw) (string->symbol transport-type-raw))
+          (else transport-type-raw))))
+         
+    (BB> "server:launch fired for run-id="run-id" transport-type="transport-type)
 
+    (case transport-type
+      ((http)(http-transport:launch run-id))
+      ;;((nmsg)(nmsg-transport:launch run-id))
+      ((rpc)  (rpc-transport:launch run-id))
+      (else (debug:print-error 0 *default-log-port* "unknown server type " transport-type)))))
+  
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
 ;;======================================================================
