@@ -54,8 +54,8 @@
 
 (define (client:setup  run-id #!key (remaining-tries 10) (failed-connects 0))
   (case (server:get-transport)
-    ((rpc) (let ((res (rpc-transport:client-setup run-id remaining-tries: remaining-tries failed-connects: failed-connects)))
-             (remote-conndat-set! *runremote* runremote-server-dat)
+    ((rpc) (let ((res (client:setup-rpc run-id remaining-tries: remaining-tries)))
+             (remote-conndat-set! *runremote* res)
              res))
     ((http)(client:setup-http run-id remaining-tries: remaining-tries failed-connects: failed-connects))
     (else
