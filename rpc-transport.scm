@@ -419,10 +419,13 @@
 			      hostn))
 	 (ipaddrstr       (if (string=? "-" hostn)
 			      (server:get-best-guess-address hostname) ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
-			      #f))
+                              (string-intersperse 
+                               (map number->string
+                                    (u8vector->list
+                                      (hostname->ip hostn))) ".")
+                              ))
 	 (portnum         (let ((res (rpc:default-server-port)))  res))
 	 (host:port       (conc (if ipaddrstr ipaddrstr hostname) ":" portnum)))
-
 
     (tasks:server-set-interface-port (db:delay-if-busy (tasks:open-db)) server-id ipaddrstr portnum)
 
@@ -443,11 +446,8 @@
         (debug:print 0 *default-log-port* "INFO: rpc self test passed!")
         (begin
           (debug:print 0 *default-log-port* "Error: rpc listener did not pass self test.  Shutting down.  On: " host:port)
-          (BB> 1)
           (tasks:server-set-state! (db:delay-if-busy (tasks:open-db)) server-id "dead")
-          (BB> 2)
           (tcp-close rpc:listener) ;; gotta exit nicely and free up that tcp port
-          (BB> 3)
           (rpc-transport:server-shutdown server-id rpc:listener)
           (exit)))
     (mutex-lock! *heartbeat-mutex*)
@@ -604,7 +604,7 @@
     
     (if login-res
         (begin
-          (BB> "Self test PASS.  login-res="login-res" testing-res="testing-res" *toppath*="*toppath*)
+          ;;(BB> "Self test PASS.  login-res="login-res" testing-res="testing-res" *toppath*="*toppath*)
           #t)
         (begin
           (BB> "Self test fail.  login-res="login-res" testing-res="testing-res" *toppath*="*toppath*)

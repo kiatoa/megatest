@@ -118,9 +118,11 @@
 	 (testsuite   (common:get-testsuite-name))
 	 (logfile     (conc *toppath* "/logs/server.log"))
 	 (cmdln (conc (common:get-megatest-exe)
-		      " -server " (or target-host "-") " -run-id " 0 (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
-									      (conc " -daemonize -log " logfile)
-									      "")
+		      " -server " (or target-host "-") " -run-id " 0
+                      (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
+                          (conc " -daemonize -log " logfile)
+                          "")
+                      " -transport " (server:get-transport)
 		      " -m testsuite:" testsuite)) ;; (conc " >> " logfile " 2>&1 &")))))
 	 (log-rotate  (make-thread common:rotate-logs  "server run, rotate logs thread")))
     ;; we want the remote server to start in *toppath* so push there
