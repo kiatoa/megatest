@@ -590,8 +590,8 @@
   (rmt:send-receive 'get-runs-by-patt #f (list keys runnamepatt targpatt offset limit fields last-runs-update)))
 
 (define (rmt:find-and-mark-incomplete run-id ovr-deadtime)
-  (if (rmt:send-receive 'have-incompletes? run-id (list run-id ovr-deadtime))
-      (rmt:send-receive 'mark-incomplete run-id (list run-id ovr-deadtime))))
+  ;; (if (rmt:send-receive 'have-incompletes? run-id (list run-id ovr-deadtime))
+  (rmt:send-receive 'mark-incomplete run-id (list run-id ovr-deadtime))) ;; )
 
 (define (rmt:get-main-run-stats run-id)
   (rmt:send-receive 'get-main-run-stats #f (list run-id)))
