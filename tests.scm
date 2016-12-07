@@ -1334,6 +1334,7 @@ EOF
   0)
 
 (define (tests:update-central-meta-info run-id test-id cpuload diskfree minutes uname hostname)
+  (rmt:general-call 'update-test-rundat run-id test-id (or cpuload -1)(or diskfree -1)(or minutes -1))
   (if (and cpuload diskfree)
       (rmt:general-call 'update-cpuload-diskfree run-id cpuload diskfree test-id))
   (if minutes 

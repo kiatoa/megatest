@@ -1501,9 +1501,10 @@
 	    (debug:print 0 *default-log-port* "WARNING: Marking test(s); " (string-intersperse (map conc all-ids) ", ") " as INCOMPLETE")
 	    (sqlite3:execute 
 	     db
-	     (conc "UPDATE tests SET state='INCOMPLETE' WHERE id IN (" 
+	     (conc "UPDATE tests SET state='INCOMPLETE' WHERE run_id=? AND id IN (" 
 		   (string-intersperse (map conc all-ids) ",")
-		   ");")))))
+		   ");")
+             run-id))))
 
     ;; Now do rollups for the toplevel tests
     ;;
@@ -3312,6 +3313,7 @@
 	'(tests:test-set-toplog   "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';")
 	'(update-cpuload-diskfree "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;") ;; DONE
 	'(update-uname-host       "UPDATE tests SET uname=?,host=? WHERE id=?;")       ;; DONE
+        '(update-test-rundat      "INSERT INTO test_rundat (test_id,update_time,cpuload,diskfree,diskusage,run_duration) VALUES (?,?,?,?,?,?);")
 	'(update-test-state       "UPDATE tests SET state=? WHERE state=? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
 	'(update-test-status      "UPDATE tests SET status=? WHERE status like ? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
 	;; stuff for roll-up-pass-fail-counts

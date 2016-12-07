@@ -1099,6 +1099,60 @@
       (with-input-from-file "/proc/loadavg" 
 	(lambda ()(list (read)(read)(read))))))
 
+;; get normalized cpu load by reading from /proc/loadavg and /proc/cpuinfo return all three values and the number of real cpus and the number of threads
+;; returns list (normalized-proc-load normalized-core-load 1m 5m 15m ncores nthreads)
+;;
+(define (common:get-normalized-cpu-load remote-host)
+  (let ((data (if remote-host
+                  (with-input-from-pipe 
+                   (conc "ssh " remote-host " cat /proc/loadavg;cat /proc/cpuinfo;echo end")
+                   read-lines)
+                  (append 
+                   (with-input-from-file "/proc/loadavg" 
+                     read-lines)
+                   (with-input-from-file "/proc/cpuinfo"
+                     read-lines)
+                   (list "end"))))
+        (load-rx  (regexp "^([\\d\\.]+)\\s+([\\d\\.]+)\\s+([\\d\\.]+)\\s+.*$"))
+        (proc-rx  (regexp "^processor\\s+:\\s+(\\d+)\\s*$"))
+        (core-rx  (regexp "^core id\\s+:\\s+(\\d+)\\s*$"))
+        (phys-rx  (regexp "^physical id\\s+:\\s+(\\d+)\\s*$"))
+        (max-num  (lambda (p n)(max (string->number p) n))))
+    ;; (print "data=" data)
+    (if (null? data) ;; something went wrong
+        #f
+        (let loop ((hed      (car data))
+                   (tal      (cdr data))
+                   (loads    #f)
+                   (proc-num 0)  ;; processor includes threads
+                   (phys-num 0)  ;; physical chip on motherboard
+                   (core-num 0)) ;; core
+          ;; (print hed ", " loads ", " proc-num ", " phys-num ", " core-num)
+          (if (null? tal) ;; have all our data, calculate normalized load and return result
+              (let* ((act-proc (+ proc-num 1))
+                     (act-phys (+ phys-num 1))
+                     (act-core (+ core-num 1))
+                     (adj-proc-load (/ (car loads) act-proc))
+                     (adj-core-load (/ (car loads) act-core)))
+                (append (list (cons 'adj-proc-load adj-proc-load)
+                              (cons 'adj-core-load adj-core-load))
+                        (list (cons '1m-load (car loads))
+                              (cons '5m-load (cadr loads))
+                              (cons '15m-load (caddr loads)))
+                        (list (cons 'proc act-proc)
+                              (cons 'core act-core)
+                              (cons 'phys act-phys))))
+              (regex-case
+               hed
+               (load-rx  ( x l1 l5 l15 ) (loop (car tal)(cdr tal)(map string->number (list l1 l5 l15)) proc-num phys-num core-num))
+               (proc-rx  ( x p         ) (loop (car tal)(cdr tal) loads           (max-num p proc-num) phys-num core-num))
+               (phys-rx  ( x p         ) (loop (car tal)(cdr tal) loads           proc-num (max-num p phys-num) core-num))
+               (core-rx  ( x c         ) (loop (car tal)(cdr tal) loads           proc-num phys-num (max-num c core-num)))
+               (else 
+                (begin
+                  ;; (print "NO MATCH: " hed)
+                  (loop (car tal)(cdr tal) loads proc-num phys-num core-num)))))))))
+
 (define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
   (let* ((loadavg (common:get-cpu-load remote-host))
 	 (first   (car loadavg))
