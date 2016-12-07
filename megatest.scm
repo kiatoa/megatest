@@ -329,6 +329,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; Add args that use remargs here
 ;;
+
 (if (and (not (null? remargs))
 	 (not (or
 	       (args:get-arg "-runstep")
@@ -701,9 +702,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (let ((tl        (launch:setup))
 	;; (run-id    (and (args:get-arg "-run-id")
 	;; 		  (string->number (args:get-arg "-run-id"))))
-          (transport-type (string->symbol (or (args:get-arg "-transport") "http"))))
-      ;; (if run-id
-      ;;   (begin
+          (transport-type *transport-type*  ))
       (server:launch 0 transport-type)
       (set! *didsomething* #t)))
 ;;     ;; (debug:print-error 0 *default-log-port* "server requires run-id be specified with -run-id")))
