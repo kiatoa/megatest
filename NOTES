@@ -1,3 +1,8 @@
+=====================================================================
+NOTES from looking at branch v1.62-rpc
+=====================================================================
+
+*last-db-access* or *db-last-access* ==> which is it to be?
 
 ======================================================================
 New way of launching needed to accomodate different target hosttypes
@@ -5,7 +10,7 @@ for items
 ======================================================================
 
 [flavors]
-general ssh #{getbgesthost general}
+general ssh #{getbesthost general}
 nbgeneral nbjob run JOBCOMMAND -log $MT_LINKTREE/$MT_TARGET/$MT_RUNNAME.$MT_TESTNAME-$MT_ITEM_PATH.lgo
 
 [hosts]

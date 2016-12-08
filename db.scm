@@ -195,7 +195,7 @@
 	       
 (define (db:set-sync db)
   (let ((syncprag (configf:lookup *configdat* "setup" "sychronous")))
-    (sqlite3:execute db (conc "PRAGMA synchronous = " (or syncprag 1) ";")))) 
+    (sqlite3:execute db (conc "PRAGMA synchronous = " (or syncprag 0) ";")))) 
 
 ;; open an sql database inside a file lock
 ;; returns: db existed-prior-to-opening
@@ -213,7 +213,7 @@
 	      (db      (sqlite3:open-database fname)))
 	  (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
 	  ;; (db:set-sync db)
-	  (sqlite3:execute db "PRAGMA synchronous = NORMAL;")
+	  (sqlite3:execute db "PRAGMA synchronous = 0;")
 	  (if (not file-exists)
 	      (begin
 		(if (string-match "^/tmp/.*" fname) ;; this is a file in /tmp
