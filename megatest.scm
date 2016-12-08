@@ -348,7 +348,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (define *watchdog* (make-thread common:watchdog "Watchdog thread"))
 
-;;(thread-start! *watchdog*)
+(thread-start! *watchdog*)
 
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))
@@ -1984,7 +1984,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Exit and clean up
 ;;======================================================================
 
-(if *runremote* (close-all-connections!)) ;; for http-client
+(if (and *runremote* (eq? 'http (remote-transport *runremote*))) (close-all-connections!)) ;; for http-client
 
 (if (not *didsomething*)
     (debug:print 0 *default-log-port* help))
