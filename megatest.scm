@@ -348,7 +348,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (define *watchdog* (make-thread common:watchdog "Watchdog thread"))
 
-(thread-start! *watchdog*)
+;;(thread-start! *watchdog*)
 
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))

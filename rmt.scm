@@ -136,7 +136,10 @@
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  6  hh-dat: " (remote-hh-dat *runremote*) " conndat: " (remote-conndat *runremote*))
       (mutex-unlock! *rmt-mutex*)
       (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
-      (remote-conndat-set! *runremote* (rmt:get-connection-info 0)) ;; calls client:setup which calls client:setup-http
+      (let* ((cinfo (rmt:get-connection-info 0))
+            (transport (vector-ref cinfo 6))) ;; TODO: replace with tasks:server-dat-accessor-?? for transport
+        (remote-conndat-set! *runremote* cinfo) ;; calls client:setup which calls client:setup-http
+        (remote-transport-set! *runremote* transport))
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; all set up if get this far, dispatch the query
      ((cdr (remote-hh-dat *runremote*)) ;; we are on homehost
@@ -158,7 +161,7 @@
                                   ((commfail)(vector #f "communications fail"))
                                   ((exn)(vector #f "other fail" (print-call-chain)))))
 			 (else
-			  (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " not supported")
+			  (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " not supported (1)")
 			  (exit))))
 	     (success  (if (vector? dat) (vector-ref dat 0) #f))
 	     (res      (if (vector? dat) (vector-ref dat 1) #f)))

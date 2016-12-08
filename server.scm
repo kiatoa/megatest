@@ -54,7 +54,7 @@
           ((string? transport-type-raw) (string->symbol transport-type-raw))
           (else transport-type-raw))))
          
-    (BB> "server:launch fired for run-id="run-id" transport-type="transport-type)
+    ;;(BB> "server:launch fired for run-id="run-id" transport-type="transport-type)
 
     (case transport-type
       ((http)(http-transport:launch run-id))
@@ -195,6 +195,18 @@
 	     (read-line)))
 	 #f))))
 
+
+(define (server:dotserver-starting)
+  (with-output-to-file
+      (conc *toppath* "/.starting-server")
+    (lambda ()
+      (print (current-process-id) " on " (get-host-name)))))
+
+(define (server:dotserver-starting-remove)
+  (delete-file* (conc *toppath* "/.starting-server")))
+  
+
+  
 ;; write a .server file in *toppath* with hostport
 ;; return #t on success, #f otherwise
 ;;
@@ -214,11 +226,11 @@
 	  res)
 	#f)))
 
-(define (server:remove-dotserver-file areapath hostport)
+(define (server:remove-dotserver-file areapath hostport #!key (force #f))
   (let ((dotserver   (server:read-dotserver areapath))
 	(server-file (conc areapath "/.server"))
 	(lock-file   (conc areapath "/.server.lock")))
-    (if (and dotserver (string-match (conc ".*:" hostport "$") dotserver)) ;; port matches, good enough info to decide to remove the file
+    (if (or force (and dotserver (string-match (conc ".*:" hostport "$") dotserver))) ;; port matches, good enough info to decide to remove the file
 	(if (common:simple-file-lock lock-file)
 	    (begin
 	      (handle-exceptions

@@ -400,8 +400,8 @@
 			(set! server-going #t)
 			(tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")
 			(server:write-dotserver *toppath* (conc iface ":" port))
-			(delete-file* (conc *toppath* "/.starting-server")))
-		      (begin ;; gotta exit nicely
+                        (server:dotserver-starting-remove))
+                      (begin ;; gotta exit nicely
 			(tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "collision")
 			(http-transport:server-shutdown server-id port))))))
 
@@ -522,10 +522,7 @@
 ;; start_server? 
 ;;
 (define (http-transport:launch run-id)
-  (with-output-to-file
-      (conc *toppath* "/.starting-server")
-    (lambda ()
-      (print (current-process-id) " on " (get-host-name))))
+  (server:dotserver-starting)
   (let* ((tdbdat (tasks:open-db)))
     (set! *run-id*   run-id)
     (if (args:get-arg "-daemonize")
@@ -554,7 +551,8 @@
 		;; since we didn't get the server lock we are going to clean up and bail out
 		(debug:print-info 2 *default-log-port* "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
 		(tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat) " http-transport:launch")
-		(delete-file* (conc *toppath* "/.starting-server"))
+                
+                (server:dotserver-starting-remove)
 		))
 	  (let* ((th2 (make-thread (lambda ()
 				     (debug:print-info 0 *default-log-port* "Server run thread started")
