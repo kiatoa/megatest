@@ -1826,7 +1826,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
-      (common:cleanup-db)
+      (let ((dbstruct (db:setup *toppath*)))
+        (common:cleanup-db dbstruct))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-mark-incompletes")
