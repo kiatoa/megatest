@@ -625,6 +625,7 @@
 		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*)))))))
 
 (define (std-exit-procedure)
+  
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
 		       #f
 		       (begin
@@ -653,6 +654,15 @@
 			      (debug:print 4 *default-log-port* " ... done")
 			      )
 			    "clean exit")))
+
+      ;; let's try to clean up open sockets
+      (if *runremote*
+          (case (remote-transport *runremote*)
+            ((http) (close-all-connections!))
+            ((rpc)  (rpc:close-all-connections!))
+            (else
+             (debug:print-info 0 *default-log-port* "Transport "(remote-transport *runremote*)" not supported"))))
+
       (thread-start! th1)
       (thread-start! th2)
       (thread-join! th1))))

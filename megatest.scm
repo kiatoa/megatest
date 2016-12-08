@@ -1984,7 +1984,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Exit and clean up
 ;;======================================================================
 
-(if (and *runremote* (eq? 'http (remote-transport *runremote*))) (close-all-connections!)) ;; for http-client
 
 (if (not *didsomething*)
     (debug:print 0 *default-log-port* help))
