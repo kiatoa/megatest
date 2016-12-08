@@ -125,7 +125,7 @@
          (or
           (args:get-arg "-transport")
           (configf:lookup *configdat* "server" "transport")
-          "http")))
+          "rpc")))
   *transport-type*)
   
 (define *runremote*         #f)                ;; if set up for server communication this will hold <host port>
