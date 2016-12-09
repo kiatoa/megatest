@@ -3,6 +3,7 @@ NOTES from looking at branch v1.62-rpc
 =====================================================================
 
 *last-db-access* or *db-last-access* ==> which is it to be?
+seen in singletest: ERROR: Unrecognised arguments: :first_err This is the first error
 
 ======================================================================
 New way of launching needed to accomodate different target hosttypes
