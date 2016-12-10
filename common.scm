@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo typed-records)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils)
 (require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -20,6 +20,8 @@
 (declare (unit common))
 
 (include "common_records.scm")
+(include "thunk-utils.scm")
+
 
 ;; (require-library margs)
 ;; (include "margs.scm")
@@ -45,12 +47,12 @@
 
 ;; GLOBAL GLETCHES
 
-(define *contexts* (make-hash-table))
-
-;; Common data structure for 
+;; CONTEXTS
 (defstruct cxt
   (taskdb #f)
   (cmutex (make-mutex)))
+(define *contexts* (make-hash-table))
+(define *context-mutex* (make-mutex))
 
 ;; safe method for accessing a context given a toppath
 ;;
@@ -62,9 +64,20 @@
     (let ((cxt-mutex (cxt-mutex cxt)))
       (mutex-unlock! *context-mutex*)
       (mutex-lock! cxt-mutex)
-      (let ((res (proc cxt)))
-        (mutex-unlock! cxt-mutex)
-        res))))
+      ;; here we guard proc with exception handler so
+      ;; no matter how proc succeeds or fails,
+      ;; the cxt-mutex will be unlocked afterward.
+      (let* ((EXCEPTION-SYMBOL (gensym)) ;; use a generated symbol
+             (guarded-proc               ;; to avoid collision
+              (lambda args
+                (let* ((res (condition-case
+                             (apply proc args)
+                             [x () (cons EXCEPTION-SYMBOL x)])))
+                 (mutex-unlock! cxt-mutex)
+                 (if (and (pair? res) (eq? (car res) EXCEPTION))
+                     (abort (cdr res))
+                     res)))))
+        (guarded-proc cxt)))))
         
 (define *db-keys* #f)
 
@@ -75,47 +88,67 @@
 (define *toppath*      #f)
 (define *already-seen-runconfig-info* #f)
 
-(define *waiting-queue*     (make-hash-table))
 (define *test-meta-updated* (make-hash-table))
 (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
 (define *passnum*           0) ;; when running track calls to run-tests or similar
-(define *write-frequency*   (make-hash-table)) ;; run-id => (vector (current-seconds) 0))
 (define *alt-log-file* #f)  ;; used by -log
 (define *common:denoise*    (make-hash-table)) ;; for low noise printing
 (define *default-log-port*  (current-error-port))
+(define *time-zero* (current-seconds)) ;; for the watchdog
 
 ;; DATABASE
-(define *dbstruct-db*  #f)
+(define *dbstruct-db*         #f) ;; used to cache the dbstruct in db:setup. Goal is to remove this.
+;; db stats
 (define *db-stats*            (make-hash-table)) ;; hash of vectors < count duration-total >
 (define *db-stats-mutex*      (make-mutex))
-(define *db-sync-mutex*       (make-mutex))
-(define *db-multi-sync-mutex* (make-mutex))
-(define *db-local-sync*       (make-hash-table)) ;; used to record last touch of db
-(define *megatest-db*         #f)
-(define *last-db-access*      (current-seconds))  ;; update when db is accessed via server
+;; db access
+(define *db-last-access*      (current-seconds)) ;; last db access, used in server
 (define *db-write-access*     #t)
-(define *inmemdb*             #f)
+;; db sync
+(define *db-last-write*       0)                 ;; used to record last touch of db
+(define *db-last-sync*        0)                 ;; last time the sync to megatest.db happened
+(define *db-sync-in-progress* #f)                ;; if there is a sync in progress do not try to start another
+(define *db-multi-sync-mutex* (make-mutex))      ;; protect access to *db-sync-in-progress*, *db-last-sync* and *db-last-write*
+;; task db
 (define *task-db*             #f) ;; (vector db path-to-db)
 (define *db-access-allowed*   #t) ;; flag to allow access
 (define *db-access-mutex*     (make-mutex))
+(define *db-cache-path*       #f)
 
 ;; SERVER
 (define *my-client-signature* #f)
-(define *transport-type*    'http)
-(define *transport-type*    'http)             ;; override with [server] transport http|rpc|nmsg
-(define *runremote*         (make-hash-table)) ;; if set up for server communication this will hold <host port>
+(define *transport-type*  #f)             ;; override with [server] transport http|rpc|nmsg
+
+(define *DEFAULT-TRANSPORT* "http")
+(define (common:set-transport-type)
+  (set! *transport-type*
+        (string->symbol
+         (or
+          (args:get-arg "-transport")
+          (configf:lookup *configdat* "server" "transport")
+          *DEFAULT-TRANSPORT*)))
+  *transport-type*)
+  
+(define *runremote*         #f)                ;; if set up for server communication this will hold <host port>
 (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))
-(define *client-non-blocking-mode* #f)
 (define *server-id*         #f)
 (define *server-info*       #f)
 (define *time-to-exit*      #f)
-(define *received-response* #f)
-(define *default-numtries*  10)
 (define *server-run*        #t)
 (define *run-id*            #f)
 (define *server-kind-run*   (make-hash-table))
+(define *home-host*         #f)
+(define *total-non-write-delay* 0)
+(define *heartbeat-mutex*   (make-mutex))
 
+;; client
+(define *rmt-mutex*         (make-mutex))     ;; remote access calls mutex 
+
+;; RPC transport
+(define *rpc:listener*      #f)
+
+;; KEY info
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here
 (define *keyvals*           (make-hash-table))
@@ -125,10 +158,11 @@
 (define *test-info*         (make-hash-table)) ;; cache the test info records, update the state, status, run_duration etc. from testdat.db
 
 (define *run-info-cache*    (make-hash-table)) ;; run info is stable, no need to reget
+(define *launch-setup-mutex* (make-mutex))     ;; need to be able to call launch:setup often so mutex it and re-call the real deal only if *toppath* not set
+(define *homehost-mutex*     (make-mutex))
 
-;; Awful. Please FIXME
+;; cache environment vars for each run here
 (define *env-vars-by-run-id* (make-hash-table))
-(define *current-run-name*   #f)
 
 ;; Testconfig and runconfig caches. 
 (define *testconfigs*       (make-hash-table)) ;; test-name => testconfig
@@ -190,42 +224,70 @@
 ;; Move me elsewhere ...
 ;; RADT => Why do we meed the version check here, this is called only if version misma
 ;;
-(define (common:cleanup-db)
+(define (common:cleanup-db dbstruct)
   (db:multi-db-sync 
-   #f ;; do all run-ids
+   dbstruct
    ;; 'new2old
    'killservers
    'dejunk
    ;; 'adj-testids
    ;; 'old2new
-   'new2old)
+   'new2old
+   'schema)
   (if (common:version-changed?)
       (common:set-last-run-version)))
+
+;; Rotate logs, logic: 
+;;                 if > 500k and older than 1 week:
+;;                     remove previous compressed log and compress this log
+;; WARNING: This proc operates assuming that it is in the directory above the
+;;          logs directory you wish to log-rotate.
+;;
+(define (common:rotate-logs)
+  (if (not (directory-exists? "logs"))(create-directory "logs"))
+  (directory-fold 
+   (lambda (file rem)
+     (if (and (string-match "^.*.log" file)
+	      (> (file-size (conc "logs/" file)) 200000))
+	 (let ((gzfile (conc "logs/" file ".gz")))
+	   (if (file-exists? gzfile)
+	       (begin
+		 (debug:print-info 0 *default-log-port* "removing " gzfile)
+		 (delete-file gzfile)))
+	   (debug:print-info 0 *default-log-port* "compressing " file)
+	   (system (conc "gzip logs/" file)))))
+   '()
+   "logs"))
 
 ;; Force a megatest cleanup-db if version is changed and skip-version-check not specified
 ;;
 (define (common:exit-on-version-changed)
   (if (common:version-changed?)
-      (let ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config")))
-        (debug:print 0 *default-log-port*
-		     "WARNING: Version mismatch!\n"
-		     "   expected: " (common:version-signature) "\n"
-		     "   got:      " (common:get-last-run-version))
-	(if (and (file-exists? mtconf)
-		 (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
-	    (begin
-	      (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
-	      (handle-exceptions
-	       exn
-	       (begin
-		 (debug:print 0 *default-log-port* "Failed to switch versions.")
-		 (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-		 (print-call-chain (current-error-port))
-		 (exit 1))
-	       (common:cleanup-db)))
-	    (begin
-	      (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
-	      (exit 1))))))
+      (if (common:on-homehost?)
+	  (let ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config"))
+		(dbstruct (db:setup)))
+	    (debug:print 0 *default-log-port*
+			 "WARNING: Version mismatch!\n"
+			 "   expected: " (common:version-signature) "\n"
+			 "   got:      " (common:get-last-run-version))
+	    (if (and (file-exists? mtconf)
+		     (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
+		(begin
+		  (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
+		  (handle-exceptions
+		   exn
+		   (begin
+		     (debug:print 0 *default-log-port* "Failed to switch versions.")
+		     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+		     (print-call-chain (current-error-port))
+		     (exit 1))
+		   (common:cleanup-db dbstruct)))
+		(begin
+		  (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
+		  (exit 1))))
+	  (begin
+	    (debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
+	    (exit 1)))))
 
 ;;======================================================================
 ;; S P A R S E   A R R A Y S
@@ -347,32 +409,106 @@
 ;;======================================================================
 
 (define *common:std-states*   
-  '((0 "COMPLETED")
-    (1 "NOT_STARTED")
-    (2 "RUNNING")
-    (3 "REMOTEHOSTSTART")
-    (4 "LAUNCHED")
-    (5 "KILLED")
-    (6 "KILLREQ")
-    (7 "STUCK")
-    (8 "ARCHIVED")))
+  '((0 "ARCHIVED")
+    (1 "STUCK")
+    (2 "KILLREQ")
+    (3 "KILLED")
+    (4 "NOT_STARTED")
+    (5 "COMPLETED")
+    (6 "LAUNCHED")
+    (7 "REMOTEHOSTSTART")
+    (8 "RUNNING")
+    ))
 
 (define *common:std-statuses*
-  '((0 "PASS")
-    (1 "WARN")
-    (2 "FAIL")
+  '(;; (0 "DELETED")
+    (1 "n/a")
+    (2 "PASS")
     (3 "CHECK")
-    (4 "n/a")
-    (5 "WAIVED")
-    (6 "SKIP")
-    (7 "DELETED")
-    (8 "STUCK/DEAD")
+    (4 "SKIP")
+    (5 "WARN")
+    (6 "WAIVED")
+    (7 "STUCK/DEAD")
+    (8 "FAIL")
     (9 "ABORT")))
 
-;; These are stopping conditions that prevent a test from being run
-(define *common:cant-run-states-sym* 
-  '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE ABORT ARCHIVED))
+(define *common:ended-states*       ;; states which indicate the test is stopped and will not proceed
+  '("COMPLETED" "ARCHIVED" "KILLED" "KILLREQ" "STUCK" "INCOMPLETE"))
 
+(define *common:badly-ended-states* ;; these roll up as CHECK, i.e. results need to be checked
+  '("KILLED" "KILLREQ" "STUCK" "INCOMPLETE" "DEAD"))
+
+(define *common:running-states*     ;; test is either running or can be run
+  '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED"))
+
+(define *common:cant-run-states*    ;; These are stopping conditions that prevent a test from being run
+  '("COMPLETED" "KILLED" "UNKNOWN" "INCOMPLETE" "ARCHIVED"))
+
+(define *common:not-started-ok-statuses* ;; if not one of these statuses when in not_started state treat as dead
+  '("n/a" "na" "PASS" "FAIL" "WARN" "CHECK" "WAIVED" "DEAD" "SKIP"))
+
+(define (common:special-sort items order comp)
+  (let ((items-order (map reverse order))
+        (acomp       (or comp >)))
+    (sort items
+        (lambda (a b)
+          (let ((a-num (cadr (or (assoc a items-order) '(0 0))))
+                (b-num (cadr (or (assoc b items-order) '(0 0)))))
+            (acomp a-num b-num))))))
+
+;; ;; given a toplevel with currstate, currstatus apply state and status
+;; ;;  => (newstate . newstatus)
+;; (define (common:apply-state-status currstate currstatus state status)
+;;   (let* ((cstate  (string->symbol (string-downcase currstate)))
+;;          (cstatus (string->symbol (string-downcase currstatus)))
+;;          (sstate  (string->symbol (string-downcase state)))
+;;          (sstatus (string->symbol (string-downcase status)))
+;;          (nstate  #f)
+;;          (nstatus #f))
+;;     (set! nstate
+;;           (case cstate
+;;             ((completed not_started killed killreq stuck archived) 
+;;              (case sstate ;; completed -> sstate
+;;                ((completed killed killreq stuck archived) completed)
+;;                ((running remotehoststart launched)        running)
+;;                (else                                      unknown-error-1)))
+;;             ((running remotehoststart launched)
+;;              (case sstate
+;;                ((completed killed killreq stuck archived) #f) ;; need to look at all items
+;;                ((running remotehoststart launched)        running)
+;;                (else                                      unknown-error-2)))
+;;             (else unknown-error-3)))
+;;     (set! nstatus
+;;           (case sstatus
+;;             ((pass)
+;;              (case nstate
+;;                ((pass n/a deleted)     pass)
+;;                ((warn)                 warn)
+;;                ((fail)                 fail)
+;;                ((check)               check)
+;;                ((waived)             waived)
+;;                ((skip)                 skip)
+;;                ((stuck/dead)          stuck)
+;;                ((abort)               abort)
+;;                (else        unknown-error-4)))
+;;             ((warn)
+;;              (case nstate
+;;                ((pass warn n/a skip deleted)   warn)
+;;                ((fail)                         fail)
+;;                ((check)                       check)
+;;                ((waived)                     waived)
+;;                ((stuck/dead)                  stuck)
+;;                (else                unknown-error-5)))
+;;             ((fail)
+;;              (case nstate
+;;                ((pass warn fail check n/a waived skip deleted stuck/dead stuck)  fail)
+;;                ((abort)                                                         abort)
+;;                (else                                                  unknown-error-6)))
+;;             (else    unknown-error-7)))
+;;     (cons 
+;;      (if nstate  (symbol->string nstate)  nstate)
+;;      (if nstatus (symbol->string nstatus) nstatus))))
+               
 ;;======================================================================
 ;; D E B U G G I N G   S T U F F 
 ;;======================================================================
@@ -395,28 +531,102 @@
           (pathname-file (current-directory)))))
 
 (define (common:get-db-tmp-area)
-  (create-directory (conc "/tmp/" (current-user-name)
-                          "/megatest/"
-                          (common:get-testsuite-name) "/"
-                          (string-translate *toppath* "/" "_")) #t))
+  (if *db-cache-path*
+      *db-cache-path*
+      (let ((dbpath (create-directory (conc "/tmp/" (current-user-name)
+					    "/megatest_localdb/"
+					    (common:get-testsuite-name) "/"
+					    (string-translate *toppath* "/" ".")) #t)))
+	(set! *db-cache-path* dbpath)
+	dbpath)))
+
+(define (common:get-area-path-signature)
+  (message-digest-string (md5-primitive) *toppath*))
 
 ;;======================================================================
 ;; E X I T   H A N D L I N G
 ;;======================================================================
 
-(define (common:legacy-sync-recommended)
-  (or (args:get-arg "-runtests")
-      (args:get-arg "-run")
-      (args:get-arg "-server")
-      ;; (args:get-arg "-set-run-status")
-      (args:get-arg "-remove-runs")
-      ;; (args:get-arg "-get-run-status")
-      ))
+(define (common:run-sync?)
+  (let ((ohh (common:on-homehost?))
+	(srv (args:get-arg "-server")))
+    ;; (debug:print-info 0 *default-log-port* "common:run-sync? ohh=" ohh ", srv=" srv)
+    (and (common:on-homehost?)
+	 (args:get-arg "-server"))))
 
-(define (common:legacy-sync-required)
-  (configf:lookup *configdat* "setup" "megatest-db"))
+;;;; run-ids
+;;    if #f use *db-local-sync* : or 'local-sync-flags
+;;    if #t use timestamps      : or 'timestamps
+(define (common:sync-to-megatest.db dbstruct) 
+  (let ((start-time         (current-seconds))
+	(res                (db:multi-db-sync dbstruct 'new2old)))
+    (let ((sync-time (- (current-seconds) start-time)))
+      (debug:print-info 3 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds")
+      (if (common:low-noise-print 30 "sync new to old")
+	  (debug:print-info 0 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds")))
+    res))
+
+;; currently the primary job of the watchdog is to run the sync back to megatest.db from the db in /tmp
+;; if we are on the homehost and we are a server (by definition we are on the homehost if we are a server)
+;;
+(define (common:watchdog)
+  (thread-sleep! 0.05) ;; delay for startup
+  (let ((legacy-sync (common:run-sync?))
+	(debug-mode  (debug:debug-mode 1))
+	(last-time   (current-seconds)))
+    (debug:print-info 0 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync)
+    (if legacy-sync
+	(let ((dbstruct (db:setup)))
+	  (debug:print-info 0 *default-log-port* "Server running, periodic sync started.")
+	  (let loop ()
+	    ;; sync for filesystem local db writes
+	    ;;
+	    (mutex-lock! *db-multi-sync-mutex*)
+	    (let* ((need-sync        (>= *db-last-write* *db-last-sync*)) ;; no sync since last write
+		   (sync-in-progress *db-sync-in-progress*)
+		   (should-sync      (> (- (current-seconds) *db-last-sync*) 5)) ;; sync every five seconds minimum
+		   (will-sync        (and (or need-sync should-sync)
+					  (not sync-in-progress)))
+		   (start-time       (current-seconds)))
+	      ;; (debug:print-info 0 *default-log-port* "need-sync: " need-sync " sync-in-progress: " sync-in-progress " should-sync: " should-sync " will-sync: " will-sync)
+	      (if will-sync (set! *db-sync-in-progress* #t))
+	      (mutex-unlock! *db-multi-sync-mutex*)
+	      (if will-sync
+		  (let ((res (common:sync-to-megatest.db dbstruct))) ;; did we sync any data? If so need to set the db touched flag to keep the server alive
+		    (if (> res 0) ;; some records were transferred, keep the db alive
+			(begin
+			  (mutex-lock! *heartbeat-mutex*)
+			  (set! *db-last-access* (current-seconds))
+			  (mutex-unlock! *heartbeat-mutex*)
+			  (debug:print-info 0 *default-log-port* "sync called, " res " records transferred."))
+			(debug:print-info 2 *default-log-port* "sync called but zero records transferred"))))
+	      (if will-sync
+		  (begin
+		    (mutex-lock! *db-multi-sync-mutex*)
+		    (set! *db-sync-in-progress* #f)
+		    (set! *db-last-sync* start-time)
+		    (mutex-unlock! *db-multi-sync-mutex*)))
+	      (if (and debug-mode
+		       (> (- start-time last-time) 60))
+		  (begin
+		    (set! last-time start-time)
+		    (debug:print-info 4 *default-log-port* "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
+	    
+	    ;; keep going unless time to exit
+	    ;;
+	    (if (not *time-to-exit*)
+		(let delay-loop ((count 0))
+		  (if (and (not *time-to-exit*)
+			   (< count 4)) ;; was 11, changing to 4. 
+		      (begin
+			(thread-sleep! 1)
+			(delay-loop (+ count 1))))
+		  (loop)))
+	    (if (common:low-noise-print 30)
+		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*)))))))
 
 (define (std-exit-procedure)
+  
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
 		       #f
 		       (begin
@@ -426,26 +636,15 @@
     (if (and no-hurry (debug:debug-mode 18))
 	(rmt:print-db-stats))
     (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
-			      (let ((run-ids (hash-table-keys *db-local-sync*)))
-				(if (and (not (null? run-ids))
-					 (or (common:legacy-sync-recommended)
-					     (configf:lookup *configdat* "setup" "megatest-db")))
-				    (if no-hurry (db:multi-db-sync run-ids 'new2old))))
-			      (if *dbstruct-db* (db:close-all *dbstruct-db*))
-			      (if *inmemdb*     (db:close-all *inmemdb*))
-			      (if (and *megatest-db*
-				       (sqlite3:database? *megatest-db*))
-				  (begin
-				    (sqlite3:interrupt! *megatest-db*)
-				    (sqlite3:finalize! *megatest-db* #t)
-				    (set! *megatest-db* #f)))
+			      (if *dbstruct-db* (db:close-all *dbstruct-db*)) ;; one second allocated
 			      (if *task-db*    
 				  (let ((db (cdr *task-db*)))
 				    (if (sqlite3:database? db)
 					(begin
 					  (sqlite3:interrupt! db)
 					  (sqlite3:finalize! db #t)
-					  (vector-set! *task-db* 0 #f)))))
+					  ;; (vector-set! *task-db* 0 #f)
+					  (set! *task-db* #f)))))
 			      (close-output-port *default-log-port*)
 			      (set! *default-log-port* (current-error-port))) "Cleanup db exit thread"))
 	  (th2 (make-thread (lambda ()
@@ -456,6 +655,15 @@
 			      (debug:print 4 *default-log-port* " ... done")
 			      )
 			    "clean exit")))
+
+      ;; let's try to clean up open sockets
+      (if *runremote*
+          (case (remote-transport *runremote*)
+            ((http) #t)
+            ((rpc)  (rpc:close-all-connections!))
+            (else
+             (debug:print-info 0 *default-log-port* "Transport "(remote-transport *runremote*)" not supported"))))
+
       (thread-start! th1)
       (thread-start! th2)
       (thread-join! th1))))
@@ -557,6 +765,27 @@
 	   (pathname-directory exe-path))))
 	#f)))
 
+;; return first path that can be created or already exists and is writable
+;;
+(define (common:get-create-writeable-dir dirs)
+  (if (null? dirs)
+      #f
+      (let loop ((hed (car dirs))
+		 (tal (cdr dirs)))
+	(let ((res (or (and (directory? hed)
+			    (file-write-access? hed)
+			    hed)
+		       (handle-exceptions
+			exn
+			#f
+			(create-directory hed #t)))))
+	  (if (and (string? res)
+		   (directory? res))
+	      res
+	      (if (null? tal)
+		  #f
+		  (loop (car tal)(cdr tal))))))))
+  
 ;;======================================================================
 ;; T A R G E T S  ,   S T A T E ,   S T A T U S ,   
 ;;                    R U N N A M E    A N D   T E S T P A T T
@@ -622,6 +851,56 @@
 	      #f)
 	    #f))))
 
+;; logic for getting homehost. Returns (host . at-home)
+;; IF *toppath* is not set, wait up to five seconds trying every two seconds
+;; (this is to accomodate the watchdog)
+;;
+(define (common:get-homehost #!key (trynum 5))
+  ;; called often especially at start up. use mutex to eliminate collisions
+  (mutex-lock! *homehost-mutex*)
+  (cond
+   (*home-host*
+    (mutex-unlock! *homehost-mutex*)
+    *home-host*)
+   ((not *toppath*)
+    (mutex-unlock! *homehost-mutex*)
+    (launch:setup) ;; safely mutexed now
+    (if (> trynum 0)
+	(begin
+	  (thread-sleep! 2)
+	  (common:get-homehost trynum: (- trynum 1)))
+	#f))
+   (else
+    (let* ((currhost (get-host-name))
+	   (bestadrs (server:get-best-guess-address currhost))
+	   ;; first look in config, then look in file .homehost, create it if not found
+	   (homehost (or (configf:lookup *configdat* "server" "homehost" )
+			 (let ((hhf (conc *toppath* "/.homehost")))
+			   (if (file-exists? hhf)
+			       (with-input-from-file hhf read-line)
+			       (if (file-write-access? *toppath*)
+				   (begin
+				     (with-output-to-file hhf
+				       (lambda ()
+					 (print bestadrs)))
+				     (begin
+				       (mutex-unlock! *homehost-mutex*)
+				       (car (common:get-homehost))))
+				   #f)))))
+	   (at-home  (or (equal? homehost currhost)
+			 (equal? homehost bestadrs))))
+      (set! *home-host* (cons homehost at-home))
+      (mutex-unlock! *homehost-mutex*)
+      *home-host*))))
+
+;; am I on the homehost?
+;;
+(define (common:on-homehost?)
+  (let ((hh (common:get-homehost)))
+    (if hh
+	(cdr hh)
+	#f)))
+
 ;;======================================================================
 ;; M I S C   L I S T S
 ;;======================================================================
@@ -644,6 +923,7 @@
 		    (loop (car tala)
 			  (cdr tala)
 			  (car talb)
+			  
 			  (cdr talb)))
 		#f)))))
 
@@ -830,6 +1110,60 @@
       (with-input-from-file "/proc/loadavg" 
 	(lambda ()(list (read)(read)(read))))))
 
+;; get normalized cpu load by reading from /proc/loadavg and /proc/cpuinfo return all three values and the number of real cpus and the number of threads
+;; returns list (normalized-proc-load normalized-core-load 1m 5m 15m ncores nthreads)
+;;
+(define (common:get-normalized-cpu-load remote-host)
+  (let ((data (if remote-host
+                  (with-input-from-pipe 
+                   (conc "ssh " remote-host " cat /proc/loadavg;cat /proc/cpuinfo;echo end")
+                   read-lines)
+                  (append 
+                   (with-input-from-file "/proc/loadavg" 
+                     read-lines)
+                   (with-input-from-file "/proc/cpuinfo"
+                     read-lines)
+                   (list "end"))))
+        (load-rx  (regexp "^([\\d\\.]+)\\s+([\\d\\.]+)\\s+([\\d\\.]+)\\s+.*$"))
+        (proc-rx  (regexp "^processor\\s+:\\s+(\\d+)\\s*$"))
+        (core-rx  (regexp "^core id\\s+:\\s+(\\d+)\\s*$"))
+        (phys-rx  (regexp "^physical id\\s+:\\s+(\\d+)\\s*$"))
+        (max-num  (lambda (p n)(max (string->number p) n))))
+    ;; (print "data=" data)
+    (if (null? data) ;; something went wrong
+        #f
+        (let loop ((hed      (car data))
+                   (tal      (cdr data))
+                   (loads    #f)
+                   (proc-num 0)  ;; processor includes threads
+                   (phys-num 0)  ;; physical chip on motherboard
+                   (core-num 0)) ;; core
+          ;; (print hed ", " loads ", " proc-num ", " phys-num ", " core-num)
+          (if (null? tal) ;; have all our data, calculate normalized load and return result
+              (let* ((act-proc (+ proc-num 1))
+                     (act-phys (+ phys-num 1))
+                     (act-core (+ core-num 1))
+                     (adj-proc-load (/ (car loads) act-proc))
+                     (adj-core-load (/ (car loads) act-core)))
+                (append (list (cons 'adj-proc-load adj-proc-load)
+                              (cons 'adj-core-load adj-core-load))
+                        (list (cons '1m-load (car loads))
+                              (cons '5m-load (cadr loads))
+                              (cons '15m-load (caddr loads)))
+                        (list (cons 'proc act-proc)
+                              (cons 'core act-core)
+                              (cons 'phys act-phys))))
+              (regex-case
+               hed
+               (load-rx  ( x l1 l5 l15 ) (loop (car tal)(cdr tal)(map string->number (list l1 l5 l15)) proc-num phys-num core-num))
+               (proc-rx  ( x p         ) (loop (car tal)(cdr tal) loads           (max-num p proc-num) phys-num core-num))
+               (phys-rx  ( x p         ) (loop (car tal)(cdr tal) loads           proc-num (max-num p phys-num) core-num))
+               (core-rx  ( x c         ) (loop (car tal)(cdr tal) loads           proc-num phys-num (max-num c core-num)))
+               (else 
+                (begin
+                  ;; (print "NO MATCH: " hed)
+                  (loop (car tal)(cdr tal) loads proc-num phys-num core-num)))))))))
+
 (define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
   (let* ((loadavg (common:get-cpu-load remote-host))
 	 (first   (car loadavg))
@@ -931,26 +1265,32 @@
 	      (car df-results))
     freespc))
 
-;; check space in dbdir
-;; returns: ok/not dbspace required-space
-;;
-(define (common:check-db-dir-space)
-  (let* ((dbdir    (db:get-dbdir))
-	 (dbspace  (if (directory? dbdir)
-		       (get-df dbdir)
-		       0))
-	 (required (string->number 
-		    (or (configf:lookup *configdat* "setup" "dbdir-space-required")
-			"100000"))))
+(define (common:check-space-in-dir dirpath required)
+  (let* ((dbspace  (if (directory? dirpath)
+		       (get-df dirpath)
+		       0)))
     (list (> dbspace required)
 	  dbspace
 	  required
-	  dbdir)))
+	  dirpath)))
 
+;; check space in dbdir and in megatest dir
+;; returns: ok/not dbspace required-space
+;;
+(define (common:check-db-dir-space)
+  (let* ((required (string->number 
+		    (or (configf:lookup *configdat* "setup" "dbdir-space-required")
+			"100000")))
+	 (dbdir    (common:get-db-tmp-area)) ;; (db:get-dbdir))
+	 (tdbspace (common:check-space-in-dir dbdir required))
+	 (mdbspace (common:check-space-in-dir *toppath* required)))
+    (sort (list tdbspace mdbspace) (lambda (a b)
+				     (< (cadr a)(cadr b))))))
+    
 ;; check available space in dbdir, exit if insufficient
 ;;
 (define (common:check-db-dir-and-exit-if-insufficient)
-  (let* ((spacedat (common:check-db-dir-space))
+  (let* ((spacedat (car (common:check-db-dir-space))) ;; look only at worst for now
 	 (is-ok    (car spacedat))
 	 (dbspace  (cadr spacedat))
 	 (required (caddr spacedat))

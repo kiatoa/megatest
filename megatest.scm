@@ -143,6 +143,7 @@ Misc
   -cleanup-db             : remove any orphan records, vacuum the db
   -import-megatest.db     : migrate a database from v1.55 series to v1.60 series
   -sync-to-megatest.db    : migrate data back to megatest.db
+  -use-db-cache           : use cached access to db to reduce load
   -update-meta            : update the tests metadata for all tests
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
@@ -261,8 +262,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-fields"
 			"-recover-test" ;; run-id,test-id - used internally to recover a test stuck in RUNNING state
 			"-sort"
-			) 
-		 (list  "-h" "-help" "--help"
+			"-target-db"
+			"-source-db"
+			)
+ 		 (list  "-h" "-help" "--help"
 			"-manual"
 			"-version"
 		        "-force"
@@ -279,7 +282,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-rerun-clean"
 			"-rerun-all"
 			"-clean-cache"
-
+			"-cache-db"
+                        "-use-db-cache"
 			;; misc
 			"-repl"
 			"-lock"
@@ -325,6 +329,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; Add args that use remargs here
 ;;
+
 (if (and (not (null? remargs))
 	 (not (or
 	       (args:get-arg "-runstep")
@@ -341,58 +346,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; The watchdog is to keep an eye on things like db sync etc.
 ;;
-(define *time-zero* (current-seconds))
-(define *watchdog*
-  (make-thread 
-   (lambda ()
-     (thread-sleep! 0.05) ;; delay for startup
-     (let ((legacy-sync (common:legacy-sync-required))
-	   (debug-mode  (debug:debug-mode 1))
-	   (last-time   (current-seconds)))
-       (if (common:legacy-sync-recommended)
-	   (let loop ()
-	     ;; sync for filesystem local db writes
-	     ;;
-	     (let ((start-time      (current-seconds))
-		   (servers-started (make-hash-table)))
-	       (for-each 
-		(lambda (run-id)
-		  (mutex-lock! *db-multi-sync-mutex*)
-		  (if (and legacy-sync 
-			   (hash-table-ref/default *db-local-sync* run-id #f))
-		      ;; (if (> (- start-time last-write) 5) ;; every five seconds
-		      (begin ;; let ((sync-time (- (current-seconds) start-time)))
-			(db:multi-db-sync (list run-id) 'new2old)
-			(let ((sync-time (- (current-seconds) start-time)))
-			  (debug:print-info 3 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
-			  (if (common:low-noise-print 30 "sync new to old")
-			      (debug:print-info 0 *default-log-port* "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
-			;; (if (> sync-time 10) ;; took more than ten seconds, start a server for this run
-			;;     (begin
-			;;       (debug:print-info 0 *default-log-port* "Sync is taking a long time, start up a server to assist for run " run-id)
-			;;       (server:kind-run run-id)))))
-			(hash-table-delete! *db-local-sync* run-id)))
-		  (mutex-unlock! *db-multi-sync-mutex*))
-		(hash-table-keys *db-local-sync*))
-	       (if (and debug-mode
-			(> (- start-time last-time) 60))
-		   (begin
-		     (set! last-time start-time)
-		     (debug:print-info 4 *default-log-port* "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
-	     
-	     ;; keep going unless time to exit
-	     ;;
-	     (if (not *time-to-exit*)
-		 (let delay-loop ((count 0))
-		   (if (and (not *time-to-exit*)
-			    (< count 11)) ;; aprox 5-6 seconds
-		       (begin
-			 (thread-sleep! 1)
-			 (delay-loop (+ count 1))))
-		   (loop)))
-	     (if (common:low-noise-print 30)
-		 (debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*)))))
-     "Watchdog thread")))
+(define *watchdog* (make-thread common:watchdog "Watchdog thread"))
 
 (thread-start! *watchdog*)
 
@@ -482,6 +436,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 ;; Misc general calls
 ;;======================================================================
+
+(if (and (args:get-arg "-cache-db")
+         (args:get-arg "-source-db"))
+    (let* ((temp-dir (or (args:get-arg "-target-db") (create-directory (conc "/tmp/" (getenv "USER") "/" (string-translate (current-directory) "/" "_")))))
+           (target-db (conc temp-dir "/cached.db"))
+           (source-db (args:get-arg "-source-db")))        
+      (db:cache-for-read-only source-db target-db)
+      (set! *didsomething* #t)))
 
 ;; handle a clean-cache request as early as possible
 ;;
@@ -683,9 +645,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ))
 
 (if (args:get-arg "-ping")
-    (let* ((run-id        (string->number (args:get-arg "-run-id")))
+    (let* ((server-id     (string->number (args:get-arg "-ping"))) ;; extract run-id (i.e. no ":"
 	   (host:port     (args:get-arg "-ping")))
-      (server:ping run-id host:port)))
+      (server:ping (or server-id host:port) do-exit: #t)))
 
 ;;======================================================================
 ;; Capture, save and manipulate environments
@@ -738,44 +700,39 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ;; Server? Start up here.
     ;;
     (let ((tl        (launch:setup))
-	  (run-id    (and (args:get-arg "-run-id")
-			  (string->number (args:get-arg "-run-id"))))
-          (transport-type (string->symbol (or (args:get-arg "-transport") "http"))))
-      (if run-id
-	  (begin
-	    (server:launch run-id transport-type)
-	    (set! *didsomething* #t))
-	  (debug:print-error 0 *default-log-port* "server requires run-id be specified with -run-id")))
-
-    ;; Not a server? This section will decide how to communicate
-    ;;
-    ;;  Setup client for all expect listed here
-    (if (null? (lset-intersection 
-		equal?
-		(hash-table-keys args:arg-hash)
-		'("-list-servers"
-		  "-stop-server"
-                  "-kill-server"
-		  "-show-cmdinfo"
-		  "-list-runs"
-		  "-ping")))
-	(if (launch:setup)
-	    (let ((run-id    (and (args:get-arg "-run-id")
-				  (string->number (args:get-arg "-run-id")))))
-	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
-	      ;; if not list or kill then start a client (if appropriate)
-	      (if (or (args-defined? "-h" "-version" "-create-megatest-area" "-create-test")
-		      (eq? (length (hash-table-keys args:arg-hash)) 0))
-		  (debug:print-info 1 *default-log-port* "Server connection not needed")
-		  (begin
-		    ;; (if run-id 
-		    ;;     (client:launch run-id) 
-		    ;;     (client:launch 0)      ;; without run-id we'll start a server for "0"
-		    #t
-		    ))))))
-
-;; MAY STILL NEED THIS
-;;		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))
+	;; (run-id    (and (args:get-arg "-run-id")
+	;; 		  (string->number (args:get-arg "-run-id"))))
+          (transport-type *transport-type*  ))
+      (server:launch 0 transport-type)
+      (set! *didsomething* #t)))
+;;     ;; (debug:print-error 0 *default-log-port* "server requires run-id be specified with -run-id")))
+;; 
+;;     ;; Not a server? This section will decide how to communicate
+;;     ;;
+;;     ;;  Setup client for all expect listed here
+;;     (if (null? (lset-intersection 
+;; 		equal?
+;; 		(hash-table-keys args:arg-hash)
+;; 		'("-list-servers"
+;; 		  "-stop-server"
+;;                   "-kill-server"
+;; 		  "-show-cmdinfo"
+;; 		  "-list-runs"
+;; 		  "-ping")))
+;; 	(if (launch:setup)
+;; 	    (let ((run-id    (and (args:get-arg "-run-id")
+;; 				  (string->number (args:get-arg "-run-id")))))
+;; 	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
+;; 	      ;; if not list or kill then start a client (if appropriate)
+;; 	      (if (or (args-defined? "-h" "-version" "-create-megatest-area" "-create-test")
+;; 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
+;; 		  (debug:print-info 1 *default-log-port* "Server connection not needed")
+;; 		  (begin
+;; 		    ;; (if run-id 
+;; 		    ;;     (client:launch run-id) 
+;; 		    ;;     (client:launch 0)      ;; without run-id we'll start a server for "0"
+;; 		    #t
+;; 		    ))))))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server")
@@ -834,19 +791,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (args:get-arg "-list-targets")
-    (let ((targets (common:get-runconfig-targets)))
-      (debug:print 1 *default-log-port* "Found "(length targets) " targets")
-      (case (string->symbol (or (args:get-arg "-dumpmode") "alist"))
-	((alist)
-	 (for-each (lambda (x)
-		     ;; (print "[" x "]"))
-		     (print x))
-		   targets))
-	((json)
-	 (json-write targets))
-	(else
-	 (debug:print-error 0 *default-log-port* "dump output format " (args:get-arg "-dumpmode") " not supported for -list-targets")))
-      (set! *didsomething* #t)))
+    (if (launch:setup)
+        (let ((targets (common:get-runconfig-targets)))
+          (debug:print 1 *default-log-port* "Found "(length targets) " targets")
+          (case (string->symbol (or (args:get-arg "-dumpmode") "alist"))
+            ((alist)
+             (for-each (lambda (x)
+                         ;; (print "[" x "]"))
+                         (print x))
+                       targets))
+            ((json)
+             (json-write targets))
+            (else
+             (debug:print-error 0 *default-log-port* "dump output format " (args:get-arg "-dumpmode") " not supported for -list-targets")))
+          (set! *didsomething* #t))))
 
 ;; cache the runconfigs in $MT_LINKTREE/$MT_TARGET/$MT_RUNNAME/.runconfig
 ;;
@@ -1040,7 +998,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   (let ((indx (hash-table-ref/default test-field-index fieldname #f)))
     (if indx
 	(if (>= indx (vector-length datavec))
-	    #f ;; index to high, should raise an error I suppose
+	    #f ;; index too high, should raise an error I suppose
 	    (vector-ref datavec indx))
 	#f)))
 
@@ -1053,31 +1011,35 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (if (launch:setup)
 	(let* (;; (dbstruct    (make-dbr:dbstruct path: *toppath* local: (args:get-arg "-local")))
 	       (runpatt     (args:get-arg "-list-runs"))
+               (access-mode (db:get-access-mode))
 	       (testpatt    (common:args-get-testpatt #f))
 	       ;; (if (args:get-arg "-testpatt") 
 	       ;;  	        (args:get-arg "-testpatt") 
 	       ;;  	        "%"))
 	       (keys        (rmt:get-keys)) ;; (db:get-keys dbstruct))
-	       ;; (runsda   t  (db:get-runs dbstruct runpatt #f #f '()))
-	       (runsdat     (rmt:get-runs-by-patt keys (or runpatt "%") (common:args-get-target) ;; (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
-			           	 #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
+	       ;; (runsdat  (db:get-runs dbstruct runpatt #f #f '()))
+	;; (runsdat     (rmt:get-runs-by-patt keys (or runpatt "%") (common:args-get-target) ;; (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
+	;; 		           	 #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
+	       (runsdat     (rmt:get-runs-by-patt keys (or runpatt "%") 
+                                                  (common:args-get-target) #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
 	       (runstmp     (db:get-rows runsdat))
 	       (header      (db:get-header runsdat))
 	       ;; this is "-since" support. This looks at last mod times of <run-id>.db files
 	       ;; and collects those modified since the -since time.
-	       (runs        (if (and (not (null? runstmp))
-				     (args:get-arg "-since"))
-				(let ((changed-ids (db:get-changed-run-ids (string->number (args:get-arg "-since")))))
-				  (let loop ((hed (car runstmp))
-					     (tal (cdr runstmp))
-					     (res '()))
-				    (let ((new-res (if (member (db:get-value-by-header hed header "id") changed-ids)
-						       (cons hed res)
-						       res)))
-				      (if (null? tal)
-					  (reverse new-res)
-					  (loop (car tal)(cdr tal) new-res)))))
-				runstmp))
+	       (runs        runstmp)
+                        ;; (if (and (not (null? runstmp))
+			;;        (args:get-arg "-since"))
+			;;   (let ((changed-ids (db:get-changed-run-ids (string->number (args:get-arg "-since")))))
+			;;     (let loop ((hed (car runstmp))
+			;;   	     (tal (cdr runstmp))
+			;;   	     (res '()))
+			;;       (let ((new-res (if (member (db:get-value-by-header hed header "id") changed-ids)
+			;;   		       (cons hed res)
+			;;   		       res)))
+			;;         (if (null? tal)
+			;;   	  (reverse new-res)
+			;;   	  (loop (car tal)(cdr tal) new-res)))))
+			;;   runstmp))
 	       (db-targets  (args:get-arg "-list-db-targets"))
 	       (seen        (make-hash-table))
 	       (dmode       (let ((d (args:get-arg "-dumpmode")))
@@ -1130,7 +1092,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (states  (string-split (or (args:get-arg "-state") "") ","))
 			  (statuses (string-split (or (args:get-arg "-status") "") ","))
 			  (tests   (if tests-spec
-				       (rmt:get-tests-for-run run-id testpatt states statuses #f #f #f 'testname 'asc ;; (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
+				       (db:dispatch-query access-mode rmt:get-tests-for-run db:get-tests-for-run run-id testpatt states statuses #f #f #f 'testname 'asc ;; (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
 							     ;; use qryvals if test-spec provided
 							     (if tests-spec
 								 (string-intersperse adj-tests-spec ",")
@@ -1255,7 +1217,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					     )
 				    ;; Each test
 				    ;; DO NOT remote run
-				    (let ((steps (rmt:get-steps-for-test run-id (db:test-get-id test)))) ;; (db:get-steps-for-test dbstruct run-id (db:test-get-id test))))
+				    (let ((steps (db:dispatch-query access-mode rmt:get-steps-for-test db:get-steps-for-test run-id (db:test-get-id test)))) ;; (db:get-steps-for-test dbstruct run-id (db:test-get-id test))))
 				      (for-each 
 				       (lambda (step)
 					 (format #t 
@@ -1866,7 +1828,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
-      (common:cleanup-db)
+      (let ((dbstruct (db:setup *toppath*)))
+        (common:cleanup-db dbstruct))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-mark-incompletes")
@@ -1904,8 +1867,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(args:get-arg "-repl")
 	(args:get-arg "-load"))
     (let* ((toppath (launch:setup))
-	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
-      (if dbstruct
+	   (dbstruct (if (and toppath
+                              (common:on-homehost?))
+                         (db:setup)
+                         #f))) ;; make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
+      (if *toppath*
 	  (cond
 	   ((getenv "MT_RUNSCRIPT")
 	    ;; How to run megatest scripts
@@ -1922,7 +1888,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (else
 	    (begin
 	      (set! *db* dbstruct)
-	      (set! *client-non-blocking-mode* #t)
 	      (import extras) ;; might not be needed
 	      ;; (import csi)
 	      (import readline)
@@ -1941,7 +1906,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (if (args:get-arg "-repl")
 		  (repl)
 		  (load (args:get-arg "-load")))
-	      (db:close-all dbstruct))
+	      ;; (db:close-all dbstruct) <= taken care of by on-exit call
+	      )
 	    (exit)))
 	  (set! *didsomething* #t))))
 
@@ -1992,7 +1958,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-import-megatest.db")
     (begin
       (db:multi-db-sync 
-       #f ;; do all run-ids
+       (db:setup)
        'killservers
        'dejunk
        'adj-testids
@@ -2004,7 +1970,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-sync-to-megatest.db")
     (begin
       (db:multi-db-sync 
-       #f ;; do all run-ids
+       (db:setup)
        'new2old
        )
       (set! *didsomething* #t)))
@@ -2020,7 +1986,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Exit and clean up
 ;;======================================================================
 
-(if *runremote* (close-all-connections!))
 
 (if (not *didsomething*)
     (debug:print 0 *default-log-port* help))
