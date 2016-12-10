@@ -156,7 +156,7 @@
   (server:remove-dotserver-file *toppath* "anyhost:anyport" force: #t)
   (tasks:server-delete-record (db:delay-if-busy (tasks:open-db)) server-id " rpc-transport:keep-running complete")
   
-
+  (rpc:close-all-connections!)
   ;;(BB> "Before (exit) (from-on-exit="from-on-exit")")
   ;;(unless from-on-exit (exit))  ;; sometimes we hang (around) here with 100% cpu.
   ;;(BB> "After")
@@ -278,6 +278,7 @@
       (begin
         (BB> "WHAT?? for run-id="run-id", serverdat="serverdat)
         (print-call-chain)
+        (rpc:close-all-connections!)
         (exit 1)))
   (let* ((iface (rpc-transport:server-dat-get-iface serverdat))
          (port  (rpc-transport:server-dat-get-port serverdat))
@@ -309,6 +310,7 @@
 			      (thread-sleep! 45)
                               (set! time-out-reached #t)
                               (thread-terminate! th1)
+                              
 			      #f))
 
          (th2 (make-thread time-out     "time out")))

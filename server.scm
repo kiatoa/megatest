@@ -73,7 +73,7 @@
       (let ((ttype (string->symbol
 		    (or (args:get-arg "-transport")
 			(configf:lookup *configdat* "server" "transport")
-			"rpc"))))
+			*DEFAULT-TRANSPORT*))))
 	(set! *transport-type* ttype)
 	ttype)))
 	    

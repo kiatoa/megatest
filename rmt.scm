@@ -137,7 +137,9 @@
       (mutex-unlock! *rmt-mutex*)
       (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
       (let* ((cinfo (rmt:get-connection-info 0))
-            (transport (vector-ref cinfo 6))) ;; TODO: replace with tasks:server-dat-accessor-?? for transport
+             (transport (if cinfo
+                            (vector-ref cinfo 6)
+                            (server:get-transport)))) ;; TODO: replace with tasks:server-dat-accessor-?? for transport
         (remote-conndat-set! *runremote* cinfo) ;; calls client:setup which calls client:setup-http
         (remote-transport-set! *runremote* transport))
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
@@ -273,10 +275,11 @@
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
+         (transport (or (remote-transport *runremote*) (server:get-transport)))
 	 (res  	   (handle-exceptions
 		    exn
 		    #f
-                    (case (remote-transport *runremote*)
+                    (case transport
                       ((http) (http-transport:client-api-send-receive run-id connection-info cmd params))
                       ((rpc) (rpc-transport:client-api-send-receive run-id connection-info cmd params))
                       (else

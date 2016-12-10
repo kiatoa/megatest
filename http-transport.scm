@@ -86,7 +86,7 @@
 				   (send-response body:    (api:process-request *dbstruct-db* $) ;; the $ is the request vars proc
 						  headers: '((content-type text/plain)))
 				   (mutex-lock! *heartbeat-mutex*)
-				   (set! *last-db-access* (current-seconds))
+				   (set! *db-lastaccess* (current-seconds))
 				   (mutex-unlock! *heartbeat-mutex*))
 				  ((equal? (uri-path (request-uri (current-request))) 
 					   '(/ ""))
@@ -428,9 +428,9 @@
 	    (set! iface (car sdat))
 	    (set! port  (cadr sdat))))
       
-      ;; Transfer *last-db-access* to last-access to use in checking that we are still alive
+      ;; Transfer *db-last-access* to last-access to use in checking that we are still alive
       (mutex-lock! *heartbeat-mutex*)
-      (set! last-access *last-db-access*)
+      (set! last-access *db-last-access*)
       (mutex-unlock! *heartbeat-mutex*)
 
       ;; (debug:print 11 *default-log-port* "last-access=" last-access ", server-timeout=" server-timeout)

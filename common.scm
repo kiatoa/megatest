@@ -119,13 +119,14 @@
 (define *my-client-signature* #f)
 (define *transport-type*  #f)             ;; override with [server] transport http|rpc|nmsg
 
+(define *DEFAULT-TRANSPORT* "http")
 (define (common:set-transport-type)
   (set! *transport-type*
         (string->symbol
          (or
           (args:get-arg "-transport")
           (configf:lookup *configdat* "server" "transport")
-          "rpc")))
+          *DEFAULT-TRANSPORT*)))
   *transport-type*)
   
 (define *runremote*         #f)                ;; if set up for server communication this will hold <host port>
@@ -658,7 +659,7 @@
       ;; let's try to clean up open sockets
       (if *runremote*
           (case (remote-transport *runremote*)
-            ((http) (close-all-connections!))
+            ((http) #t)
             ((rpc)  (rpc:close-all-connections!))
             (else
              (debug:print-info 0 *default-log-port* "Transport "(remote-transport *runremote*)" not supported"))))
