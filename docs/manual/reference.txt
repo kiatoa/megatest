@@ -2,8 +2,28 @@
 Reference
 ---------
 
-Megatest Config File Settings
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Config File Helpers
+~~~~~~~~~~~~~~~~~~~
+
+Various helpers for more advanced config files.
+
+.Helpers
+[width="80%",cols="^,2m,2m,2m",frame="topbot",options="header"]
+|======================
+|Helper                      | Purpose                       | Valid values            | Comments
+| #{scheme (scheme code...)} | Execute arbitrary scheme code | Any valid scheme        | Value returned from the call is converted to a string and processed as part of the config file
+| #{system command}          | Execute program, inserts exit code  | Any valid Unix command  | Discards the output from the program
+| #{shell  command} or #{sh ...}  | Execute program, inserts result from stdout | Any valid Unix command | Value returned from the call is converted to a string and processed as part of the config file
+| #{realpath path} or #{rp ...}   | Replace with normalized path | Must be a valid path |
+| #{getenv VAR} or #{gv VAR}      | Replace with content of env variable | Must be a valid var |
+| #{get s v} or #{g s v}     | Replace with variable v from section s | Variable must be defined before use |
+| #{rget v}                  | Replace with variable v from target or default of runconfigs file | |
+|======================
+
+Config File Settings
+~~~~~~~~~~~~~~~~~~~~
+
+Settings in megatest.config
 
 Disk Space Checks
 ^^^^^^^^^^^^^^^^^

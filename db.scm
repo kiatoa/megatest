@@ -741,7 +741,7 @@
 ;;
 (define (db:dispatch-query access-mode rmt-cmd db-cmd . params)
   (if (eq? access-mode 'cached)
-      (print "not doing cached calls right now"))
+      (debug:print 2 *default-log-port* "not doing cached calls right now"))
 ;;      (apply db:call-with-cached-db db-cmd params)
       (apply rmt-cmd params))
 ;;)
@@ -3057,9 +3057,11 @@
     (sqlite3:finalize! runsqry)
     row-ids))
 
+;; finds latest matching all patts for given run-id
+;;
 (define (db:test-get-paths-matching-keynames-target-new dbstruct run-id keynames target res testpatt statepatt statuspatt runname)
   (let* ((testqry (tests:match->sqlqry testpatt))
-	 (tstsqry (conc "SELECT rundir FROM tests WHERE " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;")))
+	 (tstsqry (conc "SELECT rundir FROM tests WHERE run_id=? AND " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;")))
     (db:with-db
      dbstruct
      run-id
@@ -3069,7 +3071,8 @@
 	(lambda (p)
 	  (set! res (cons p res)))
 	db
-	tstsqry)
+	tstsqry
+	run-id)
        res))))
 
 (define (db:test-toplevel-num-items dbstruct run-id testname)
