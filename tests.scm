@@ -922,10 +922,10 @@ EOF
 ;;
 (define (tests:test-get-paths-matching keynames target fnamepatt #!key (res '()))
   ;; BUG: Move the values derived from args to parameters and push to megatest.scm
-  (let* ((testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
-	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
-	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
-	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
+  (let* ((testpatt   (or (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
+	 (statepatt  (or (args:get-arg "-state")   (args:get-arg ":state")    "%"))
+	 (statuspatt (or (args:get-arg "-status")  (args:get-arg ":status")   "%"))
+	 (runname    (or (args:get-arg "-runname") (args:get-arg ":runname")  "%"))
 	 (paths-from-db (rmt:test-get-paths-matching-keynames-target-new keynames target res
 					testpatt
 					statepatt
@@ -935,7 +935,13 @@ EOF
 	(apply append 
 	       (map (lambda (p)
 		      (if (directory-exists? p)
-			  (glob (conc p "/" fnamepatt))
+			  (let ((glob-query (conc p "/" fnamepatt)))
+			    (handle-exceptions
+				exn
+				(with-input-from-pipe
+				    (conc "echo " glob-query)
+				  read-lines)  ;; we aren't going to try too hard. If glob breaks it is likely because someone tried to do */*/*.log or similar
+			      (glob glob-query)))
 			  '()))
 		    paths-from-db))
 	paths-from-db)))

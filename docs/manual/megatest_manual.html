@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<meta name="generator" content="AsciiDoc 8.6.7">
+<meta name="generator" content="AsciiDoc 8.6.9">
 <title>The Megatest Users Manual</title>
 <style type="text/css">
 /* Shared CSS for AsciiDoc xhtml11 and html5 backends */
@@ -86,9 +86,15 @@ ul, ol, li > p {
 ul > li     { color: #aaa; }
 ul > li > * { color: black; }
 
-pre {
+.monospaced, code, pre {
+  font-family: "Courier New", Courier, monospace;
+  font-size: inherit;
+  color: navy;
   padding: 0;
   margin: 0;
+}
+pre {
+  white-space: pre-wrap;
 }
 
 #author {
@@ -218,7 +224,7 @@ div.exampleblock > div.content {
 }
 
 div.imageblock div.content { padding-left: 0; }
-span.image img { border-style: none; }
+span.image img { border-style: none; vertical-align: text-bottom; }
 a.image:visited { color: white; }
 
 dl {
@@ -414,12 +420,6 @@ div.unbreakable { page-break-inside: avoid; }
  *
  * */
 
-tt {
-  font-family: "Courier New", Courier, monospace;
-  font-size: inherit;
-  color: navy;
-}
-
 div.tableblock {
   margin-top: 1.0em;
   margin-bottom: 1.5em;
@@ -452,12 +452,6 @@ div.tableblock > table[frame="vsides"] {
  * html5 specific
  *
  * */
-
-.monospaced {
-  font-family: "Courier New", Courier, monospace;
-  font-size: inherit;
-  color: navy;
-}
 
 table.tableblock {
   margin-top: 1.0em;
@@ -538,6 +532,8 @@ body.manpage div.sectionbody {
 @media print {
   body.manpage div#toc { display: none; }
 }
+
+
 @media screen {
   body {
     max-width: 50em; /* approximately 80 characters wide */
@@ -1327,7 +1323,74 @@ sudo netstat -tulpn</pre>
 <h2 id="_reference">Reference</h2>
 <div class="sectionbody">
 <div class="sect2">
-<h3 id="_megatest_config_file_settings">Megatest Config File Settings</h3>
+<h3 id="_config_file_helpers">Config File Helpers</h3>
+<div class="paragraph"><p>Various helpers for more advanced config files.</p></div>
+<table class="tableblock frame-topbot grid-all"
+style="
+width:80%;
+">
+<caption class="title">Table 2. Helpers</caption>
+<col style="width:14%;">
+<col style="width:28%;">
+<col style="width:28%;">
+<col style="width:28%;">
+<thead>
+<tr>
+<th class="tableblock halign-center valign-top" >Helper                      </th>
+<th class="tableblock halign-left valign-top" > Purpose                       </th>
+<th class="tableblock halign-left valign-top" > Valid values            </th>
+<th class="tableblock halign-left valign-top" > Comments</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">#{scheme (scheme code&#8230;)}</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Execute arbitrary scheme code</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Any valid scheme</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Value returned from the call is converted to a string and processed as part of the config file</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">#{system command}</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Execute program, inserts exit code</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Any valid Unix command</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Discards the output from the program</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">#{shell  command} or #{sh &#8230;}</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Execute program, inserts result from stdout</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Any valid Unix command</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Value returned from the call is converted to a string and processed as part of the config file</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">#{realpath path} or #{rp &#8230;}</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Replace with normalized path</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Must be a valid path</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced"></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">#{getenv VAR} or #{gv VAR}</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Replace with content of env variable</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Must be a valid var</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced"></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">#{get s v} or #{g s v}</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Replace with variable v from section s</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Variable must be defined before use</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced"></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">#{rget v}</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Replace with variable v from target or default of runconfigs file</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced"></p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced"></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="sect2">
+<h3 id="_config_file_settings">Config File Settings</h3>
+<div class="paragraph"><p>Settings in megatest.config</p></div>
 <div class="sect3">
 <h4 id="_disk_space_checks">Disk Space Checks</h4>
 <div class="paragraph"><p>Some parameters you can put in the [setup] section of megatest.config:</p></div>
@@ -1450,7 +1513,7 @@ cell-width 60</pre>
 style="
 width:70%;
 ">
-<caption class="title">Table 2. Database config settings in [setup] section of megatest.config</caption>
+<caption class="title">Table 3. Database config settings in [setup] section of megatest.config</caption>
 <col style="width:14%;">
 <col style="width:28%;">
 <col style="width:28%;">
@@ -1826,7 +1889,7 @@ COMPLETED/ xterm -e bash -s --</pre>
 <div class="admonitionblock">
 <table><tr>
 <td class="icon">
-<img src="/nfs/pdx/disks/ice.disk.002/icfadm/pkgs/asciidoc/8.6.7/images/icons/note.png" alt="Note">
+<img src="/usr/images/icons/note.png" alt="Note">
 </td>
 <td class="content">There is a trailing space after the --</td>
 </tr></table>
@@ -1919,7 +1982,7 @@ megatest -envdelta original-munged -dumpmode ini -o modified.config</pre>
 style="
 width:70%;
 ">
-<caption class="title">Table 3. API Keys Related Calls</caption>
+<caption class="title">Table 4. API Keys Related Calls</caption>
 <col style="width:14%;">
 <col style="width:28%;">
 <col style="width:28%;">
@@ -1971,7 +2034,8 @@ width:70%;
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br>
-Last updated 2016-10-19 10:23:07 PDT
+Last updated
+ 2016-11-27 13:47:38 MST
 </div>
 </div>
 </body>
