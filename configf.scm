@@ -59,6 +59,7 @@
 ;;======================================================================
 
 (define configf:include-rx (regexp "^\\[include\\s+(.*)\\]\\s*$"))
+(define configf:script-rx  (regexp "^\\[scriptinc\\s+(.*)\\]\\s*$")) ;; include output from a script
 (define configf:section-rx (regexp "^\\[(.*)\\]\\s*$"))
 (define configf:blank-l-rx (regexp "^\\s*$"))
 (define configf:key-sys-pr (regexp "^(\\S+)\\s+\\[system\\s+(\\S+.*)\\]\\s*$"))
@@ -70,7 +71,7 @@
 
 ;; read a line and process any #{ ... } constructs
 
-(define configf:var-expand-regex (regexp "^(.*)#\\{(scheme|system|shell|getenv|get|runconfigs-get|rget)\\s+([^\\}\\{]*)\\}(.*)"))
+(define configf:var-expand-regex (regexp "^(.*)#\\{(scheme|system|shell|getenv|get|runconfigs-get|rget|scm|sh|rp|gv|g|mtrah)\\s+([^\\}\\{]*)\\}(.*)"))
 
 (define (configf:process-line l ht allow-system #!key (linenum #f))
   (let loop ((res l))
@@ -85,17 +86,23 @@
 		     (start-time (current-seconds))
 		     (cmdsym  (string->symbol cmdtype))
 		     (fullcmd (case cmdsym
-				((scheme)(conc "(lambda (ht)" cmd ")"))
-				((system)(conc "(lambda (ht)(system \"" cmd "\"))"))
-				((shell) (conc "(lambda (ht)(shell \""  cmd "\"))"))
-				((getenv)(conc "(lambda (ht)(get-environment-variable \"" cmd "\"))"))
-				((get)   
+				((scheme scm) (conc "(lambda (ht)" cmd ")"))
+				((system)     (conc "(lambda (ht)(system \"" cmd "\"))"))
+				((shell sh)   (conc "(lambda (ht)(string-translate (shell \""  cmd "\") \"\n\" \" \"))"))
+				((realpath rp)(conc "(lambda (ht)(common:nice-path \"" cmd "\"))"))
+				((getenv gv)  (conc "(lambda (ht)(get-environment-variable \"" cmd "\"))"))
+				((mtrah)      (conc "(lambda (ht)"
+                                                    "    (let ((extra \"" cmd "\"))"
+						    "       (conc (or *toppath* (get-environment-variable \"MT_RUN_AREA_HOME\"))"
+						    "             (if (string-null? extra) \"\" \"/\")"
+						    "             extra)))"))
+				((get g)   
 				 (let* ((parts (string-split cmd))
 					(sect  (car parts))
 					(var   (cadr parts)))
 				   (conc "(lambda (ht)(config-lookup ht \"" sect "\" \"" var "\"))")))
-				((runconfigs-get) (conc "(lambda (ht)(runconfigs-get ht \"" cmd "\"))"))
-				((rget)           (conc "(lambda (ht)(runconfigs-get ht \"" cmd "\"))"))
+				((runconfigs-get rget) (conc "(lambda (ht)(runconfigs-get ht \"" cmd "\"))"))
+				;; ((rget)           (conc "(lambda (ht)(runconfigs-get ht \"" cmd "\"))"))
 				(else "(lambda (ht)(print \"ERROR\") \"ERROR\")"))))
 		;; (print "fullcmd=" fullcmd)
 		(handle-exceptions
@@ -104,13 +111,13 @@
 		   (debug:print 0 *default-log-port* "WARNING: failed to process config input \"" l "\"")
 		   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 		   ;; (print "exn=" (condition->list exn))
-		   (set! result (conc "#{( " cmdtype ") " cmd"}")))
+		   (set! result (conc "#{( " cmdtype ") " cmd "}, full expansion: " fullcmd)))
 		 (if (or allow-system
-			 (not (member cmdtype '("system" "shell"))))
+			 (not (member cmdtype '("system" "shell" "sh"))))
 		     (with-input-from-string fullcmd
 		       (lambda ()
 			 (set! result ((eval (read)) ht))))
-		    (set! result (conc "#{(" cmdtype ") "  cmd "}"))))
+		     (set! result (conc "#{(" cmdtype ") "  cmd "}"))))
 		(case cmdsym
 		  ((system shell scheme)
 		   (let ((delta (- (current-seconds) start-time)))
@@ -184,12 +191,15 @@
 (define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f)(settings (make-hash-table))(keep-filenames #f)(post-section-procs '()))
   (debug:print-info 5 *default-log-port* "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections " pwd: " (current-directory))
   (debug:print 9 *default-log-port* "START: " path)
-  (if (not (file-exists? path))
+  (if (and (not (port? path))
+	   (not (file-exists? path))) ;; for case where we are handed a port
       (begin 
 	(debug:print-info 1 *default-log-port* "read-config - file not found " path " current path: " (current-directory))
 	;; WARNING: This is a risky change but really, we should not return an empty hash table if no file read?
 	#f) ;; (if (not ht)(make-hash-table) ht))
-      (let ((inp        (open-input-file path))
+      (let ((inp        (if (string? path)
+			    (open-input-file path)
+			      path)) ;; we can be handed a port
 	    (res        (if (not ht)(make-hash-table) ht))
 	    (metapath   (if (or (debug:debug-mode 9)
 				keep-filenames)
@@ -201,7 +211,8 @@
 	  (debug:print-info 8 *default-log-port* "curr-section-name: " curr-section-name " var-flag: " var-flag "\n   inl: \"" inl "\"")
 	  (if (eof-object? inl) 
 	      (begin
-		(close-input-port inp)
+		(if (string? path) ;; we received a path, not a port, thus we are responsible for closing it.
+		    (close-input-port inp))
 		(hash-table-delete! res "") ;; we are using "" as a dumping ground and must remove it before returning the ht
 		(debug:print 9 *default-log-port* "END: " path)
 		res)
@@ -231,6 +242,22 @@
 							      (debug:print '(2 9) #f "INFO: include file " include-file " not found (called from " path ")")
 							      (debug:print 2 *default-log-port* "        " full-conf)
 							      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f)))))
+	       (configf:script-rx ( x include-script );; handle-exceptions
+						      ;;    exn
+						      ;;    (begin
+						      ;;      (debug:print '(0 2 9) #f "INFO: include from script " include-script " failed.")
+						      ;;      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
+							 (if (and (file-exists? include-script)(file-execute-access? include-script))
+							     (let* ((new-inp-port (open-input-pipe include-script)))
+							       (debug:print '(2 9) *default-log-port* "Including from script output: " include-script)
+							      ;;  (print "We got here, calling read-config next. Port is: " new-inp-port)
+							       (read-config new-inp-port res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections settings: settings keep-filenames: keep-filenames)
+							       (close-input-port new-inp-port)
+							       (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
+							     (begin
+							       (debug:print 0 *default-log-port* "Script not found or not exectutable: " include-script)
+							       (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f)))
+							 ) ;; )
 	       (configf:section-rx ( x section-name ) (begin
 							;; call post-section-procs
 							(for-each 
