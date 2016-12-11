@@ -1530,7 +1530,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 (paths    (tests:test-get-paths-matching keys target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
-			(print path))
+			(if (file-exists? path)
+			(print path)))	
 		      paths)))
 	;; else do a general-run-call
 	(general-run-call 
