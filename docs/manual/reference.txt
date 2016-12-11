@@ -18,6 +18,7 @@ Various helpers for more advanced config files.
 | #{getenv VAR} or #{gv VAR}      | Replace with content of env variable | Must be a valid var |
 | #{get s v} or #{g s v}     | Replace with variable v from section s | Variable must be defined before use |
 | #{rget v}                  | Replace with variable v from target or default of runconfigs file | |
+| #{mtrah}                   | Replace with the path to the megatest testsuite area | | 
 |======================
 
 Config File Settings
