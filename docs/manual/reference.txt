@@ -1,12 +1,33 @@
 
 Reference
-=========
+---------
 
-Megatest Config File Settings
------------------------------
+Config File Helpers
+~~~~~~~~~~~~~~~~~~~
+
+Various helpers for more advanced config files.
+
+.Helpers
+[width="80%",cols="^,2m,2m,2m",frame="topbot",options="header"]
+|======================
+|Helper                      | Purpose                       | Valid values            | Comments
+| #{scheme (scheme code...)} | Execute arbitrary scheme code | Any valid scheme        | Value returned from the call is converted to a string and processed as part of the config file
+| #{system command}          | Execute program, inserts exit code  | Any valid Unix command  | Discards the output from the program
+| #{shell  command} or #{sh ...}  | Execute program, inserts result from stdout | Any valid Unix command | Value returned from the call is converted to a string and processed as part of the config file
+| #{realpath path} or #{rp ...}   | Replace with normalized path | Must be a valid path |
+| #{getenv VAR} or #{gv VAR}      | Replace with content of env variable | Must be a valid var |
+| #{get s v} or #{g s v}     | Replace with variable v from section s | Variable must be defined before use |
+| #{rget v}                  | Replace with variable v from target or default of runconfigs file | |
+| #{mtrah}                   | Replace with the path to the megatest testsuite area | | 
+|======================
+
+Config File Settings
+~~~~~~~~~~~~~~~~~~~~
+
+Settings in megatest.config
 
 Disk Space Checks
-~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^
 
 Some parameters you can put in the [setup] section of megatest.config:
 
@@ -22,17 +43,17 @@ free-space-script check-space.sh
 -------------------
 
 Trim trailing spaces
-~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^
 
 ------------------
 [configf:settings trim-trailing-spaces yes]
 ------------------
 
 Job Submission Control
-~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^
 
 Submit jobs to Host Types based on Test Name
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+++++++++++++++++++++++++++++++++++++++++++++
 
 .In megatest.config
 ------------------------
@@ -52,7 +73,7 @@ flexi-launcher yes
 ------------------------
 
 host-types
-^^^^^^^^^^
+++++++++++
 
 List of host types and the commandline to run a job on that host type.
 
@@ -62,14 +83,15 @@ general nbfake
 ------------
 
 launchers
-^^^^^^^^^
++++++++++
+
 .test/itempath => host-type
 ------------
 runfirst/sum% remote
 ------------
 
 Miscellaneous Setup Items
-~~~~~~~~~~~~~~~~~~~~~~~~~
++++++++++++++++++++++++++
 
 Attempt to rerun tests in "STUCK/DEAD", "n/a", "ZERO_ITEMS" states.
 
@@ -80,7 +102,7 @@ reruns 5
 ------------------
 
 Run time limit
-^^^^^^^^^^^^^^
+++++++++++++++
 
 -----------------
 [setup]
@@ -89,7 +111,7 @@ runtimelim 1h 2m 3s
 -----------------
 
 Tests browser view
-^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~
 
 The tests browser (see the Run Control tab on the dashboard) has two views for displaying the tests. 
 
@@ -103,6 +125,17 @@ well in that mode then use "nodot" to turn it off.
 [setup]
 nodot
 -----------------
+
+Dashboard settings
+~~~~~~~~~~~~~~~~~~
+
+.Runs tab buttons, font and size
+------------------
+[dashboard]
+btn-height x14
+btn-fontsz 10
+cell-width 60
+------------------
 
 Database settings
 ~~~~~~~~~~~~~~~~~

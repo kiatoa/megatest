@@ -46,19 +46,35 @@
 	 (print "Full condition info:\n" (condition->list exn)))))
    (proc)))
 
+;; Need a mutex protected way to get and set values
+;; or use (define-simple-syntax ??
+;;
+(define-inline (with-mutex mtx accessor record . val)
+  (mutex-lock! mtx)
+  (let ((res (apply accessor record val)))
+    (mutex-unlock! mtx)
+    res))
+
+;; this was cached based on results from profiling but it turned out the profiling
+;; somehow went wrong - perhaps too many processes writing to it. Leaving the caching
+;; in for now but can probably take it out later.
+;;
 (define (debug:calc-verbosity vstr)
-  (cond
-   ((number? vstr) vstr)
-   ((not (string?  vstr))   1)
-   ;; ((string-match  "^\\s*$" vstr) 1)
-   (vstr           (let ((debugvals  (filter number? (map string->number (string-split vstr ",")))))
-		     (cond
-		      ((> (length debugvals) 1) debugvals)
-		      ((> (length debugvals) 0)(car debugvals))
-		      (else 1))))
-   ((args:get-arg "-v")   2)
-   ((args:get-arg "-q")    0)
-   (else                   1)))
+  (or (hash-table-ref/default *verbosity-cache* vstr #f)
+      (let ((res (cond
+                  ((number? vstr) vstr)
+                  ((not (string?  vstr))   1)
+                  ;; ((string-match  "^\\s*$" vstr) 1)
+                  (vstr           (let ((debugvals  (filter number? (map string->number (string-split vstr ",")))))
+                                    (cond
+                                     ((> (length debugvals) 1) debugvals)
+                                     ((> (length debugvals) 0)(car debugvals))
+                                     (else 1))))
+                  ((args:get-arg "-v")   2)
+                  ((args:get-arg "-q")    0)
+                  (else                   1))))
+        (hash-table-set! *verbosity-cache* vstr res)
+        res)))
 
 ;; check verbosity, #t is ok
 (define (debug:check-verbosity verbosity vstr)
