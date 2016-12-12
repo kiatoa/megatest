@@ -14,10 +14,10 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
+(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
 ;; (use zmq)
 
-(import (prefix sqlite3 sqlite3:))
+(use (prefix sqlite3 sqlite3:))
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars uri-common intarweb directory-utils)
 
@@ -52,9 +52,9 @@
 
 (define (client:setup  run-id #!key (remaining-tries 10) (failed-connects 0))
   (case (server:get-transport)
-    ((rpc) (rpc-transport:client-setup run-id)) ;;(client:setup-rpc run-id))
-    ((http)(client:setup-http run-id))
-    (else  (rpc-transport:client-setup run-id)))) ;; (client:setup-rpc run-id))))
+    ((rpc) (rpc-transport:client-setup run-id remaining-tries: remaining-tries failed-connects: failed-connects)) ;;(client:setup-rpc run-id))
+    ((http)(client:setup-http run-id remaining-tries: remaining-tries failed-connects: failed-connects))
+    (else  (rpc-transport:client-setup run-id remaining-tries: remaining-tries failed-connects: failed-connects)))) ;; (client:setup-rpc run-id))))
 
 ;; (define (client:login-no-auto-setup server-info run-id)
 ;;   (case (server:get-transport)
@@ -169,24 +169,27 @@
 		     (port      (tasks:hostinfo-get-port      server-dat))
 		     (start-res (case *transport-type*
 				  ((http)(http-transport:client-connect iface port))
-				  ((nmsg)(nmsg-transport:client-connect hostname port))))
+				  ;;((nmsg)(nmsg-transport:client-connect hostname port))
+                                  ))
 		     (ping-res  (case *transport-type* 
-				  ((http)(rmt:login-no-auto-client-setup start-res run-id))
-				  ((nmsg)(let ((logininfo (rmt:login-no-auto-client-setup start-res run-id)))
- 					   (if logininfo
- 					       (car (vector-ref logininfo 1))
- 					       #f))))))
+				  ((http)(rmt:login-no-auto-client-setup start-res))
+				  ;; ((nmsg)(let ((logininfo (rmt:login-no-auto-client-setup start-res run-id)))
+ 				  ;;          (if logininfo
+ 				  ;;              (car (vector-ref logininfo 1))
+ 				  ;;              #f)))
+                                  
+                                  )))
 		(if (and start-res
 			 ping-res)
 		    (begin
-		      (hash-table-set! *runremote* run-id start-res)
+		      (remote-conndat-set! *runremote* start-res) ;; (hash-table-set! *runremote* run-id start-res)
 		      (debug:print-info 2 *default-log-port* "connected to " (http-transport:server-dat-make-url start-res))
 		      start-res)
 		    (begin    ;; login failed but have a server record, clean out the record and try again
 		      (debug:print-info 0 *default-log-port* "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
 		      (case *transport-type* 
 			((http)(http-transport:close-connections run-id)))
-		      (hash-table-delete! *runremote* run-id)
+		      (remote-conndat-set! *runremote* #f)  ;; (hash-table-delete! *runremote* run-id)
 		      (tasks:kill-server-run-id run-id)
 		      (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat)
 							   run-id 

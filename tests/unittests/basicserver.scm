@@ -12,15 +12,79 @@
 (test "setup for run" #t (begin (launch:setup)
  				(string? (getenv "MT_RUN_AREA_HOME"))))
 
-;; NON Server tests go here
+(test #f #t (and (server:kind-run *toppath*) #t))
 
-(test #f #f (db:dbdat-get-path *db*))
-(test #f #f (db:get-run-name-from-id *db* run-id))
-;; (test #f '("SYSTEM" "RELEASE") (rmt:get-keys))
 
-;; (exit)
+(define user    (current-user-name))
+(define runname "mytestrun")
+(define keys    (rmt:get-keys))
+(define runinfo #f)
+(define keyvals '(("SYSTEM" "abc")("RELEASE" "def")))
+(define header  (list "SYSTEM" "RELEASE" "id" "runname" "state" "status" "owner" "event_time"))
 
-;; Server tests go here 
+;; Setup
+;;
+;; (test #f #f  (not (client:setup run-id)))
+;; (test #f #f  (not (hash-table-ref/default *runremote* run-id #f)))
+
+;; Login
+;;
+(test #f'(#t "successful login")
+      (rmt:login run-id))
+
+;; Keys
+;;
+(test #f '("SYSTEM" "RELEASE")  (rmt:get-keys))
+
+;; No data in db
+;;
+(test #f '() (rmt:get-all-run-ids))
+(test #f #f  (rmt:get-run-name-from-id run-id))
+(test #f 
+      (vector
+       header
+       (vector #f #f #f #f))
+      (rmt:get-run-info run-id))
+
+;; Insert data into db
+;;
+(test #f 1 (rmt:register-run keyvals runname "new" "n/a" user))
+;; (test #f #f (rmt:get-runs-by-patt keys runname))
+(test #f #t (rmt:general-call 'register-test run-id run-id "test-one" ""))
+(define test-one-id #f)
+(test #f 1  (let ((test-id (rmt:get-test-id run-id "test-one" "")))
+	      (set! test-one-id test-id)
+	      test-id))
+(define test-one-rec #f)
+(test #f "test-one" (let ((test-rec (rmt:get-test-info-by-id run-id test-one-id)))
+		      (set! test-one-rec test-rec)
+		      (vector-ref test-rec 2)))
+
+;; With data in db
+;;
+(print "Using runame=" runname)
+(test #f '(1)    (rmt:get-all-run-ids))
+(test #f runname (rmt:get-run-name-from-id run-id))
+(test #f 
+      runname
+      (let ((run-info (rmt:get-run-info run-id)))
+	(db:get-value-by-header (db:get-rows run-info)
+				(db:get-header run-info)
+				"runname")))
+
+;; test killing server
+;;
+(for-each
+ (lambda (run-id)
+   (test #f #t (and (tasks:kill-server-run-id run-id) #t))
+   (test #f #f (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)))
+ (list 0 1))
+
+;; Tests to assess reading/writing while servers are starting/stopping
+;; NO LONGER APPLICABLE
+
+;; Server tests go here
+(define (server-tests-dont-run-right-now)
 (for-each
  (lambda (run-id)
    (test #f #f (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id))
@@ -53,78 +117,10 @@
 		       (loop (- remtries 1)(tasks:get-server (db:delay-if-busy (tasks:open-db)) run-id)))
 		     res)))))
    )
- (list 0 1))
+ (list 0 1)))
 
-(define user    (current-user-name))
-(define runname "mytestrun")
-(define keys    (rmt:get-keys))
-(define runinfo #f)
-(define keyvals '(("SYSTEM" "abc")("RELEASE" "def")))
-(define header  (list "SYSTEM" "RELEASE" "id" "runname" "state" "status" "owner" "event_time"))
-
-;; Setup
-;;
-(test #f #f  (not (client:setup run-id)))
-(test #f #f  (not (hash-table-ref/default *runremote* run-id #f)))
-
-;; Login
-;;
-(test #f'(#t "successful login")
-      (rmt:login-no-auto-client-setup (hash-table-ref/default *runremote* run-id #f) run-id))
-(test #f '(#t "successful login")
-      (rmt:login run-id))
-
-;; Keys
-;;
-(test #f '("SYSTEM" "RELEASE")  (rmt:get-keys))
-
-;; No data in db
-;;
-(test #f '() (rmt:get-all-run-ids))
-(test #f #f  (rmt:get-run-name-from-id run-id))
-(test #f 
-      (vector
-       header
-       (vector #f #f #f #f))
-      (rmt:get-run-info run-id))
-
-;; Insert data into db
-;;
-(test #f 1 (rmt:register-run keyvals runname "new" "n/a" user))
-;; (test #f #f (rmt:get-runs-by-patt keys runname))
-(test #f #t (rmt:general-call 'register-test run-id run-id "test-one" ""))
-(define test-one-id #f)
-(test #f 30001  (let ((test-id (rmt:get-test-id run-id "test-one" "")))
-	      (set! test-one-id test-id)
-	      test-id))
-(define test-one-rec #f)
-(test #f "test-one" (let ((test-rec (rmt:get-test-info-by-id run-id test-one-id)))
-		      (set! test-one-rec test-rec)
-		      (vector-ref test-rec 2)))
-
-;; With data in db
-;;
-(print "Using runame=" runname)
-(test #f '(1)    (rmt:get-all-run-ids))
-(test #f runname (rmt:get-run-name-from-id run-id))
-(test #f 
-      runname
-      (let ((run-info (rmt:get-run-info run-id)))
-	(db:get-value-by-header (db:get-rows run-info)
-				(db:get-header run-info)
-				"runname")))
-
-(for-each (lambda (run-id)
-;; test killing server
-;;
-(tasks:kill-server-run-id run-id)
-
-(test #f #f (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id))
-)
-(list 0 1))
-
-;; Tests to assess reading/writing while servers are starting/stopping
 (define start-time (current-seconds))
+(define (reading-writing-while-server-starting-stopping-dont-run-now)
 (let loop ((test-state 'start))
   (let* ((server-dats (tasks:get-server-records (db:delay-if-busy (tasks:open-db)) run-id))
 	 (first-dat   (if (not (null? server-dats))
@@ -151,7 +147,7 @@
 	 (else (print "Don't know what to do if get here"))))
       ((server-shutdown)
        (loop test-state)))))
-
+)
 ;;======================================================================
 ;; END OF TESTS
 ;;======================================================================

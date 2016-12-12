@@ -224,7 +224,7 @@
 	     (> run-count config-reruns))
 	(set! run-count config-reruns))
     
-    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
+    ;; (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 
     (let ((sighand (lambda (signum)
 		     ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
@@ -725,7 +725,7 @@
 					  (runs:calc-not-completed prereqs-not-met)))
 	 (loop-list               (list hed tal reg reruns))
 	 ;; configure the load runner
-	 (numcpus                 (common:get-num-cpus))
+	 (numcpus                 (common:get-num-cpus #f))
 	 (maxload                 (string->number (or (configf:lookup *configdat* "jobtools" "maxload") "3")))
 	 (waitdelay               (string->number (or (configf:lookup *configdat* "jobtools" "waitdelay") "60"))))
     (debug:print-info 4 *default-log-port* "have-resources: " have-resources " prereqs-not-met: (" 
@@ -930,7 +930,7 @@
 		      (hash-table-set! test-registry hed 'removed)
 		      (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "TEN_STRIKES" #f)
 		      ;; I'm unclear on if this roll up is needed - it may be the root cause of the "all set to FAIL" bug.
-		      (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "FAIL") ;; treat as FAIL
+		      (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "FAIL" #f) ;; treat as FAIL
 		      (list (if (null? tal)(car newtal)(car tal))
 			    tal
 			    reg
@@ -1326,7 +1326,7 @@
     (thread-sleep! 5) ;; I think there is a race condition here. Let states/statuses settle
     (let wait-loop ((num-running      (rmt:get-count-tests-running-for-run-id run-id))
 		    (prev-num-running 0))
-      ;; (debug:print 0 *default-log-port* "num-running=" num-running ", prev-num-running=" prev-num-running)
+      ;; (BB> "num-running=" num-running ", prev-num-running=" prev-num-running)
       (if (and (or (args:get-arg "-run-wait")
 		   (equal? (configf:lookup *configdat* "setup" "run-wait") "yes"))
 	       (> num-running 0))
@@ -1546,7 +1546,7 @@
 			  (running-tests   (rmt:get-tests-for-runs-mindata #f full-test-name '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED") '() #f))
 			  (completed-tests (rmt:get-tests-for-runs-mindata #f full-test-name '("COMPLETED" "INCOMPLETE") '("PASS" "FAIL" "ABORT") #f)) ;; ironically INCOMPLETE is same as COMPLETED in this contex
 			  (last-run-times  (map db:mintest-get-event_time completed-tests))
-			  (time-since-last (- (current-seconds) (if (null? last-run-times) 0 (apply max last-run-times)))))
+			  (time-since-last (- (current-seconds) (if (null? last-run-times) 0 (common:max last-run-times)))))
 		     (if (or (not (null? running-tests)) ;; have to skip if test is running
 			     (> numseconds time-since-last))
 			 (set! skip-test (conc "Skipping due to previous test run less than " (configf:lookup test-conf "skip" "rundelay") " ago"))))))
@@ -1671,7 +1671,7 @@
 	       (begin
 		 (case action
 		   ((remove-runs)
-		    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
+		    ;; (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 		    ;; seek and kill in flight -runtests with % as testpatt here
 		    ;; (if (equal? testpatt "%")
 		    (tasks:kill-runner target run-name testpatt)

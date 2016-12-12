@@ -40,28 +40,30 @@
 ;; start_server? 
 ;;
 (define (rpc-transport:launch run-id)
-  (set! *run-id*   run-id)
-  (if (args:get-arg "-daemonize")
-      (daemon:ize))
-  (if (server:check-if-running run-id)
-      (begin
-	(debug:print 0 *default-log-port* "INFO: Server for run-id " run-id " already running")
-	(exit 0)))
-  (let loop ((server-id (open-run-close tasks:server-lock-slot tasks:open-db run-id))
-	     (remtries  4))
-    (if (not server-id)
-	(if (> remtries 0)
-	    (begin
-	      (thread-sleep! 2)
-	      (loop (open-run-close tasks:server-lock-slot tasks:open-db run-id)
-		    (- remtries 1)))
-	    (begin
-	      ;; since we didn't get the server lock we are going to clean up and bail out
-	      (debug:print-info 2 *default-log-port* "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
-	      (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db " rpc-transport:launch")))
-	(begin
-	  (rpc-transport:run (if (args:get-arg "-server")(args:get-arg "-server") "-") run-id server-id)
-	  (exit)))))
+  (let* ((tdbdat (tasks:open-db)))
+    (BB> "rpc-transport:launch fired for run-id="run-id)
+    (set! *run-id*   run-id)
+    (if (args:get-arg "-daemonize")
+        (daemon:ize))
+    (if (server:check-if-running run-id)
+        (begin
+          (debug:print 0 *default-log-port* "INFO: Server for run-id " run-id " already running")
+          (exit 0)))
+    (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id))
+               (remtries  4))
+      (if (not server-id)
+          (if (> remtries 0)
+              (begin
+                (thread-sleep! 2)
+                (loop (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id)
+                      (- remtries 1)))
+              (begin
+                ;; since we didn't get the server lock we are going to clean up and bail out
+                (debug:print-info 2 *default-log-port* "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
+                (tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat) " rpc-transport:launch")))
+          (begin
+            (rpc-transport:run (if (args:get-arg "-server")(args:get-arg "-server") "-") run-id server-id)
+            (exit))))))
 
 (define (rpc-transport:run hostn run-id server-id)
   (debug:print 2 *default-log-port* "Attempting to start the rpc server ...")
@@ -96,7 +98,7 @@
 	 (host:port       (conc (if ipaddrstr ipaddrstr hostname) ":" portnum))
 	 (tdb             (tasks:open-db)))
     (thread-start! th1)
-    (set! db *inmemdb*)
+    (set! db *dbstruct-db*)
     (open-run-close tasks:server-set-interface-port 
 		    tasks:open-db 
 		    server-id 
@@ -116,16 +118,16 @@
 
     (set! *rpc:listener* rpc:listener)
     (tasks:server-set-state! tdb server-id "running")
-    (set! *inmemdb*  (db:setup run-id))
+    (set! *dbstruct-db*  (db:setup run-id))
     ;; if none running or if > 20 seconds since 
     ;; server last used then start shutdown
     (let loop ((count 0))
       (thread-sleep! 5) ;; no need to do this very often
       (let ((numrunning -1)) ;; (db:get-count-tests-running db)))
 	(if (or (> numrunning 0)
-		(> (+ *last-db-access* 60)(current-seconds)))
+		(> (+ *db-last-access* 60)(current-seconds)))
 	    (begin
-	      (debug:print-info 0 *default-log-port* "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
+	      (debug:print-info 0 *default-log-port* "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *db-last-access*))
 	      (loop (+ 1 count)))
 	    (begin
 	      (debug:print-info 0 *default-log-port* "Starting to shutdown the server side")

@@ -26,6 +26,7 @@
 (include "common_records.scm")
 (include "db_records.scm")
 (include "key_records.scm")
+(include "run_records.scm")
 
 ;; yes, this is non-ideal 
 (define dashboard:update-summary-tab #f)
@@ -217,7 +218,7 @@
 				    (let ((rownums (hash-table-values testname-to-row)))
 				      (set! rownum (if (null? rownums)
 						       1
-						       (+ 1 (apply max rownums))))
+						       (+ 1 (common:max rownums))))
 				      (hash-table-set! testname-to-row fullname rownum)
 				      ;; create the label
 				      (set! changed (dcommon:modifiy-if-different 
@@ -261,6 +262,41 @@
     ;; (debug:print 2 *default-log-port* "run-changes: " run-changes)
     ;; (debug:print 2 *default-log-port* "test-changes: " test-changes)
     (list run-changes all-test-changes)))
+
+(define (dcommon:runsdat-get-col-num dat target runname force-set)
+  (let* ((runs-index (dboard:runsdat-runs-index dat))
+	 (col-name   (conc target "/" runname))
+	 (res        (hash-table-ref/default runs-index col-name #f)))
+    (if res
+	res
+	(if force-set
+	    (let ((max-col-num (+ 1 (common:max (cons-1 (hash-table-values runs-index))))))
+	      (hash-table-set! runs-index col-name max-col-num)
+	      max-col-num)))))
+
+(define (dcommon:runsdat-get-row-num dat testname itempath force-set)
+  (let* ((tests-index (dboard:runsdat-runs-index dat))
+	 (row-name    (conc testname "/" itempath))
+	 (res         (hash-table-ref/default runs-index row-name #f)))
+    (if res
+	res
+	(if force-set
+	    (let ((max-row-num (+ 1 (common:max (cons -1 (hash-table-values tests-index))))))
+	      (hash-table-set! runs-index row-name max-row-num)
+	      max-row-num)))))
+
+(define (dcommon:rundat-copy-tests-to-by-name rundat)
+  (let ((src-ht (dboard:rundat-tests rundat))
+	(trg-ht (dboard:rundat-tests-by-name rundat)))
+    (if (and (hash-table? src-ht)(hash-table? trg-ht))
+	(begin
+	  (hash-table-clear! trg-ht)
+	  (for-each
+	   (lambda (testdat)
+	     (hash-table-set! trg-ht (test:test-get-fullname testdat) testdat))
+	   (hash-table-values src-ht)))
+	(debug:print 0 *default-log-port* "WARNING: src-ht " src-ht " trg-ht " trg-ht))))
+  
 
 ;;======================================================================
 ;; TESTS DATA
@@ -509,14 +545,14 @@
   (let* ((stats-matrix (iup:matrix expand: "YES"))
 	 (changed      #f)
 	 (stats-updater (lambda ()
-			 (if (dashboard:database-changed? commondat tabdat)
+			 (if (dashboard:database-changed? commondat tabdat context-key: 'run-stats)
 			     (let* ((run-stats    (rmt:get-run-stats))
 				    (indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
 				    (row-indices  (car indices))
 				    (col-indices  (cadr indices))
-				    (max-row      (if (null? row-indices) 1 (apply max (map cadr row-indices))))
+				    (max-row      (if (null? row-indices) 1 (common:max (map cadr row-indices))))
 				    (max-col      (if (null? col-indices) 1 
-						      (apply max (map cadr col-indices))))
+						      (common:max (map cadr col-indices))))
 				    (max-visible  (max (- (dboard:tabdat-num-tests tabdat) 15) 3))
 				    (max-col-vis  (if (> max-col 10) 10 max-col))
 				    (numrows      1)
@@ -562,8 +598,11 @@
 						   (set! changed #t)
 						   (iup:attribute-set! stats-matrix key value)))))
 					 run-stats)
-			       (if changed (iup:attribute-set! stats-matrix "REDRAW" "ALL")))))))
-    (stats-updater)
+			       (if changed (iup:attribute-set! stats-matrix "REDRAW" "ALL")))
+                             ))))
+    ;; (dboard:commondat-please-update-set! commondat #t) ;; force redraw on first pass 
+    ;; (mark-for-update tabdat)
+    ;; (stats-updater)
     (dboard:commondat-add-updater commondat stats-updater tab-num: tab-num)
     ;; (set! dashboard:update-summary-tab updater)
     (iup:attribute-set! stats-matrix "WIDTHDEF" "40")
@@ -1001,17 +1040,17 @@
       tb)
     (iup:button "Execute" #:size "50x"
 		#:action (lambda (obj)
-			   (let ((cmd (conc "xterm -geometry 180x20 -e \""
-					    (iup:attribute (dboard:tabdat-command-tb data) "VALUE")
-					    ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-			     (system cmd)))))))
+			   ;; (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
+                           (common:run-a-command (iup:attribute (dboard:tabdat-command-tb data) "VALUE")))))))
+    ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+    ;; (system cmd)))))))
 
 (define (dcommon:command-action-selector commondat tabdat #!key (tab-num #f))
   (iup:frame
    #:title "Set the action to take"
    (iup:hbox
     ;; (iup:label "Command to run" #:expand "HORIZONTAL" #:size "70x" #:alignment "LEFT:ACENTER")
-    (let* ((cmds-list '("run" "remove-runs" "set-state-status" "lock-runs" "unlock-runs"))
+    (let* ((cmds-list '("run" "remove-runs")) ;;  "set-state-status" "lock-runs" "unlock-runs"))
 	   (lb         (iup:listbox #:expand "HORIZONTAL"
 				    #:dropdown "YES"
 				    #:action (lambda (obj val index lbstate)
@@ -1048,20 +1087,21 @@
 					       (dashboard:update-run-command tabdat))))
 				       "command-runname-selector lb action"))))
 	  (refresh-runs-list (lambda ()
-			       (if (dashboard:database-changed? commondat tabdat)
-				   (let* ((target        (dboard:tabdat-target-string tabdat))
-					  (runs-for-targ (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" target #f #f #f 0))
+			       (if (dashboard:database-changed? commondat tabdat context-key: 'runname-selector-runs-list)
+				   (let* (;; (target        (dboard:tabdat-target-string tabdat))
+					  (runs-for-targ (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f 0))
 					  (runs-header   (vector-ref runs-for-targ 0))
 					  (runs-dat      (vector-ref runs-for-targ 1))
 					  (run-names     (cons default-run-name 
 							       (map (lambda (x)
 								      (db:get-value-by-header x runs-header "runname"))
 								    runs-dat))))
+				     ;; (print "DEBUGINFO: run-names=" run-names)
 				     ;; (iup:attribute-set! lb "REMOVEITEM" "ALL")
 				     (iuplistbox-fill-list lb run-names selected-item: default-run-name))))))
      ;; (dboard:tabdat-updater-for-runs-set! tabdat refresh-runs-list)
      (dboard:commondat-add-updater commondat refresh-runs-list tab-num: tab-num)
-     (refresh-runs-list)
+     ;; (refresh-runs-list)
      (dboard:tabdat-run-name-set! tabdat default-run-name)
      (iup:hbox
       tb
@@ -1083,9 +1123,10 @@
 			   #:value (dboard:test-patt->lines
 				    (dboard:tabdat-test-patts-use tabdat))
 			   #:expand "YES"
-			   #:size "10x30"
+			   #:size "x30" ;; was 10x30
 			   #:multiline "YES")))
       (set! test-patterns-textbox tb)
+      (dboard:tabdat-test-patterns-textbox-set! tabdat tb)
       tb))
 ;; (iup:frame
 ;;  #:title "Target"
@@ -1114,7 +1155,7 @@
 	(dboard:tabdat-statuses-set! tabdat all)
 	(dashboard:update-run-command tabdat)))))))
 
-(define (dcommon:command-tests-tasks-canvas data test-records sorted-testnames tests-draw-state)
+(define (dcommon:command-tests-tasks-canvas tabdat test-records sorted-testnames tests-draw-state)
   (iup:frame
    #:title "Tests and Tasks"
    (let* ((updater #f)
@@ -1160,7 +1201,8 @@
 					    (sizey          (hash-table-ref tests-draw-state 'sizey))
 					    (xoffset        (dcommon:get-xoffset tests-draw-state #f #f))
 					    (yoffset        (dcommon:get-yoffset tests-draw-state #f #f))
-					    (new-y          (- sizey y)))
+					    (new-y          (- sizey y))
+					    (test-patterns-textbox (dboard:tabdat-test-patterns-textbox tabdat)))
 				       ;; (print "xoffset=" xoffset ", yoffset=" yoffset)
 				       ;; (print "\tx\ty\tllx\tlly\turx\tury")
 				       (for-each (lambda (test-name)
@@ -1176,17 +1218,21 @@
 							      (>= new-y lly)
 							      (<= x urx)
 							      (<= new-y ury))
-							 (let ((patterns (string-split (iup:attribute test-patterns-textbox "VALUE"))))
+							 (let* ((box-patterns (string-split (iup:attribute test-patterns-textbox "VALUE")))
+                                                                (test-patts   (string-split (or (dboard:tabdat-test-patts tabdat)
+                                                                                                "")
+                                                                                            ","))
+                                                                (patterns     (delete-duplicates (append box-patterns test-patts)))) 
 							   (let* ((selected     (not (member test-name patterns)))
 								  (newpatt-list (if selected
 										    (cons test-name patterns)
 										    (delete test-name patterns)))
 								  (newpatt      (string-intersperse newpatt-list "\n")))
+							     (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
 							     (iup:attribute-set! obj "REDRAW" "ALL")
 							     (hash-table-set! selected-tests test-name selected)
-							     (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
-							     (dboard:tabdat-test-patts-set!-use data (dboard:lines->test-patt newpatt))
-							     (dashboard:update-run-command data)
+							     (dboard:tabdat-test-patts-set!-use tabdat (dboard:lines->test-patt newpatt))
+							     (dashboard:update-run-command tabdat)
 							     (if updater (updater last-xadj last-yadj)))))))
 						 (hash-table-keys tests-info)))))))
      canvas-obj)))
