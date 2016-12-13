@@ -1137,7 +1137,7 @@
       ;; the following call handles waiver propogation. cannot yet condense into roll-up-pass-fail
       (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
       (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "LAUNCHED" #f)
-      (pp (hash-table->alist tconfig))
+      ;; (pp (hash-table->alist tconfig))
       (set! diskpath (get-best-disk *configdat* tconfig))
       (if diskpath
 	  (let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
