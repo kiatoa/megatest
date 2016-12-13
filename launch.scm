@@ -863,7 +863,7 @@
 	      (begin
 		(if (common:low-noise-print 20 "No valid disks or no disk with enough space")
 		    (debug:print-error 0 *default-log-port* "No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists and has enough space!\n    You can change minspace in the [setup] section of megatest.config. Current setting is: " minspace))
-		(exit 1)))))))
+		(exit 1))))))) ;; TODO - move the exit to the calling location and return #f
 
 ;; Desired directory structure:
 ;;
@@ -1066,15 +1066,20 @@
     (set! *last-launch* (current-seconds))
     (change-directory *toppath*)
     (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute", *maybe* - the longer they are set the longer each launch takes (must be non-overlapping with the vars)
-     (list
-      (list "MT_RUN_AREA_HOME" *toppath*)
-      (list "MT_TEST_NAME" test-name)
-      (list "MT_RUNNAME"   runname)
-      (list "MT_ITEMPATH"  item-path)
-      ))
-    (let* ((tregistry       (tests:get-all))
+     (append
+      (list
+       (list "MT_RUN_AREA_HOME" *toppath*)
+       (list "MT_TEST_NAME" test-name)
+       (list "MT_RUNNAME"   runname)
+       (list "MT_ITEMPATH"  item-path)
+       )
+      itemdat))
+    (let* ((tregistry       (tests:get-all)) ;; third param (below) is system-allowed
+           ;; for tconfig, why do we allow fallback to test-conf?
 	   (tconfig         (or (tests:get-testconfig test-name tregistry #t force-create: #t)
-				test-conf)) ;; force re-read now that all vars are set
+				(begin
+                                  (debug:print 0 *default-log-port* "WARNING: falling back to pre-calculated testconfig. This is likely not desired.")
+                                  test-conf))) ;; force re-read now that all vars are set
 	   (useshell        (let ((ush (config-lookup *configdat* "jobtools"     "useshell")))
 			      (if ush 
 				  (if (equal? ush "no") ;; must use "no" to NOT use shell
@@ -1132,6 +1137,7 @@
       ;; the following call handles waiver propogation. cannot yet condense into roll-up-pass-fail
       (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
       (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "LAUNCHED" #f)
+      (pp (hash-table->alist tconfig))
       (set! diskpath (get-best-disk *configdat* tconfig))
       (if diskpath
 	  (let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
