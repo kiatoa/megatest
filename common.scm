@@ -1145,44 +1145,47 @@
 
 ;; ideally put all this info into the db, no need to preserve it across moving homehost
 ;;
-(define (common:get-least-loaded-host hosts)
-  (if (null? hosts)
-      #f
-      ;;
-      ;; stategy:
-      ;;    sort by last-used and normalized-load
-      ;;    if last-updated > 15 seconds then re-update
-      ;;    take the host with the lowest load with the lowest last-used (i.e. not used for longest time)
-      ;;
-      (let ((best-host #f)
-	    (curr-time (current-seconds)))
-	(for-each
-	 (lambda (hostname)
-	   (let* ((rec       (let ((h (hash-table-ref/default *host-loads* hostname #f)))
-			       (if h
-				   h
-				   (let ((h (make-host)))
-				     (hash-table-set! *host-loads* hostname h)
-				     h))))
-		  ;; if host hasn't been pinged in 15 sec update it's data
-		  (ping-good (if (< (- curr-time (host-last-update rec)) 15)
-				 (host-reachable rec)
-				 (or (host-reachable rec)
-				     (begin
-				       (host-reachable-set! rec (common:unix-ping hostname))
-				       (host-last-update-set! rec curr-time)
-				       (host-last-cpuload-set! rec (common:get-normalized-cpu-load hostname))
-				       (host-reachable rec))))))
-	     (cond
-	      ((not best-host)
-	       (set! best-host hostname))
-	      ((and ping-good
-		    (< (alist-ref 'adj-core-load (host-last-cpuload rec))
-		       (alist-ref 'adj-core-load
-				  (host-last-cpuload (hash-table-ref *host-loads* best-host)))))
-	       (set! best-host rec)))))
-	 hosts)
-	best-host)))
+(define (common:get-least-loaded-host hosts-raw)
+  (let* ((hosts (filter (lambda (x)
+                          (string-match (regexp "^\\S+$") x))
+                        hosts-raw)))
+    (if (null? hosts)
+        #f
+        ;;
+        ;; stategy:
+        ;;    sort by last-used and normalized-load
+        ;;    if last-updated > 15 seconds then re-update
+        ;;    take the host with the lowest load with the lowest last-used (i.e. not used for longest time)
+        ;;
+        (let ((best-host #f)
+              (curr-time (current-seconds)))
+          (for-each
+           (lambda (hostname)
+             (let* ((rec       (let ((h (hash-table-ref/default *host-loads* hostname #f)))
+                                 (if h
+                                     h
+                                     (let ((h (make-host)))
+                                       (hash-table-set! *host-loads* hostname h)
+                                       h))))
+                    ;; if host hasn't been pinged in 15 sec update it's data
+                    (ping-good (if (< (- curr-time (host-last-update rec)) 15)
+                                   (host-reachable rec)
+                                   (or (host-reachable rec)
+                                       (begin
+                                         (host-reachable-set! rec (common:unix-ping hostname))
+                                         (host-last-update-set! rec curr-time)
+                                         (host-last-cpuload-set! rec (common:get-normalized-cpu-load hostname))
+                                         (host-reachable rec))))))
+               (cond
+                ((not best-host)
+                 (set! best-host hostname))
+                ((and ping-good
+                      (< (alist-ref 'adj-core-load (host-last-cpuload rec))
+                         (alist-ref 'adj-core-load
+                                    (host-last-cpuload (hash-table-ref *host-loads* best-host)))))
+                 (set! best-host hostname)))))
+           hosts)
+          best-host))))
 
 (define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
   (let* ((loadavg (common:get-cpu-load remote-host))
