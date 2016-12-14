@@ -26,6 +26,30 @@ Config File Settings
 
 Settings in megatest.config
 
+Config File Additional Features
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Including output from a script as if it was inline to the config file:
+
+-------------------------
+[scriptinc myscript.sh]
+-------------------------
+
+If the script outputs:
+
+-------------------------
+[items]
+A a b c
+B d e f
+-------------------------
+
+Then the config file would effectively appear to contain an items section
+exactly like the output from the script. This is extremely useful when
+dynamically creating items, itemstables and other config structures. You can
+see the expansion of the call by looking in the cached files (look in your
+linktree for megatest.config and runconfigs.config cache files and in your
+test run areas for the expanded and cached testconfig).
+
 Disk Space Checks
 ^^^^^^^^^^^^^^^^^
 
