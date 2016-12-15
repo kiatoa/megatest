@@ -1499,22 +1499,29 @@
       (if (> (length all-ids) 0)
 	  (begin
 	    (debug:print 0 *default-log-port* "WARNING: Marking test(s); " (string-intersperse (map conc all-ids) ", ") " as INCOMPLETE")
-	    (sqlite3:execute 
-	     db
-	     (conc "UPDATE tests SET state='INCOMPLETE' WHERE run_id=? AND id IN (" 
-		   (string-intersperse (map conc all-ids) ",")
-		   ");")
-             run-id))))
+            (for-each
+             (lambda (test-id)
+               (db:test-set-status-state dbstruct run-id test-id "COMPLETE" "DEAD" "Test failed to complete"))
+             all-ids))))))
 
-    ;; Now do rollups for the toplevel tests
-    ;;
-    ;; (db:delay-if-busy dbdat)
-    (for-each
-     (lambda (toptest)
-       (let ((test-name (list-ref toptest 3)))
-;;	     (run-id    (list-ref toptest 5)))
-	 (db:top-test-set-per-pf-counts dbstruct run-id test-name)))
-     toplevels)))
+;; ALL REPLACED BY THE BLOCK ABOVE
+;;
+;; 	    (sqlite3:execute 
+;; 	     db
+;; 	     (conc "UPDATE tests SET state='INCOMPLETE' WHERE run_id=? AND id IN (" 
+;; 		   (string-intersperse (map conc all-ids) ",")
+;; 		   ");")
+;;              run-id))))
+;; 
+;;     ;; Now do rollups for the toplevel tests
+;;     ;;
+;;     ;; (db:delay-if-busy dbdat)
+;;     (for-each
+;;      (lambda (toptest)
+;;        (let ((test-name (list-ref toptest 3)))
+;; ;;	     (run-id    (list-ref toptest 5)))
+;; 	 (db:top-test-set-per-pf-counts dbstruct run-id test-name)))
+;;      toplevels)))
 
 ;; BUG: Probably broken - does not explicitly use run-id in the query
 ;;
