@@ -8,13 +8,14 @@
 ;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 ;;  PURPOSE.
 ;;======================================================================
-
+;;
 (use format typed-records) ;; RADT => purpose of json format??
 
 (declare (unit rmt))
 (declare (uses api))
 (declare (uses tdb))
 (declare (uses http-transport))
+(declare (uses rpc-transport))
 ;;(declare (uses nmsg-transport))
 (include "common_records.scm")
 
@@ -135,7 +136,12 @@
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  6  hh-dat: " (remote-hh-dat *runremote*) " conndat: " (remote-conndat *runremote*))
       (mutex-unlock! *rmt-mutex*)
       (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
-      (remote-conndat-set! *runremote* (rmt:get-connection-info 0)) ;; calls client:setup which calls client:setup-http
+      (let* ((cinfo (rmt:get-connection-info 0))
+             (transport (if cinfo
+                            (vector-ref cinfo 6)
+                            (server:get-transport)))) ;; TODO: replace with tasks:server-dat-accessor-?? for transport
+        (remote-conndat-set! *runremote* cinfo) ;; calls client:setup which calls client:setup-http
+        (remote-transport-set! *runremote* transport))
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; all set up if get this far, dispatch the query
      ((cdr (remote-hh-dat *runremote*)) ;; we are on homehost
@@ -152,8 +158,12 @@
                                   (http-transport:client-api-send-receive 0 conninfo cmd params)
                                   ((commfail)(vector #f "communications fail"))
                                   ((exn)(vector #f "other fail" (print-call-chain)))))
+                         ((rpc) (condition-case ;; handling here has caused a lot of problems. However it is needed to deal with attemtped communication to servers that have gone away
+                                  (rpc-transport:client-api-send-receive 0 conninfo cmd params)
+                                  ((commfail)(vector #f "communications fail"))
+                                  ((exn)(vector #f "other fail" (print-call-chain)))))
 			 (else
-			  (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " not supported")
+			  (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " not supported (1)")
 			  (exit))))
 	     (success  (if (vector? dat) (vector-ref dat 0) #f))
 	     (res      (if (vector? dat) (vector-ref dat 1) #f)))
@@ -161,7 +171,7 @@
         (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat)
 	(if success
 	    (case (remote-transport *runremote*)
-	      ((http) res)
+	      ((http rpc) res)
 	      (else
 	       (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " is unknown")
 	       (exit 1)))
@@ -265,10 +275,18 @@
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
+         (transport (or (remote-transport *runremote*) (server:get-transport)))
 	 (res  	   (handle-exceptions
 		    exn
 		    #f
-		    (http-transport:client-api-send-receive run-id connection-info cmd params))))
+                    (case transport
+                      ((http) (http-transport:client-api-send-receive run-id connection-info cmd params))
+                      ((rpc) (rpc-transport:client-api-send-receive run-id connection-info cmd params))
+                      (else
+			  (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " not supported (2)")
+			  (exit))
+
+                    ))))
     (if (and res (vector-ref res 0))
 	(vector-ref res 1) ;;; YES!! THIS IS CORRECT!! CHANGE IT HERE, THEN CHANGE rmt:send-receive ALSO!!!
 	#f)))
@@ -312,7 +330,12 @@
 ;;
 (define (rmt:login-no-auto-client-setup connection-info)
   (case *transport-type* ;; run-id of 0 is just a placeholder
-    ((http)(rmt:send-receive-no-auto-client-setup connection-info 'login 0 (list *toppath* megatest-version *my-client-signature*)))
+    ((http rpc)(rmt:send-receive-no-auto-client-setup connection-info 'login 0 (list *toppath* megatest-version *my-client-signature*)))
+    (else
+     (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " not supported (3)")
+     (exit))
+
+    
     ;;((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info 'login (list *toppath* megatest-version run-id *my-client-signature*)))
     ))
 

@@ -20,6 +20,8 @@
 (declare (unit common))
 
 (include "common_records.scm")
+(include "thunk-utils.scm")
+
 
 ;; (require-library margs)
 ;; (include "margs.scm")
@@ -62,9 +64,20 @@
     (let ((cxt-mutex (cxt-mutex cxt)))
       (mutex-unlock! *context-mutex*)
       (mutex-lock! cxt-mutex)
-      (let ((res (proc cxt)))
-        (mutex-unlock! cxt-mutex)
-        res))))
+      ;; here we guard proc with exception handler so
+      ;; no matter how proc succeeds or fails,
+      ;; the cxt-mutex will be unlocked afterward.
+      (let* ((EXCEPTION-SYMBOL (gensym)) ;; use a generated symbol
+             (guarded-proc               ;; to avoid collision
+              (lambda args
+                (let* ((res (condition-case
+                             (apply proc args)
+                             [x () (cons EXCEPTION-SYMBOL x)])))
+                 (mutex-unlock! cxt-mutex)
+                 (if (and (pair? res) (eq? (car res) EXCEPTION))
+                     (abort (cdr res))
+                     res)))))
+        (guarded-proc cxt)))))
         
 (define *db-keys* #f)
 
@@ -104,7 +117,18 @@
 
 ;; SERVER
 (define *my-client-signature* #f)
-(define *transport-type*    'http)             ;; override with [server] transport http|rpc|nmsg
+(define *transport-type*  #f)             ;; override with [server] transport http|rpc|nmsg
+
+(define *DEFAULT-TRANSPORT* "http")
+(define (common:set-transport-type)
+  (set! *transport-type*
+        (string->symbol
+         (or
+          (args:get-arg "-transport")
+          (configf:lookup *configdat* "server" "transport")
+          *DEFAULT-TRANSPORT*)))
+  *transport-type*)
+  
 (define *runremote*         #f)                ;; if set up for server communication this will hold <host port>
 (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))
@@ -611,6 +635,7 @@
 		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*)))))))
 
 (define (std-exit-procedure)
+  
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
 		       #f
 		       (begin
@@ -639,6 +664,15 @@
 			      (debug:print 4 *default-log-port* " ... done")
 			      )
 			    "clean exit")))
+
+      ;; let's try to clean up open sockets
+      (if *runremote*
+          (case (remote-transport *runremote*)
+            ((http) #t)
+            ((rpc)  (rpc:close-all-connections!))
+            (else
+             (debug:print-info 0 *default-log-port* "Transport "(remote-transport *runremote*)" not supported"))))
+
       (thread-start! th1)
       (thread-start! th2)
       (thread-join! th1))))
@@ -1704,14 +1738,14 @@
 ;; % nbgeneral
 ;; 
 ;; [jobtools]
-;; # if defined and not "no" flexi-launcher will bypass "launcher" unless no match.
+;; # if == "yes" flexi-launcher will bypass "launcher" unless no match.
 ;; flexi-launcher yes  
 ;; launcher nbfake
 ;;
 (define (common:get-launcher configdat testname itempath)
   (let ((fallback-launcher (configf:lookup configdat "jobtools" "launcher")))
-    (if (and (configf:lookup configdat "jobtools" "flexi-launcher") ;; overrides launcher
-	     (not (equal? (configf:lookup configdat "jobtools" "flexi-launcher") "no")))
+    (if (string-search "^yes" (configf:lookup configdat "jobtools" "flexi-launcher")) ;; overrides launcher
+	;; (not (equal? (configf:lookup configdat "jobtools" "flexi-launcher") "no")))
 	(let* ((launchers         (hash-table-ref/default configdat "launchers" '())))
 	  (if (null? launchers)
 	      fallback-launcher

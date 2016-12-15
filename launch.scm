@@ -818,6 +818,7 @@
 	      (debug:print-error 0 *default-log-port* "No " mtconfig " file found. Giving up.")
 	      (exit 2))))))
     ;; additional house keeping
+    (common:set-transport-type) ;; DEPRECATED. Please always call (server:get-transport), if it is a frequent call you can cache it.
     (let* ((linktree (or (getenv "MT_LINKTREE")
 			 (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f))))
       (if linktree

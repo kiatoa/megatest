@@ -49,15 +49,12 @@
 ;; start_server
 ;;
 (define (server:launch run-id transport-type)
-  (BB> "server:launch fired for run-id="run-id" transport-type="transport-type)
   (case transport-type
     ((http)(http-transport:launch run-id))
     ;;((nmsg)(nmsg-transport:launch run-id))
     ((rpc)  (rpc-transport:launch run-id))
     (else (debug:print-error 0 *default-log-port* "unknown server type " transport-type))))
-;;       (else   (debug:print-error 0 *default-log-port* "No known transport set, transport=" transport ", using rpc")
-;; 	      (rpc-transport:launch run-id)))))
-
+  
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
 ;;======================================================================
@@ -69,7 +66,7 @@
       (let ((ttype (string->symbol
 		    (or (args:get-arg "-transport")
 			(configf:lookup *configdat* "server" "transport")
-			"rpc"))))
+			*DEFAULT-TRANSPORT*))))
 	(set! *transport-type* ttype)
 	ttype)))
 	    
@@ -114,9 +111,11 @@
 	 (testsuite   (common:get-testsuite-name))
 	 (logfile     (conc *toppath* "/logs/server.log"))
 	 (cmdln (conc (common:get-megatest-exe)
-		      " -server " (or target-host "-") " -run-id " 0 (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
-									      (conc " -daemonize -log " logfile)
-									      "")
+		      " -server " (or target-host "-") " -run-id " 0
+                      (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
+                          (conc " -daemonize -log " logfile)
+                          "")
+                      " -transport " (server:get-transport)
 		      " -m testsuite:" testsuite)) ;; (conc " >> " logfile " 2>&1 &")))))
 	 (log-rotate  (make-thread common:rotate-logs  "server run, rotate logs thread")))
     ;; we want the remote server to start in *toppath* so push there
@@ -189,6 +188,18 @@
 	     (read-line)))
 	 #f))))
 
+
+(define (server:dotserver-starting)
+  (with-output-to-file
+      (conc *toppath* "/.starting-server")
+    (lambda ()
+      (print (current-process-id) " on " (get-host-name)))))
+
+(define (server:dotserver-starting-remove)
+  (delete-file* (conc *toppath* "/.starting-server")))
+  
+
+  
 ;; write a .server file in *toppath* with hostport
 ;; return #t on success, #f otherwise
 ;;
@@ -208,11 +219,11 @@
 	  res)
 	#f)))
 
-(define (server:remove-dotserver-file areapath hostport)
+(define (server:remove-dotserver-file areapath hostport #!key (force #f))
   (let ((dotserver   (server:read-dotserver areapath))
 	(server-file (conc areapath "/.server"))
 	(lock-file   (conc areapath "/.server.lock")))
-    (if (and dotserver (string-match (conc ".*:" hostport "$") dotserver)) ;; port matches, good enough info to decide to remove the file
+    (if (or force (and dotserver (string-match (conc ".*:" hostport "$") dotserver))) ;; port matches, good enough info to decide to remove the file
 	(if (common:simple-file-lock lock-file)
 	    (begin
 	      (handle-exceptions
@@ -228,7 +239,7 @@
   (let* ((dotserver (server:read-dotserver areapath))) ;; tdbdat (tasks:open-db)))
     (if dotserver
 	(let* ((res (case *transport-type*
-		      ((http)(server:ping-server dotserver))
+		      ((http rpc)(server:ping-server dotserver))
 		      ;; ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
 		      )))
 	  (if res
@@ -267,7 +278,13 @@
 	    #f)
 	  (let* ((iface      (car host-port))
 		 (port       (cadr host-port))
-		 (server-dat (http-transport:client-connect iface port))
+		 (server-dat
+                  (case (remote-transport *runremote*)
+                    ((http) (http-transport:client-connect iface port))
+                    ((rpc) (rpc-transport:client-connect iface port))
+                    (else
+                     (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " not supported (4)")
+                     (exit))))
 		 (login-res  (rmt:login-no-auto-client-setup server-dat)))
 	    (if (and (list? login-res)
 		     (car login-res))
@@ -300,13 +317,19 @@
 	#t
 	#f)))
 
+;; default to five minutes if not specified in megatest.config server section.
+;;
 (define (server:get-timeout)
-  (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
-    (if (and (string? tmo)
-	     (string->number tmo))
-	(* 60 60 (string->number tmo))
-	;; (* 3 24 60 60) ;; default to three days
-	(* 60 1)         ;; default to one minute
-	;; (* 60 60 25)      ;; default to 25 hours
-	)))
+  (string->number
+   (or (configf:lookup  *configdat* "server" "timeout")
+       "600")))
+
+;;   (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
+;;     (if (and (string? tmo)
+;; 	     (string->number tmo))
+;; 	(* 60 60 (string->number tmo))
+;; 	;; (* 3 24 60 60) ;; default to three days
+;; 	(* 60 1)         ;; default to one minute
+;; 	;; (* 60 60 25)      ;; default to 25 hours
+;; 	)))
 
