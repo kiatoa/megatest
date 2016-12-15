@@ -17,6 +17,7 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
+(import (prefix dbi dbi:))
 
 (declare (unit tdb))
 (declare (uses common))
@@ -54,6 +55,7 @@
       (let* ((dbpath              (conc work-area "/testdat.db"))
 	     (dbexists            (file-exists? dbpath))
 	     (work-area-writeable (file-write-access? work-area))
+	     (dbdat '())
 	     (db                  (handle-exceptions  ;; open the db if area writeable or db pre-existing. open in-mem otherwise. if exception, open in-mem
 				   exn
 				   (begin
@@ -61,11 +63,12 @@
 				     (debug:print 2 *default-log-port* "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
 						  ((condition-property-accessor 'exn 'message) exn))
 				     (set! dbexists #f) ;; must force re-creation of tables, more tom-foolery
-				     (sqlite3:open-database ":memory:")) ;; open an in-memory db to allow readonly access 
+				     (set! dbdat (cons (cons 'dbname ":memory:") dbdat))
+				     (dbi:open 'sqlite3 dbdat)) ;; open an in-memory db to allow readonly access 
 				   (if (or work-area-writeable
 					   dbexists)
-				       (sqlite3:open-database dbpath)
-				       (sqlite3:open-database ":memory:"))))
+				   	(set! dbdat (cons (cons 'dbname dbpath) dbdat))
+				   	(set! dbdat (cons (cons 'dbname ":memory:") dbdat)))))
 	     (tdb-writeable       (and (file-write-access? work-area)
 				       (file-write-access? dbpath)))
 	     (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")

@@ -120,7 +120,7 @@ Test data capture
 Queries
   -list-runs patt         : list runs matching pattern \"patt\", % is the wildcard
   -show-keys              : show the keys used in this megatest setup
-  -test-files targpatt    : get the most recent test path/file matching targpatt e.g. %/%... 
+  -test-files targpatt    : get the most recent test path/file matching targpatt e.g. %/% or '*.log'
                             returns list sorted by age ascending, see examples below
   -test-paths             : get the test paths matching target, runname, item and test
                             patterns.
@@ -1531,7 +1531,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 (paths    (tests:test-get-paths-matching keys target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
-			(print path))
+			(if (file-exists? path)
+			(print path)))	
 		      paths)))
 	;; else do a general-run-call
 	(general-run-call 

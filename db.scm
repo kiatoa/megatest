@@ -20,6 +20,9 @@
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:)) ;; RADT => prefix??
 
+(include "/nfs/site/disks/icf_fdk_cw_gwa002/srehman/fossil/dbi/dbi.scm")
+(import (prefix dbi dbi:))
+
 (declare (unit db))
 (declare (uses common))
 (declare (uses keys))
@@ -84,7 +87,8 @@
 	   (debug:print-error 0 *default-log-port* " query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
 	   (print-call-chain (current-error-port))
 	   default)))
-   (apply sqlite3:first-result db stmt params)))
+   ;;(apply dbi:get-one db stmt params)))
+   (apply dbi:get-one db stmt params)))
 
 ;; Get/open a database
 ;;    if run-id => get run specific db
@@ -133,7 +137,7 @@
 		      (print-call-chain)
 		      (print "db:with-db called with dbdat instead of dbstruct, FIXME!!")
 		      dbstruct))) ;; cheat, allow for passing in a dbdat
-	 (db    (db:dbdat-get-db dbdat))) 
+	 (db    (db:dbdat-get-db dbdat)))
     (handle-exceptions
      exn
      (begin
@@ -195,7 +199,7 @@
 	       
 (define (db:set-sync db)
   (let ((syncprag (configf:lookup *configdat* "setup" "sychronous")))
-    (sqlite3:execute db (conc "PRAGMA synchronous = " (or syncprag 0) ";")))) 
+    (dbi:exec db (conc "PRAGMA synchronous = " (or syncprag 0) ";")))) 
 
 ;; open an sql database inside a file lock
 ;; returns: db existed-prior-to-opening
@@ -207,24 +211,27 @@
 	 (file-exists  (file-exists? fname))
 	 (file-write   (if file-exists
 			   (file-write-access? fname)
-			   dir-writable )))
+			   dir-writable ))
+	 (dbdat (cons (cons 'dbname fname) '())))
     (if file-write ;; dir-writable
 	(let (;; (lock    (obtain-dot-lock fname 1 5 10))
-	      (db      (sqlite3:open-database fname)))
-	  (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
+	      (db 	 (dbi:open 'sqlite3 dbdat)))
+	      ;;(db      (sqlite3:open-database fname)))
+	  ;;(sqlite3:set-busy-handler! db (make-busy-timeout 136000))
 	  ;; (db:set-sync db)
-	  (sqlite3:execute db "PRAGMA synchronous = 0;")
+	  (dbi:exec db "PRAGMA synchronous = 0;")
 	  (if (not file-exists)
 	      (begin
 		(if (string-match "^/tmp/.*" fname) ;; this is a file in /tmp
-		    (sqlite3:execute db "PRAGMA journal_mode=WAL;")
+		    (dbi:exec db "PRAGMA journal_mode=WAL;")
 		    (print "Creating " fname " in NON-WAL mode."))
 		(initproc db)))
 	  ;; (release-dot-lock fname)
 	  db)
 	(begin
 	  (debug:print 2 *default-log-port* "WARNING: opening db in non-writable dir " fname)
-	  (sqlite3:open-database fname))))) ;; )
+	  (dbi:open 'sqlite3 dbdat)))))
+	  ;;(sqlite3:open-database fname))))) ;; )
 
 ;; ;; This routine creates the db. It is only called if the db is not already opened
 ;; ;; 
@@ -240,13 +247,13 @@
 ;;                                                             (debug:print-error 0 *default-log-port* "tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
 ;;                                                             (db:open-rundb dbstruct run-id attemptnum (+ attemptnum 1))))
 ;;                                                       (db:initialize-run-id-db db)
-;;                                                       (sqlite3:execute 
+;;                                                       (dbi:exec 
 ;;                                                        db
 ;;                                                        "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
 ;;                                                        (* run-id 30000) ;; allow for up to 30k tests per run
 ;;                                                        run-id)
 ;;                                                       ;; do a dummy query to test that the table exists and the db is truly readable
-;;                                                       (sqlite3:execute db "SELECT * FROM tests WHERE id=?;" (* run-id 30000))
+;;                                                       (dbi:exec db "SELECT * FROM tests WHERE id=?;" (* run-id 30000))
 ;;                                                       )))) ;; add strings db to rundb, not in use yet
 ;;          (olddb        (if *megatest-db*
 ;;                            *megatest-db* 
@@ -347,9 +354,12 @@
         (let ((tdb (db:dbdat-get-db (dbr:dbstruct-tmpdb  dbstruct)))
               (mdb (db:dbdat-get-db (dbr:dbstruct-mtdb   dbstruct)))
               (rdb (db:dbdat-get-db (dbr:dbstruct-refndb dbstruct))))
-          (if tdb (sqlite3:finalize! tdb))
-          (if mdb (sqlite3:finalize! mdb))
-          (if rdb (sqlite3:finalize! rdb))))))
+          (if tdb (dbi:close tdb))
+          (if mdb (dbi:close mdb))
+          (if rdb (dbi:close rdb))))))
+          ;;(if tdb (dbi:close tdb))
+          ;;(if mdb (dbi:close mdb))
+          ;;(if rdb (dbi:close rdb))))))
   
 ;;   (let ((locdbs (dbr:dbstruct-locdbs dbstruct)))
 ;;     (if (hash-table? locdbs)
@@ -471,7 +481,8 @@
 (define (db:repair-db dbdat #!key (numtries 1))
   (let* ((dbpath   (db:dbdat-get-path        dbdat))
 	 (dbdir    (pathname-directory       dbpath))
-	 (fname    (pathname-strip-directory dbpath)))
+	 (fname    (pathname-strip-directory dbpath))
+   (dbdat '()))
     (debug:print-info 0 *default-log-port* "Checking db " dbpath " for errors.")
     (cond
      ((not (file-write-access? dbdir))
@@ -503,20 +514,20 @@
 	 (exit) ;; we can not safely continue when a db was corrupted - even if fixed.
 	 )
        ;; test read/write access to the database
-       (let ((db (sqlite3:open-database dbpath)))
+       (let ((db (dbi:open 'sqlite3 (cons (cons ('dbname dbpath) '())))))
 	 (cond
 	  ((equal? fname "megatest.db")
-	   (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';"))
+	   (dbi:exec db "DELETE FROM tests WHERE state='DELETED';"))
 	  ((equal? fname "main.db")
-	   (sqlite3:execute db "DELETE FROM runs WHERE state='deleted';"))
+	   (dbi:exec db "DELETE FROM runs WHERE state='deleted';"))
 	  ((string-match "\\d.db" fname)
-	   (sqlite3:execute db "UPDATE tests SET state='DELETED' WHERE state='DELETED';"))
+	   (dbi:exec db "UPDATE tests SET state='DELETED' WHERE state='DELETED';"))
 	  ((equal? fname "monitor.db")
-	   (sqlite3:execute "DELETE FROM servers WHERE state LIKE 'defunct%';"))
+	   (dbi:exec "DELETE FROM servers WHERE state LIKE 'defunct%';"))
 	  (else
-	   (sqlite3:execute db "vacuum;")))
+	   (dbi:exec db "vacuum;")))
 	 
-	 (finalize! db)
+	 (dbi:close db)
 	 #t))))))
     
 ;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
@@ -550,9 +561,9 @@
    (cond
     ((not fromdb) (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with fromdb missing") -1)
     ((not todb)   (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with todb missing") -2)
-    ((not (sqlite3:database? (db:dbdat-get-db fromdb)))
+    ((not (eq? 'sqlite3 (dbi:db-dbtype fromdb)))
      (debug:print-error 0 *default-log-port* "db:sync-tables called with fromdb not a database " fromdb) -3)
-    ((not (sqlite3:database? (db:dbdat-get-db todb)))
+    ((not (eq? 'sqlite3 (dbi:db-dbtype todb)))
      (debug:print-error 0 *default-log-port* "db:sync-tables called with todb not a database " todb) -4)
     (else
      (let ((stmts       (make-hash-table)) ;; table-field => stmt
@@ -597,7 +608,7 @@
 	     fields)
 
 	    ;; read the source table
-	    (sqlite3:for-each-row
+	    (dbi:for-each-row
 	     (lambda (a . b)
 	       (set! fromdat (cons (apply vector a b) fromdat))
 	       (if (> (length fromdat) batch-len)
@@ -616,7 +627,7 @@
 		(debug:print-info 4 *default-log-port* "found " totrecords " records to sync"))
 
 	    ;; read the target table
-	    (sqlite3:for-each-row
+	    (dbi:for-each-row
 	     (lambda (a . b)
 	       (hash-table-set! todat a (apply vector a b)))
 	     (db:dbdat-get-db todb)
@@ -630,7 +641,7 @@
 		 ;; (db:delay-if-busy targdb) ;; NO WAITING
 		 (for-each
 		  (lambda (fromdat-lst)
-		    (sqlite3:with-transaction
+		    (dbi:with-transaction
 		     db
 		     (lambda ()
 		       (for-each ;; 
@@ -647,12 +658,12 @@
 				  (loop (+ i 1))))
 			    (if (not same)
 				(begin
-				  (apply sqlite3:execute stmth (vector->list fromrow))
+				  (apply dbi:exec stmth (vector->list fromrow))
 				  (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
 			fromdat-lst))
 		  ))
 		  fromdats)
-		 (sqlite3:finalize! stmth)))
+		 (dbi:close stmth)))
 	     (append (list todb) slave-dbs))))
 	tbls)
        (let* ((runtime      (- (current-milliseconds) start-time))
@@ -680,13 +691,13 @@
       (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
           (debug:print 0 *default-log-port* "Column last_update already added to " table-name " table")
           (db:general-sqlite-error-dump exn "alter table " table-name " ..." #f "none"))
-      (sqlite3:execute
+      (dbi:exec
        frundb
        (conc "ALTER TABLE " table-name " ADD COLUMN last_update INTEGER DEFAULT 0")))
-     (sqlite3:execute
+     (dbi:exec
       frundb
       (conc "DROP TRIGGER IF EXISTS update_" table-name "_trigger;"))
-     (sqlite3:execute
+     (dbi:exec
       frundb
       (conc "CREATE TRIGGER IF NOT EXISTS update_" table-name "_trigger AFTER UPDATE ON " table-name "
                              FOR EACH ROW
@@ -706,11 +717,11 @@
    (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
        (debug:print 0 *default-log-port* "Column last_update already added to runs table")
        (db:general-sqlite-error-dump exn "alter table runs ..." #f "none"))
-   (sqlite3:execute
+   (dbi:exec
     maindb
     "ALTER TABLE runs ADD COLUMN last_update INTEGER DEFAULT 0"))
   ;; these schema changes don't need exception handling
-  (sqlite3:execute
+  (dbi:exec
    maindb
    "CREATE TRIGGER IF NOT EXISTS update_runs_trigger AFTER UPDATE ON runs
                              FOR EACH ROW
@@ -718,14 +729,14 @@
                                  UPDATE runs SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-  (sqlite3:execute maindb "CREATE TABLE IF NOT EXISTS run_stats (
+  (dbi:exec maindb "CREATE TABLE IF NOT EXISTS run_stats (
                               id     INTEGER PRIMARY KEY,
                               run_id INTEGER,
                               state  TEXT,
                               status TEXT,
                               count  INTEGER,
                               last_update INTEGER DEFAULT (strftime('%s','now')))")
-  (sqlite3:execute maindb "CREATE TRIGGER  IF NOT EXISTS update_run_stats_trigger AFTER UPDATE ON run_stats
+  (dbi:exec maindb "CREATE TRIGGER  IF NOT EXISTS update_run_stats_trigger AFTER UPDATE ON run_stats
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE run_stats SET last_update=(strftime('%s','now'))
@@ -741,7 +752,7 @@
 ;;
 (define (db:dispatch-query access-mode rmt-cmd db-cmd . params)
   (if (eq? access-mode 'cached)
-      (print "not doing cached calls right now"))
+      (debug:print 2 *default-log-port* "not doing cached calls right now"))
 ;;      (apply db:call-with-cached-db db-cmd params)
       (apply rmt-cmd params))
 ;;)
@@ -859,7 +870,7 @@
 ;; ;;		       (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
 ;; 		   (debug:print 0 *default-log-port* "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
 ;; 		   (db:replace-test-records dbstruct run-id testrecs)
-;; 		   (sqlite3:finalize! (db:dbdat-get-db (dbr:dbstruct-rundb dbstruct)))))
+;; 		   (dbi:close (db:dbdat-get-db (dbr:dbstruct-rundb dbstruct)))))
 ;; 	       run-ids)))
 
 	;; now ensure all newdb data are synced to megatest.db
@@ -943,7 +954,7 @@
 ;; 	    dead-runs))))
 ;; 
 	;; (db:close-all dbstruct)
-	;; (sqlite3:finalize! mdb)
+	;; (dbi:close mdb)
 	data-synced)))
 
 ;; keeping it around for debugging purposes only
@@ -955,13 +966,13 @@
 	  (not #t)) ;; was: (member proc * db:all-write-procs *)))
       (let* ((db (cond
 		  ((pair? idb)                 (db:dbdat-get-db idb))
-		  ((sqlite3:database? idb)     idb)
+		  ((dbi:database? idb)     idb)
 		  ((not idb)                   (debug:print-error 0 *default-log-port* "cannot open-run-close with #f anymore"))
 		  ((procedure? idb)            (idb))
 		  (else   	               (debug:print-error 0 *default-log-port* "cannot open-run-close with #f anymore"))))
 	     (res #f))
 	(set! res (apply proc db params))
-	(if (not idb)(sqlite3:finalize! dbstruct))
+	(if (not idb)(dbi:close dbstruct))
 	(debug:print-info 11 *default-log-port* "open-run-close-no-exception-handling END" )
 	res)
       #f))
@@ -1007,14 +1018,14 @@
 			(print "ERROR: your key cannot be named " keyn " as this conflicts with the same named field in the runs table, you must remove your megatest.db and <linktree>/.db before trying again.")
 			(exit 1)))))
 	      keys)
-    (sqlite3:with-transaction
+    (dbi:with-transaction
      db
      (lambda ()
-       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
+       (dbi:exec db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
        (for-each (lambda (key)
-		   (sqlite3:execute db "INSERT OR REPLACE INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
+		   (dbi:exec db "INSERT OR REPLACE INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
 		 keys)
-       (sqlite3:execute db (conc 
+       (dbi:exec db (conc 
 			    "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, \n			 " 
 			    fieldstr (if havekeys "," "") "
 			 runname    TEXT DEFAULT 'norun',
@@ -1027,26 +1038,26 @@
 			 pass_count INTEGER DEFAULT 0,
                          last_update INTEGER DEFAULT (strftime('%s','now')),
 			 CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
-       (sqlite3:execute db "CREATE TRIGGER IF NOT EXISTS update_runs_trigger AFTER UPDATE ON runs
+       (dbi:exec db "CREATE TRIGGER IF NOT EXISTS update_runs_trigger AFTER UPDATE ON runs
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE runs SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS run_stats (
+       (dbi:exec db "CREATE TABLE IF NOT EXISTS run_stats (
                               id     INTEGER PRIMARY KEY,
                               run_id INTEGER,
                               state  TEXT,
                               status TEXT,
                               count  INTEGER,
                               last_update INTEGER DEFAULT (strftime('%s','now')))")
-       (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_run_stats_trigger AFTER UPDATE ON run_stats
+       (dbi:exec db "CREATE TRIGGER  IF NOT EXISTS update_run_stats_trigger AFTER UPDATE ON run_stats
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE run_stats SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (
+       (dbi:exec db "CREATE TABLE IF NOT EXISTS test_meta (
                                      id          INTEGER PRIMARY KEY,
                                      testname    TEXT DEFAULT '',
                                      author      TEXT DEFAULT '',
@@ -1059,7 +1070,7 @@
                                      tags        TEXT DEFAULT '',
                                      jobgroup    TEXT DEFAULT 'default',
                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
-       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
+       (dbi:exec db "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
                                 action TEXT DEFAULT '',
                                 owner TEXT,
                                 state TEXT DEFAULT 'new',
@@ -1071,7 +1082,7 @@
                                 creation_time TIMESTAMP DEFAULT (strftime('%s','now')),
                                 execution_time TIMESTAMP);")
        ;; archive disk areas, cached info from [archive-disks]
-       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archive_disks (
+       (dbi:exec db "CREATE TABLE IF NOT EXISTS archive_disks (
                                 id INTEGER PRIMARY KEY,
                                 archive_area_name TEXT,
                                 disk_path TEXT,
@@ -1079,7 +1090,7 @@
                                 last_df_time TIMESTAMP DEFAULT (strftime('%s','now')),
                                 creation_time TIMESTAMP DEFAULT (strftime('%','now')));")
        ;; individual bup (or tar) data chunks
-       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archive_blocks (
+       (dbi:exec db "CREATE TABLE IF NOT EXISTS archive_blocks (
                                 id INTEGER PRIMARY KEY,
                                 archive_disk_id INTEGER,
                                 disk_path TEXT,
@@ -1089,23 +1100,23 @@
        ;; tests allocated to what chunks. reusing a chunk for a test/item_path is very efficient
        ;; NB// the per run/test recording of where the archive is stored is done in the test
        ;;      record. 
-       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archive_allocations (
+       (dbi:exec db "CREATE TABLE IF NOT EXISTS archive_allocations (
                                 id INTEGER PRIMARY KEY,
                                 archive_block_id INTEGER,
                                 testname TEXT,
                                 item_path TEXT,
                                 creation_time TIMESTAMP DEFAULT (strftime('%','now')));")
        ;; move this clean up call somewhere else
-       (sqlite3:execute db "DELETE FROM tasks_queue WHERE state='done' AND creation_time < ?;" (- (current-seconds)(* 24 60 60))) ;; remove older than 24 hrs
-       (sqlite3:execute db (conc "CREATE INDEX IF NOT EXISTS runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
-       ;; (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
-       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
-       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
+       (dbi:exec db "DELETE FROM tasks_queue WHERE state='done' AND creation_time < ?;" (- (current-seconds)(* 24 60 60))) ;; remove older than 24 hrs
+       (dbi:exec db (conc "CREATE INDEX IF NOT EXISTS runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
+       ;; (dbi:exec db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
+       (dbi:exec db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
+       (dbi:exec db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
                                   CONSTRAINT metadat_constraint UNIQUE (var));")
-       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
+       (dbi:exec db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
        ;; Must do this *after* running patch db !! No more. 
        ;; cannot use db:set-var since it will deadlock, hardwire the code here
-       (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" "MEGATEST_VERSION" (common:version-signature))
+       (dbi:exec db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" "MEGATEST_VERSION" (common:version-signature))
        (debug:print-info 11 *default-log-port* "db:initialize END")))))
 
 ;;======================================================================
@@ -1113,10 +1124,10 @@
 ;;======================================================================
 
 (define (db:initialize-run-id-db db)
-  (sqlite3:with-transaction 
+  (dbi:with-transaction 
    db
    (lambda ()
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tests 
+     (dbi:exec db "CREATE TABLE IF NOT EXISTS tests 
                     (id INTEGER PRIMARY KEY,
                      run_id       INTEGER   DEFAULT -1,
                      testname     TEXT      DEFAULT 'noname',
@@ -1140,14 +1151,14 @@
                      archived     INTEGER   DEFAULT 0, -- 0=no, > 1=archive block id where test data can be found
                      last_update  INTEGER DEFAULT (strftime('%s','now')),
                         CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path));")
-     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path);")
-     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_tests_trigger AFTER UPDATE ON tests
+     (dbi:exec db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path);")
+     (dbi:exec db "CREATE TRIGGER  IF NOT EXISTS update_tests_trigger AFTER UPDATE ON tests
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE tests SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
+     (dbi:exec db "CREATE TABLE IF NOT EXISTS test_steps 
                               (id INTEGER PRIMARY KEY,
                                test_id INTEGER, 
                                stepname TEXT, 
@@ -1158,14 +1169,14 @@
                                logfile TEXT DEFAULT '',
                                last_update  INTEGER DEFAULT (strftime('%s','now')),
                                CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
-     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS teststeps_index ON tests (run_id, testname, item_path);")
-     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_teststeps_trigger AFTER UPDATE ON test_steps
+     (dbi:exec db "CREATE INDEX IF NOT EXISTS teststeps_index ON tests (run_id, testname, item_path);")
+     (dbi:exec db "CREATE TRIGGER  IF NOT EXISTS update_teststeps_trigger AFTER UPDATE ON test_steps
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE test_steps SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
+     (dbi:exec db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
                                 test_id INTEGER,
                                 category TEXT DEFAULT '',
                                 variable TEXT,
@@ -1178,14 +1189,14 @@
                                 type TEXT DEFAULT '',
                                 last_update  INTEGER DEFAULT (strftime('%s','now')),
                               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
-     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS test_data_index ON test_data (test_id);")
-     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_test_data_trigger AFTER UPDATE ON test_data
+     (dbi:exec db "CREATE INDEX IF NOT EXISTS test_data_index ON test_data (test_id);")
+     (dbi:exec db "CREATE TRIGGER  IF NOT EXISTS update_test_data_trigger AFTER UPDATE ON test_data
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE test_data SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_rundat (
+     (dbi:exec db "CREATE TABLE IF NOT EXISTS test_rundat (
                               id           INTEGER PRIMARY KEY,
                               test_id      INTEGER,
                               update_time  TIMESTAMP,
@@ -1193,7 +1204,7 @@
                               diskfree     INTEGER DEFAULT -1,
                               diskusage    INTGER DEFAULT -1,
                               run_duration INTEGER DEFAULT 0);")
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archives (
+     (dbi:exec db "CREATE TABLE IF NOT EXISTS archives (
                               id           INTEGER PRIMARY KEY,
                               test_id      INTEGER,
                               state        TEXT DEFAULT 'new',
@@ -1216,7 +1227,7 @@
 	 (db           (db:dbdat-get-db dbdat))
 	 (res          '())
 	 (blocks       '())) ;; a block is an archive chunck that can be added too if there is space
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (id archive-disk-id disk-path last-du last-du-time)
        (set! res (cons (vector id archive-disk-id disk-path last-du last-du-time) res)))
      db
@@ -1227,7 +1238,7 @@
     ;; Now res has list of candidate paths, look in archive_disks for candidate with potential free space
     (if (null? res)
 	'()
-	(sqlite3:for-each-row
+	(dbi:for-each-row
 	 (lambda (id archive-area-name disk-path last-df last-df-time)
 	   (set! blocks (cons (vector id archive-area-name disk-path last-df last-df-time) blocks)))
 	 db 
@@ -1246,7 +1257,7 @@
   (let* ((dbdat        (db:get-db dbstruct #f)) ;; archive tables are in main.db
 	 (db           (db:dbdat-get-db dbdat))
 	 (res          #f))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (id)
        (set! res id))
      db
@@ -1254,12 +1265,12 @@
      bdisk-name bdisk-path)
     (if res ;; record exists, update df and return id
 	(begin
-	  (sqlite3:execute db "UPDATE archive_disks SET last_df=?,last_df_time=(strftime('%s','now'))
+	  (dbi:exec db "UPDATE archive_disks SET last_df=?,last_df_time=(strftime('%s','now'))
                                   WHERE archive_area_name=? AND disk_path=?;"
 			   df bdisk-name bdisk-path)
 	  res)
 	(begin
-	  (sqlite3:execute
+	  (dbi:exec
 	   db
 	   "INSERT OR REPLACE INTO archive_disks (archive_area_name,disk_path,last_df)
                 VALUES (?,?,?);"
@@ -1275,7 +1286,7 @@
 	 (db           (db:dbdat-get-db dbdat))
 	 (res          #f))
     ;; first look to see if this path is already registered
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (id)
        (set! res id))
      db
@@ -1283,12 +1294,12 @@
      bdisk-id archive-path)
     (if res ;; record exists, update du if applicable and return res
 	(begin
-	  (if du (sqlite3:exectute db "UPDATE archive_blocks SET last_du=?,last_du_time=(strftime('%s','now'))
+	  (if du (dbi:exec db "UPDATE archive_blocks SET last_du=?,last_du_time=(strftime('%s','now'))
                                           WHERE archive_disk_id=? AND disk_path=?;"
 				   bdisk-id archive-path du))
 	  res)
 	(begin
-	  (sqlite3:execute db "INSERT OR REPLACE INTO archive_blocks (archive_disk_id,disk_path,last_du)
+	  (dbi:exec db "INSERT OR REPLACE INTO archive_blocks (archive_disk_id,disk_path,last_du)
                                                         VALUES (?,?,?);"
 			   bdisk-id archive-path (or du 0))
 	  (db:archive-register-block-name dbstruct bdisk-id archive-path du: du)))))
@@ -1302,7 +1313,7 @@
    run-id
    #f
    (lambda (db)
-     (sqlite3:execute db "UPDATE tests SET archived=? WHERE id=?;"
+     (dbi:exec db "UPDATE tests SET archived=? WHERE id=?;"
 		      archive-block-id test-id))))
  
 ;; Look up the archive block info given a block-id
@@ -1314,7 +1325,7 @@
    #f
    (lambda (db)
      (let ((res #f))
-       (sqlite3:for-each-row 
+       (dbi:for-each-row 
 	;;        0         1           2        3          4           5
 	(lambda (id archive-disk-id disk-path last-du last-du-time creation-time)
 	  (set! res (vector id archive-disk-id disk-path last-du last-du-time creation-time)))
@@ -1328,7 +1339,7 @@
 ;; 	 (db           (db:dbdat-get-db dbdat))
 ;; 	 (res          '())
 ;; 	 (blocks       '())) ;; a block is an archive chunck that can be added too if there is space
-;;     (sqlite3:for-each-row  #f)
+;;     (dbi:for-each-row  #f)
 
 ;;======================================================================
 ;; L O G G I N G    D B 
@@ -1337,15 +1348,15 @@
 (define (open-logging-db)
   (let* ((dbpath    (conc (if *toppath* (conc *toppath* "/") "") "logging.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
-	 (db        (sqlite3:open-database dbpath))
+	 (db        (dbi:open 'sqlite3 (cons (cons ('dbname dbpath) '()))))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
 					   136000)))) ;; 136000)))
-    (sqlite3:set-busy-handler! db handler)
+    ;;(sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(begin
-	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY,event_time TIMESTAMP DEFAULT (strftime('%s','now')),logline TEXT,pwd TEXT,cmdline TEXT,pid INTEGER);")
-	  (db:set-sync db) ;; (sqlite3:execute db (conc "PRAGMA synchronous = 0;"))
+	  (dbi:exec db "CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY,event_time TIMESTAMP DEFAULT (strftime('%s','now')),logline TEXT,pwd TEXT,cmdline TEXT,pid INTEGER);")
+	  (db:set-sync db) ;; (dbi:exec db (conc "PRAGMA synchronous = 0;"))
 	  ))
     db))
 
@@ -1355,12 +1366,12 @@
 
 (define (db:log-event logline)
   (let ((db (open-logging-db)))
-    (sqlite3:execute db "INSERT INTO log (logline,pwd,cmdline,pid) VALUES (?,?,?,?);"
+    (dbi:exec db "INSERT INTO log (logline,pwd,cmdline,pid) VALUES (?,?,?,?);"
 		     logline
 		     (current-directory)
 		     (string-intersperse (argv) " ")
 		     (current-process-id))
-    (sqlite3:finalize! db)
+    (dbi:close db)
     logline))
 
 ;;======================================================================
@@ -1391,7 +1402,7 @@
     ;;                     (db:test-get-run_duration testdat)))
     ;;                    600) 
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:for-each-row 
+    (dbi:for-each-row 
      (lambda (test-id run-dir uname testname item-path)
        (if (and (equal? uname "n/a")
 		(equal? item-path "")) ;; this is a toplevel test
@@ -1407,7 +1418,7 @@
     ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
     ;;
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (test-id run-dir uname testname item-path)
        (if (and (equal? uname "n/a")
 		(equal? item-path "")) ;; this is a toplevel test
@@ -1455,7 +1466,7 @@
     ;;                     (db:test-get-run_duration testdat)))
     ;;                    600) 
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:for-each-row 
+    (dbi:for-each-row 
      (lambda (test-id run-dir uname testname item-path)
        (if (and (equal? uname "n/a")
 		(equal? item-path "")) ;; this is a toplevel test
@@ -1471,7 +1482,7 @@
     ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
     ;;
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (test-id run-dir uname testname item-path)
        (if (and (equal? uname "n/a")
 		(equal? item-path "")) ;; this is a toplevel test
@@ -1499,7 +1510,7 @@
       (if (> (length all-ids) 0)
 	  (begin
 	    (debug:print 0 *default-log-port* "WARNING: Marking test(s); " (string-intersperse (map conc all-ids) ", ") " as INCOMPLETE")
-	    (sqlite3:execute 
+	    (dbi:exec 
 	     db
 	     (conc "UPDATE tests SET state='INCOMPLETE' WHERE run_id=? AND id IN (" 
 		   (string-intersperse (map conc all-ids) ",")
@@ -1536,10 +1547,10 @@
 (define (db:clean-up dbdat)
   ;; (debug:print 0 *default-log-port* "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
   (let* ((db         (db:dbdat-get-db dbdat))
-	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM tests)+(SELECT count(id) FROM runs);"))
+	 (count (dbi:get-one db "SELECT (SELECT count(id) FROM tests)+(SELECT count(id) FROM runs);"))
 	(statements
 	 (map (lambda (stmt)
-		(sqlite3:prepare db stmt))
+		(dbi:exec db stmt))
 	      (list
 	       ;; delete all tests that belong to runs that are 'deleted'
 	       "DELETE FROM tests WHERE run_id in (SELECT id FROM runs WHERE state='deleted');"
@@ -1553,21 +1564,21 @@
 	       "DELETE FROM runs WHERE id NOT IN (SELECT DISTINCT r.id FROM runs AS r INNER JOIN tests AS t ON t.run_id=r.id);"
 	       ))))
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:with-transaction 
+    (dbi:with-transaction 
      db
      (lambda ()
-       (sqlite3:for-each-row (lambda (tot)
+       (dbi:for-each-row (lambda (tot)
 			       (debug:print-info 0 *default-log-port* "Records count before clean: " tot))
 			     count-stmt)
-       (map sqlite3:execute statements)
-       (sqlite3:for-each-row (lambda (tot)
+       (map dbi:exec statements)
+       (dbi:for-each-row (lambda (tot)
 			       (debug:print-info 0 *default-log-port* "Records count after  clean: " tot))
 			     count-stmt)))
-    (map sqlite3:finalize! statements)
-    (sqlite3:finalize! count-stmt)
+    (map dbi:close statements)
+    (dbi:close count-stmt)
     ;; (db:find-and-mark-incomplete db)
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:execute db "VACUUM;")))
+    (dbi:exec db "VACUUM;")))
 
 ;; Clean out old junk and vacuum the database
 ;;
@@ -1594,21 +1605,21 @@
 	       "DELETE FROM tests WHERE state='DELETED';"
 	       ))))
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:with-transaction 
+    (dbi:with-transaction 
      db
      (lambda ()
-       (sqlite3:for-each-row (lambda (tot)
+       (dbi:for-each-row (lambda (tot)
 			       (debug:print-info 0 *default-log-port* "Records count before clean: " tot))
 			     count-stmt)
-       (map sqlite3:execute statements)
-       (sqlite3:for-each-row (lambda (tot)
+       (map dbi:exec statements)
+       (dbi:for-each-row (lambda (tot)
 			       (debug:print-info 0 *default-log-port* "Records count after  clean: " tot))
 			     count-stmt)))
-    (map sqlite3:finalize! statements)
-    (sqlite3:finalize! count-stmt)
+    (map dbi:close statements)
+    (dbi:close count-stmt)
     ;; (db:find-and-mark-incomplete db)
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:execute db "VACUUM;")))
+    (dbi:exec db "VACUUM;")))
 
 ;; Clean out old junk and vacuum the database
 ;;
@@ -1635,27 +1646,27 @@
 		"DELETE FROM runs WHERE state='deleted';"
 		)))
 	 (dead-runs '()))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (run-id)
        (set! dead-runs (cons run-id dead-runs)))
        db
        "SELECT id FROM runs WHERE state='deleted';")
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:with-transaction 
+    (dbi:with-transaction 
      db
      (lambda ()
-       (sqlite3:for-each-row (lambda (tot)
+       (dbi:for-each-row (lambda (tot)
 			       (debug:print-info 0 *default-log-port* "Records count before clean: " tot))
 			     count-stmt)
-       (map sqlite3:execute statements)
-       (sqlite3:for-each-row (lambda (tot)
+       (map dbi:exec statements)
+       (dbi:for-each-row (lambda (tot)
 			       (debug:print-info 0 *default-log-port* "Records count after  clean: " tot))
 			     count-stmt)))
-    (map sqlite3:finalize! statements)
-    (sqlite3:finalize! count-stmt)
+    (map dbi:close statements)
+    (dbi:close count-stmt)
     ;; (db:find-and-mark-incomplete db)
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:execute db "VACUUM;")
+    (dbi:exec db "VACUUM;")
     dead-runs))
 
 ;;======================================================================
@@ -1669,7 +1680,7 @@
   (let* ((res      #f)
 	 (dbdat    (db:get-db dbstruct #f))
 	 (db       (db:dbdat-get-db dbdat)))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (val)
        (set! res val))
      db
@@ -1695,13 +1706,13 @@
 (define (db:set-var dbstruct var val)
   (let* ((dbdat (db:get-db dbstruct #f))
 	 (db    (db:dbdat-get-db dbdat)))
-    (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val)))
+    (dbi:exec db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val)))
 
 (define (db:del-var dbstruct var)
   ;; (db:delay-if-busy)
   (db:with-db dbstruct #f #t 
 	      (lambda (db)
-		(sqlite3:execute db "DELETE FROM metadat WHERE var=?;" var))))
+		(dbi:exec db "DELETE FROM metadat WHERE var=?;" var))))
 
 ;; use a global for some primitive caching, it is just silly to
 ;; re-read the db over and over again for the keys since they never
@@ -1715,7 +1726,7 @@
       (let ((res '()))
 	(db:with-db dbstruct #f #f
 		    (lambda (db)
-		      (sqlite3:for-each-row 
+		      (dbi:for-each-row 
 		       (lambda (key)
 			 (set! res (cons key res)))
 		       db
@@ -1750,7 +1761,7 @@
    #f ;; does not modify db
    (lambda (db)
      (let ((res #f))
-       (sqlite3:for-each-row
+       (dbi:for-each-row
 	(lambda (runname)
 	  (set! res runname))
 	db
@@ -1765,7 +1776,7 @@
    #f
    (lambda (db)
      (let ((res #f))
-       (sqlite3:for-each-row
+       (dbi:for-each-row
 	(lambda (val)
 	  (set! res val))
 	db
@@ -1813,10 +1824,10 @@
     (if (and runname (null? (filter (lambda (x)(not x)) keyvals))) ;; there must be a better way to "apply and"
 	(let ((res #f))
 	  ;; (db:delay-if-busy dbdat)
-	  (apply sqlite3:execute db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time" comma keystr ") VALUES (?,?,?,?,strftime('%s','now')" comma valslots ");")
+	  (apply dbi:exec db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time" comma keystr ") VALUES (?,?,?,?,strftime('%s','now')" comma valslots ");")
 		 allvals)
 	  ;; (db:delay-if-busy dbdat)
-	  (apply sqlite3:for-each-row 
+	  (apply dbi:for-each-row 
 		 (lambda (id)
 		   (set! res id))
 		 db
@@ -1825,7 +1836,7 @@
 		   qry)
 		 qryvals)
 	  ;; (db:delay-if-busy dbdat)
-	  (sqlite3:execute db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=? AND state='deleted';" state status res)
+	  (dbi:exec db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=? AND state='deleted';" state status res)
 	  res) 
 	(begin
 	  (debug:print-error 0 *default-log-port* "Called without all necessary keys")
@@ -1865,7 +1876,7 @@
     (debug:print-info 11 *default-log-port* "db:get-runs START qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
     (db:with-db dbstruct #f #f
 		(lambda (db)		
-		  (sqlite3:for-each-row
+		  (dbi:for-each-row
 		   (lambda (a . x)
 		     (set! res (cons (apply vector a x) res)))
 		   db
@@ -1906,7 +1917,7 @@
      #f
      #f
      (lambda (db)
-       (sqlite3:for-each-row
+       (dbi:for-each-row
 	(lambda (a . x)
 	  (let ((targ (cons a x)))
 	    (if (not (hash-table-ref/default seen targ #f))
@@ -1927,7 +1938,7 @@
    (lambda (db)
      (let ((numruns 0))
        (debug:print-info 11 *default-log-port* "db:get-num-runs START " runpatt)
-       (sqlite3:for-each-row 
+       (dbi:for-each-row 
 	(lambda (count)
 	  (set! numruns count))
 	db
@@ -1964,16 +1975,16 @@
      (let* ((stmt1 (sqlite3:prepare db "DELETE FROM run_stats WHERE run_id=? AND state=? AND status=?;"))
 	    (stmt2 (sqlite3:prepare db "INSERT INTO run_stats (run_id,state,status,count) VALUES (?,?,?,?);"))
 	    (res
-	     (sqlite3:with-transaction
+	     (dbi:with-transaction
 	      db
 	      (lambda ()
 		(for-each
 		 (lambda (dat)
-		   (sqlite3:execute stmt1 run-id (car dat)(cadr dat))
-		   (apply sqlite3:execute stmt2 run-id dat))
+		   (dbi:exec stmt1 run-id (car dat)(cadr dat))
+		   (apply dbi:exec stmt2 run-id dat))
 		 stats)))))
-       (sqlite3:finalize! stmt1)
-       (sqlite3:finalize! stmt2)
+       (dbi:close stmt1)
+       (dbi:close stmt2)
        res))))
 
 (define (db:get-main-run-stats dbstruct run-id)
@@ -1997,7 +2008,7 @@
    #f
    (lambda (db)
      (let ((run-ids '()))
-       (sqlite3:for-each-row
+       (dbi:for-each-row
 	(lambda (run-id)
 	  (set! run-ids (cons run-id run-ids)))
 	db
@@ -2017,7 +2028,7 @@
 	 (runs-info    '()))
     ;; First get all the runname/run-ids
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (run-id runname)
        (set! runs-info (cons (list run-id runname) runs-info)))
      db
@@ -2033,7 +2044,7 @@
 	  run-id
 	  #f
 	  (lambda (db)
-	    (sqlite3:for-each-row
+	    (dbi:for-each-row
 	     (lambda (state status count)
 	       (let ((netstate (if (equal? state "COMPLETED") status state)))
 		 (if (string? netstate)
@@ -2114,7 +2125,7 @@
 			  (string-intersperse remfields ","))))
     (debug:print-info 11 *default-log-port* "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (a . x)
        (set! res (apply vector a x)))
      db 
@@ -2131,7 +2142,7 @@
    #f
    #f
    (lambda (db)
-     (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" comment ;; (sdb:qry 'getid comment)
+     (dbi:exec db "UPDATE runs SET comment=? WHERE id=?;" comment ;; (sdb:qry 'getid comment)
 		      run-id))))
 
 ;; does not (obviously!) removed dependent data. But why not!!?
@@ -2142,14 +2153,14 @@
 	 (dbdat  (db:get-db dbstruct #f))
 	 (db     (db:dbdat-get-db dbdat)))
     ;; (db:delay-if-busy rdbdat)
-    (sqlite3:with-transaction
+    (dbi:with-transaction
      db
      (lambda ()
-       (sqlite3:execute rdb "DELETE FROM test_steps WHERE test_id IN (SELECT id FROM tests WHERE run_id=?);" run-id)
-       (sqlite3:execute rdb "DELETE FROM test_data WHERE test_id IN (SELECT id FROM tests WHERE run_id=?);"  run-id)
-       (sqlite3:execute rdb "UPDATE tests SET state='DELETED',comment='' WHERE run_id=?;" run-id)
+       (dbi:exec rdb "DELETE FROM test_steps WHERE test_id IN (SELECT id FROM tests WHERE run_id=?);" run-id)
+       (dbi:exec rdb "DELETE FROM test_data WHERE test_id IN (SELECT id FROM tests WHERE run_id=?);"  run-id)
+       (dbi:exec rdb "UPDATE tests SET state='DELETED',comment='' WHERE run_id=?;" run-id)
        ;; (db:delay-if-busy dbdat)
-       (sqlite3:execute db "UPDATE runs SET state='deleted',comment='' WHERE id=?;" run-id)))))
+       (dbi:exec db "UPDATE runs SET state='deleted',comment='' WHERE id=?;" run-id)))))
 
 (define (db:update-run-event_time dbstruct run-id)
   (db:with-db
@@ -2157,7 +2168,7 @@
    #f
    #t
    (lambda (db)
-     (sqlite3:execute db "UPDATE runs SET event_time=strftime('%s','now') WHERE id=?;" run-id))))
+     (dbi:exec db "UPDATE runs SET event_time=strftime('%s','now') WHERE id=?;" run-id))))
 
 (define (db:lock/unlock-run dbstruct run-id lock unlock user)
   (db:with-db
@@ -2169,8 +2180,8 @@
 			   (if unlock
 			       "unlocked"
 			       "locked")))) ;; semi-failsafe
-       (sqlite3:execute db "UPDATE runs SET state=? WHERE id=?;" newlockval run-id)
-       (sqlite3:execute db "INSERT INTO access_log (user,accessed,args) VALUES(?,strftime('%s','now'),?);"
+       (dbi:exec db "UPDATE runs SET state=? WHERE id=?;" newlockval run-id)
+       (dbi:exec db "INSERT INTO access_log (user,accessed,args) VALUES(?,strftime('%s','now'),?);"
 			user (conc newlockval " " run-id))
        (debug:print-info 1 *default-log-port* "" newlockval " run number " run-id)))))
 
@@ -2179,8 +2190,8 @@
 	 (db    (db:dbdat-get-db dbdat)))
     ;; (db:delay-if-busy dbdat)
     (if msg
-	(sqlite3:execute db "UPDATE runs SET status=?,comment=? WHERE id=?;" status msg run-id)
-	(sqlite3:execute db "UPDATE runs SET status=? WHERE id=?;" status run-id))))
+	(dbi:exec db "UPDATE runs SET status=?,comment=? WHERE id=?;" status msg run-id)
+	(dbi:exec db "UPDATE runs SET status=? WHERE id=?;" status run-id))))
 
 (define (db:get-run-status dbstruct run-id)
   (let ((res "n/a"))
@@ -2189,7 +2200,7 @@
      #f
      #f
      (lambda (db)
-       (sqlite3:for-each-row 
+       (dbi:for-each-row 
 	(lambda (status)
 	  (set! res status))
 	db
@@ -2212,7 +2223,7 @@
      (lambda (key)
        (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
 	 ;; (db:delay-if-busy dbdat)
-	 (sqlite3:for-each-row 
+	 (dbi:for-each-row 
 	  (lambda (key-val)
 	    (set! res (cons (list key key-val) res)))
 	  db qry run-id)))
@@ -2229,7 +2240,7 @@
      (lambda (key)
        (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
 	 ;; (db:delay-if-busy dbdat)
-	 (sqlite3:for-each-row 
+	 (dbi:for-each-row 
 	  (lambda (key-val)
 	    (set! res (cons key-val res)))
 	  db qry run-id)))
@@ -2254,7 +2265,7 @@
     (let ((prev-run-ids '()))
       (db:with-db dbstruct #f #f ;; #f means work with the zeroth db - i.e. the runs db
        (lambda (db)
-	 (apply sqlite3:for-each-row
+	 (apply dbi:for-each-row
 		(lambda (id)
 		  (set! prev-run-ids (cons id prev-run-ids)))
 		db
@@ -2351,7 +2362,7 @@
 	(debug:print-info 8 *default-log-port* "db:get-tests-for-run run-id=" run-id ", qry=" qry)
 	(db:with-db dbstruct run-id #f
 		    (lambda (db)
-		      (sqlite3:for-each-row 
+		      (dbi:for-each-row 
 		       (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
 			 (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
 		       db
@@ -2383,7 +2394,7 @@
     (debug:print-info 8 *default-log-port* "db:get-tests-for-run qry=" qry)
     (db:with-db dbstruct run-id #f
 		(lambda (db)
-		  (sqlite3:for-each-row
+		  (dbi:for-each-row
 		   (lambda (id testname item-path state status)
 		     ;;                      id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
 		     (set! res (cons (vector id run-id testname state status -1         ""     -1      -1       ""    "-"  item-path -1           "-"         "-") res)))
@@ -2396,7 +2407,7 @@
   (let ((res            #f))
     (db:with-db dbstruct run-id #f
 		(lambda (db)
-		  (sqlite3:for-each-row
+		  (dbi:for-each-row
 		   (lambda (run-id testname item-path state status)
 		     ;; id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
 		     (set! res (vector test-id run-id testname state status -1 "" -1 -1 "" "-" item-path -1 "-" "-")))
@@ -2435,7 +2446,7 @@
     (db:general-call dbdat 'delete-test-step-records (list test-id))
     ;; (db:delay-if-busy)
     (db:general-call dbdat 'delete-test-data-records (list test-id))
-    (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id)))
+    (dbi:exec db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id)))
 
 ;; 
 (define (db:delete-old-deleted-test-records dbstruct)
@@ -2446,12 +2457,12 @@
      0
      #t
      (lambda (db)
-       (sqlite3:with-transaction
+       (dbi:with-transaction
 	db
 	(lambda ()
-	  (sqlite3:execute db "DELETE FROM test_steps WHERE test_id IN (SELECT id FROM tests WHERE state='DELETED' AND event_time<?);" targtime)
-	  (sqlite3:execute db "DELETE FROM test_data WHERE test_id IN (SELECT id FROM tests WHERE state='DELETED' AND event_time<?);" targtime)
-	  (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime)))))))
+	  (dbi:exec db "DELETE FROM test_steps WHERE test_id IN (SELECT id FROM tests WHERE state='DELETED' AND event_time<?);" targtime)
+	  (dbi:exec db "DELETE FROM test_data WHERE test_id IN (SELECT id FROM tests WHERE state='DELETED' AND event_time<?);" targtime)
+	  (dbi:exec db "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime)))))))
 
 ;; set tests with state currstate and status currstatus to newstate and newstatus
 ;; use currstate = #f and or currstatus = #f to apply to any state or status respectively
@@ -2475,7 +2486,7 @@
 		 #t
 		 (lambda (db)
 		   (let ((test-id (db:get-test-id dbstruct run-id testname "")))
-		     (sqlite3:execute db qry newstate newstatus run-id testname)
+		     (dbi:exec db qry newstate newstatus run-id testname)
 		     (if test-id (mt:process-triggers run-id test-id newstate newstatus)))
 		   ))))
 	    testnames))
@@ -2491,14 +2502,14 @@
    (lambda (db)
      (cond
       ((and newstate newstatus newcomment)
-       (sqlite3:execute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus newcomment ;; (sdb:qry 'getid newcomment)
+       (dbi:exec db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus newcomment ;; (sdb:qry 'getid newcomment)
 			test-id))
       ((and newstate newstatus)
-       (sqlite3:execute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
+       (dbi:exec db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
       (else
-       (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
-       (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
-       (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment ;; (sdb:qry 'getid newcomment)
+       (if newstate   (dbi:exec db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
+       (if newstatus  (dbi:exec db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
+       (if newcomment (dbi:exec db "UPDATE tests SET comment=? WHERE id=?;" newcomment ;; (sdb:qry 'getid newcomment)
 				       test-id))))
      (mt:process-triggers run-id test-id newstate newstatus))))
 
@@ -2510,7 +2521,7 @@
    run-id
    #f
    (lambda (db)
-     (sqlite3:first-result 
+     (dbi:get-one 
       db
       ;; WARNING BUG EDIT ME - merged from v1.55 - not sure what is right here ...
       ;; AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted')
@@ -2526,7 +2537,7 @@
    run-id
    #f
    (lambda (db)
-     (sqlite3:first-result
+     (dbi:get-one
       db
       ;; WARNING BUG EDIT ME - merged from v1.55 - not sure what is right here ...
       ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted') AND NOT (uname = 'n/a' AND item_path = '');")
@@ -2542,7 +2553,7 @@
    run-id
    #f
    (lambda (db)
-     (sqlite3:first-result
+     (dbi:get-one
       db
       "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '');" run-id))))
 
@@ -2555,7 +2566,7 @@
    run-id
    #f
    (lambda (db)
-     (sqlite3:first-result
+     (dbi:get-one
       db
       "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '') AND testname=?;" run-id testname))))
 
@@ -2567,7 +2578,7 @@
       (let ((testnames '()))
 	;; get the testnames
 	;; (db:delay-if-busy dbdat)
-	(sqlite3:for-each-row
+	(dbi:for-each-row
 	 (lambda (testname)
 	   (set! testnames (cons testname testnames)))
 	 db
@@ -2580,7 +2591,7 @@
 	     run-id
 	     #f
 	     (lambda (db)
-	       (sqlite3:first-result
+	       (dbi:get-one
 		db
 		(conc "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND testname in ('"
 		      (string-intersperse testnames "','")
@@ -2599,7 +2610,7 @@
    run-id
    #f
    (lambda (db)
-     (sqlite3:first-result
+     (dbi:get-one
       db
       "SELECT count(id) FROM tests WHERE state in ('LAUNCHED','NOT_STARTED','REMOTEHOSTSTART','RUNNING','KILLREQ');"))))
 
@@ -2625,7 +2636,7 @@
    run-id
    #f
    (lambda (db)
-     (sqlite3:execute db "UPDATE tests SET attemptnum=? WHERE id=?;"
+     (dbi:exec db "UPDATE tests SET attemptnum=? WHERE id=?;"
 		      pid test-id))))
 
 (define (db:test-get-top-process-pid dbstruct run-id test-id)
@@ -2670,7 +2681,7 @@
 	 (db    (db:dbdat-get-db dbdat))
 	 (res '()))
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum archived)
        ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14     15        16
        (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum archived)
@@ -2687,15 +2698,15 @@
 		       (qrystr (conc "INSERT OR REPLACE INTO tests (" db:test-record-qry-selector ") VALUES (" qmarks ");"))
 		       (qry    (sqlite3:prepare db qrystr)))
 		  (debug:print 0 *default-log-port* "INFO: migrating test records for run with id " run-id)
-		  (sqlite3:with-transaction
+		  (dbi:with-transaction
 		   db
 		   (lambda ()
 		     (for-each 
 		      (lambda (rec)
 			;; (debug:print 0 *default-log-port* "INFO: Inserting values: " (string-intersperse (map conc (vector->list rec)) ",") "\n")
-			(apply sqlite3:execute qry (vector->list rec)))
+			(apply dbi:exec qry (vector->list rec)))
 		      testrecs)))
-		  (sqlite3:finalize! qry)))))
+		  (dbi:close qry)))))
 
 ;; map a test-id into the proper range
 ;;
@@ -2704,7 +2715,7 @@
       test-id
       (let loop ((new-id min-test-id))
 	(let ((test-id-found #f))
-	  (sqlite3:for-each-row 
+	  (dbi:for-each-row 
 	   (lambda (id)
 	     (set! test-id-found id))
 	   (db:dbdat-get-db mtdb)
@@ -2715,7 +2726,7 @@
 	      (loop (+ new-id 1))
 	      (begin
 		(debug:print-info 0 *default-log-port* "New test id " new-id " selected for test with id " test-id)
-		(sqlite3:execute mtdb "UPDATE tests SET id=? WHERE id=?;" new-id test-id)))))))
+		(dbi:exec mtdb "UPDATE tests SET id=? WHERE id=?;" new-id test-id)))))))
 
 ;; move test ids into the 30k * run_id range
 ;;
@@ -2747,7 +2758,7 @@
    #f
    (lambda (db)
      (let ((res #f))
-       (sqlite3:for-each-row ;; attemptnum added to hold pid of top process (not Megatest) controlling a test
+       (dbi:for-each-row ;; attemptnum added to hold pid of top process (not Megatest) controlling a test
 	(lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)
 	  ;;             0    1       2      3      4        5       6      7        8     9     10      11          12          13           14         15          16
 	  (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)))
@@ -2766,7 +2777,7 @@
    #f
    (lambda (db)
      (let ((res '()))
-       (sqlite3:for-each-row
+       (dbi:for-each-row
 	(lambda (a . b)
 	  ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
 	  (set! res (cons (apply vector a b) res)))
@@ -2782,7 +2793,7 @@
    #f
    (lambda (db)
      (let ((res #f))
-       (sqlite3:for-each-row
+       (dbi:for-each-row
 	(lambda (a . b)
 	  (set! res (apply vector a b)))
 	db
@@ -2812,7 +2823,7 @@
    run-id
    #t
    (lambda (db)
-     (sqlite3:execute 
+     (dbi:exec 
       db
       "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);"
       test-id teststep-name state-in status-in (current-seconds)
@@ -2827,7 +2838,7 @@
    #f
    (lambda (db)
      (let* ((res '()))
-       (sqlite3:for-each-row 
+       (dbi:for-each-row 
 	(lambda (id test-id stepname state status event-time logfile comment)
 	  (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "") comment) res)))
 	db
@@ -2842,7 +2853,7 @@
    #f
    (lambda (db)
      (let ((res '()))
-       (sqlite3:for-each-row 
+       (dbi:for-each-row 
 	(lambda (id test-id stepname state status event-time logfile)
 	  (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
 	db
@@ -2865,7 +2876,7 @@
 	 (fail-count 0)
 	 (pass-count 0))
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (fcount pcount)
        (set! fail-count fcount)
        (set! pass-count pcount))
@@ -3015,7 +3026,7 @@
 	 (debug:print 4 *default-log-port* "AFTER2: category: " category " variable: " variable " value: " value 
 		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
 	 ;; (db:delay-if-busy dbdat)
-	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
+	 (dbi:exec db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
 			  test-id category variable value expected tol units (if comment comment "") status type)))
      csvlist)))
 
@@ -3026,7 +3037,7 @@
 	 (db         (db:dbdat-get-db dbdat))
 	 (res '()))
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:for-each-row 
+    (dbi:for-each-row 
      (lambda (id test_id category variable value expected tol units comment status type)
        (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
      db
@@ -3050,26 +3061,29 @@
 	 ;; (testqry (tests:match->sqlqry testpatt))
 	 (runsqry (sqlite3:prepare db (conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';"))))
     ;; (debug:print 8 *default-log-port* "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" testqry)
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (rid)
        (set! row-ids (cons rid row-ids)))
      runsqry)
-    (sqlite3:finalize! runsqry)
+    (dbi:close runsqry)
     row-ids))
 
+;; finds latest matching all patts for given run-id
+;;
 (define (db:test-get-paths-matching-keynames-target-new dbstruct run-id keynames target res testpatt statepatt statuspatt runname)
   (let* ((testqry (tests:match->sqlqry testpatt))
-	 (tstsqry (conc "SELECT rundir FROM tests WHERE " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;")))
+	 (tstsqry (conc "SELECT rundir FROM tests WHERE run_id=? AND " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;")))
     (db:with-db
      dbstruct
      run-id
      #f
      (lambda (db)
-       (sqlite3:for-each-row 
+       (dbi:for-each-row 
 	(lambda (p)
 	  (set! res (cons p res)))
 	db
-	tstsqry)
+	tstsqry
+	run-id)
        res))))
 
 (define (db:test-toplevel-num-items dbstruct run-id testname)
@@ -3079,7 +3093,7 @@
    #f
    (lambda (db)
      (let ((res 0))
-       (sqlite3:for-each-row
+       (dbi:for-each-row
 	(lambda (num-items)
 	  (set! res num-items))
 	db
@@ -3158,7 +3172,7 @@
 	 (item-path    (db:test-get-item-path testdat))
          (tl-testdat   (db:get-test-info dbstruct run-id test-name ""))
          (tl-test-id   (db:test-get-id tl-testdat)))
-    (sqlite3:with-transaction
+    (dbi:with-transaction
      db
      (lambda ()
        (db:test-set-state-status-by-id dbstruct run-id test-id state status comment)
@@ -3263,7 +3277,7 @@
    #f
    (lambda (db)
      (let ((res #f))
-       (sqlite3:for-each-row 
+       (dbi:for-each-row 
 	(lambda (path final_logf)
 	  ;; (let ((path       (sdb:qry 'getstr path-id))
 	  ;;       (final_logf (sdb:qry 'getstr final_logf-id)))
@@ -3452,7 +3466,7 @@
 				   db:queries)))
  		 (if q (car q) #f))))
     ;; (db:delay-if-busy dbdat)
-    (apply sqlite3:execute (db:dbdat-get-db dbdat) query params)
+    (apply dbi:exec (db:dbdat-get-db dbdat) query params)
     #t))
 
 ;; get a summary of state and status counts to calculate a rollup
@@ -3461,7 +3475,7 @@
 ;;
 (define (db:get-state-status-summary db run-id testname)
   (let ((res   '()))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (state status count)
        (set! res (cons (vector state status count) res)))
      db
@@ -3510,7 +3524,7 @@
 	 (tests-hash (make-hash-table)))
     ;; first look up the key values from the run selected by run-id
     ;; (db:delay-if-busy dbdat)
-    (sqlite3:for-each-row 
+    (dbi:for-each-row 
      (lambda (a . b)
        (set! keyvals (cons a b)))
      db
@@ -3518,7 +3532,7 @@
     (if (not keyvals)
 	'()
 	(let ((prev-run-ids '()))
-	  (apply sqlite3:for-each-row
+	  (apply dbi:for-each-row
 		 (lambda (id)
 		   (set! prev-run-ids (cons id prev-run-ids)))
 		 db
@@ -3597,7 +3611,7 @@
      run-id
      #f
      (lambda (db)
-       (sqlite3:for-each-row 
+       (dbi:for-each-row 
 	(lambda (id itempath state status run_duration logf comment)
 	  (set! res (cons (vector id itempath state status run_duration logf comment) res)))
 	db
@@ -3617,7 +3631,7 @@
      #f
      #f
      (lambda (db)
-       (sqlite3:for-each-row
+       (dbi:for-each-row
 	(lambda (id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup)
 	  (set! res (vector id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup)))
 	db
@@ -3629,7 +3643,7 @@
 (define (db:testmeta-add-record dbstruct testname)
   (db:with-db dbstruct #f #f 
 	      (lambda (db)
-		(sqlite3:execute 
+		(dbi:exec 
 		 db
 		 "INSERT OR IGNORE INTO test_meta (testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags) VALUES (?,'','','','','','','','');" testname))))
 
@@ -3637,7 +3651,7 @@
 (define (db:testmeta-update-field dbstruct testname field value)
   (db:with-db dbstruct #f #f 
 	      (lambda (db)
-		(sqlite3:execute 
+		(dbi:exec 
 		 db
 		 (conc "UPDATE test_meta SET " field "=? WHERE testname=?;") value testname))))
 
@@ -3645,7 +3659,7 @@
   (db:with-db dbstruct #f #f 
 	      (lambda (db)
 		(let ((res '()))
-		  (sqlite3:for-each-row
+		  (dbi:for-each-row
 		   (lambda (a . b)
 		     (set! res (cons (apply vector a b) res)))
 		   db
@@ -3840,7 +3854,7 @@
     ;; "Expected Value"
     ;; "Value Found"
     ;; "Tolerance"
-    (apply sqlite3:for-each-row
+    (apply dbi:for-each-row
 	   (lambda (test-id . b)
 	     (set! test-ids (cons test-id test-ids))   ;; test-id is now testname
 	     (set! results (append results ;; note, drop the test-id
@@ -3884,7 +3898,7 @@
      (lambda (test-id)
        (let ((test-data (list testdata-header))
 	     (curr-test-name #f))
-	 (sqlite3:for-each-row
+	 (dbi:for-each-row
 	  (lambda (run-id testname item-path category variable value expected tol units status comment)
 	    (set! curr-test-name testname)
 	    (set! test-data (append test-data (list (list run-id testname item-path category variable value expected tol units status comment)))))

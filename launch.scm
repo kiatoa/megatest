@@ -863,7 +863,7 @@
 	      (begin
 		(if (common:low-noise-print 20 "No valid disks or no disk with enough space")
 		    (debug:print-error 0 *default-log-port* "No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists and has enough space!\n    You can change minspace in the [setup] section of megatest.config. Current setting is: " minspace))
-		(exit 1)))))))
+		(exit 1))))))) ;; TODO - move the exit to the calling location and return #f
 
 ;; Desired directory structure:
 ;;
@@ -1055,194 +1055,196 @@
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
-  (let loop ((delta        (- (current-seconds) *last-launch*))
-	     (launch-delay (string->number (or (configf:lookup *configdat* "setup" "launch-delay") "5"))))
-    (if (> launch-delay delta)
-	(begin
-	  (debug:print-info 0 *default-log-port* "Delaying launch of " test-name " for " (- launch-delay delta) " seconds")
-	  (thread-sleep! (- launch-delay delta))
-	  (loop (- (current-seconds) *last-launch*) launch-delay))))
-  (set! *last-launch* (current-seconds))
-  (change-directory *toppath*)
-  (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
-   (list ;; (list "MT_TEST_RUN_DIR" work-area)
-    (list "MT_RUN_AREA_HOME" *toppath*)
-    (list "MT_TEST_NAME" test-name)
-    ;; (list "MT_ITEM_INFO" (conc itemdat)) 
-    (list "MT_RUNNAME"   runname)
-    ;; (list "MT_TARGET"    mt_target)
-    ))
-  (let* ((tregistry       (tests:get-all))
-	 (item-path       (let ((ip (item-list->path itemdat)))
-			    (alist->env-vars (list (list "MT_ITEMPATH" ip)))
-			    ip))
-	 (tconfig         (or (tests:get-testconfig test-name tregistry #t force-create: #t)
-			      test-conf)) ;; force re-read now that all vars are set
-	 (useshell        (let ((ush (config-lookup *configdat* "jobtools"     "useshell")))
-			    (if ush 
-				(if (equal? ush "no") ;; must use "no" to NOT use shell
-				    #f
-				    ush)
-				#t)))     ;; default is yes
-	 (runscript       (config-lookup tconfig   "setup"        "runscript"))
-	 (ezsteps         (> (length (hash-table-ref/default tconfig "ezsteps" '())) 0)) ;; don't send all the steps, could be big
-	 (diskspace       (config-lookup tconfig   "requirements" "diskspace"))
-	 (memory          (config-lookup tconfig   "requirements" "memory"))
-	 (hosts           (config-lookup *configdat* "jobtools"     "workhosts"))
-	 (remote-megatest (config-lookup *configdat* "setup" "executable"))
-	 (run-time-limit  (or (configf:lookup  tconfig   "requirements" "runtimelim")
-			      (configf:lookup  *configdat* "setup" "runtimelim")))
-	 ;; FIXME SOMEDAY: not good how this is so obtuse, this hack is to 
-	 ;;                allow running from dashboard. Extract the path
-	 ;;                from the called megatest and convert dashboard
-	 ;;             	  or dboard to megatest
-	 (local-megatest  (let* ((lm  (car (argv)))
-				 (dir (pathname-directory lm))
-				 (exe (pathname-strip-directory lm)))
-			    (conc (if dir (conc dir "/") "")
-				  (case (string->symbol exe)
-				    ((dboard)    "../megatest")
-				    ((mtest)     "../megatest")
-				    ((dashboard) "megatest")
-				    (else exe)))))
-	 (launcher        (common:get-launcher *configdat* test-name item-path)) ;; (config-lookup *configdat* "jobtools"     "launcher"))
-	 (test-sig   (conc (common:get-testsuite-name) ":" test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
-	 (work-area  #f)
-	 (toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
-	 (diskpath   #f)
-	 (cmdparms   #f)
-	 (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
-	 (mt-bindir-path #f)
-	 (testinfo   (rmt:get-test-info-by-id run-id test-id))
-	 (mt_target  (string-intersperse (map cadr keyvals) "/"))
-	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
-			      (if (args:get-arg "-logging")(list "-logging") '()))))
-
-    (setenv "MT_ITEMPATH" item-path)
-    (if hosts (set! hosts (string-split hosts)))
-    ;; set the megatest to be called on the remote host
-    (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))
-    (set! mt-bindir-path (pathname-directory remote-megatest))
-    (if launcher (set! launcher (string-split launcher)))
-    ;; set up the run work area for this test
-    (if (and (args:get-arg "-preclean") ;; user has requested to preclean for this run
-	     (not (member (db:test-get-rundir testinfo)(list "n/a" "/tmp/badname")))) ;; n/a is a placeholder and thus not a read dir
-	(begin
-	  (debug:print-info 0 *default-log-port* "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
-	  (runs:remove-test-directory testinfo 'remove-data-only))) ;; remove data only, do not perturb the record
-
-    ;; prevent overlapping actions - set to LAUNCHED as early as possible
-    ;;
-    ;; the following call handles waiver propogation. cannot yet condense into roll-up-pass-fail
-    (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
-    (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "LAUNCHED" #f)
-    (set! diskpath (get-best-disk *configdat* tconfig))
-    (if diskpath
-	(let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
-	  (set! work-area (car dat))
-	  (set! toptest-work-area (cadr dat))
-	  (debug:print-info 2 *default-log-port* "Using work area " work-area))
-	(begin
-	  (set! work-area (conc test-path "/tmp_run"))
-	  (create-directory work-area #t)
-	  (debug:print 0 *default-log-port* "WARNING: No disk work area specified - running in the test directory under tmp_run")))
-    (set! cmdparms (base64:base64-encode 
-		    (z3:encode-buffer 
-		     (with-output-to-string
-		       (lambda () ;; (list 'hosts     hosts)
-			 (write (list (list 'testpath  test-path)
-				      (list 'transport (conc *transport-type*))
-				      ;; (list 'serverinf *server-info*)
-				      (list 'toppath   *toppath*)
-				      (list 'work-area work-area)
-				      (list 'test-name test-name) 
-				      (list 'runscript runscript) 
-				      (list 'run-id    run-id   )
-				      (list 'test-id   test-id  )
-				      ;; (list 'item-path item-path )
-				      (list 'itemdat   itemdat  )
-				      (list 'megatest  remote-megatest)
-				      (list 'ezsteps   ezsteps) 
-				      (list 'target    mt_target)
-				      (list 'runtlim   (if run-time-limit (common:hms-string->seconds run-time-limit) #f))
-				      (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
-				      (list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
-				      (list 'runname   runname)
-				      (list 'mt-bindir-path mt-bindir-path))))))))
-
-    ;; clean out step records from previous run if they exist
-    ;; (rmt:delete-test-step-records run-id test-id)
-    ;; if the dir does not exist we may have a itempath where individual variables are a path, launch anyway
-    (if (file-exists? work-area)
-	(change-directory work-area)) ;; so that log files from the launch process don't clutter the test dir
-    (cond
-     ((and launcher hosts) ;; must be using ssh hostname
-      (set! fullcmd (append launcher (car hosts)(list remote-megatest "-m" test-sig "-execute" cmdparms) debug-param)))
-     ;; (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms))))
-     (launcher
-      (set! fullcmd (append launcher (list remote-megatest "-m" test-sig "-execute" cmdparms) debug-param)))
-     ;; (set! fullcmd (append launcher (list remote-megatest test-sig "-execute" cmdparms))))
-     (else
-      (if (not useshell)(debug:print 0 *default-log-port* "WARNING: internal launching will not work well without \"useshell yes\" in your [jobtools] section"))
-      (set! fullcmd (append (list remote-megatest "-m" test-sig "-execute" cmdparms) debug-param (list (if useshell "&" ""))))))
-    ;; (set! fullcmd (list remote-megatest test-sig "-execute" cmdparms (if useshell "&" "")))))
-    (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
-    (debug:print 1 *default-log-port* "Launching " work-area)
-    ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
-    (debug:print 4 *default-log-port* "fullcmd: " fullcmd)
-    (let* ((commonprevvals (alist->env-vars
-			    (hash-table-ref/default *configdat* "env-override" '())))
-	   (testprevvals   (alist->env-vars
-			    (hash-table-ref/default tconfig "pre-launch-env-overrides" '())))
-	   (miscprevvals   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
-			    (append (list (list "MT_TEST_RUN_DIR" work-area)
-					  (list "MT_TEST_NAME" test-name)
-					  (list "MT_ITEM_INFO" (conc itemdat)) 
-					  (list "MT_RUNNAME"   runname)
-					  (list "MT_TARGET"    mt_target)
-					  (list "MT_ITEMPATH"  item-path)
-					  )
-				    itemdat)))
-	   ;; Launchwait defaults to true, must override it to turn off wait
-	   (launchwait     (if (equal? (configf:lookup *configdat* "setup" "launchwait") "no") #f #t))
-	   (launch-results (apply (if launchwait
-				      process:cmd-run-with-stderr->list
-				      process-run)
-				  (if useshell
-				      (let ((cmdstr (string-intersperse fullcmd " ")))
-					(if launchwait
-					    cmdstr
-					    (conc cmdstr " >> mt_launch.log 2>&1")))
-				      (car fullcmd))
-				  (if useshell
-				      '()
-				      (cdr fullcmd)))))
-      (if (not launchwait) ;; give the OS a little time to allow the process to start
-	  (thread-sleep! 0.01))
-      (with-output-to-file "mt_launch.log"
-	(lambda ()
-	  (print "LAUNCHCMD: " (string-intersperse fullcmd " "))
-	  (if (list? launch-results)
-	      (apply print launch-results)
-	      (print "NOTE: launched \"" fullcmd "\"\n  but did not wait for it to proceed. Add the following to megatest.config \n[setup]\nlaunchwait yes\n  if you have problems with this"))
-	  #:append))
-      (debug:print 2 *default-log-port* "Launching completed, updating db")
-      (debug:print 2 *default-log-port* "Launch results: " launch-results)
-      (if (not launch-results)
-          (begin
-            (print "ERROR: Failed to run " (string-intersperse fullcmd " ") ", exiting now")
-            ;; (sqlite3:finalize! db)
-            ;; good ole "exit" seems not to work
-            ;; (_exit 9)
-            ;; but this hack will work! Thanks go to Alan Post of the Chicken email list
-            ;; NB// Is this still needed? Should be safe to go back to "exit" now?
-            (process-signal (current-process-id) signal/kill)
-            ))
-      (alist->env-vars miscprevvals)
-      (alist->env-vars testprevvals)
-      (alist->env-vars commonprevvals)
-      launch-results))
-  (change-directory *toppath*))
+  (let* ((item-path       (item-list->path itemdat)))
+    (let loop ((delta        (- (current-seconds) *last-launch*))
+	       (launch-delay (string->number (or (configf:lookup *configdat* "setup" "launch-delay") "5"))))
+      (if (> launch-delay delta)
+	  (begin
+	    (debug:print-info 0 *default-log-port* "Delaying launch of " test-name " for " (- launch-delay delta) " seconds")
+	    (thread-sleep! (- launch-delay delta))
+	    (loop (- (current-seconds) *last-launch*) launch-delay))))
+    (set! *last-launch* (current-seconds))
+    (change-directory *toppath*)
+    (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute", *maybe* - the longer they are set the longer each launch takes (must be non-overlapping with the vars)
+     (append
+      (list
+       (list "MT_RUN_AREA_HOME" *toppath*)
+       (list "MT_TEST_NAME" test-name)
+       (list "MT_RUNNAME"   runname)
+       (list "MT_ITEMPATH"  item-path)
+       )
+      itemdat))
+    (let* ((tregistry       (tests:get-all)) ;; third param (below) is system-allowed
+           ;; for tconfig, why do we allow fallback to test-conf?
+	   (tconfig         (or (tests:get-testconfig test-name tregistry #t force-create: #t)
+				(begin
+                                  (debug:print 0 *default-log-port* "WARNING: falling back to pre-calculated testconfig. This is likely not desired.")
+                                  test-conf))) ;; force re-read now that all vars are set
+	   (useshell        (let ((ush (config-lookup *configdat* "jobtools"     "useshell")))
+			      (if ush 
+				  (if (equal? ush "no") ;; must use "no" to NOT use shell
+				      #f
+				      ush)
+				  #t)))     ;; default is yes
+	   (runscript       (config-lookup tconfig   "setup"        "runscript"))
+	   (ezsteps         (> (length (hash-table-ref/default tconfig "ezsteps" '())) 0)) ;; don't send all the steps, could be big
+	   ;; (diskspace       (config-lookup tconfig   "requirements" "diskspace"))
+	   ;; (memory          (config-lookup tconfig   "requirements" "memory"))
+	   ;; (hosts           (config-lookup *configdat* "jobtools"     "workhosts")) ;; I'm pretty sure this was never completed
+	   (remote-megatest (config-lookup *configdat* "setup" "executable"))
+	   (run-time-limit  (or (configf:lookup  tconfig   "requirements" "runtimelim")
+				(configf:lookup  *configdat* "setup" "runtimelim")))
+	   ;; FIXME SOMEDAY: not good how this is so obtuse, this hack is to 
+	   ;;                allow running from dashboard. Extract the path
+	   ;;                from the called megatest and convert dashboard
+	   ;;             	  or dboard to megatest
+	   (local-megatest  (let* ((lm  (car (argv)))
+				   (dir (pathname-directory lm))
+				   (exe (pathname-strip-directory lm)))
+			      (conc (if dir (conc dir "/") "")
+				    (case (string->symbol exe)
+				      ((dboard)    "../megatest")
+				      ((mtest)     "../megatest")
+				      ((dashboard) "megatest")
+				      (else exe)))))
+	   (launcher        (common:get-launcher *configdat* test-name item-path)) ;; (config-lookup *configdat* "jobtools"     "launcher"))
+	   (test-sig   (conc (common:get-testsuite-name) ":" test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
+	   (work-area  #f)
+	   (toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
+	   (diskpath   #f)
+	   (cmdparms   #f)
+	   (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
+	   (mt-bindir-path #f)
+	   (testinfo   (rmt:get-test-info-by-id run-id test-id))
+	   (mt_target  (string-intersperse (map cadr keyvals) "/"))
+	   (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
+				(if (args:get-arg "-logging")(list "-logging") '()))))
+      
+      ;; (if hosts (set! hosts (string-split hosts)))
+      ;; set the megatest to be called on the remote host
+      (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))
+      (set! mt-bindir-path (pathname-directory remote-megatest))
+      (if launcher (set! launcher (string-split launcher)))
+      ;; set up the run work area for this test
+      (if (and (args:get-arg "-preclean") ;; user has requested to preclean for this run
+	       (not (member (db:test-get-rundir testinfo)(list "n/a" "/tmp/badname")))) ;; n/a is a placeholder and thus not a read dir
+	  (begin
+	    (debug:print-info 0 *default-log-port* "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
+	    (runs:remove-test-directory testinfo 'remove-data-only))) ;; remove data only, do not perturb the record
+      
+      ;; prevent overlapping actions - set to LAUNCHED as early as possible
+      ;;
+      ;; the following call handles waiver propogation. cannot yet condense into roll-up-pass-fail
+      (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
+      (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "LAUNCHED" #f)
+      ;; (pp (hash-table->alist tconfig))
+      (set! diskpath (get-best-disk *configdat* tconfig))
+      (if diskpath
+	  (let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
+	    (set! work-area (car dat))
+	    (set! toptest-work-area (cadr dat))
+	    (debug:print-info 2 *default-log-port* "Using work area " work-area))
+	  (begin
+	    (set! work-area (conc test-path "/tmp_run"))
+	    (create-directory work-area #t)
+	    (debug:print 0 *default-log-port* "WARNING: No disk work area specified - running in the test directory under tmp_run")))
+      (set! cmdparms (base64:base64-encode 
+		      (z3:encode-buffer 
+		       (with-output-to-string
+			 (lambda () ;; (list 'hosts     hosts)
+			   (write (list (list 'testpath  test-path)
+					(list 'transport (conc *transport-type*))
+					;; (list 'serverinf *server-info*)
+					(list 'toppath   *toppath*)
+					(list 'work-area work-area)
+					(list 'test-name test-name) 
+					(list 'runscript runscript) 
+					(list 'run-id    run-id   )
+					(list 'test-id   test-id  )
+					;; (list 'item-path item-path )
+					(list 'itemdat   itemdat  )
+					(list 'megatest  remote-megatest)
+					(list 'ezsteps   ezsteps) 
+					(list 'target    mt_target)
+					(list 'runtlim   (if run-time-limit (common:hms-string->seconds run-time-limit) #f))
+					(list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
+					(list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
+					(list 'runname   runname)
+					(list 'mt-bindir-path mt-bindir-path))))))))
+      
+      ;; clean out step records from previous run if they exist
+      ;; (rmt:delete-test-step-records run-id test-id)
+      ;; if the dir does not exist we may have a itempath where individual variables are a path, launch anyway
+      (if (file-exists? work-area)
+	  (change-directory work-area)) ;; so that log files from the launch process don't clutter the test dir
+      (cond
+       ;; ((and launcher hosts) ;; must be using ssh hostname
+       ;;    (set! fullcmd (append launcher (car hosts)(list remote-megatest "-m" test-sig "-execute" cmdparms) debug-param)))
+       ;; (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms))))
+       (launcher
+	(set! fullcmd (append launcher (list remote-megatest "-m" test-sig "-execute" cmdparms) debug-param)))
+       ;; (set! fullcmd (append launcher (list remote-megatest test-sig "-execute" cmdparms))))
+       (else
+	(if (not useshell)(debug:print 0 *default-log-port* "WARNING: internal launching will not work well without \"useshell yes\" in your [jobtools] section"))
+	(set! fullcmd (append (list remote-megatest "-m" test-sig "-execute" cmdparms) debug-param (list (if useshell "&" ""))))))
+      ;; (set! fullcmd (list remote-megatest test-sig "-execute" cmdparms (if useshell "&" "")))))
+      (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
+      (debug:print 1 *default-log-port* "Launching " work-area)
+      ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
+      (debug:print 4 *default-log-port* "fullcmd: " fullcmd)
+      (let* ((commonprevvals (alist->env-vars
+			      (hash-table-ref/default *configdat* "env-override" '())))
+	     (miscprevvals   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
+			      (append (list (list "MT_TEST_RUN_DIR" work-area)
+					    (list "MT_TEST_NAME" test-name)
+					    (list "MT_ITEM_INFO" (conc itemdat)) 
+					    (list "MT_RUNNAME"   runname)
+					    (list "MT_TARGET"    mt_target)
+					    (list "MT_ITEMPATH"  item-path)
+					    )
+				      itemdat)))
+	     (testprevvals   (alist->env-vars
+			      (hash-table-ref/default tconfig "pre-launch-env-overrides" '())))
+	     ;; Launchwait defaults to true, must override it to turn off wait
+	     (launchwait     (if (equal? (configf:lookup *configdat* "setup" "launchwait") "no") #f #t))
+	     (launch-results (apply (if launchwait
+					process:cmd-run-with-stderr->list
+					process-run)
+				    (if useshell
+					(let ((cmdstr (string-intersperse fullcmd " ")))
+					  (if launchwait
+					      cmdstr
+					      (conc cmdstr " >> mt_launch.log 2>&1")))
+					(car fullcmd))
+				    (if useshell
+					'()
+					(cdr fullcmd)))))
+	(if (not launchwait) ;; give the OS a little time to allow the process to start
+	    (thread-sleep! 0.01))
+	(with-output-to-file "mt_launch.log"
+	  (lambda ()
+	    (print "LAUNCHCMD: " (string-intersperse fullcmd " "))
+	    (if (list? launch-results)
+		(apply print launch-results)
+		(print "NOTE: launched \"" fullcmd "\"\n  but did not wait for it to proceed. Add the following to megatest.config \n[setup]\nlaunchwait yes\n  if you have problems with this"))
+	    #:append))
+	(debug:print 2 *default-log-port* "Launching completed, updating db")
+	(debug:print 2 *default-log-port* "Launch results: " launch-results)
+	(if (not launch-results)
+	    (begin
+	      (print "ERROR: Failed to run " (string-intersperse fullcmd " ") ", exiting now")
+	      ;; (sqlite3:finalize! db)
+	      ;; good ole "exit" seems not to work
+	      ;; (_exit 9)
+	      ;; but this hack will work! Thanks go to Alan Post of the Chicken email list
+	      ;; NB// Is this still needed? Should be safe to go back to "exit" now?
+	      (process-signal (current-process-id) signal/kill)
+	      ))
+	(alist->env-vars miscprevvals)
+	(alist->env-vars testprevvals)
+	(alist->env-vars commonprevvals)
+	launch-results))
+    (change-directory *toppath*)))
 
 ;; recover a test where the top controlling mtest may have died
 ;;

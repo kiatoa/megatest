@@ -133,16 +133,25 @@
 (define *test-ids*          (make-hash-table)) ;; cache run-id, testname, and item-path => test-id
 (define *test-info*         (make-hash-table)) ;; cache the test info records, update the state, status, run_duration etc. from testdat.db
 
-(define *run-info-cache*    (make-hash-table)) ;; run info is stable, no need to reget
+(define *run-info-cache*     (make-hash-table)) ;; run info is stable, no need to reget
 (define *launch-setup-mutex* (make-mutex))     ;; need to be able to call launch:setup often so mutex it and re-call the real deal only if *toppath* not set
 (define *homehost-mutex*     (make-mutex))
+
+;; launching and hosts
+(defstruct host
+  (reachable    #f)
+  (last-update  0)
+  (last-used    0)
+  (last-cpuload 1))
+
+(define *host-loads*         (make-hash-table))
 
 ;; cache environment vars for each run here
 (define *env-vars-by-run-id* (make-hash-table))
 
 ;; Testconfig and runconfig caches. 
-(define *testconfigs*       (make-hash-table)) ;; test-name => testconfig
-(define *runconfigs*        (make-hash-table)) ;; target    => runconfig
+(define *testconfigs*        (make-hash-table)) ;; test-name => testconfig
+(define *runconfigs*         (make-hash-table)) ;; target    => runconfig
 
 ;; This is a cache of pre-reqs met, don't re-calc in cases where called with same params less than
 ;; five seconds ago
@@ -150,7 +159,7 @@
 
 ;; cache of verbosity given string
 ;;
-(define *verbosity-cache* (make-hash-table))
+(define *verbosity-cache*    (make-hash-table))
 
 (define (common:clear-caches)
   (set! *target*             (make-hash-table))
@@ -1130,6 +1139,51 @@
                   ;; (print "NO MATCH: " hed)
                   (loop (car tal)(cdr tal) loads proc-num phys-num core-num)))))))))
 
+(define (common:unix-ping hostname)
+  (let ((res (system (conc "ping -c 1 " hostname " > /dev/null"))))
+    (eq? res 0)))
+
+;; ideally put all this info into the db, no need to preserve it across moving homehost
+;;
+(define (common:get-least-loaded-host hosts)
+  (if (null? hosts)
+      #f
+      ;;
+      ;; stategy:
+      ;;    sort by last-used and normalized-load
+      ;;    if last-updated > 15 seconds then re-update
+      ;;    take the host with the lowest load with the lowest last-used (i.e. not used for longest time)
+      ;;
+      (let ((best-host #f)
+	    (curr-time (current-seconds)))
+	(for-each
+	 (lambda (hostname)
+	   (let* ((rec       (let ((h (hash-table-ref/default *host-loads* hostname #f)))
+			       (if h
+				   h
+				   (let ((h (make-host)))
+				     (hash-table-set! *host-loads* hostname h)
+				     h))))
+		  ;; if host hasn't been pinged in 15 sec update it's data
+		  (ping-good (if (< (- curr-time (host-last-update rec)) 15)
+				 (host-reachable rec)
+				 (or (host-reachable rec)
+				     (begin
+				       (host-reachable-set! rec (common:unix-ping hostname))
+				       (host-last-update-set! rec curr-time)
+				       (host-last-cpuload-set! rec (common:get-normalized-cpu-load hostname))
+				       (host-reachable rec))))))
+	     (cond
+	      ((not best-host)
+	       (set! best-host hostname))
+	      ((and ping-good
+		    (< (alist-ref 'adj-core-load (host-last-cpuload rec))
+		       (alist-ref 'adj-core-load
+				  (host-last-cpuload (hash-table-ref *host-loads* best-host)))))
+	       (set! best-host rec)))))
+	 hosts)
+	best-host)))
+
 (define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
   (let* ((loadavg (common:get-cpu-load remote-host))
 	 (first   (car loadavg))
@@ -1631,12 +1685,15 @@
 ;;  T E S T   L A U N C H I N G   P E R   I T E M   W I T H   H O S T   T Y P E S
 ;;======================================================================
 ;; 
-;; [host-types]
-;; general ssh #{getbgesthost general}
-;; nbgeneral nbjob run JOBCOMMAND -log $MT_LINKTREE/$MT_TARGET/$MT_RUNNAME.$MT_TESTNAME-$MT_ITEM_PATH.lgo
-;; 
 ;; [hosts]
-;; general cubian xena
+;; arm cubie01 cubie02
+;; x86_64 zeus xena myth01
+;; allhosts #{g hosts arm} #{g hosts x86_64}
+;; 
+;; [host-types]
+;; general #MTLOWESTLOAD #{g hosts allhosts}
+;; arm     #MTLOWESTLOAD #{g hosts arm}
+;; nbgeneral nbjob run JOBCOMMAND -log $MT_LINKTREE/$MT_TARGET/$MT_RUNNAME.$MT_TESTNAME-$MT_ITEM_PATH.lgo
 ;; 
 ;; [launchers]
 ;; envsetup general
@@ -1644,11 +1701,10 @@
 ;; % nbgeneral
 ;; 
 ;; [jobtools]
-;; launcher bsub
-;; # if defined and not "no" flexi-launcher will bypass launcher unless there is no
-;; # match.
+;; # if defined and not "no" flexi-launcher will bypass "launcher" unless no match.
 ;; flexi-launcher yes  
-
+;; launcher nbfake
+;;
 (define (common:get-launcher configdat testname itempath)
   (let ((fallback-launcher (configf:lookup configdat "jobtools" "launcher")))
     (if (and (configf:lookup configdat "jobtools" "flexi-launcher") ;; overrides launcher
@@ -1665,7 +1721,12 @@
 			(debug:print-info 2 *default-log-port* "Have flexi-launcher match for " testname "/" itempath " = " host-type)
 			(let ((launcher (configf:lookup configdat "host-types" host-type)))
 			  (if launcher
-			      launcher
+			      (let* ((launcher-parts (string-split launcher))
+				     (launcher-exe   (car launcher-parts)))
+				(if (equal? launcher-exe "#MTLOWESTLOAD") ;; this is our special case, we will find the lowest load and craft a nbfake commandline
+				    (let ((targ-host (common:get-least-loaded-host (cdr launcher-parts))))
+				      (conc "remrun " targ-host))
+				    launcher))
 			      (begin
 				(debug:print-info 0 *default-log-port* "WARNING: no launcher found for host-type " host-type)
 				(if (null? tal)

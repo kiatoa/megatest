@@ -11,6 +11,7 @@
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking format)
 (import (prefix sqlite3 sqlite3:))
+(import (prefix dbi dbi:))
 
 (declare (unit tasks))
 (declare (uses db))
@@ -96,16 +97,19 @@
 	      (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
 	      (exists       (file-exists? dbpath))
 	      (write-access (file-write-access? dbpath))
+        (dbdat '())
 	      (mdb          (cond ;; what the hek is *toppath* doing here?
 			     ((and (string? *toppath*)(file-write-access? *toppath*))
-			      (sqlite3:open-database dbfile))
-			     ((file-read-access? dbpath)    (sqlite3:open-database dbfile))
-			     (else (sqlite3:open-database ":memory:")))) ;; (never-give-up-open-db dbpath))
+            (set! dbdat (cons (cons 'dbname dbfile) dbdat))
+			      (dbi:open 'sqlite3 dbdat))
+			     ((file-read-access? dbpath)    (dbi:open 'sqlite3 dbdat))
+			     (else (dbi:open 'sqlite3 '((dbname . ":memory:")))))) ;; (never-give-up-open-db dbpath))
 	      (handler      (make-busy-timeout 36000)))
+
 	 (if (and exists
 		  (not write-access))
 	     (set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
-	 (sqlite3:set-busy-handler! mdb handler)
+	 ;;(sqlite3:set-busy-handler! mdb handler)
 	 (db:set-sync mdb) ;; (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
 	 ;;  (if (or (and (not exists)
 	 ;; 	      (file-write-access? *toppath*))
@@ -125,14 +129,14 @@
          ;;                        params TEXT,
          ;;                        creation_time TIMESTAMP,
          ;;                        execution_time TIMESTAMP);")
-	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
+	 (dbi:exec mdb "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
                                 pid INTEGER,
                                 start_time TIMESTAMP,
                                 last_update TIMESTAMP,
                                 hostname TEXT,
                                 username TEXT,
                                CONSTRAINT monitors_constraint UNIQUE (pid,hostname));")
-	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY,
+	 (dbi:exec mdb "CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY,
                                   pid INTEGER,
                                   interface TEXT,
                                   hostname TEXT,
@@ -146,7 +150,7 @@
                                   transport TEXT,
                                   run_id INTEGER);")
 	 ;;                               CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
-	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
+	 (dbi:exec mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
                                   server_id INTEGER,
                                   pid INTEGER,
                                   hostname TEXT,

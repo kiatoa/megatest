@@ -1,0 +1,28 @@
+#!/bin/bash
+###############################################################################
+#
+# remrun - same behavior as nbfake but first param is a hosthane
+#          (capture command output in a logfile)
+#
+# remrun behavior can be changed by setting the following env var:
+#   NBFAKE_LOG        Logfile for nbfake output
+#
+###############################################################################
+
+if [[ -z "$@" ]]; then
+  cat <<__EOF
+
+remrun usage:
+
+remrun hostname <command to run>
+
+remrun behavior can be changed by setting the following env vars:
+   NBFAKE_LOG        Logfile for remrun output
+
+__EOF
+  exit
+fi
+
+export NBFAKE_HOST=$1
+shift
+exec nbfake $*

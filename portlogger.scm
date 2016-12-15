@@ -12,9 +12,11 @@
 
 (use sqlite3 srfi-1 posix srfi-69 hostinfo dot-locking z3)
 (import (prefix sqlite3 sqlite3:))
+(import (prefix dbi dbi:))
 
 (declare (unit portlogger))
 (declare (uses db))
+
 
 ;; lsof -i
 
@@ -23,10 +25,10 @@
   (let* ((avail    (tasks:wait-on-journal fname 5 remove: #t)) ;; wait up to about 10 seconds for the journal to go away
 	 (exists   (file-exists? fname))
 	 (db       (if avail 
-		       (sqlite3:open-database fname)
+		       (dbi:open 'sqlite3 '((dbname . fname)))
 		       (begin
 			 (system (conc "rm -f " fname))
-			 (sqlite3:open-database fname))))
+			 (dbi:open 'sqlite3 '((dbname . fname))))))
 	 (handler  (make-busy-timeout 136000))
 	 (canwrite (file-write-access? fname)))
 	 ;; (db-init  (lambda ()
@@ -37,10 +39,10 @@
          ;;                 state TEXT DEFAULT 'not-used',
          ;;                 fail_count INTEGER DEFAULT 0,
          ;;                 update_time TIMESTAMP DEFAULT (strftime('%s','now')) );"))))
-    (sqlite3:set-busy-handler! db handler)
+    ;;(sqlite3:set-busy-handler! db handler)
     (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
     ;; (if (not exists) ;; needed with IF NOT EXISTS?
-    (sqlite3:execute 
+    (dbi:exec 
      db
      "CREATE TABLE IF NOT EXISTS ports (
             port INTEGER PRIMARY KEY,
