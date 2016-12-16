@@ -1193,18 +1193,15 @@
          )
     (cond
      ((< load-sample-age loadinfo-timeout-seconds)
-      ;;(print "BB> chr - 1")
       (list #t
             load-sample-time
             load))
      ((and host-rec
            (< (current-seconds) (+ (host-last-update host-rec) host-last-update-timeout-seconds)))
-      ;;(print "BB> chr - 2")
       (list #t
             (host-last-update host-rec)
             (host-last-cpuload host-rec )))
      ((common:unix-ping hostname)
-      ;;(print "BB> chr - 3 host-rec="host-rec" lu="(if host-rec (- (current-seconds) (host-last-update host-rec)) "None"))
       (list #t
             (current-seconds)
             (alist-ref 'adj-core-load (common:get-normalized-cpu-load hostname))))

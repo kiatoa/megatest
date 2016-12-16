@@ -219,7 +219,7 @@
 			 (begin
 			   (debug:print 0 *default-log-port* "FATAL ERROR: http-transport:client-api-send-receive called with no server info")
 			   (exit 1))))
-	 (res        #f)
+	 (res        (vector #f "uninitialized"))
 	 (success    #t)
 	 (sparams    (db:obj->string params transport: 'http)))
        (debug:print-info 11 *default-log-port* "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")

@@ -113,6 +113,7 @@
   (handle-exceptions
    exn
    (let ((call-chain (get-call-chain)))
+     (debug:print 0 *default-log-port* "WARNING: api:execute-requests received an exception from peer")
      (print-call-chain (current-error-port))
      (debug:print 0 *default-log-port* " message: "  ((condition-property-accessor 'exn 'message) exn))       
      (vector #f (vector exn call-chain dat))) ;; return some stuff for debug if an exception happens
