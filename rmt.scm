@@ -345,6 +345,11 @@
 (define (rmt:general-call stmtname run-id . params)
   (rmt:send-receive 'general-call run-id (append (list stmtname run-id) params)))
 
+
+;; given a hostname, return a pair of cpu load and update time representing latest intelligence from tests running on that host
+(define (rmt:get-latest-host-load hostname)
+  (rmt:send-receive 'get-latest-host-load 0 (list hostname)))
+
 ;; (define (rmt:sync-inmem->db run-id)
 ;;   (rmt:send-receive 'sync-inmem->db run-id '()))
 
