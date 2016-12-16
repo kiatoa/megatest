@@ -320,7 +320,7 @@
     (let loop ((minutes   (calc-minutes))
 	       (cpu-load  (get-cpu-load))
 	       (disk-free (get-df (current-directory))))
-      (let ((new-cpu-load (let* ((load  (get-cpu-load))
+      (let ((new-cpu-load (let* ((load  (common:get-normalized-cpu-load #f))
 				 (delta (abs (- load cpu-load))))
 			    (if (> delta 0.6) ;; don't bother updating with small changes
 				load

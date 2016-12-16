@@ -241,6 +241,7 @@
 	    ((read-test-data)               (apply db:read-test-data dbstruct params))
 
 	    ;; MISC
+            ((get-latest-host-load)         (apply db:get-latest-host-load dbstruct params))
 	    ((have-incompletes?)            (apply db:have-incompletes? dbstruct params))
 	    ((login)                        (apply db:login dbstruct params))
 	    ((general-call)                 (let ((stmtname   (car params))
