@@ -124,6 +124,18 @@
      (lambda () ;; (process-run "/bin/bash" "-c" "exec ls -l /tmp/foobar > /tmp/delme-more.log 2>&1")
        (let* ((cmd (conc stepcmd " > " stepname ".log 2>&1")) ;; >outfile 2>&1 
 	      (pid (process-run "/bin/bash" (list "-c" cmd))))
+
+         (with-output-to-file "Makefile.ezsteps"
+           (lambda ()
+             (print stepname ".log :")
+             (print "\t" cmd)
+             (if (file-exists? (conc stepname ".logpro"))
+                 (print "\tlogpro " stepname ".logpro " stepname ".html < " stepname ".log"))
+             (print)
+             (print stepname " : " stepname ".log")
+             (print))
+           #:append)
+
 	 (rmt:test-set-top-process-pid run-id test-id pid)
 	 (let processloop ((i 0))
 	   (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
@@ -318,11 +330,11 @@
     ;; (tests:set-full-meta-info test-id run-id (calc-minutes) work-area)
     (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
     (let loop ((minutes   (calc-minutes))
-	       (cpu-load  (get-cpu-load))
+	       (cpu-load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
 	       (disk-free (get-df (current-directory))))
-      (let ((new-cpu-load (let* ((load  (common:get-normalized-cpu-load #f))
+      (let ((new-cpu-load (let* ((load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
 				 (delta (abs (- load cpu-load))))
-			    (if (> delta 0.6) ;; don't bother updating with small changes
+			    (if (> delta 0.1) ;; don't bother updating with small changes
 				load
 				#f)))
 	    (new-disk-free (let* ((df    (get-df (current-directory)))
