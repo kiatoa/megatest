@@ -3479,6 +3479,25 @@
      run-id testname)
     res))
 
+
+(define (db:get-latest-host-load dbstruct raw-hostname)
+  (let* ((hostname (string-substitute "\\..*$" "" raw-hostname))
+        (res  (cons -1 0))
+        (mydb (db:dbdat-get-db (db:get-db dbstruct 0)))
+        )
+    (print "BB> hostname="hostname" raw-hostname="raw-hostname" dbstruct="dbstruct" mydb="mydb)
+    (db:with-db
+     dbstruct
+     0
+     #f
+     (lambda (db)
+       (sqlite3:for-each-row
+        (lambda (cpuload update-time)  (set! res (cons cpuload update-time)))
+        db
+        "SELECT tr.cpuload, tr.update_time FROM test_rundat tr, tests t WHERE t.host=? AND tr.cpuload != -1  AND tr.test_id=t.id ORDER BY tr.update_time DESC LIMIT 1;"
+        hostname))) res ))
+
+
 (define (db:set-top-level-from-items dbstruct run-id testname)
   (let* ((dbdat (db:get-db dbstruct run-id))
 	 (db    (db:dbdat-get-db dbdat))
