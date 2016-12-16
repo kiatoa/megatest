@@ -3485,7 +3485,6 @@
         (res  (cons -1 0))
         (mydb (db:dbdat-get-db (db:get-db dbstruct 0)))
         )
-    (print "BB> hostname="hostname" raw-hostname="raw-hostname" dbstruct="dbstruct" mydb="mydb)
     (db:with-db
      dbstruct
      0
