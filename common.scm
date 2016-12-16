@@ -1086,7 +1086,8 @@
 	(lambda ()(list (read)(read)(read))))))
 
 ;; get normalized cpu load by reading from /proc/loadavg and /proc/cpuinfo return all three values and the number of real cpus and the number of threads
-;; returns list (normalized-proc-load normalized-core-load 1m 5m 15m ncores nthreads)
+;; returns alist '((adj-cpu-load . normalized-proc-load) ... etc.
+;;  keys: adj-proc-load, adj-core-load, 1m-load, 5m-load, 15m-load
 ;;
 (define (common:get-normalized-cpu-load remote-host)
   (let ((data (if remote-host
