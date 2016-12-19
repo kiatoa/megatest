@@ -1709,7 +1709,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (if (null? remargs)
 		  (begin
 		    (debug:print-error 0 *default-log-port* "nothing specified to run!")
-		    (if db (sqlite3:finalize! db))
+		    (if db (dbi:close db))
 		    (exit 6))
 		  (let* ((stepname   (args:get-arg "-runstep"))
 			 (logprofile (args:get-arg "-logpro"))
@@ -1770,13 +1770,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			     (not status)))
 		    (begin
 		      (debug:print-error 0 *default-log-port* "You must specify :state and :status with every call to -test-status\n" help)
-		      (if (sqlite3:database? db)(sqlite3:finalize! db))
+		      (if (dbi:database? db)(dbi:close db))
 		      (exit 6)))
 		(let* ((msg    (args:get-arg "-m"))
 		       (numoth (length (hash-table-keys otherdata))))
 		  ;; Convert to rpc inside the tests:test-set-status! call, not here
 		  (tests:test-set-status! run-id test-id state newstatus msg otherdata work-area: work-area))))
-	  (if (sqlite3:database? db)(sqlite3:finalize! db))
+	  (if (dbi:database? db)(dbi:close db))
 	  (set! *didsomething* #t))))
 
 ;;======================================================================
@@ -1793,7 +1793,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (exit 1)))
       (set! keys (rmt:get-keys)) ;;  db))
       (debug:print 1 *default-log-port* "Keys: " (string-intersperse keys ", "))
-      (if (sqlite3:database? db)(sqlite3:finalize! db))
+      (if (dbi:database? db)(dbi:close db))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-gui")

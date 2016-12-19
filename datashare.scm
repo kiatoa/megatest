@@ -146,7 +146,7 @@ Version: " megatest-fossil-hash)) ;; "
           path       TEXT);")))
 
 (define (datashare:register-data db area version-name store-type submitter quality source-path comment)
-  (let ((iter-qry       (sqlite3:prepare db "SELECT max(iteration) FROM pkgs WHERE area=? AND version_name=?;"))
+  (let ((iter-qry       (dbi:prepare db "SELECT max(iteration) FROM pkgs WHERE area=? AND version_name=?;"))
 	(next-iteration 0))
     (dbi:with-transaction
      db

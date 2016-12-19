@@ -105,8 +105,8 @@
             (set! dbdat (cons (cons 'dbname dbfile) dbdat))
 			      (dbi:open 'sqlite3 dbdat))
 			     ((file-read-access? dbpath)    (dbi:open 'sqlite3 dbdat))
-			     (else (dbi:open 'sqlite3 '((dbname . ":memory:")))))) ;; (never-give-up-open-db dbpath))
-	      (handler      (make-busy-timeout 36000)))
+			     (else (dbi:open 'sqlite3 '((dbname . ":memory:"))))))) ;; (never-give-up-open-db dbpath))
+	      ;;(handler      (make-busy-timeout 36000)))
 
 	 (if (and exists
 		  (not write-access))

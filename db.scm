@@ -273,7 +273,6 @@
 ;; This routine creates the db if not already present. It is only called if the db is not already opened
 ;;
 (define (db:open-db dbstruct #!key (areapath #f))
-  (print (db:open-megatest-db path: (db:dbfile-path)))
   (let ((tmpdb (dbr:dbstruct-tmpdb dbstruct))) ;; RA => Returns the first reference in dbstruct
     (if tmpdb
 	tmpdb
@@ -1678,7 +1677,6 @@
 ;; also updates *global-delta*
 ;;
 (define (db:get-var dbstruct var)
-  (print dbstruct var)
   (let* ((res      #f)
 	 (dbdat    (db:get-db dbstruct #f))
 	 (db       (db:dbdat-get-db dbdat)))
@@ -1724,7 +1722,6 @@
 ;; using keys:config-get-fields?
 
 (define (db:get-keys dbstruct)
-  (print dbstruct)
   (if *db-keys* *db-keys* 
       (let ((res '()))
 	(db:with-db dbstruct #f #f
@@ -1766,7 +1763,6 @@
      (let ((res #f))
        (dbi:for-each-row
 	(lambda (runname)
-    (print runname)
 	  (set! res runname))
 	db
 	"SELECT runname FROM runs WHERE id=?;"
@@ -1782,7 +1778,6 @@
      (let ((res #f))
        (dbi:for-each-row
 	(lambda (val)
-    (print val)
 	  (set! res val))
 	db
 	(conc "SELECT " key " FROM runs WHERE id=?;")
@@ -3253,7 +3248,7 @@
 ;;    ;; 	)))
 
 (define (db:get-all-state-status-counts-for-test db run-id test-name item-path)
-  (sqlite3:map-row
+  (dbi:map-row
    (lambda (state status count)
      (make-dbr:counts state: state status: status count: count))
    db
@@ -3262,14 +3257,14 @@
 
 
 (define (db:get-all-item-states db run-id test-name)
-  (sqlite3:map-row 
+  (dbi:map-row 
    (lambda (a) a)
    db
    "SELECT DISTINCT state FROM tests WHERE item_path != '' AND state != 'DELETED' AND run_id=? AND testname=?"
    run-id test-name))
 
 (define (db:get-all-item-statuses db run-id test-name)
-  (sqlite3:map-row 
+  (dbi:map-row 
    (lambda (a) a)
    db
    "SELECT DISTINCT status FROM tests WHERE item_path != '' AND state != 'DELETED' AND state='COMPLETED' AND run_id=? AND testname=?"
