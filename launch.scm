@@ -124,6 +124,18 @@
      (lambda () ;; (process-run "/bin/bash" "-c" "exec ls -l /tmp/foobar > /tmp/delme-more.log 2>&1")
        (let* ((cmd (conc stepcmd " > " stepname ".log 2>&1")) ;; >outfile 2>&1 
 	      (pid (process-run "/bin/bash" (list "-c" cmd))))
+
+         (with-output-to-file "Makefile.ezsteps"
+           (lambda ()
+             (print stepname ".log :")
+             (print "\t" cmd)
+             (if (file-exists? (conc stepname ".logpro"))
+                 (print "\tlogpro " stepname ".logpro " stepname ".html < " stepname ".log"))
+             (print)
+             (print stepname " : " stepname ".log")
+             (print))
+           #:append)
+
 	 (rmt:test-set-top-process-pid run-id test-id pid)
 	 (let processloop ((i 0))
 	   (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
@@ -318,11 +330,11 @@
     ;; (tests:set-full-meta-info test-id run-id (calc-minutes) work-area)
     (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
     (let loop ((minutes   (calc-minutes))
-	       (cpu-load  (get-cpu-load))
+	       (cpu-load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
 	       (disk-free (get-df (current-directory))))
-      (let ((new-cpu-load (let* ((load  (get-cpu-load))
+      (let ((new-cpu-load (let* ((load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
 				 (delta (abs (- load cpu-load))))
-			    (if (> delta 0.6) ;; don't bother updating with small changes
+			    (if (> delta 0.1) ;; don't bother updating with small changes
 				load
 				#f)))
 	    (new-disk-free (let* ((df    (get-df (current-directory)))
@@ -1055,6 +1067,7 @@
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
+  (mutex-lock! *launch-setup-mutex*) ;; setting variables and processing the testconfig is NOT thread-safe, reuse the launch-setup mutex
   (let* ((item-path       (item-list->path itemdat)))
     (let loop ((delta        (- (current-seconds) *last-launch*))
 	       (launch-delay (string->number (or (configf:lookup *configdat* "setup" "launch-delay") "5"))))
@@ -1063,7 +1076,6 @@
 	    (debug:print-info 0 *default-log-port* "Delaying launch of " test-name " for " (- launch-delay delta) " seconds")
 	    (thread-sleep! (- launch-delay delta))
 	    (loop (- (current-seconds) *last-launch*) launch-delay))))
-    (set! *last-launch* (current-seconds))
     (change-directory *toppath*)
     (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute", *maybe* - the longer they are set the longer each launch takes (must be non-overlapping with the vars)
      (append
@@ -1119,7 +1131,6 @@
 	   (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	   (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 				(if (args:get-arg "-logging")(list "-logging") '()))))
-      
       ;; (if hosts (set! hosts (string-split hosts)))
       ;; set the megatest to be called on the remote host
       (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))
@@ -1192,6 +1203,7 @@
       (debug:print 1 *default-log-port* "Launching " work-area)
       ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
       (debug:print 4 *default-log-port* "fullcmd: " fullcmd)
+      (set! *last-launch* (current-seconds)) ;; all that junk above takes time, set this as late as possible.
       (let* ((commonprevvals (alist->env-vars
 			      (hash-table-ref/default *configdat* "env-override" '())))
 	     (miscprevvals   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
@@ -1219,6 +1231,7 @@
 				    (if useshell
 					'()
 					(cdr fullcmd)))))
+        (mutex-unlock! *launch-setup-mutex*) ;; yes, really should mutex all the way to here. Need to put this entire process into a fork.
 	(if (not launchwait) ;; give the OS a little time to allow the process to start
 	    (thread-sleep! 0.01))
 	(with-output-to-file "mt_launch.log"

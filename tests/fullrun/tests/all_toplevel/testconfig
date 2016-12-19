@@ -1,6 +1,6 @@
 [ezsteps]
 calcresults megatest -list-runs $MT_RUNNAME -target $MT_TARGET
-check_triggers  cat $MT_RUN_AREA_HOME/triggers_$MT_RUN_NAME.dat
+check_triggers  cat $MT_RUN_AREA_HOME/triggers_$MT_RUNNAME.dat
 
 [logpro]
 check_triggers ;;

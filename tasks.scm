@@ -331,8 +331,8 @@
      (lambda (a . b)
        (set! res (cons (apply vector a b) res)))
      mdb
-     (conc "SELECT " selstr " FROM servers WHERE run_id=? AND state in ('available','running','dbprep') ORDER BY start_time DESC;")
-     run-id)
+     (conc "SELECT " selstr " FROM servers WHERE state in ('available','running','dbprep') ORDER BY start_time DESC;")
+     )
     (vector header res)))
 
 (define (tasks:get-server mdb run-id #!key (retries 10))
