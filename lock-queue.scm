@@ -9,6 +9,8 @@
 
 (use sqlite3 srfi-18)
 (import (prefix sqlite3 sqlite3:))
+(include "/nfs/site/disks/icf_fdk_cw_gwa002/srehman/fossil/dbi/dbi.scm")
+(import (prefix dbi dbi:))
 
 (declare (unit lock-queue))
 (declare (uses common))
@@ -36,8 +38,8 @@
 (define (lock-queue:open-db fname #!key (count 10))
   (let* ((actualfname (conc fname ".lockdb"))
 	 (dbexists (file-exists? actualfname))
-	 (db       (sqlite3:open-database actualfname))
-	 (handler  (make-busy-timeout 136000)))
+	 (db       (dbi:open 'sqlite3 (cons (cons ('dbname actualfname) '())))))
+	 ;;(handler  (make-busy-timeout 136000)))
     (if dbexists
 	(vector db actualfname)
 	(begin
@@ -48,10 +50,10 @@
 	     (if (> count 0)
 		 (lock-queue:open-db fname count: (- count 1))
 		 (vector db actualfname)))
-	   (sqlite3:with-transaction
+	   (dbi:with-transaction
 	    db
 	    (lambda ()
-	      (sqlite3:execute 
+	      (dbi:exec 
 	       db
 	       "CREATE TABLE IF NOT EXISTS queue (
      	         id         INTEGER PRIMARY KEY,
@@ -59,14 +61,14 @@
                  start_time INTEGER,
                  state      TEXT,
                  CONSTRAINT queue_constraint UNIQUE (test_id));")
-	      (sqlite3:execute
+	      (dbi:exec
 	       db
 	       "CREATE TABLE IF NOT EXISTS runlocks (
                  id         INTEGER PRIMARY KEY,
                  test_id    INTEGER,
                  run_lock   TEXT,
                  CONSTRAINT runlock_constraint UNIQUE (run_lock));"))))))
-    (sqlite3:set-busy-handler! db handler)
+    ;;(sqlite3:set-busy-handler! db handler)
     (vector db actualfname)))
 
 (define (lock-queue:set-state dbdat test-id newstate #!key (remtries 10))
@@ -82,7 +84,7 @@
        (begin
 	 (debug:print-error 0 *default-log-port* " Failed to set lock state for test with id " test-id ", error: " ((condition-property-accessor 'exn 'message) exn) ", giving up.")
 	 #f))
-   (sqlite3:execute (lock-queue:db-dat-get-db dbdat) "UPDATE queue SET state=? WHERE test_id=?;"
+   (dbi:exec (lock-queue:db-dat-get-db dbdat) "UPDATE queue SET state=? WHERE test_id=?;"
 		    newstate
 		    test-id)))
 
@@ -102,7 +104,7 @@
 	 (debug:print-error 0 *default-log-port* " Failed to find younger locks for test with id " test-id ", error: " ((condition-property-accessor 'exn 'message) exn) ", giving up.")
 	 #f))
    (let ((res #f))
-     (sqlite3:for-each-row
+     (dbi:for-each-row
       (lambda (tid)
 	;; Actually this should not be needed as mystart cannot be simultaneously less than and test-id same as 
 	(if (not (equal? tid test-id)) 
@@ -129,10 +131,10 @@
 	      ;; (begin ;; never recovered, remote the lock file and return #f, no lock obtained
 	      (lock-queue:delete-lock-db dbdat)
 	      #f)
-	    (sqlite3:with-transaction
+	    (dbi:with-transaction
 	     db
 	     (lambda ()
-	       (sqlite3:for-each-row (lambda (tid lockstate)
+	       (dbi:for-each-row (lambda (tid lockstate)
 				       (set! res (list tid lockstate)))
 				     lckqry)
 	       (if res
@@ -140,11 +142,11 @@
 		       #t ;; already have the lock
 		       #f)
 		   (begin
-		     (sqlite3:execute mklckqry test-id)
+		     (dbi:exec mklckqry test-id)
 		     ;; if no error handled then return #t for got the lock
 		     #t)))))))
-      (sqlite3:finalize! lckqry)
-      (sqlite3:finalize! mklckqry)
+      (dbi:close lckqry)
+      (dbi:close mklckqry)
       result)))
 
 (define (lock-queue:release-lock fname test-id #!key (count 10))
@@ -158,7 +160,7 @@
        (thread-sleep! (/ count 10))
        (if (> count 0)
 	   (begin
-	     (sqlite3:finalize! (lock-queue:db-dat-get-db dbdat))
+	     (dbi:close (lock-queue:db-dat-get-db dbdat))
 	     (lock-queue:release-lock fname test-id count: (- count 1)))
 	   (let ((journal (conc fname "-journal")))
 	     ;; If we've tried ten times and failed there is a serious problem
@@ -169,8 +171,8 @@
 	      (if (file-exists? journal)(delete-file journal))
 	      (if (file-exists? fname)  (delete-file fname))
 	      #f))))
-     (sqlite3:execute (lock-queue:db-dat-get-db dbdat) "DELETE FROM runlocks WHERE test_id=?;" test-id)
-     (sqlite3:finalize! (lock-queue:db-dat-get-db dbdat)))))
+     (dbi:exec (lock-queue:db-dat-get-db dbdat) "DELETE FROM runlocks WHERE test_id=?;" test-id)
+     (dbi:close (lock-queue:db-dat-get-db dbdat)))))
 
 (define (lock-queue:steal-lock dbdat test-id #!key (count 10))
   (debug:print-info 0 *default-log-port* "Attempting to steal lock at " (lock-queue:db-dat-get-path dbdat))
@@ -184,7 +186,7 @@
      (if (> count 0)
 	 (lock-queue:steal-lock dbdat test-id count: (- count 1))
 	 #f))
-   (sqlite3:execute (lock-queue:db-dat-get-db dbdat) "DELETE FROM runlocks WHERE run_lock='locked';"))
+   (dbi:exec (lock-queue:db-dat-get-db dbdat) "DELETE FROM runlocks WHERE run_lock='locked';"))
   (lock-queue:get-lock dbdat test-it))
 
 ;; returns #f if ok to skip the task
@@ -205,7 +207,7 @@
        (thread-sleep! 10)
        (if (> count 0)
 	   (begin
-	     (sqlite3:finalize! db)
+	     (dbi:close db)
 	     (lock-queue:wait-turn fname test-id count: (- count 1)))
 	   (begin
 	     (debug:print 0 *default-log-port* "Giving up calls to lock-queue:wait-turn for test-id " test-id " at path " fname ", printing call chain")
@@ -216,7 +218,7 @@
      (if (not (lock-queue:any-younger? dbdat mystart test-id)) ;; no processing in flight, must try to start processing
 	 (begin
 	   (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 waiting-msg: "lock-queue:wait-turn; waiting on journal file")
-	   (sqlite3:execute
+	   (dbi:exec
 	    db
 	    "INSERT OR REPLACE INTO queue (test_id,start_time,state) VALUES (?,?,'waiting');"
 	    test-id mystart)
@@ -237,7 +239,7 @@
 				(begin
 				  (thread-sleep! 1)
 				  (loop (lock-queue:any-younger? dbdat mystart test-id)))))))))
-	     (sqlite3:finalize! db)
+	     (dbi:close db)
 	     result))))))
 	  
             

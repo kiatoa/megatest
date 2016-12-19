@@ -18,6 +18,8 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
+(include "/nfs/site/disks/icf_fdk_cw_gwa002/srehman/fossil/dbi/dbi.scm")
+(import (prefix dbi dbi:))
 
 (declare (unit sdb))
 
@@ -30,30 +32,30 @@
 			  (begin
 			    (create-directory dbpath #t)
 			    #f))))
-	 (sdb        (sqlite3:open-database fname))
+	 (sdb        (dbi:open 'sqlite3 (cons (cons ('dbname fname) '()))))
 	 (handler   (make-busy-timeout 136000)))
-    (sqlite3:set-busy-handler! sdb handler)
+    ;;(sqlite3:set-busy-handler! sdb handler)
     (if (not dbexists)
 	(sdb:initialize sdb))
-    (sqlite3:execute sdb "PRAGMA synchronous = 1;")
+    (dbi:exec sdb "PRAGMA synchronous = 1;")
     sdb))
 
 (define (sdb:initialize sdb)
-  (sqlite3:execute sdb "CREATE TABLE IF NOT EXISTS strs
+  (dbi:exec sdb "CREATE TABLE IF NOT EXISTS strs
                            (id  INTEGER PRIMARY KEY,
                             str TEXT,
                         CONSTRAINT str UNIQUE (str));")
-  (sqlite3:execute sdb "CREATE INDEX IF NOT EXISTS strindx ON strs (str);"))
+  (dbi:exec sdb "CREATE INDEX IF NOT EXISTS strindx ON strs (str);"))
 
 ;; (define sumup (let ((a 0))(lambda (x)(set! a (+ x a)) a)))
 
 (define (sdb:register-string sdb str)
-  (sqlite3:execute sdb "INSERT OR IGNORE INTO strs (str) VALUES (?);" str))
+  (dbi:exec sdb "INSERT OR IGNORE INTO strs (str) VALUES (?);" str))
 
 (define (sdb:string->id sdb str-cache str)
   (let ((id (hash-table-ref/default str-cache str #f)))
     (if (not id)
-	(sqlite3:for-each-row
+	(dbi:for-each-row
 	 (lambda (sid)
 	   (set! id sid)
 	   (hash-table-set! str-cache str id))
@@ -64,7 +66,7 @@
 (define (sdb:id->string sdb id-cache id)
   (let ((str (hash-table-ref/default id-cache id #f)))
     (if (not str)
-	(sqlite3:for-each-row
+	(dbi:for-each-row
 	 (lambda (istr)
 	   (set! str istr)
 	   (hash-table-set! id-cache id str))
@@ -86,7 +88,7 @@
 	((getdb)    sdb)
 	((finalize) (if sdb
 			(begin
-			  (sqlite3:finalize! sdb)
+			  (dbi:close sdb)
 			  (set! sdb #f))))
 	((getid)     (let ((id (if (or (number? var)
 				       (string->number var))

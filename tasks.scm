@@ -11,7 +11,9 @@
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking format)
 (import (prefix sqlite3 sqlite3:))
+(include "/nfs/site/disks/icf_fdk_cw_gwa002/srehman/fossil/dbi/dbi.scm")
 (import (prefix dbi dbi:))
+
 
 (declare (unit tasks))
 (declare (uses db))
@@ -110,7 +112,7 @@
 		  (not write-access))
 	     (set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
 	 ;;(sqlite3:set-busy-handler! mdb handler)
-	 (db:set-sync mdb) ;; (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
+	 (db:set-sync mdb) ;; (dbi:exec mdb (conc "PRAGMA synchronous = 0;"))
 	 ;;  (if (or (and (not exists)
 	 ;; 	      (file-write-access? *toppath*))
 	 ;; 	 (not (file-read-access? dbpath)))
@@ -118,7 +120,7 @@
 	 ;; 
 	 ;; TASKS QUEUE MOVED TO main.db
 	 ;;
-	 ;; (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
+	 ;; (dbi:exec mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
          ;;                        action TEXT DEFAULT '',
          ;;                        owner TEXT,
          ;;                        state TEXT DEFAULT 'new',
@@ -187,7 +189,7 @@
 	
 ;; register that this server may come online (first to register goes though with the process)
 (define (tasks:server-set-available mdb run-id)
-  (sqlite3:execute 
+  (dbi:exec 
    mdb 
    "INSERT INTO servers (pid,hostname,port,pubport,start_time,      priority,state,mt_version,heartbeat,   interface,transport,run_id)
                    VALUES(?, ?,       ?,   ?, strftime('%s','now'), ?,       ?,    ?,-1,?,        ?,        ?);"
@@ -206,7 +208,7 @@
 
 (define (tasks:num-in-available-state mdb run-id)
   (let ((res 0))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (num-in-queue)
        (set! res num-in-queue))
      mdb
@@ -216,7 +218,7 @@
 
 (define (tasks:num-servers-non-zero-running mdb)
   (let ((res 0))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (num-running)
        (set! res num-running))
      mdb
@@ -224,42 +226,42 @@
     res))
 
 (define (tasks:server-clean-out-old-records-for-run-id mdb run-id tag)
-  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state in ('available','dbprep','shutting-down') AND (strftime('%s','now') - start_time) > 50 AND run_id=?;"
+  (dbi:exec mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state in ('available','dbprep','shutting-down') AND (strftime('%s','now') - start_time) > 50 AND run_id=?;"
 		   (conc "defunct" tag) run-id))
 
 (define (tasks:server-force-clean-running-records-for-run-id mdb run-id tag)
-  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state = 'running' AND run_id=?;"
+  (dbi:exec mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state = 'running' AND run_id=?;"
 		   (conc "defunct" tag) run-id))
 
 (define (tasks:server-force-clean-run-record mdb run-id iface port tag)
-  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state = 'running' AND run_id=? AND interface=? AND port=?;"
+  (dbi:exec mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state = 'running' AND run_id=? AND interface=? AND port=?;"
 		   (conc "defunct" tag) run-id iface port))
 
 
 ;; BB> adding missing func for --list-servers
 (define (tasks:server-deregister mdb hostname #!key (pullport #f) (pid #f) (action #f)) ;;pullport pid: pid action: 'delete))
   (if (eq? action 'delete)
-      (sqlite3:execute mdb "DELETE FROM servers WHERE pid=? AND port=? AND hostname=?;" pid pullport hostname)
-      (sqlite3:execute mdb "UPDATE servers SET state='defunct', heartbeat=strftime('%s','now') WHERE hostname=? AND pid=?;"
+      (dbi:exec mdb "DELETE FROM servers WHERE pid=? AND port=? AND hostname=?;" pid pullport hostname)
+      (dbi:exec mdb "UPDATE servers SET state='defunct', heartbeat=strftime('%s','now') WHERE hostname=? AND pid=?;"
                        hostname pid)))
 
 (define (tasks:server-delete-records-for-this-pid mdb tag)
-  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE hostname=? AND pid=?;"
+  (dbi:exec mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE hostname=? AND pid=?;"
 		   (conc "defunct" tag) (get-host-name) (current-process-id)))
 
 (define (tasks:server-delete-record mdb server-id tag) 
-  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE id=?;"
+  (dbi:exec mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE id=?;"
 		   (conc "defunct" tag) server-id)
   ;; use this opportuntity to clean out records over one month old or over 10 minutes old with port = -1 (i.e. a never used placeholder)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE state not in ('running','shutting-down','dbprep') AND (strftime('%s','now') - start_time) > 2628000;")
-  (sqlite3:execute mdb "DELETE FROM servers WHERE state like 'defunct%' AND port=-1 AND (strftime('%s','now') - start_time) > 600;")
+  (dbi:exec mdb "DELETE FROM servers WHERE state not in ('running','shutting-down','dbprep') AND (strftime('%s','now') - start_time) > 2628000;")
+  (dbi:exec mdb "DELETE FROM servers WHERE state like 'defunct%' AND port=-1 AND (strftime('%s','now') - start_time) > 600;")
   )
 
 (define (tasks:server-set-state! mdb server-id state)
-  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE id=?;" state server-id))
+  (dbi:exec mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE id=?;" state server-id))
 
 (define (tasks:server-set-interface-port mdb server-id interface port)
-  (sqlite3:execute mdb "UPDATE servers SET interface=?,port=?,heartbeat=strftime('%s','now') WHERE id=?;" interface port server-id))
+  (dbi:exec mdb "UPDATE servers SET interface=?,port=?,heartbeat=strftime('%s','now') WHERE id=?;" interface port server-id))
 
 ;; Get random port not used in long time
 ;;
@@ -278,7 +280,7 @@
 	;; 		    (string->number (config-lookup  *configdat* "server" "port"))
 	;; 		    #f))
 	)
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (port)
        (set! used-ports (cons port used-ports)))
      mdb
@@ -325,7 +327,7 @@
    (let* ((header (list "id" "hostname" "pid" "interface" "port" "pubport" "state" "run_id" "priority" "start_time"))
 	  (selstr (string-intersperse header ","))
 	  (res    '()))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (a . b)
        (set! res (cons (apply vector a b) res)))
      mdb
@@ -350,7 +352,7 @@
 	     (thread-sleep! 10)
 	     (tasks:get-server mdb run-id retries: (- retries 0)))
 	   (debug:print 0 *default-log-port* "10 tries of tasks:get-server all crashed and burned. Giving up and returning \"no server found\"")))
-     (sqlite3:for-each-row
+     (dbi:for-each-row
       (lambda (id interface port pubport transport pid hostname)
 	(set! res (vector id interface port pubport transport pid hostname)))
       mdb
@@ -363,7 +365,7 @@
 
 (define (tasks:server-running-or-starting? mdb run-id)
   (let ((res #f))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (id)
        (set! res id))
      mdb ;; NEEDS dbprep ADDED
@@ -372,7 +374,7 @@
 
 (define (tasks:server-running? mdb run-id)
   (let ((res #f))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (id)
        (set! res id))
      mdb ;; NEEDS dbprep ADDED
@@ -418,7 +420,7 @@
 
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id)
        ;;                       0  1     2         3      4     5          6        7     8          9          10        11     12
        (set! res (cons (vector id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id) res)))
@@ -429,7 +431,7 @@
 
 (define (tasks:get-server-by-id mdb id)
   (let ((res #f))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id)
        ;;                       0  1     2         3      4     5          6        7     8          9          10        11     12
        (set! res (vector id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id)))
@@ -441,7 +443,7 @@
 
 (define (tasks:get-server-records mdb run-id)
   (let ((res '()))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id)
        ;;                       0  1     2         3      4     5          6        7     8          9          10        11     12
        (set! res (cons (vector id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id) res)))
@@ -483,13 +485,13 @@
 ;;======================================================================
 
 (define (tasks:remove-monitor-record mdb)
-  (sqlite3:execute mdb "DELETE FROM monitors WHERE pid=? AND hostname=?;"
+  (dbi:exec mdb "DELETE FROM monitors WHERE pid=? AND hostname=?;"
 		   (current-process-id)
 		   (get-host-name)))
 
 (define (tasks:get-monitors mdb)
   (let ((res '()))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (a . rem)
        (set! res (cons (apply vector a rem) res)))
      mdb
@@ -515,17 +517,17 @@
 ;; update the last_update field with the current time and
 ;; if any monitors appear dead, remove them
 (define (tasks:monitors-update mdb)
-  (sqlite3:execute mdb "UPDATE monitors SET last_update=strftime('%s','now') WHERE pid=? AND hostname=?;"
+  (dbi:exec mdb "UPDATE monitors SET last_update=strftime('%s','now') WHERE pid=? AND hostname=?;"
 			  (current-process-id)
 			  (get-host-name))
   (let ((deadlist '()))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (id pid host last-update delta)
        (print "Going to delete stale record for monitor with pid " pid " on host " host " last updated " delta " seconds ago")
        (set! deadlist (cons id deadlist)))
      mdb 
      "SELECT id,pid,hostname,last_update,strftime('%s','now')-last_update AS delta FROM monitors WHERE delta > 700;")
-    (sqlite3:execute mdb (conc "DELETE FROM monitors WHERE id IN ('" (string-intersperse (map conc deadlist) "','") "');")))
+    (dbi:exec mdb (conc "DELETE FROM monitors WHERE id IN ('" (string-intersperse (map conc deadlist) "','") "');")))
   )
 (define (tasks:register-monitor db port)
   (let* ((pid (current-process-id))
@@ -533,12 +535,12 @@
 	 (userinfo (user-information (current-user-id)))
 	 (username (car userinfo)))
     (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
-    (sqlite3:execute db "INSERT INTO monitors (pid,start_time,last_update,hostname,username) VALUES (?,strftime('%s','now'),strftime('%s','now'),?,?);"
+    (dbi:exec db "INSERT INTO monitors (pid,start_time,last_update,hostname,username) VALUES (?,strftime('%s','now'),strftime('%s','now'),?,?);"
 		     pid hostname username)))
 
 (define (tasks:get-num-alive-monitors mdb)
   (let ((res 0))
-    (sqlite3:for-each-row 
+    (dbi:for-each-row 
      (lambda (count)
        (set! res count))
      mdb
@@ -596,7 +598,7 @@
   (db:with-db 
    dbstruct #f #t
    (lambda (db)
-     (sqlite3:execute db "INSERT INTO tasks_queue (action,owner,state,target,name,testpatt,params,creation_time,execution_time)
+     (dbi:exec db "INSERT INTO tasks_queue (action,owner,state,target,name,testpatt,params,creation_time,execution_time)
                              VALUES (?,?,'new',?,?,?,?,strftime('%s','now'),0);" 
 		      action
 		      owner
@@ -632,7 +634,7 @@
      dbstruct #f #t
      (lambda (db)
        ;; first randomly set a new to pid-hostname-hostname
-       (sqlite3:execute
+       (dbi:exec
 	db 
 	"UPDATE tasks_queue SET keylock=? WHERE id IN
            (SELECT id FROM tasks_queue 
@@ -641,14 +643,14 @@
                     state='reset'
               ORDER BY RANDOM() LIMIT 1);" keytxt)
 
-       (sqlite3:for-each-row
+       (dbi:for-each-row
 	(lambda (id . rem)
 	  (set! res (apply vector id rem)))
 	db
 	"SELECT id,action,owner,state,target,name,test,item,params,creation_time,execution_time FROM tasks_queue WHERE keylock=? ORDER BY execution_time ASC LIMIT 1;" keytxt)
        (if res ;; yep, have work to be done
 	   (begin
-	     (sqlite3:execute db "UPDATE tasks_queue SET state='inprogress',execution_time=strftime('%s','now') WHERE id=?;"
+	     (dbi:exec db "UPDATE tasks_queue SET state='inprogress',execution_time=strftime('%s','now') WHERE id=?;"
 			      (tasks:task-get-id res))
 	     res)
 	   #f)))))
@@ -658,12 +660,12 @@
     (db:with-db
      dbstruct #f #t
      (lambda (db)
-       (sqlite3:for-each-row
+       (dbi:for-each-row
 	(lambda (id delta)
 	  (set! res (cons id res)))
 	db
 	"SELECT id,strftime('%s','now')-execution_time AS delta FROM tasks_queue WHERE state='inprogress' AND delta>700 ORDER BY delta DESC LIMIT 2;")
-       (sqlite3:execute 
+       (dbi:exec 
 	db 
 	(conc "UPDATE tasks_queue SET state='reset' WHERE id IN ('" (string-intersperse (map conc res) "','") "');")
 	)))))
@@ -675,7 +677,7 @@
     (db:with-db
      dbstruct #f #f
      (lambda (db)
-       (sqlite3:for-each-row
+       (dbi:for-each-row
 	(lambda (id . rem)
 	  (set! res (cons (apply vector id rem) res)))
 	db
@@ -692,7 +694,7 @@
     (db:with-db
      dbstruct #f #f
      (lambda (db)
-       (sqlite3:for-each-row
+       (dbi:for-each-row
 	(lambda (id . rem)
 	  (set! res (apply vector id rem)))
 	db
@@ -709,7 +711,7 @@
   (db:with-db
    dbstruct #f #t
    (lambda (db)
-     (sqlite3:execute db (conc "DELETE FROM tasks_queue WHERE id IN (" task-ids ");")))))
+     (dbi:exec db (conc "DELETE FROM tasks_queue WHERE id IN (" task-ids ");")))))
 
 (define (tasks:process-queue dbstruct)
   (let* ((task   (tasks:snag-a-task dbstruct))
@@ -746,7 +748,7 @@
   (db:with-db 
    dbstruct #f #t
    (lambda (db)
-     (sqlite3:execute db "UPDATE tasks_queue SET state=? WHERE id=?;" 
+     (dbi:exec db "UPDATE tasks_queue SET state=? WHERE id=?;" 
 		      state 
 		      task-id))))
 
@@ -761,14 +763,14 @@
      (handle-exceptions
       exn
       #f
-      (sqlite3:first-result db "SELECT id FROM tasks_queue WHERE params LIKE ?;"
+      (dbi:get-one db "SELECT id FROM tasks_queue WHERE params LIKE ?;"
 			    task-params)))))
 
 (define (tasks:set-state-given-param-key dbstruct param-key new-state)
   (db:with-db
    dbstruct #f #t
    (lambda (db)
-     (sqlite3:execute db "UPDATE tasks_queue SET state=? WHERE params LIKE ?;" new-state param-key))))
+     (dbi:exec db "UPDATE tasks_queue SET state=? WHERE params LIKE ?;" new-state param-key))))
 
 (define (tasks:get-records-given-param-key dbstruct param-key state-patt action-patt test-patt)
   (db:with-db
@@ -777,7 +779,7 @@
      (handle-exceptions
       exn
       '()
-      (sqlite3:first-row db "SELECT id,action,owner,state,target,name,testpatt,keylock,params WHERE
+      (dbi:get-one-row db "SELECT id,action,owner,state,target,name,testpatt,keylock,params WHERE
                                params LIKE ? AND state LIKE ? AND action LIKE ? AND testpatt LIKE ?;"
 			 param-key state-patt action-patt test-patt)))))
 
@@ -788,7 +790,7 @@
   ;;  (sqlite3:first-row
   (let ((db (db:delay-if-busy (db:get-db dbstruct #f)))
 	(res '()))
-    (sqlite3:for-each-row 
+    (dbi:for-each-row 
      (lambda (a . b)
        (set! res (cons (cons a b) res)))
      db "SELECT id,action,owner,state,target,name,testpatt,keylock,params FROM tasks_queue 

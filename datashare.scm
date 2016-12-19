@@ -30,6 +30,8 @@
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69)
 (import (prefix sqlite3 sqlite3:))
+(include "/nfs/site/disks/icf_fdk_cw_gwa002/srehman/fossil/dbi/dbi.scm")
+(import (prefix dbi dbi:))
 
 (declare (uses configf))
 (declare (uses tree))
@@ -116,7 +118,7 @@ Version: " megatest-fossil-hash)) ;; "
 (define (datashare:initialize-db db)
   (for-each
    (lambda (qry)
-     (sqlite3:execute db qry))
+     (dbi:exec db qry))
    (list 
     "CREATE TABLE pkgs 
          (id           INTEGER PRIMARY KEY,
@@ -146,25 +148,25 @@ Version: " megatest-fossil-hash)) ;; "
 (define (datashare:register-data db area version-name store-type submitter quality source-path comment)
   (let ((iter-qry       (sqlite3:prepare db "SELECT max(iteration) FROM pkgs WHERE area=? AND version_name=?;"))
 	(next-iteration 0))
-    (sqlite3:with-transaction
+    (dbi:with-transaction
      db
      (lambda ()
-       (sqlite3:for-each-row
+       (dbi:for-each-row
 	(lambda (iteration)
 	  (if (and (number? iteration)
 		   (>= iteration next-iteration))
 	      (set! next-iteration (+ iteration 1))))
 	iter-qry area version-name)
        ;; now store the data
-       (sqlite3:execute db "INSERT INTO pkgs (area,version_name,iteration,store_type,submitter,source_path,quality,comment) 
+       (dbi:exec db "INSERT INTO pkgs (area,version_name,iteration,store_type,submitter,source_path,quality,comment) 
                                  VALUES (?,?,?,?,?,?,?,?);"
 			area version-name next-iteration (conc store-type) submitter source-path quality comment)))
-    (sqlite3:finalize! iter-qry)
+    (dbi:close iter-qry)
     next-iteration))
 
 (define (datashare:get-id db area version-name iteration)
   (let ((res #f))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (id)
        (set! res id))
      db
@@ -173,14 +175,14 @@ Version: " megatest-fossil-hash)) ;; "
     res))
 
 (define (datashare:set-stored-path db id path)
-  (sqlite3:execute db "UPDATE pkgs SET stored_path=? WHERE id=?;" path id))
+  (dbi:exec db "UPDATE pkgs SET stored_path=? WHERE id=?;" path id))
 
 (define (datashare:set-copied db id value)
-  (sqlite3:execute db "UPDATE pkgs SET copied=? WHERE id=?;" value id))
+  (dbi:exec db "UPDATE pkgs SET copied=? WHERE id=?;" value id))
   
 (define (datashare:get-pkg-record db area version-name iteration)
   (let ((res #f))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (a . b)
        (set! res (apply vector a b)))
      db 
@@ -208,11 +210,11 @@ Version: " megatest-fossil-hash)) ;; "
 ;; candidate for removal
 ;;
 (define (datashare:record-pkg-ref db pkg-id dest-link)
-  (sqlite3:execute db "INSERT INTO refs (pkg_id,destlink) VALUES (?,?);" pkg-id dest-link))
+  (dbi:exec db "INSERT INTO refs (pkg_id,destlink) VALUES (?,?);" pkg-id dest-link))
   
 (define (datashare:count-refs db pkg-id)
   (let ((res 0))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (count)
        (set! res count))
      db
@@ -236,8 +238,8 @@ Version: " megatest-fossil-hash)) ;; "
 	     (debug:print 2 *default-log-port* "ERROR: problem accessing db " dbpath
 			  ((condition-property-accessor 'exn 'message) exn))
 	     (exit))
-	   (set! db (sqlite3:open-database dbpath)))
-	  (if *db-write-access* (sqlite3:set-busy-handler! db handler))
+	   (set! db (dbi:open 'sqlite3 (cons (cons ('dbname dbpath) '()))))
+	  ;;(if *db-write-access* (sqlite3:set-busy-handler! db handler))
 	  (if (not dbexists)
 	      (begin
 		(datashare:initialize-db db)))
@@ -266,13 +268,13 @@ Version: " megatest-fossil-hash)) ;; "
 (define (open-run-close-no-exception-handling  proc idb . params)
   ;; (print "open-run-close-no-exception-handling START given a db=" (if idb "yes " "no ") ", params=" params)
   (let* ((db (cond
-	      ((sqlite3:database? idb)     idb)
+	      ((dbi:database? idb)     idb)
 	      ((not idb)                   (print "ERROR: cannot open-run-close with #f anymore"))
 	      ((procedure? idb)            (idb))
 	      (else                        (print "ERROR: cannot open-run-close with #f anymore"))))
 	 (res #f))
     (set! res (apply proc db params))
-    (if (not idb)(sqlite3:finalize! dbstruct))
+    (if (not idb)(dbi:close dbstruct))
     ;; (print "open-run-close-no-exception-handling END" )
     res))
 
@@ -280,7 +282,7 @@ Version: " megatest-fossil-hash)) ;; "
 
 (define (datashare:get-pkgs db area-filter version-filter iter-filter)
   (let ((res '()))
-    (sqlite3:for-each-row ;; replace with fold ...
+    (dbi:for-each-row ;; replace with fold ...
      (lambda (a . b)
        (set! res (cons (list->vector (cons a b)) res)))
      db 
@@ -292,7 +294,7 @@ Version: " megatest-fossil-hash)) ;; "
 (define (datashare:get-pkg db area-name version-name #!key (iteration #f))
   (let ((dat '())
 	(res #f))
-    (sqlite3:for-each-row ;; replace with fold ...
+    (dbi:for-each-row ;; replace with fold ...
      (lambda (a . b)
        (set! dat (cons (list->vector (cons a b)) dat)))
      db 
@@ -315,7 +317,7 @@ Version: " megatest-fossil-hash)) ;; "
 (define (datashare:get-versions-for-area db area-name #!key (version-patt #f))
   (let ((res '())
 	(data (make-hash-table)))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (version-name submitter iteration submitted-time comment)
        ;;                                              0           1         2           3           4
        (hash-table-set! data version-name (vector version-name submitter iteration submitted-time comment)))
@@ -343,14 +345,14 @@ Version: " megatest-fossil-hash)) ;; "
 				    (let ((pid (process-run "rsync" (list "-av" (conc source-path "/") (conc targ-path "/")))))
 				      (process-wait pid)
 				      (datashare:set-copied db id "yes")
-				      (sqlite3:finalize! db)))
+				      (dbi:close db)))
 				   "Data copy")))
 	    (thread-start! th1))
 	  #t)
 	(begin
 	  (print "ERROR: Not enough space in storage area " dest-path)
 	  (datashare:set-copied db id "no")
-	  (sqlite3:finalize! db)
+	  (dbi:close db)
 	  #f))))
 
 (define (datashare:get-areas configdat)
@@ -379,7 +381,7 @@ Version: " megatest-fossil-hash)) ;; "
 		(datashare:set-copied db id "n/a")
 		(datashare:set-latest db id area-name version iteration)))
 	  (print "ERROR: Failed to get an iteration number"))
-      (sqlite3:finalize! db)
+      (dbi:close db)
       (cons #t "Successfully saved data")))))
 
 (define (datashare:get-best-storage configdat)
@@ -609,7 +611,7 @@ Version: " megatest-fossil-hash)) ;; "
 					(tree:add-node tb2 "Installed" (datashare:path->lst path)))
 				    (hash-table-set! installed-dat path (datashare:pathdat-apply-heuristics configdat fullpath))))
 				areas)
-			       (sqlite3:finalize! db))))
+			       (dbi:close db))))
 	   (apply          (iup:button "Apply"
 				       #:action
 				       (lambda (obj)
@@ -741,7 +743,7 @@ Version: " megatest-fossil-hash)) ;; "
 		      (target-path (conc basepath "/" dest-stub)))
 		 (datashare:build-dir-make-link stored-path target-path)
 		 (datashare:record-pkg-ref db (datashare:pkg-get-id curr-record) target-path)
-		 (sqlite3:finalize! db)
+		 (dbi:close db)
 		 (print "Creating link from " stored-path " to " target-path))))))
     ((publish)
      (if (< (length args) 3)
@@ -783,7 +785,7 @@ Version: " megatest-fossil-hash)) ;; "
 			  (conc "\"" (vector-ref x 4) "\""))
 		  (print (vector-ref x 0))))
 	    versions)
-       (sqlite3:finalize! db)))))
+       (dbi:close db)))))
 
 ;; ease debugging by loading ~/.dashboardrc - REMOVE FROM PRODUCTION!
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.datasharerc")))

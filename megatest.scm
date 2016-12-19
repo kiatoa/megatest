@@ -15,6 +15,8 @@
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
      http-client srfi-18 extras format) ;;  zmq extras)
+(include "/nfs/site/disks/icf_fdk_cw_gwa002/srehman/fossil/dbi/dbi.scm")
+(import (prefix dbi dbi:))
 
 ;; Added for csv stuff - will be removed
 ;;
@@ -628,15 +630,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		((sqlite3)
 		 (let* ((db-file   (or out-file (pathname-file input-db)))
 			(db-exists (file-exists? db-file))
-			(db        (sqlite3:open-database db-file)))
-		   (if (not db-exists)(sqlite3:execute db "CREATE TABLE data (sheet,section,var,val);"))
+			(db        (dbi:open 'sqlite3 (cons (cons ('dbname db-file) '())))))
+		   (if (not db-exists)(dbi:exec db "CREATE TABLE data (sheet,section,var,val);"))
 		   (configf:map-all-hier-alist
 		    data
 		    (lambda (sheetname sectionname varname val)
-		      (sqlite3:execute db
+		      (dbi:exec db
 				       "INSERT OR REPLACE INTO data (sheet,section,var,val) VALUES (?,?,?,?);"
 				       sheetname sectionname varname val)))
-		   (sqlite3:finalize! db)))
+		   (dbi:close db)))
 		(else
 		 (pp data))))))
       (if out-file (close-output-port out-port))

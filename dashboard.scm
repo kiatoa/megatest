@@ -19,6 +19,8 @@
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 typed-records sparse-vectors) ;; defstruct
 (import (prefix sqlite3 sqlite3:))
+(include "/nfs/site/disks/icf_fdk_cw_gwa002/srehman/fossil/dbi/dbi.scm")
+(import (prefix dbi dbi:))
 
 (declare (uses common))
 (declare (uses margs))
@@ -2946,8 +2948,8 @@ Misc
 			  (debug:print 0 *default-log-port* "ERROR: I only know sqlite3 databases for now: " dbstr)
 			  #f)))))
     (if (and dbpth (file-read-access? dbpth))
-	(let ((db (sqlite3:open-database dbpth))) ;; (open-database dbpth)))
-	  (sqlite3:set-busy-handler! db (make-busy-timeout 10000))
+	(let ((db (dbi:open 'sqlite3 (cons (cons ('dbname dbpth) '()))))) ;; (open-database dbpth)))
+	  ;;(sqlite3:set-busy-handler! db (make-busy-timeout 10000))
 	  db)
 	#f)))
 
@@ -2973,14 +2975,14 @@ Misc
 			 (zeroth-point   (conc "SELECT " timef "," varfn "," valfn " FROM " tablen " WHERE " varfn "='" fieldname "' AND " timef " < " tstart " LIMIT 1")))
 		     (hash-table-set! res-ht fieldname ;; (fetch-rows (sql db qrystr)))))
 				      (reverse
-				       (sqlite3:fold-row
+				       (dbi:fold-row
 					(lambda (res t var val)
 					  (cons (vector t var val) res))
 					'() db all-dat-qrystr)))
 		     (let ((zeropt (handle-exceptions
 				    exn
 				    #f
-				    (sqlite3:first-row db all-dat-qrystr))))
+				    (dbi:get-one-row db all-dat-qrystr))))
 		       (if zeropt ;; NOTE: Add zeropt to the beginning of the list as the list was reversed above.
 			   (hash-table-set! res-ht
 					    fieldname

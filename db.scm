@@ -273,6 +273,7 @@
 ;; This routine creates the db if not already present. It is only called if the db is not already opened
 ;;
 (define (db:open-db dbstruct #!key (areapath #f))
+  (print (db:open-megatest-db path: (db:dbfile-path)))
   (let ((tmpdb (dbr:dbstruct-tmpdb dbstruct))) ;; RA => Returns the first reference in dbstruct
     (if tmpdb
 	tmpdb
@@ -637,7 +638,7 @@
 	    (for-each 
 	     (lambda (targdb)
 	       (let* ((db     (db:dbdat-get-db targdb))
-		      (stmth  (sqlite3:prepare db full-ins)))
+		      (stmth  (dbi:prepare db full-ins)))
 		 ;; (db:delay-if-busy targdb) ;; NO WAITING
 		 (for-each
 		  (lambda (fromdat-lst)
@@ -1594,10 +1595,10 @@
 (define (db:clean-up-rundb dbdat)
   ;; (debug:print 0 *default-log-port* "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
   (let* ((db         (db:dbdat-get-db dbdat))
-	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM tests);"))
+	 (count-stmt (dbi:prepare db "SELECT (SELECT count(id) FROM tests);"))
 	(statements
 	 (map (lambda (stmt)
-		(sqlite3:prepare db stmt))
+		(dbi:prepare db stmt))
 	      (list
 	       ;; delete all tests that belong to runs that are 'deleted'
 	       ;; (conc "DELETE FROM tests WHERE run_id NOT IN (" (string-intersperse (map conc valid-runs) ",") ");")
@@ -1635,10 +1636,10 @@
 (define (db:clean-up-maindb dbdat)
   ;; (debug:print 0 *default-log-port* "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
   (let* ((db         (db:dbdat-get-db dbdat))
-	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM runs);"))
+	 (count-stmt (dbi:prepare db "SELECT (SELECT count(id) FROM runs);"))
 	 (statements
 	  (map (lambda (stmt)
-		 (sqlite3:prepare db stmt))
+		 (dbi:prepare db stmt))
 	       (list
 		;; delete all tests that belong to runs that are 'deleted'
 		;; (conc "DELETE FROM tests WHERE run_id NOT IN (" (string-intersperse (map conc valid-runs) ",") ");")
@@ -1677,12 +1678,13 @@
 ;; also updates *global-delta*
 ;;
 (define (db:get-var dbstruct var)
+  (print dbstruct var)
   (let* ((res      #f)
 	 (dbdat    (db:get-db dbstruct #f))
 	 (db       (db:dbdat-get-db dbdat)))
     (dbi:for-each-row
      (lambda (val)
-       (set! res val))
+       (set! res (vector-ref val 0)))
      db
      "SELECT val FROM metadat WHERE var=?;" var)
     ;; convert to number if can
@@ -1722,13 +1724,14 @@
 ;; using keys:config-get-fields?
 
 (define (db:get-keys dbstruct)
+  (print dbstruct)
   (if *db-keys* *db-keys* 
       (let ((res '()))
 	(db:with-db dbstruct #f #f
 		    (lambda (db)
 		      (dbi:for-each-row 
 		       (lambda (key)
-			 (set! res (cons key res)))
+			 (set! res (cons (vector-ref key 0) res)))
 		       db
 		       "SELECT fieldname FROM keys ORDER BY id DESC;")))
 	(set! *db-keys* res)
@@ -1763,6 +1766,7 @@
      (let ((res #f))
        (dbi:for-each-row
 	(lambda (runname)
+    (print runname)
 	  (set! res runname))
 	db
 	"SELECT runname FROM runs WHERE id=?;"
@@ -1778,6 +1782,7 @@
      (let ((res #f))
        (dbi:for-each-row
 	(lambda (val)
+    (print val)
 	  (set! res val))
 	db
 	(conc "SELECT " key " FROM runs WHERE id=?;")
@@ -1954,7 +1959,7 @@
    run-id
    #f
    (lambda (db)
-     (sqlite3:fold-row
+     (dbi:fold-row
 	(lambda (res state status count)
 	  (cons (list state status count) res))
 	'()
@@ -1972,8 +1977,8 @@
    #f
    (lambda (db)
      ;; remove previous data
-     (let* ((stmt1 (sqlite3:prepare db "DELETE FROM run_stats WHERE run_id=? AND state=? AND status=?;"))
-	    (stmt2 (sqlite3:prepare db "INSERT INTO run_stats (run_id,state,status,count) VALUES (?,?,?,?);"))
+     (let* ((stmt1 (dbi:prepare db "DELETE FROM run_stats WHERE run_id=? AND state=? AND status=?;"))
+	    (stmt2 (dbi:prepare db "INSERT INTO run_stats (run_id,state,status,count) VALUES (?,?,?,?);"))
 	    (res
 	     (dbi:with-transaction
 	      db
@@ -1993,7 +1998,7 @@
    #f ;; this data comes from main
    #f
    (lambda (db)
-     (sqlite3:fold-row
+     (dbi:fold-row
 	(lambda (res state status count)
 	  (cons (list state status count) res))
 	'()
@@ -2103,7 +2108,7 @@
             (reverse
              (db:with-db dbstruct #f #f ;; reads db, does not write to it.
                          (lambda (db)
-                           (sqlite3:fold-row
+                           (dbi:fold-row
                             (lambda (res . r)
                               (cons (list->vector r) res))
                             '()
@@ -2696,7 +2701,7 @@
 	      (lambda (db)
 		(let* ((qmarks (string-intersperse (make-list (length db:test-record-fields) "?") ","))
 		       (qrystr (conc "INSERT OR REPLACE INTO tests (" db:test-record-qry-selector ") VALUES (" qmarks ");"))
-		       (qry    (sqlite3:prepare db qrystr)))
+		       (qry    (dbi:prepare db qrystr)))
 		  (debug:print 0 *default-log-port* "INFO: migrating test records for run with id " run-id)
 		  (dbi:with-transaction
 		   db
@@ -3059,7 +3064,7 @@
 		       (string-split target "/"))
 		  " AND "))
 	 ;; (testqry (tests:match->sqlqry testpatt))
-	 (runsqry (sqlite3:prepare db (conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';"))))
+	 (runsqry (dbi:prepare db (conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';"))))
     ;; (debug:print 8 *default-log-port* "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" testqry)
     (dbi:for-each-row
      (lambda (rid)

@@ -10,6 +10,8 @@
 ;; (require-extension synch sqlite3 posix srfi-13 srfi-1 utils regex)
 (use sqlite3 srfi-1 posix regex srfi-69 srfi-13 posix-extras)
 (import (prefix sqlite3 sqlite3:))
+(include "/nfs/site/disks/icf_fdk_cw_gwa002/srehman/fossil/dbi/dbi.scm")
+(import (prefix dbi dbi:))
 
 (declare (unit filedb))
 
@@ -19,20 +21,20 @@
 (define (filedb:open-db dbpath)
   (let* ((fdb      (make-filedb:fdb))
 	 (dbexists (file-exists? dbpath))
-	 (db (sqlite3:open-database dbpath)))
+	 (db (dbi:open 'sqlite3 (cons (cons ('dbname dbpath) '())))))
     (filedb:fdb-set-db!        fdb db)
     (filedb:fdb-set-dbpath!    fdb dbpath)
     (filedb:fdb-set-pathcache! fdb (make-hash-table))
     (filedb:fdb-set-idcache!   fdb (make-hash-table))
     (filedb:fdb-set-partcache! fdb (make-hash-table))
-    (sqlite3:set-busy-handler!  db (make-busy-timeout 136000))
+    ;;(sqlite3:set-busy-handler!  db (make-busy-timeout 136000))
     (if (not dbexists)
 	(begin
-	  (sqlite3:execute db "PRAGMA synchronous = OFF;")
-	  (sqlite3:execute db "CREATE TABLE names (id INTEGER PRIMARY KEY,name TEST);") ;; for future use - change path in paths table to path_id
-	  (sqlite3:execute db "CREATE INDEX name_index ON names (name);")
+	  (dbi:execute db "PRAGMA synchronous = OFF;")
+	  (dbi:exec db "CREATE TABLE names (id INTEGER PRIMARY KEY,name TEST);") ;; for future use - change path in paths table to path_id
+	  (dbi:exec db "CREATE INDEX name_index ON names (name);")
 	  ;; NB// We store a useful subset of file attributes but do not attempt to store all
-	  (sqlite3:execute db "CREATE TABLE paths (id        INTEGER PRIMARY KEY,
+	  (dbi:exec db "CREATE TABLE paths (id        INTEGER PRIMARY KEY,
                                                    path      TEXT,
                                                    parent_id INTEGER,
                                                    mode      INTEGER DEFAULT -1,
@@ -40,20 +42,20 @@
                                                    gid       INTEGER DEFAULT -1,
                                                    size      INTEGER DEFAULT -1,
                                                    mtime     INTEGER DEFAULT -1);")
-	  (sqlite3:execute db "CREATE INDEX path_index ON paths (path,parent_id);")
-	  (sqlite3:execute db "CREATE TABLE bases (id INTEGER PRIMARY KEY,base TEXT,                  updated TIMESTAMP);")))
+	  (dbi:exec db "CREATE INDEX path_index ON paths (path,parent_id);")
+	  (dbi:exec db "CREATE TABLE bases (id INTEGER PRIMARY KEY,base TEXT,                  updated TIMESTAMP);")))
     ;; close the sqlite3 db and open it as needed
     (filedb:finalize-db! fdb)
     (filedb:fdb-set-db! fdb #f)
     fdb))
 
 (define (filedb:reopen-db fdb)
-  (let ((db (sqlite3:open-database (filedb:fdb-get-dbpath fdb))))
-    (filedb:fdb-set-db! fdb db)
-    (sqlite3:set-busy-handler!  db (make-busy-timeout 136000))))
+  (let ((db (dbi:open 'sqlite3 (cons (cons ('dbname (filedb:fdb-get-dbpath fdb)) '())))))
+    (filedb:fdb-set-db! fdb db)))
+    ;;(sqlite3:set-busy-handler!  db (make-busy-timeout 136000))))
   
 (define (filedb:finalize-db! fdb)
-  (sqlite3:finalize! (filedb:fdb-get-db fdb)))
+  (dbi:close (filedb:fdb-get-db fdb)))
 
 (define (filedb:get-current-time-string)
   (string-chomp (time->string (seconds->local-time (current-seconds)))))
@@ -61,24 +63,24 @@
 (define (filedb:get-base-id db path)
   (let ((stmt   (sqlite3:prepare db "SELECT id FROM bases WHERE base=?;"))
         (id-num #f))
-    (sqlite3:for-each-row 
+    (dbi:for-each-row 
      (lambda (num) (set! id-num num)) stmt path)
-    (sqlite3:finalize! stmt)
+    (dbi:close stmt)
     id-num))
 
 (define (filedb:get-path-id db path parent)
   (let ((stmt   (sqlite3:prepare db "SELECT id FROM paths WHERE path=? AND parent_id=?;"))
         (id-num #f))
-    (sqlite3:for-each-row 
+    (dbi:for-each-row 
      (lambda (num) (set! id-num num)) stmt path parent)
-    (sqlite3:finalize! stmt)
+    (dbi:close stmt)
     id-num))
 
 (define (filedb:add-base db path)
   (let ((existing (filedb:get-base-id db path)))
     (if existing #f
         (begin
-          (sqlite3:execute db "INSERT INTO bases (base,updated) VALUES (?,?);" path (filedb:get-current-time-string))))))
+          (dbi:exec db "INSERT INTO bases (base,updated) VALUES (?,?);" path (filedb:get-current-time-string))))))
 
 ;; index 	value 	field 	notes
 ;; 0 	inode number 	st_ino 	
@@ -97,7 +99,7 @@
 
 (define (filedb:add-path-stat db path parent statinfo)
   (let ((stmt (sqlite3:prepare db "INSERT INTO paths (path,parent_id,mode,uid,gid,size,mtime) VALUES (?,?,?,?,?,?,?);")))
-	(sqlite3:execute stmt
+	(dbi:exec stmt
 			 path
 			 parent
 			 (vector-ref statinfo 1) ;; mode
@@ -106,12 +108,12 @@
 			 (vector-ref statinfo 5) ;; size
 			 (vector-ref statinfo 8) ;; mtime
 			 )
-	(sqlite3:finalize! stmt))) ;;  (filedb:get-current-time-string))))
+	(dbi:close stmt))) ;;  (filedb:get-current-time-string))))
   
 (define (filedb:add-path db path parent)
   (let ((stmt (sqlite3:prepare db "INSERT INTO paths (path,parent_id) VALUES (?,?);")))
-    (sqlite3:execute stmt path parent)
-    (sqlite3:finalize! stmt)))
+    (dbi:exec stmt path parent)
+    (dbi:close stmt)))
 
 (define (filedb:register-path fdb path #!key (save-stat #f))
   (let* ((db        (filedb:fdb-get-db        fdb))
@@ -177,11 +179,11 @@
   (let* ((db     (filedb:fdb-get-db fdb))
 	 (stmt   (sqlite3:prepare db "SELECT id FROM paths WHERE path like ?;"))
 	 (result '()))
-    (sqlite3:for-each-row 
+    (dbi:for-each-row 
      (lambda (num)
        (action num)
        (set! result (cons num result))) stmt pattern)
-    (sqlite3:finalize! stmt)
+    (dbi:close stmt)
     result))
 
 (define (filedb:get-path-record fdb id)
@@ -191,16 +193,16 @@
     (if dat dat
 	(let ((stmt (sqlite3:prepare db "SELECT path,parent_id FROM paths WHERE id=?;"))
 	      (result #f))
-	  (sqlite3:for-each-row 
+	  (dbi:for-each-row 
 	   (lambda (path parent_id)(set! result (list path parent_id))) stmt id)
 	  (hash-table-set! partcache id result)
-	  (sqlite3:finalize! stmt)
+	  (dbi:close stmt)
 	  result))))
 
 (define (filedb:get-children fdb parent-id)
   (let* ((db        (filedb:fdb-get-db fdb))
 	 (res       '()))
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (id path parent-id)
        (set! res (cons (vector id path parent-id) res)))
      db "SELECT id,path,parent_id FROM paths WHERE parent_id=?;"
@@ -213,7 +215,7 @@
   (let* ((db        (filedb:fdb-get-db fdb))
 	 (res       '()))
     ;; first get the children that have no children
-    (sqlite3:for-each-row
+    (dbi:for-each-row
      (lambda (id path parent-id)
        (set! res (cons (vector id path parent-id) res)))
      db "SELECT id,path,parent_id FROM paths WHERE parent_id=? AND 

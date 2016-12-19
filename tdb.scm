@@ -17,6 +17,7 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
+(include "/nfs/site/disks/icf_fdk_cw_gwa002/srehman/fossil/dbi/dbi.scm")
 (import (prefix dbi dbi:))
 
 (declare (unit tdb))
@@ -75,9 +76,9 @@
 					       (string->number (args:get-arg "-override-timeout"))
 					       136000))))
 	
-	(if (and tdb-writeable
-		 *db-write-access*)
-	    (sqlite3:set-busy-handler! db handler))
+	;;(if (and tdb-writeable
+	;;	 *db-write-access*)
+	;;    (sqlite3:set-busy-handler! db handler))
 	(if (not dbexists)
 	    (begin
 	      (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
@@ -96,10 +97,10 @@
 	   #f)
 	 ;; Is there a cheaper single line operation that will check for existance of a table
 	 ;; and raise an exception ?
-	 (sqlite3:execute db "SELECT id FROM test_data LIMIT 1;"))
+	 (dbi:exec db "SELECT id FROM test_data LIMIT 1;"))
 	db)
       ;; no work-area or not readable - create a placeholder to fake rest of world out
-      (let ((baddb (sqlite3:open-database ":memory:")))
+      (let ((baddb (dbi:open 'sqlite3 '((dbname . ":memory:")))))
  	(debug:print-info 11 *default-log-port* "open-test-db END (unsucessful)" work-area)
  	;; provide an in-mem db (this is dangerous!)
  	(tdb:testdb-initialize baddb)
@@ -131,12 +132,12 @@
 
 (define (tdb:testdb-initialize db)
   (debug:print 11 *default-log-port* "db:testdb-initialize START")
-  (sqlite3:with-transaction
+  (dbi:with-transaction
    db
    (lambda ()
      (for-each
       (lambda (sqlcmd)
-	(sqlite3:execute db sqlcmd))
+	(dbi:exec db sqlcmd))
       (list "CREATE TABLE IF NOT EXISTS test_rundat (
               id INTEGER PRIMARY KEY,
               update_time TIMESTAMP,
@@ -182,12 +183,12 @@
 ;;
 (define (tdb:read-test-data tdb test-id categorypatt)
   (let ((res '()))
-    (sqlite3:for-each-row 
+    (dbi:for-each-row 
      (lambda (id test_id category variable value expected tol units comment status type)
        (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
      tdb
      "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
-    (sqlite3:finalize! tdb)
+    (dbi:close tdb)
     (reverse res)))
 
 ;;======================================================================
@@ -399,10 +400,10 @@
 ;; 
 (define (tdb:remote-update-testdat-meta-info run-id test-id work-area cpuload diskfree minutes)
   (let ((tdb         (rmt:open-test-db-by-test-id run-id test-id work-area: work-area)))
-    (if (sqlite3:database? tdb)
+    (if (dbi:database? tdb)
 	(begin
-	  (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
+	  (dbi:exec tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
 			   cpuload diskfree minutes)
-	  (sqlite3:finalize! tdb))
+	  (dbi:close tdb))
 	(debug:print 2 *default-log-port* "Can't update testdat.db for test " test-id " read-only or non-existant"))))
     
