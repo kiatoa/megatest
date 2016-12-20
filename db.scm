@@ -2599,6 +2599,9 @@
              ;; AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?)
              ;; AND NOT (uname = 'n/a' AND item_path = '');"
 
+;; tags: '("tag%" "tag2" "%ag6")
+;;
+
 ;; done with run when:
 ;;   0 tests in LAUNCHED, NOT_STARTED, REMOTEHOSTSTART, RUNNING
 (define (db:estimated-tests-remaining dbstruct run-id)
@@ -3637,6 +3640,25 @@
 ;;======================================================================
 ;; Tests meta data
 ;;======================================================================
+
+;; returns a hash table of tags to tests
+;;
+(define (db:get-tests-tags dbstruct)
+  (let* ((dbdat   (db:get-db dbstruct #f))
+	 (db      (db:dbdat-get-db dbdat))
+         (res     (make-hash-table)))
+    (sqlite3:for-each-row
+     (lambda (testname tags-in)
+       (let ((tags (string-split tags-in ",")))
+         (for-each
+          (lambda (tag)
+            (hash-table-set! res tag
+                             (delete-duplicates
+                              (cons testname (hash-table-ref/default res tag '())))))
+          tags)))
+     db
+     "SELECT testname,tags FROM test_meta")
+    res))
 
 ;; read the record given a testname
 (define (db:testmeta-get-record dbstruct testname)

@@ -1961,6 +1961,19 @@
 	       (rmt:testmeta-update-field test-name fld val)))))
      '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9)("jobgroup" 10)))))
 
+;; find tests with matching tags, tagpatt is a string "tagpatt1,tagpatt2%, ..."
+;;
+(define (runs:get-tests-matching-tags tagpatt)
+  (let* ((tagdata (rmt:get-tests-tags))
+         (res     '())) ;; list of tests that match one or more tags
+    (for-each
+     (lambda (tag)
+       (if (patt-list-match tag tagpatt)
+           (set! res (append (hash-table-ref tagdata tag)))))
+     (hash-table-keys tagdata))
+    res))
+    
+
 ;; Update test_meta for all tests
 (define (runs:update-all-test_meta db)
   (let ((test-names (tests:get-all))) ;; (tests:get-valid-tests)))
