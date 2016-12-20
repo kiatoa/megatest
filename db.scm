@@ -481,8 +481,7 @@
 (define (db:repair-db dbdat #!key (numtries 1))
   (let* ((dbpath   (db:dbdat-get-path        dbdat))
 	 (dbdir    (pathname-directory       dbpath))
-	 (fname    (pathname-strip-directory dbpath))
-   (dbdat '()))
+	 (fname    (pathname-strip-directory dbpath)))
     (debug:print-info 0 *default-log-port* "Checking db " dbpath " for errors.")
     (cond
      ((not (file-write-access? dbdir))
@@ -609,8 +608,8 @@
 
 	    ;; read the source table
 	    (dbi:for-each-row
-	     (lambda (a . b)
-	       (set! fromdat (cons (apply vector a b) fromdat))
+        (lambda (output)
+	       (set! fromdat (cons output fromdat))
 	       (if (> (length fromdat) batch-len)
 		   (begin
 		     (set! fromdats (cons fromdat fromdats))
@@ -628,7 +627,7 @@
 
 	    ;; read the target table
 	    (dbi:for-each-row
-	     (lambda (a . b)
+        (lambda (output)
 	       (hash-table-set! todat a (apply vector a b)))
 	     (db:dbdat-get-db todb)
 	     full-sel)
@@ -1228,8 +1227,9 @@
 	 (res          '())
 	 (blocks       '())) ;; a block is an archive chunck that can be added too if there is space
     (dbi:for-each-row
+      (lambda (output)
      (lambda (id archive-disk-id disk-path last-du last-du-time)
-       (set! res (cons (vector id archive-disk-id disk-path last-du last-du-time) res)))
+       (set! res (cons (vector id archive-disk-id disk-path last-du last-du-time) res))))
      db
      "SELECT b.id,b.archive_disk_id,b.disk_path,b.last_du,b.last_du_time FROM archive_blocks AS b
         INNER JOIN archive_allocations AS a ON a.archive_block_id=b.id
@@ -1239,8 +1239,9 @@
     (if (null? res)
 	'()
 	(dbi:for-each-row
+    (lambda (output)
 	 (lambda (id archive-area-name disk-path last-df last-df-time)
-	   (set! blocks (cons (vector id archive-area-name disk-path last-df last-df-time) blocks)))
+	   (set! blocks (cons (vector id archive-area-name disk-path last-df last-df-time) blocks))))
 	 db 
 	 (conc
 	  "SELECT d.id,d.archive_area_name,disk_path,last_df,last_df_time FROM archive_disks AS d
@@ -1258,8 +1259,9 @@
 	 (db           (db:dbdat-get-db dbdat))
 	 (res          #f))
     (dbi:for-each-row
+      (lambda (output)
      (lambda (id)
-       (set! res id))
+       (set! res id)))
      db
      "SELECT id FROM archive_disks WHERE archive_area_name=? AND disk_path=?;"
      bdisk-name bdisk-path)
@@ -1287,8 +1289,9 @@
 	 (res          #f))
     ;; first look to see if this path is already registered
     (dbi:for-each-row
+      (lambda (output)
      (lambda (id)
-       (set! res id))
+       (set! res id)))
      db
      "SELECT id FROM archive_blocks WHERE archive_disk_id=? AND disk_path=?;"
      bdisk-id archive-path)
@@ -1326,9 +1329,10 @@
    (lambda (db)
      (let ((res #f))
        (dbi:for-each-row 
+        (lambda (output)
 	;;        0         1           2        3          4           5
 	(lambda (id archive-disk-id disk-path last-du last-du-time creation-time)
-	  (set! res (vector id archive-disk-id disk-path last-du last-du-time creation-time)))
+	  (set! res (vector id archive-disk-id disk-path last-du last-du-time creation-time))))
 	db
 	"SELECT id,archive_disk_id,disk_path,last_du,last_du_time,creation_time FROM archive_blocks WHERE id=?;"
 	archive-block-id)
@@ -1402,7 +1406,8 @@
     ;;                     (db:test-get-run_duration testdat)))
     ;;                    600) 
     ;; (db:delay-if-busy dbdat)
-    (dbi:for-each-row 
+    (dbi:for-each-row
+    (lambda (output) 
      (lambda (test-id run-dir uname testname item-path)
        (if (and (equal? uname "n/a")
 		(equal? item-path "")) ;; this is a toplevel test
@@ -1410,7 +1415,7 @@
 	   (begin
 	     (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
 	     (debug:print-info 0 *default-log-port* "Found old toplevel test in RUNNING state, test-id=" test-id))
-	   (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted))))
+	   (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted)))))
      db
      "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > (run_duration + ?) AND state IN ('RUNNING','REMOTEHOSTSTART');"
      run-id deadtime)
@@ -1419,12 +1424,13 @@
     ;;
     ;; (db:delay-if-busy dbdat)
     (dbi:for-each-row
+      (lambda (output)
      (lambda (test-id run-dir uname testname item-path)
        (if (and (equal? uname "n/a")
 		(equal? item-path "")) ;; this is a toplevel test
 	   ;; what to do with toplevel? call rollup?
 	   (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
-	   (set! oldlaunched (cons (list test-id run-dir uname testname item-path run-id) oldlaunched))))
+	   (set! oldlaunched (cons (list test-id run-dir uname testname item-path run-id) oldlaunched)))))
      db
      "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 86400 AND state IN ('LAUNCHED');"
      run-id)
@@ -1466,7 +1472,8 @@
     ;;                     (db:test-get-run_duration testdat)))
     ;;                    600) 
     ;; (db:delay-if-busy dbdat)
-    (dbi:for-each-row 
+    (dbi:for-each-row
+    (lambda (output) 
      (lambda (test-id run-dir uname testname item-path)
        (if (and (equal? uname "n/a")
 		(equal? item-path "")) ;; this is a toplevel test
@@ -1474,7 +1481,7 @@
 	   (begin
 	     (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
 	     (debug:print-info 0 *default-log-port* "Found old toplevel test in RUNNING state, test-id=" test-id))
-	   (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted))))
+	   (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted)))))
      db
      "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > (run_duration + ?) AND state IN ('RUNNING','REMOTEHOSTSTART');"
      run-id deadtime)
@@ -1483,12 +1490,13 @@
     ;;
     ;; (db:delay-if-busy dbdat)
     (dbi:for-each-row
+      (lambda (output)
      (lambda (test-id run-dir uname testname item-path)
        (if (and (equal? uname "n/a")
 		(equal? item-path "")) ;; this is a toplevel test
 	   ;; what to do with toplevel? call rollup?
 	   (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
-	   (set! oldlaunched (cons (list test-id run-dir uname testname item-path run-id) oldlaunched))))
+	   (set! oldlaunched (cons (list test-id run-dir uname testname item-path run-id) oldlaunched)))))
      db
      "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 86400 AND state IN ('LAUNCHED');"
      run-id)
@@ -1547,38 +1555,39 @@
 (define (db:clean-up dbdat)
   ;; (debug:print 0 *default-log-port* "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
   (let* ((db         (db:dbdat-get-db dbdat))
-	 (count (dbi:get-one db "SELECT (SELECT count(id) FROM tests)+(SELECT count(id) FROM runs);"))
-	(statements
-	 (map (lambda (stmt)
-		(dbi:exec db stmt))
-	      (list
-	       ;; delete all tests that belong to runs that are 'deleted'
-	       "DELETE FROM tests WHERE run_id in (SELECT id FROM runs WHERE state='deleted');"
-	       ;; delete all tests that are 'DELETED'
-	       "DELETE FROM tests WHERE state='DELETED';"
-	       ;; delete all tests that have no run
-	       "DELETE FROM tests WHERE run_id NOT IN (SELECT DISTINCT id FROM runs);"
-	       ;; delete all runs that are state='deleted'
-	       "DELETE FROM runs WHERE state='deleted';"
-	       ;; delete empty runs
-	       "DELETE FROM runs WHERE id NOT IN (SELECT DISTINCT r.id FROM runs AS r INNER JOIN tests AS t ON t.run_id=r.id);"
-	       ))))
+   (count-stmt (dbi:prepare db "SELECT (SELECT count(id) FROM tests)+(SELECT count(id) FROM runs);"))
+  (statements
+   (map (lambda (stmt)
+    (dbi:prepare db stmt))
+        (list
+         ;; delete all tests that belong to runs that are 'deleted'
+         "DELETE FROM tests WHERE run_id in (SELECT id FROM runs WHERE state='deleted');"
+         ;; delete all tests that are 'DELETED'
+         "DELETE FROM tests WHERE state='DELETED';"
+         ;; delete all tests that have no run
+         "DELETE FROM tests WHERE run_id NOT IN (SELECT DISTINCT id FROM runs);"
+         ;; delete all runs that are state='deleted'
+         "DELETE FROM runs WHERE state='deleted';"
+         ;; delete empty runs
+         "DELETE FROM runs WHERE id NOT IN (SELECT DISTINCT r.id FROM runs AS r INNER JOIN tests AS t ON t.run_id=r.id);"
+         ))))
     ;; (db:delay-if-busy dbdat)
     (dbi:with-transaction 
      db
      (lambda ()
        (dbi:for-each-row (lambda (tot)
-			       (debug:print-info 0 *default-log-port* "Records count before clean: " tot))
-			     count-stmt)
+             (debug:print-info 0 *default-log-port* "Records count before clean: " tot))
+           count-stmt)
        (map dbi:exec statements)
        (dbi:for-each-row (lambda (tot)
-			       (debug:print-info 0 *default-log-port* "Records count after  clean: " tot))
-			     count-stmt)))
+             (debug:print-info 0 *default-log-port* "Records count after  clean: " tot))
+           count-stmt)))
     (map dbi:close statements)
     (dbi:close count-stmt)
     ;; (db:find-and-mark-incomplete db)
     ;; (db:delay-if-busy dbdat)
     (dbi:exec db "VACUUM;")))
+
 
 ;; Clean out old junk and vacuum the database
 ;;
@@ -1647,8 +1656,9 @@
 		)))
 	 (dead-runs '()))
     (dbi:for-each-row
+      (lambda (output)
      (lambda (run-id)
-       (set! dead-runs (cons run-id dead-runs)))
+       (set! dead-runs (cons run-id dead-runs))))
        db
        "SELECT id FROM runs WHERE state='deleted';")
     ;; (db:delay-if-busy dbdat)
@@ -1763,7 +1773,7 @@
      (let ((res #f))
        (dbi:for-each-row
 	(lambda (runname)
-	  (set! res runname))
+	  (set! res (vector-ref runname 0)))
 	db
 	"SELECT runname FROM runs WHERE id=?;"
 	run-id)
@@ -1778,7 +1788,7 @@
      (let ((res #f))
        (dbi:for-each-row
 	(lambda (val)
-	  (set! res val))
+	  (set! res (vector-ref val 0)))
 	db
 	(conc "SELECT " key " FROM runs WHERE id=?;")
 	run-id)
@@ -1829,7 +1839,7 @@
 	  ;; (db:delay-if-busy dbdat)
 	  (apply dbi:for-each-row 
 		 (lambda (id)
-		   (set! res id))
+		   (set! res (vector-ref id 0)))
 		 db
 		 (let ((qry (conc "SELECT id FROM runs WHERE (runname=? " andstr key=?str ");")))
 					;(debug:print 4 *default-log-port* "qry: " qry) 
@@ -1877,8 +1887,8 @@
     (db:with-db dbstruct #f #f
 		(lambda (db)		
 		  (dbi:for-each-row
-		   (lambda (a . x)
-		     (set! res (cons (apply vector a x) res)))
+        (lambda (output)
+		        (set! res (cons output res)))
 		   db
 		   qrystr
 		   )))
@@ -1918,8 +1928,8 @@
      #f
      (lambda (db)
        (dbi:for-each-row
-	(lambda (a . x)
-	  (let ((targ (cons a x)))
+	(lambda (output)
+	  (let ((targ (cons output)))
 	    (if (not (hash-table-ref/default seen targ #f))
 		(begin
 		  (hash-table-set! seen targ #t)
@@ -2029,8 +2039,9 @@
     ;; First get all the runname/run-ids
     ;; (db:delay-if-busy dbdat)
     (dbi:for-each-row
-     (lambda (run-id runname)
-       (set! runs-info (cons (list run-id runname) runs-info)))
+     (lambda (output)
+        (lambda (run-id runname)
+       (set! runs-info (cons (list run-id runname) runs-info))))
      db
      "SELECT id,runname FROM runs WHERE state != 'deleted' ORDER BY event_time DESC;") ;; If you change this to the more logical ASC please adjust calls to db:get-run-stats
     ;; for each run get stats data
@@ -2045,12 +2056,13 @@
 	  #f
 	  (lambda (db)
 	    (dbi:for-each-row
-	     (lambda (state status count)
-	       (let ((netstate (if (equal? state "COMPLETED") status state)))
-		 (if (string? netstate)
-		     (begin
-		       (hash-table-set! totals netstate (+ (hash-table-ref/default totals netstate 0) count))
-		       (hash-table-set! curr   netstate (+ (hash-table-ref/default curr   netstate 0) count))))))
+        (lambda (output)
+    	     (lambda (state status count)
+    	       (let ((netstate (if (equal? state "COMPLETED") status state)))
+    		 (if (string? netstate)
+    		     (begin
+    		       (hash-table-set! totals netstate (+ (hash-table-ref/default totals netstate 0) count))
+    		       (hash-table-set! curr   netstate (+ (hash-table-ref/default curr   netstate 0) count)))))))
 	     db
 	     "SELECT state,status,count(id) FROM tests AS t GROUP BY state,status ORDER BY state,status DESC;")
 	    ;; add the per run counts to res
@@ -2126,8 +2138,11 @@
     (debug:print-info 11 *default-log-port* "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
     ;; (db:delay-if-busy dbdat)
     (dbi:for-each-row
-     (lambda (a . x)
-       (set! res (apply vector a x)))
+      (lambda (output)
+          ;;(print "Output: " output)
+          ;;(print "A: " a)
+          ;;(print "X: " x)
+           (set! res output))
      db 
      (conc "SELECT " keystr " FROM runs WHERE id=? AND state != 'deleted';")
      run-id)
@@ -2201,8 +2216,9 @@
      #f
      (lambda (db)
        (dbi:for-each-row 
-	(lambda (status)
-	  (set! res status))
+	(lambda (output) 
+    (lambda (status)
+	  (set! res status)))
 	db
 	"SELECT status FROM runs WHERE id=?;" 
 	run-id)
@@ -2224,8 +2240,9 @@
        (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
 	 ;; (db:delay-if-busy dbdat)
 	 (dbi:for-each-row 
-	  (lambda (key-val)
-	    (set! res (cons (list key key-val) res)))
+    (lambda (output)
+  	  (lambda (key-val)
+  	    (set! res (cons (list key key-val) res))))
 	  db qry run-id)))
      keys)
     (reverse res)))
@@ -2240,9 +2257,10 @@
      (lambda (key)
        (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
 	 ;; (db:delay-if-busy dbdat)
-	 (dbi:for-each-row 
-	  (lambda (key-val)
-	    (set! res (cons key-val res)))
+	 (dbi:for-each-row
+    (lambda (output) 
+      (lambda (key-val)
+        (set! res (cons key-val res))))
 	  db qry run-id)))
      keys)
     (let ((final-res (reverse res)))
@@ -2266,8 +2284,9 @@
       (db:with-db dbstruct #f #f ;; #f means work with the zeroth db - i.e. the runs db
        (lambda (db)
 	 (apply dbi:for-each-row
-		(lambda (id)
-		  (set! prev-run-ids (cons id prev-run-ids)))
+		(lambda (output)
+      (lambda (id)
+		  (set! prev-run-ids (cons id prev-run-ids))))
 		db
 		(conc "SELECT id FROM runs WHERE " qrystr " AND state != 'deleted' AND id != ?;") (append kvalues (list run-id)))))
       prev-run-ids)))
@@ -2362,9 +2381,9 @@
 	(debug:print-info 8 *default-log-port* "db:get-tests-for-run run-id=" run-id ", qry=" qry)
 	(db:with-db dbstruct run-id #f
 		    (lambda (db)
-		      (dbi:for-each-row 
-		       (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
-			 (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
+		      (dbi:for-each-row
+          (lambda (output) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
+			 (set! res (cons output res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
 		       db
 		       qry
 		       run-id
@@ -2395,9 +2414,10 @@
     (db:with-db dbstruct run-id #f
 		(lambda (db)
 		  (dbi:for-each-row
+        (lambda (output)
 		   (lambda (id testname item-path state status)
 		     ;;                      id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
-		     (set! res (cons (vector id run-id testname state status -1         ""     -1      -1       ""    "-"  item-path -1           "-"         "-") res)))
+		     (set! res (cons (vector id run-id testname state status -1         ""     -1      -1       ""    "-"  item-path -1           "-"         "-") res))))
 		   db 
 		   qry
 		   run-id)))
@@ -2408,9 +2428,10 @@
     (db:with-db dbstruct run-id #f
 		(lambda (db)
 		  (dbi:for-each-row
+        (lambda (output)
 		   (lambda (run-id testname item-path state status)
 		     ;; id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
-		     (set! res (vector test-id run-id testname state status -1 "" -1 -1 "" "-" item-path -1 "-" "-")))
+		     (set! res (vector test-id run-id testname state status -1 "" -1 -1 "" "-" item-path -1 "-" "-"))))
 		   db 
 		   "SELECT run_id,testname,item_path,state,status FROM tests WHERE id=?;" 
 		   test-id)))
@@ -2579,8 +2600,9 @@
 	;; get the testnames
 	;; (db:delay-if-busy dbdat)
 	(dbi:for-each-row
+    (lambda (output)
 	 (lambda (testname)
-	   (set! testnames (cons testname testnames)))
+	   (set! testnames (cons testname testnames))))
 	 db
 	 "SELECT testname FROM test_meta WHERE jobgroup=?"
 	 jobgroup)
@@ -2682,10 +2704,11 @@
 	 (res '()))
     ;; (db:delay-if-busy dbdat)
     (dbi:for-each-row
+      (lambda (output)
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum archived)
        ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14     15        16
        (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum archived)
-		       res)))
+		       res))))
      db
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE state != 'DELETED' AND run_id=?;")
      run-id)
@@ -2715,9 +2738,10 @@
       test-id
       (let loop ((new-id min-test-id))
 	(let ((test-id-found #f))
-	  (dbi:for-each-row 
+	  (dbi:for-each-row
+    (lambda (output) 
 	   (lambda (id)
-	     (set! test-id-found id))
+	     (set! test-id-found id)))
 	   (db:dbdat-get-db mtdb)
 	   "SELECT id FROM tests WHERE id=?;"
 	   new-id)
@@ -2759,9 +2783,10 @@
    (lambda (db)
      (let ((res #f))
        (dbi:for-each-row ;; attemptnum added to hold pid of top process (not Megatest) controlling a test
+        (lambda (output)
 	(lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)
 	  ;;             0    1       2      3      4        5       6      7        8     9     10      11          12          13           14         15          16
-	  (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)))
+	  (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived))))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
 	test-id)
@@ -2778,9 +2803,9 @@
    (lambda (db)
      (let ((res '()))
        (dbi:for-each-row
-	(lambda (a . b)
+        (lambda (output)
 	  ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-	  (set! res (cons (apply vector a b) res)))
+	  (set! res (cons output res)))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id in ("
 	      (string-intersperse (map conc test-ids) ",") ");"))
@@ -2794,8 +2819,8 @@
    (lambda (db)
      (let ((res #f))
        (dbi:for-each-row
-	(lambda (a . b)
-	  (set! res (apply vector a b)))
+        (lambda (output)
+	  (set! res output))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE testname=? AND item_path=? AND run_id=?;")
 	test-name item-path run-id)
@@ -2839,8 +2864,9 @@
    (lambda (db)
      (let* ((res '()))
        (dbi:for-each-row 
+        (lambda (output)
 	(lambda (id test-id stepname state status event-time logfile comment)
-	  (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "") comment) res)))
+	  (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "") comment) res))))
 	db
 	"SELECT id,test_id,stepname,state,status,event_time,logfile,comment FROM test_steps WHERE status != 'DELETED' AND test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
 	test-id)
@@ -2854,8 +2880,9 @@
    (lambda (db)
      (let ((res '()))
        (dbi:for-each-row 
+        (lambda (output)
 	(lambda (id test-id stepname state status event-time logfile)
-	  (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
+	  (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res))))
 	db
 	"SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE status != 'DELETED' AND test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
 	test-id)
@@ -2877,9 +2904,10 @@
 	 (pass-count 0))
     ;; (db:delay-if-busy dbdat)
     (dbi:for-each-row
+      (lambda (output)
      (lambda (fcount pcount)
        (set! fail-count fcount)
-       (set! pass-count pcount))
+       (set! pass-count pcount)))
      db 
      "SELECT (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'fail') AS fail_count,
              (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'pass') AS pass_count;"
@@ -3038,8 +3066,9 @@
 	 (res '()))
     ;; (db:delay-if-busy dbdat)
     (dbi:for-each-row 
+      (lambda (output)
      (lambda (id test_id category variable value expected tol units comment status type)
-       (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
+       (set! res (cons (vector id test_id category variable value expected tol units comment status type) res))))
      db
      "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
     (reverse res)))
@@ -3079,8 +3108,9 @@
      #f
      (lambda (db)
        (dbi:for-each-row 
+        (lambda (output)
 	(lambda (p)
-	  (set! res (cons p res)))
+	  (set! res (cons p res))))
 	db
 	tstsqry
 	run-id)
@@ -3094,8 +3124,9 @@
    (lambda (db)
      (let ((res 0))
        (dbi:for-each-row
+        (lambda (output)
 	(lambda (num-items)
-	  (set! res num-items))
+	  (set! res num-items)))
 	db
 	"SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state NOT IN ('DELETED');"
 	run-id
@@ -3278,6 +3309,7 @@
    (lambda (db)
      (let ((res #f))
        (dbi:for-each-row 
+        (lambda (output)
 	(lambda (path final_logf)
 	  ;; (let ((path       (sdb:qry 'getstr path-id))
 	  ;;       (final_logf (sdb:qry 'getstr final_logf-id)))
@@ -3285,7 +3317,7 @@
 	  (set! res (list path final_logf))
 	  (if (directory? path)
 	      (debug:print 2 *default-log-port* "Found path: " path)
-	      (debug:print 2 *default-log-port* "No such path: " path))) ;; )
+	      (debug:print 2 *default-log-port* "No such path: " path)))) ;; )
 	db
 	"SELECT rundir,final_logf FROM tests WHERE testname=? AND item_path='' AND run_id=?;"
 	test-name run-id)
@@ -3476,8 +3508,9 @@
 (define (db:get-state-status-summary db run-id testname)
   (let ((res   '()))
     (dbi:for-each-row
+      (lambda (output)
      (lambda (state status count)
-       (set! res (cons (vector state status count) res)))
+       (set! res (cons (vector state status count) res))))
      db
      "SELECT state,status,count(state) FROM tests WHERE run_id=? AND testname=? AND item_path='' GROUP BY state,status;"
      run-id testname)
@@ -3524,17 +3557,18 @@
 	 (tests-hash (make-hash-table)))
     ;; first look up the key values from the run selected by run-id
     ;; (db:delay-if-busy dbdat)
-    (dbi:for-each-row 
-     (lambda (a . b)
-       (set! keyvals (cons a b)))
+    (dbi:for-each-row
+    (lambda (output) 
+       (set! keyvals (cons output)))
      db
      (conc "SELECT " selstr " FROM runs WHERE id=? ORDER BY event_time DESC;") run-id)
     (if (not keyvals)
 	'()
 	(let ((prev-run-ids '()))
 	  (apply dbi:for-each-row
+      (lambda (output)
 		 (lambda (id)
-		   (set! prev-run-ids (cons id prev-run-ids)))
+		   (set! prev-run-ids (cons id prev-run-ids))))
 		 db
 		 (conc "SELECT id FROM runs WHERE " qrystr " AND id != ?;") (append keyvals (list run-id)))
 	  ;; collect all matching tests for the runs then
@@ -3611,9 +3645,10 @@
      run-id
      #f
      (lambda (db)
-       (dbi:for-each-row 
+       (dbi:for-each-row
+       (lambda (output) 
 	(lambda (id itempath state status run_duration logf comment)
-	  (set! res (cons (vector id itempath state status run_duration logf comment) res)))
+	  (set! res (cons (vector id itempath state status run_duration logf comment) res))))
 	db
 	"SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE testname=? AND item_path != '';"
 	test-name)
@@ -3632,8 +3667,9 @@
      #f
      (lambda (db)
        (dbi:for-each-row
+        (lambda (output)
 	(lambda (id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup)
-	  (set! res (vector id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup)))
+	  (set! res (vector id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup))))
 	db
 	"SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup FROM test_meta WHERE testname=?;"
 	testname)
@@ -3660,8 +3696,8 @@
 	      (lambda (db)
 		(let ((res '()))
 		  (dbi:for-each-row
-		   (lambda (a . b)
-		     (set! res (cons (apply vector a b) res)))
+        (lambda (output)
+		     (set! res (cons output res)))
 		   db
 		   "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup FROM test_meta;")
 		  res))))
@@ -3855,6 +3891,7 @@
     ;; "Value Found"
     ;; "Tolerance"
     (apply dbi:for-each-row
+      (lambda (output)
 	   (lambda (test-id . b)
 	     (set! test-ids (cons test-id test-ids))   ;; test-id is now testname
 	     (set! results (append results ;; note, drop the test-id
@@ -3887,7 +3924,7 @@
 										(conc final-log " not-found")
 										"")))
 					  (vector->list vb))
-					b)))))
+					b))))))
 	   db
 	   mainqry
 	   runspatt (map cadr keypatt-alist))
@@ -3899,9 +3936,10 @@
        (let ((test-data (list testdata-header))
 	     (curr-test-name #f))
 	 (dbi:for-each-row
+    (lambda (output)
 	  (lambda (run-id testname item-path category variable value expected tol units status comment)
 	    (set! curr-test-name testname)
-	    (set! test-data (append test-data (list (list run-id testname item-path category variable value expected tol units status comment)))))
+	    (set! test-data (append test-data (list (list run-id testname item-path category variable value expected tol units status comment))))))
 	  db 
 	  ;; "SELECT run_id,testname,item_path,category,variable,td.value AS value,expected,tol,units,td.status AS status,td.comment AS comment FROM test_data AS td INNER JOIN tests ON tests.id=td.test_id WHERE test_id=?;"
 	  "SELECT run_id,testname,item_path,category,variable,td.value AS value,td.expected,td.tol,td.units,td.status AS status,td.comment AS comment FROM test_data AS td INNER JOIN tests ON tests.id=td.test_id WHERE testname=?;"

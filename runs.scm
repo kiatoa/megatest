@@ -13,6 +13,8 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking (srfi 18) 
      posix-extras directory-utils pathname-expand typed-records format)
 (import (prefix sqlite3 sqlite3:))
+(include "/nfs/site/disks/icf_fdk_cw_gwa002/srehman/fossil/dbi/dbi.scm")
+(import (prefix dbi dbi:))
 
 (declare (unit runs))
 (declare (uses db))
@@ -2002,7 +2004,7 @@
 	      (test-steps    (rmt:get-steps-for-test (db:test-get-id testdat)))
 	      (new-test-record #f))
 	 ;; replace these with insert ... select
-	 (apply sqlite3:execute 
+	 (apply dbi:exec 
 		db 
 		(conc "INSERT OR REPLACE INTO tests (run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment) "
 		      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);")
@@ -2013,14 +2015,14 @@
 	 (debug:print 4 *default-log-port* "Copying records in test_steps from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))
 	 (cdb:remote-run ;; to be replaced, note: this routine is not used currently
 	  (lambda ()
-	    (sqlite3:execute 
+	    (dbi:exec 
 	     db 
 	     (conc "INSERT OR REPLACE INTO test_steps (test_id,stepname,state,status,event_time,comment) "
 		   "SELECT " (db:test-get-id new-testdat) ",stepname,state,status,event_time,comment FROM test_steps WHERE test_id=?;")
 	     (db:test-get-id testdat))
 	    ;; Now duplicate the test data
 	    (debug:print 4 *default-log-port* "Copying records in test_data from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))
-	    (sqlite3:execute 
+	    (dbi:exec
 	     db 
 	     (conc "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment) "
 		   "SELECT " (db:test-get-id new-testdat) ",category,variable,value,expected,tol,units,comment FROM test_data WHERE test_id=?;")
