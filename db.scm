@@ -560,9 +560,9 @@
    (cond
     ((not fromdb) (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with fromdb missing") -1)
     ((not todb)   (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with todb missing") -2)
-    ((not (eq? 'sqlite3 (dbi:db-dbtype fromdb)))
+    ((not (dbi:database? (db:dbdat-get-db fromdb)))
      (debug:print-error 0 *default-log-port* "db:sync-tables called with fromdb not a database " fromdb) -3)
-    ((not (eq? 'sqlite3 (dbi:db-dbtype todb)))
+    ((not (dbi:database? (db:dbdat-get-db todb)))
      (debug:print-error 0 *default-log-port* "db:sync-tables called with todb not a database " todb) -4)
     (else
      (let ((stmts       (make-hash-table)) ;; table-field => stmt
@@ -598,7 +598,6 @@
 		 (batch-len  (string->number (or (configf:lookup *configdat* "sync" "batchsize") "10")))
 		 (todat      (make-hash-table))
 		 (count      0))
-
 	    ;; set up the field->num table
 	    (for-each
 	     (lambda (field)
@@ -628,7 +627,7 @@
 	    ;; read the target table
 	    (dbi:for-each-row
         (lambda (output)
-	       (hash-table-set! todat a (apply vector a b)))
+	       (hash-table-set! todat (vector-ref output 0) output))
 	     (db:dbdat-get-db todb)
 	     full-sel)
 
@@ -657,7 +656,7 @@
 				  (loop (+ i 1))))
 			    (if (not same)
 				(begin
-				  (apply dbi:exec stmth (vector->list fromrow))
+				  (dbi:exec stmth (vector->list fromrow))
 				  (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
 			fromdat-lst))
 		  ))
