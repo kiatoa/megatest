@@ -1949,7 +1949,7 @@
        (debug:print-info 11 *default-log-port* "db:get-num-runs START " runpatt)
        (dbi:for-each-row 
 	(lambda (count)
-	  (set! numruns count))
+	  (set! numruns (vector-ref count 0)))
 	db
 	"SELECT COUNT(id) FROM runs WHERE runname LIKE ? AND state != 'deleted';" runpatt)
        (debug:print-info 11 *default-log-port* "db:get-num-runs END " runpatt)
@@ -2019,7 +2019,7 @@
      (let ((run-ids '()))
        (dbi:for-each-row
 	(lambda (run-id)
-	  (set! run-ids (cons run-id run-ids)))
+	  (set! run-ids (cons (vector-ref run-id 0) run-ids)))
 	db
 	"SELECT id FROM runs WHERE state != 'deleted' ORDER BY event_time DESC;")
     (reverse run-ids)))))
@@ -3091,7 +3091,7 @@
     ;; (debug:print 8 *default-log-port* "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" testqry)
     (dbi:for-each-row
      (lambda (rid)
-       (set! row-ids (cons rid row-ids)))
+       (set! row-ids (cons (vector-ref rid 0) row-ids)))
      runsqry)
     (dbi:close runsqry)
     row-ids))
