@@ -15,6 +15,9 @@
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking tcp directory-utils)
 (import (prefix sqlite3 sqlite3:))
+(include "/nfs/site/disks/icf_fdk_cw_gwa002/srehman/fossil/dbi/dbi.scm")
+(import (prefix dbi dbi:))
+
 (require-library stml)
 
 (declare (unit tests))
@@ -1331,9 +1334,9 @@ EOF
 (define (test:tdb-get-rundat-count tdb)
   (if tdb
       (let ((res 0))
-	(sqlite3:for-each-row
+	(dbi:for-each-row
 	 (lambda (count)
-	   (set! res count))
+	   (set! res (vector-ref count 0)))
 	 tdb
 	 "SELECT count(id) FROM test_rundat;")
 	res))

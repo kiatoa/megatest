@@ -61,18 +61,18 @@
   (string-chomp (time->string (seconds->local-time (current-seconds)))))
 
 (define (filedb:get-base-id db path)
-  (let ((stmt   (sqlite3:prepare db "SELECT id FROM bases WHERE base=?;"))
+  (let ((stmt   (dbi:prepare db "SELECT id FROM bases WHERE base=?;"))
         (id-num #f))
     (dbi:for-each-row 
-     (lambda (num) (set! id-num num)) stmt path)
+     (lambda (num) (set! id-num (vector-ref num 0))) stmt path)
     (dbi:close stmt)
     id-num))
 
 (define (filedb:get-path-id db path parent)
-  (let ((stmt   (sqlite3:prepare db "SELECT id FROM paths WHERE path=? AND parent_id=?;"))
+  (let ((stmt   (dbi:prepare db "SELECT id FROM paths WHERE path=? AND parent_id=?;"))
         (id-num #f))
     (dbi:for-each-row 
-     (lambda (num) (set! id-num num)) stmt path parent)
+     (lambda (num) (set! id-num (vector-ref num 0))) stmt path parent)
     (dbi:close stmt)
     id-num))
 
@@ -111,7 +111,7 @@
 	(dbi:close stmt))) ;;  (filedb:get-current-time-string))))
   
 (define (filedb:add-path db path parent)
-  (let ((stmt (sqlite3:prepare db "INSERT INTO paths (path,parent_id) VALUES (?,?);")))
+  (let ((stmt (dbi:prepare db "INSERT INTO paths (path,parent_id) VALUES (?,?);")))
     (dbi:exec stmt path parent)
     (dbi:close stmt)))
 
@@ -177,11 +177,11 @@
 
 (define (filedb:find-all fdb pattern action)
   (let* ((db     (filedb:fdb-get-db fdb))
-	 (stmt   (sqlite3:prepare db "SELECT id FROM paths WHERE path like ?;"))
+	 (stmt   (dbi:prepare db "SELECT id FROM paths WHERE path like ?;"))
 	 (result '()))
     (dbi:for-each-row 
      (lambda (num)
-       (action num)
+       (action (vector-ref num 0))
        (set! result (cons num result))) stmt pattern)
     (dbi:close stmt)
     result))
@@ -191,10 +191,10 @@
 	 (partcache (filedb:fdb-get-partcache fdb))
 	 (dat (hash-table-ref/default partcache id #f)))
     (if dat dat
-	(let ((stmt (sqlite3:prepare db "SELECT path,parent_id FROM paths WHERE id=?;"))
+	(let ((stmt (dbi:prepare db "SELECT path,parent_id FROM paths WHERE id=?;"))
 	      (result #f))
 	  (dbi:for-each-row 
-	   (lambda (path parent_id)(set! result (list path parent_id))) stmt id)
+	   (lambda (output) (lambda (path parent_id)(set! result (list path parent_id)))) stmt id)
 	  (hash-table-set! partcache id result)
 	  (dbi:close stmt)
 	  result))))
@@ -216,8 +216,9 @@
 	 (res       '()))
     ;; first get the children that have no children
     (dbi:for-each-row
+      (lambda (output)
      (lambda (id path parent-id)
-       (set! res (cons (vector id path parent-id) res)))
+       (set! res (cons (vector id path parent-id) res))))
      db "SELECT id,path,parent_id FROM paths WHERE parent_id=? AND 
             (id IN (SELECT parent_id FROM paths) OR path LIKE ?);"
      parent-id search-patt)

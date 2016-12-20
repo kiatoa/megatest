@@ -152,11 +152,12 @@ Version: " megatest-fossil-hash)) ;; "
      db
      (lambda ()
        (dbi:for-each-row
+        (lambda (output)
 	(lambda (iteration)
-	  (if (and (number? iteration)
+	  (if (and (number? (vector-refiteration)
 		   (>= iteration next-iteration))
 	      (set! next-iteration (+ iteration 1))))
-	iter-qry area version-name)
+	iter-qry area version-name))
        ;; now store the data
        (dbi:exec db "INSERT INTO pkgs (area,version_name,iteration,store_type,submitter,source_path,quality,comment) 
                                  VALUES (?,?,?,?,?,?,?,?);"
@@ -168,7 +169,7 @@ Version: " megatest-fossil-hash)) ;; "
   (let ((res #f))
     (dbi:for-each-row
      (lambda (id)
-       (set! res id))
+       (set! res (vector-ref id 0)))
      db
      "SELECT id FROM pkgs WHERE area=? AND version_name=? AND iteration=?;"
      area version-name iteration)
@@ -183,8 +184,8 @@ Version: " megatest-fossil-hash)) ;; "
 (define (datashare:get-pkg-record db area version-name iteration)
   (let ((res #f))
     (dbi:for-each-row
-     (lambda (a . b)
-       (set! res (apply vector a b)))
+     (lambda (output)
+       (set! res output))
      db 
      "SELECT * FROM pkgs WHERE area=? AND version_name=? AND iteration=?;"
      area 
@@ -216,7 +217,7 @@ Version: " megatest-fossil-hash)) ;; "
   (let ((res 0))
     (dbi:for-each-row
      (lambda (count)
-       (set! res count))
+       (set! res (vector-ref count 0))
      db
      "SELECT count(id) FROM refs WHERE pkg_id=?;"
      pkg-id)
@@ -283,8 +284,8 @@ Version: " megatest-fossil-hash)) ;; "
 (define (datashare:get-pkgs db area-filter version-filter iter-filter)
   (let ((res '()))
     (dbi:for-each-row ;; replace with fold ...
-     (lambda (a . b)
-       (set! res (cons (list->vector (cons a b)) res)))
+     (lambda (output)
+       (set! res (cons output res)))
      db 
      (conc "SELECT id,area,version_name,store_type,copied,source_path,iteration,submitter,datetime,storegrp,datavol,quality,disk_id,comment,stored_path "
 	   " FROM pkgs WHERE area like ? AND version_name LIKE ? AND iteration " iter-filter ";")
@@ -295,8 +296,8 @@ Version: " megatest-fossil-hash)) ;; "
   (let ((dat '())
 	(res #f))
     (dbi:for-each-row ;; replace with fold ...
-     (lambda (a . b)
-       (set! dat (cons (list->vector (cons a b)) dat)))
+     (lambda (output)
+       (set! dat (cons output dat)))
      db 
      (conc "SELECT id,area,version_name,store_type,copied,source_path,iteration,submitter,datetime,storegrp,datavol,quality,disk_id,comment,stored_path "
 	   " FROM pkgs WHERE area=? AND version_name=? ORDER BY iteration ASC;")
@@ -318,9 +319,10 @@ Version: " megatest-fossil-hash)) ;; "
   (let ((res '())
 	(data (make-hash-table)))
     (dbi:for-each-row
+      (lambda (output)
      (lambda (version-name submitter iteration submitted-time comment)
        ;;                                              0           1         2           3           4
-       (hash-table-set! data version-name (vector version-name submitter iteration submitted-time comment)))
+       (hash-table-set! data version-name (vector version-name submitter iteration submitted-time comment))))
      db 
      "SELECT version_name,submitter,iteration,datetime,comment FROM pkgs WHERE area='megatest' AND version_name != 'latest' AND version_name LIKE ? ORDER BY datetime asc;"
      (or version-patt "%"))

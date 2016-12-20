@@ -57,7 +57,7 @@
     (if (not id)
 	(dbi:for-each-row
 	 (lambda (sid)
-	   (set! id sid)
+	   (set! id (vector-ref sid 0))
 	   (hash-table-set! str-cache str id))
 	 sdb
 	 "SELECT id FROM strs WHERE str=?;" str))
@@ -68,7 +68,7 @@
     (if (not str)
 	(dbi:for-each-row
 	 (lambda (istr)
-	   (set! str istr)
+	   (set! str (vector-ref istr 0))
 	   (hash-table-set! id-cache id str))
 	 sdb
 	 "SELECT str FROM strs WHERE id=?;" id))

@@ -12,6 +12,7 @@
 
 (use sqlite3 srfi-1 posix srfi-69 hostinfo dot-locking z3)
 (import (prefix sqlite3 sqlite3:))
+(include "/nfs/site/disks/icf_fdk_cw_gwa002/srehman/fossil/dbi/dbi.scm")
 (import (prefix dbi dbi:))
 
 (declare (unit portlogger))
@@ -66,22 +67,22 @@
      (let* (;; (lock   (obtain-dot-lock fname 2 9 10))
 	    (db     (portlogger:open-db fname))
 	    (res    (apply proc db params)))
-       (sqlite3:finalize! db)
+       (dbi:close db)
        ;; (release-dot-lock fname)
        res))))
 
 ;; (fold-row PROC INIT DATABASE SQL . PARAMETERS) 
 (define (portlogger:take-port db portnum)
-  (let* ((qry1 (sqlite3:prepare db "INSERT INTO ports (port,state) VALUES (?,?);"))
-	 (qry2 (sqlite3:prepare db "UPDATE ports SET state=?,update_time=strftime('%s','now') WHERE port=?;"))
-	 (qry3 (sqlite3:prepare db "SELECT state FROM ports WHERE port=?;"))
-	 (res  (sqlite3:with-transaction
+  (let* ((qry1 (dbi:prepare db "INSERT INTO ports (port,state) VALUES (?,?);"))
+	 (qry2 (dbi:prepare db "UPDATE ports SET state=?,update_time=strftime('%s','now') WHERE port=?;"))
+	 (qry3 (dbi:prepare db "SELECT state FROM ports WHERE port=?;"))
+	 (res  (dbi:with-transaction
 		db
 		(lambda ()
 		  ;; (fold-row (lambda (var curr) (or var curr)) #f db "SELECT var FROM foo WHERE id=100;")
 		  (let* ((curr #f)
 			 (res  #f))
-		    (set! curr (sqlite3:fold-row
+		    (set! curr (dbi:fold-row
 				(lambda (var curr)
 				  (or curr var curr))
 				"not-tried"
@@ -89,16 +90,16 @@
 				portnum))
 		    ;; (print "curr=" curr)
 		    (set! res (case (string->symbol curr)
-				((released)  (sqlite3:execute qry2 "taken" portnum) 'taken)
-				((not-tried) (sqlite3:execute qry1 portnum "taken") 'taken)
+				((released)  (dbi:execute qry2 "taken" portnum) 'taken)
+				((not-tried) (dbi:execute qry1 portnum "taken") 'taken)
 				((taken)                                            'already-taken)
 				((failed)                                           'failed)
 				(else                                               'error)))
 		    ;; (print "res=" res)
 		    res)))))
-    (sqlite3:finalize! qry1)
-    (sqlite3:finalize! qry2)
-    (sqlite3:finalize! qry3)
+    (dbi:close qry1)
+    (dbi:close qry2)
+    (dbi:close qry3)
     res))
 
 (define (portlogger:get-prev-used-port db)
@@ -111,7 +112,7 @@
      (print-call-chain (current-error-port))
      (debug:print 0 *default-log-port* "Continuing anyway.")
      #f)
-   (sqlite3:fold-row
+   (dbi:fold-row
     (lambda (var curr)
       (or curr var curr))
     #f
@@ -141,12 +142,12 @@
 ;; set port to "released", "failed" etc.
 ;; 
 (define (portlogger:set-port db portnum value)
-  (sqlite3:execute db "UPDATE ports SET state=?,update_time=strftime('%s','now') WHERE port=?;" value portnum))
+  (dbi:execute db "UPDATE ports SET state=?,update_time=strftime('%s','now') WHERE port=?;" value portnum))
 
 ;; set port to failed (attempted to take but got error)
 ;;
 (define (portlogger:set-failed db portnum)
-  (sqlite3:execute db "UPDATE ports SET state='failed',fail_count=fail_count+1,update_time=strftime('%s','now') WHERE port=?;" portnum))
+  (dbi:execute db "UPDATE ports SET state='failed',fail_count=fail_count+1,update_time=strftime('%s','now') WHERE port=?;" portnum))
 
 ;;======================================================================
 ;; MAIN
@@ -176,7 +177,7 @@
 					   state)
 		      state))
 	     ((failed)(portlogger:set-failed db (string->number (cadr args))) 'failed)))))
-    (sqlite3:finalize! db)
+    (dbi:close db)
     result))
      
 ;; (print (apply portlogger:main (cdr (argv))))

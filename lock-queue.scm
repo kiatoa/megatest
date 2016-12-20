@@ -105,10 +105,11 @@
 	 #f))
    (let ((res #f))
      (dbi:for-each-row
+     	(lambda (output)
       (lambda (tid)
 	;; Actually this should not be needed as mystart cannot be simultaneously less than and test-id same as 
 	(if (not (equal? tid test-id)) 
-	    (set! res tid)))
+	    (set! res tid))))
       (lock-queue:db-dat-get-db dbdat)
       "SELECT test_id FROM queue WHERE start_time > ?;" mystart)
      res)))
@@ -117,8 +118,8 @@
   (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 remove: #t waiting-msg: "lock-queue:get-lock, waiting on journal")
   (let* ((res       #f)
 	 (db        (lock-queue:db-dat-get-db dbdat))
-	 (lckqry    (sqlite3:prepare db "SELECT test_id,run_lock FROM runlocks WHERE run_lock='locked';"))
-	 (mklckqry  (sqlite3:prepare db "INSERT INTO runlocks (test_id,run_lock) VALUES (?,'locked');")))
+	 (lckqry    (dbi:prepare db "SELECT test_id,run_lock FROM runlocks WHERE run_lock='locked';"))
+	 (mklckqry  (dbi:prepare db "INSERT INTO runlocks (test_id,run_lock) VALUES (?,'locked');")))
     (let ((result 
 	   (handle-exceptions
 	    exn
@@ -134,8 +135,8 @@
 	    (dbi:with-transaction
 	     db
 	     (lambda ()
-	       (dbi:for-each-row (lambda (tid lockstate)
-				       (set! res (list tid lockstate)))
+	       (dbi:for-each-row (lambda (output) (lambda (tid lockstate)
+				       (set! res (list tid lockstate))))
 				     lckqry)
 	       (if res
 		   (if (equal? (car res) test-id)
