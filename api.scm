@@ -41,6 +41,7 @@
     get-targets
     get-target
     ;; register-run
+    get-tests-tags
     get-tests-for-run
     get-test-id
     get-tests-for-runs-mindata
@@ -170,6 +171,7 @@
 	    ;; TESTMETA
 	    ((testmeta-add-record)       (apply db:testmeta-add-record dbstruct params))
 	    ((testmeta-update-field)     (apply db:testmeta-update-field dbstruct params))
+            ((get-tests-tags)            (db:get-tests-tags dbstruct))
 
 	    ;; TASKS
 	    ((tasks-add)                 (apply tasks:add dbstruct params))   
