@@ -2048,7 +2048,8 @@
 		       (hash-table-set! totals netstate (+ (hash-table-ref/default totals netstate 0) count))
 		       (hash-table-set! curr   netstate (+ (hash-table-ref/default curr   netstate 0) count))))))
 	     db
-	     "SELECT state,status,count(id) FROM tests AS t GROUP BY state,status ORDER BY state,status DESC;")
+	     "SELECT state,status,count(id) FROM tests AS t WHERE run_id=? GROUP BY state,status ORDER BY state,status DESC;"
+             run-id)
 	    ;; add the per run counts to res
 	    (for-each (lambda (state)
 			(set! res (cons (list run-name state (hash-table-ref curr state)) res)))

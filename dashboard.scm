@@ -292,6 +292,17 @@ Misc
   tests-tree       ;; used in newdashboard
   )
 
+;; register tabdat with BBpp
+;; this is used by BBpp (Brandon's pretty printer) to convert dboard:tabdat into a composition of lists that pp will handle
+(hash-table-set! *BBpp_custom_expanders_list* TABDAT:
+                 (cons dboard:tabdat?
+                       (lambda (tabdat-item)
+                         (filter
+                          (lambda (alist-entry)
+                            (member (car alist-entry)
+                                    '(allruns-by-id allruns))) ;; FIELDS OF INTEREST
+                          (dboard:tabdat->alist tabdat-item)))))
+
 (define (dboard:tabdat-target-string vec)
   (let ((targ (dboard:tabdat-target vec)))
     (if (list? targ)(string-intersperse targ "/") "no-target-specified")))
@@ -362,6 +373,20 @@ Misc
   ((run-data-offset  0)              : number)      ;; get only 100 items per call, set back to zero when received less that 100 items
   (db-path #f)
   )
+
+;; register dboard:rundat with BBpp
+;; this is used by BBpp (Brandon's pretty printer) to convert dboard:rundat into a composition of lists that pp will handle
+(hash-table-set! *BBpp_custom_expanders_list* RUNDAT:
+                 (cons dboard:rundat?
+                       (lambda (tabdat-item)
+                         (filter
+                          (lambda (alist-entry)
+                            (member (car alist-entry)
+                                    '(run run-data-offset ))) ;; FIELDS OF INTEREST
+                          (dboard:rundat->alist tabdat-item)))))
+
+
+
 
 (define (dboard:rundat-make-init #!key (run #f)(key-vals #f)(tests #f));; -100 is before time began
   (make-dboard:rundat 
@@ -625,6 +650,8 @@ Misc
 				   runs-tree) ;; (vector-ref runs-dat 1))
 			 ht))
 	 (tb          (dboard:tabdat-runs-tree tabdat)))
+    ;;(BB> "In update-rundat")
+    ;;(inspect allruns runs-hash)
     (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
     (dboard:tabdat-header-set! tabdat header)
     ;; 
@@ -742,7 +769,13 @@ Misc
 				     run:         run 
 				     tests:       tests-ht
 				     key-vals:    key-vals)))
-		   (new-res     (if (null? all-test-ids) res (cons run-struct res)))
+		   (new-res     (if (null? all-test-ids)
+                                    res
+                                    (delete-duplicates
+                                     (cons run-struct res)
+                                     (lambda (a b)
+                                       (eq? (db:get-value-by-header (dboard:rundat-run a) header "id")
+                                            (db:get-value-by-header (dboard:rundat-run b) header "id"))))))
 		   (elapsed-time (- (current-seconds) start-time)))
 	      (if (null? all-test-ids)
 		  (hash-table-delete! (dboard:tabdat-allruns-by-id tabdat) run-id)
@@ -3393,6 +3426,9 @@ Misc
        ;; (pp (dboard:tabdat->alist tabdat))
        ;; (if (dashboard:database-changed? commondat tabdat context-key: 'runs-rundat)      
        (dashboard:do-update-rundat tabdat)
+       ;;(BB> "dashboard:runs-tab-updater")
+       ;;(inspect tabdat)
+
        (let ((uidat (dboard:commondat-uidat commondat)))
 	 ;;(print "RA => Calling update-buttons with tabdat : " tabdat " uidat " uidat)
 	 (update-buttons tabdat uidat (dboard:tabdat-numruns tabdat) (dboard:tabdat-num-tests tabdat)))
