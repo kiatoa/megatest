@@ -781,14 +781,17 @@
   (or (args:get-arg "-status")(args:get-arg ":status")))
 
 (define (common:args-get-testpatt rconf)
-  (let* ((rtestpatt     (if rconf (runconfigs-get rconf "TESTPATT") #f))
+  (let* ((tags-testpatt (if (args:get-arg "-tagexpr") (string-join (runs:get-tests-matching-tags (args:get-arg "-tagexpr")) ",") #f))
+         (testpatt-key  (if (args:get-arg "-mode") (args:get-arg "-mode") "TESTPATT"))
+         (rtestpatt     (if rconf (runconfigs-get rconf testpatt-key) #f))
 	 (args-testpatt (or (args:get-arg "-testpatt")
 			    (args:get-arg "-runtests")
 			    "%"))
-	 (testpatt    (or (and (equal? args-testpatt "%")
+	 (testpatt    (or tags-testpatt
+                          (and (equal? args-testpatt "%")
 			       rtestpatt)
 			  args-testpatt)))
-    (if rtestpatt (debug:print-info 0 *default-log-port* "TESTPATT from runconfigs: " rtestpatt))
+    (if rtestpatt (debug:print-info 0 *default-log-port* "testpatt defined in "testpatt-key" from runconfigs: " rtestpatt))
     testpatt))
 
 (define (common:get-linktree)

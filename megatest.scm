@@ -95,6 +95,8 @@ Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs e
   -runname                : required, name for this particular test run
   -state                  : Applies to runs, tests or steps depending on context
   -status                 : Applies to runs, tests or steps depending on context
+  -mode key               : load testpatt from <key> in runconfigs instead of default TESTPATT
+  -tagexpr tag1,tag2%,..  : select tests with tags matching expression
 
 Test helpers (for use inside tests)
   -step stepname
@@ -211,7 +213,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			":status"
 			"-status"
 			"-list-runs"
-			"-testpatt" 
+			"-testpatt"
+                        "-mode"
+                        "-tagexpr"
 			"-itempatt"
 			"-setlog"
 			"-set-toplog"
