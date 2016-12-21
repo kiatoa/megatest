@@ -137,6 +137,14 @@
 (define *launch-setup-mutex* (make-mutex))     ;; need to be able to call launch:setup often so mutex it and re-call the real deal only if *toppath* not set
 (define *homehost-mutex*     (make-mutex))
 
+(defstruct remote
+  (hh-dat            (common:get-homehost)) ;; homehost record ( addr . hhflag )
+  (server-url        (if *toppath* (server:read-dotserver *toppath*))) ;; (server:check-if-running *toppath*) #f))
+  (last-server-check 0)  ;; last time we checked to see if the server was alive
+  (conndat           #f)
+  (transport         *transport-type*)
+  (server-timeout    (or (server:get-timeout) 100))) ;; default to 100 seconds
+
 ;; launching and hosts
 (defstruct host
   (reachable    #f)
@@ -629,6 +637,9 @@
 					  (sqlite3:finalize! db #t)
 					  ;; (vector-set! *task-db* 0 #f)
 					  (set! *task-db* #f)))))
+                              (if (and *runremote*
+                                       (remote-conndat *runremote*))
+                                  (close-all-connections!)) ;; for http-client
 			      (close-output-port *default-log-port*)
 			      (set! *default-log-port* (current-error-port))) "Cleanup db exit thread"))
 	  (th2 (make-thread (lambda ()
@@ -641,7 +652,8 @@
 			    "clean exit")))
       (thread-start! th1)
       (thread-start! th2)
-      (thread-join! th1))))
+      (thread-join! th1))
+    ))
 
 (define (std-signal-handler signum)
   ;; (signal-mask! signum)

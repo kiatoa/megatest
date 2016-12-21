@@ -1986,13 +1986,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Exit and clean up
 ;;======================================================================
 
-(if *runremote* (close-all-connections!)) ;; for http-client
-
 (if (not *didsomething*)
     (debug:print 0 *default-log-port* help))
 
-(set! *time-to-exit* #t)
 (thread-join! *watchdog*)
+(set! *time-to-exit* #t)
 
 (if (not (eq? *globalexitstatus* 0))
     (if (or (args:get-arg "-run")(args:get-arg "-runtests")(args:get-arg "-runall"))
