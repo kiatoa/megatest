@@ -26,14 +26,6 @@
 ;;
 ;;  grep define ../rmt.scm | grep rmt: |perl -pi -e 's/\(define\s+\((\S+)\W.*$/\1/'|sort -u
 
-(defstruct remote
-  (hh-dat            (common:get-homehost)) ;; homehost record ( addr . hhflag )
-  (server-url        (if *toppath* (server:read-dotserver *toppath*))) ;; (server:check-if-running *toppath*) #f))
-  (last-server-check 0)  ;; last time we checked to see if the server was alive
-  (conndat           #f)
-  (transport         *transport-type*)
-  (server-timeout    (or (server:get-timeout) 100))) ;; default to 100 seconds
-
 ;;======================================================================
 ;;  S U P P O R T   F U N C T I O N S
 ;;======================================================================
