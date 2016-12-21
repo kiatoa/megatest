@@ -92,10 +92,9 @@
 (define *db-last-access*      (current-seconds)) ;; last db access, used in server
 (define *db-write-access*     #t)
 ;; db sync
-(define *db-last-write*       0)                 ;; used to record last touch of db
 (define *db-last-sync*        0)                 ;; last time the sync to megatest.db happened
 (define *db-sync-in-progress* #f)                ;; if there is a sync in progress do not try to start another
-(define *db-multi-sync-mutex* (make-mutex))      ;; protect access to *db-sync-in-progress*, *db-last-sync* and *db-last-write*
+(define *db-multi-sync-mutex* (make-mutex))      ;; protect access to *db-sync-in-progress*, *db-last-sync*
 ;; task db
 (define *task-db*             #f) ;; (vector db path-to-db)
 (define *db-access-allowed*   #t) ;; flag to allow access
@@ -541,11 +540,13 @@
 ;;======================================================================
 
 (define (common:run-sync?)
-  (let ((ohh (common:on-homehost?))
-	(srv (args:get-arg "-server")))
-    ;; (debug:print-info 0 *default-log-port* "common:run-sync? ohh=" ohh ", srv=" srv)
     (and (common:on-homehost?)
-	 (args:get-arg "-server"))))
+	 (args:get-arg "-server")))
+
+;;   (let ((ohh (common:on-homehost?))
+;; 	(srv (args:get-arg "-server")))
+;;     (and ohh srv)))
+    ;; (debug:print-info 0 *default-log-port* "common:run-sync? ohh=" ohh ", srv=" srv)
 
 ;;;; run-ids
 ;;    if #f use *db-local-sync* : or 'local-sync-flags
@@ -575,7 +576,8 @@
 	    ;; sync for filesystem local db writes
 	    ;;
 	    (mutex-lock! *db-multi-sync-mutex*)
-	    (let* ((need-sync        (>= *db-last-write* *db-last-sync*)) ;; no sync since last write
+	    (let* (
+                   (need-sync        (>= *db-last-access* *db-last-sync*)) ;; no sync since last write
 		   (sync-in-progress *db-sync-in-progress*)
 		   (should-sync      (> (- (current-seconds) *db-last-sync*) 5)) ;; sync every five seconds minimum
 		   (will-sync        (and (or need-sync should-sync)
@@ -619,6 +621,7 @@
 		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*)))))))
 
 (define (std-exit-procedure)
+  (on-exit (lambda () #t))
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
 		       #f
 		       (begin

@@ -337,6 +337,7 @@
       (db:sync-tables (db:sync-all-tables-list dbstruct) update_info tmpdb refndb mtdb))
     (mutex-lock! *db-multi-sync-mutex*)
     (set! *db-last-sync* start-t)
+    (set! *db-last-access* start-t)
     (mutex-unlock! *db-multi-sync-mutex*)))
 
 ;; close all opened run-id dbs

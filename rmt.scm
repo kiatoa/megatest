@@ -251,7 +251,7 @@
 	  (if qry-is-write
 	      (let ((start-time (current-seconds)))
 		(mutex-lock! *db-multi-sync-mutex*)
-		(set! *db-last-write* start-time) ;; the oldest "write"
+		(set! *db-last-access* start-time)  ;; THIS IS PROBABLY USELESS? (we are on a client)
                 (mutex-unlock! *db-multi-sync-mutex*)))))
     res))
 
