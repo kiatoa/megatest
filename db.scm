@@ -1928,7 +1928,7 @@
      (lambda (db)
        (dbi:for-each-row
 	(lambda (output)
-	  (let ((targ (cons output)))
+	  (let ((targ  (vector->list output)))
 	    (if (not (hash-table-ref/default seen targ #f))
 		(begin
 		  (hash-table-set! seen targ #t)
@@ -2138,9 +2138,6 @@
     ;; (db:delay-if-busy dbdat)
     (dbi:for-each-row
       (lambda (output)
-          ;;(print "Output: " output)
-          ;;(print "A: " a)
-          ;;(print "X: " x)
            (set! res output))
      db 
      (conc "SELECT " keystr " FROM runs WHERE id=? AND state != 'deleted';")
@@ -3556,9 +3553,10 @@
 	 (tests-hash (make-hash-table)))
     ;; first look up the key values from the run selected by run-id
     ;; (db:delay-if-busy dbdat)
+    (print selstr)
     (dbi:for-each-row
     (lambda (output) 
-       (set! keyvals (cons output)))
+       (set! keyvals (vector->list output)))
      db
      (conc "SELECT " selstr " FROM runs WHERE id=? ORDER BY event_time DESC;") run-id)
     (if (not keyvals)
