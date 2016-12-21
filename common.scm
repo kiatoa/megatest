@@ -793,16 +793,20 @@
   (or (args:get-arg "-status")(args:get-arg ":status")))
 
 (define (common:args-get-testpatt rconf)
-  (let* ((rtestpatt     (if rconf (runconfigs-get rconf "TESTPATT") #f))
-	 (args-testpatt (or (args:get-arg "-testpatt")
-			    (args:get-arg "-runtests")
-			    "%"))
-	 (testpatt    (or (and (equal? args-testpatt "%")
-			       rtestpatt)
-			  args-testpatt)))
-    (if rtestpatt (debug:print-info 0 *default-log-port* "TESTPATT from runconfigs: " rtestpatt))
-    testpatt))
-
+  (let* ((tagexpr (args:get-arg "-tagexpr"))
+         (tags-testpatt (if tagexpr (string-join (runs:get-tests-matching-tags tagexpr) ",") #f))
+         (testpatt-key  (if (args:get-arg "-mode") (args:get-arg "-mode") "TESTPATT"))
+         (args-testpatt (or (args:get-arg "-testpatt") (args:get-arg "-runtests") "%"))
+         (rtestpatt     (if rconf (runconfigs-get rconf testpatt-key) #f)))
+    (cond
+     (tags-testpatt
+      (debug:print-info 0 *default-log-port* "-tagexpr "tagexpr" selects testpatt "tags-testpatt)
+      tags-testpatt)
+     ((and (equal? args-testpatt "%") rtestpatt)
+      (debug:print-info 0 *default-log-port* "testpatt defined in "testpatt-key" from runconfigs: " rtestpatt)
+      rtestpatt)
+     (else args-testpatt))))
+     
 (define (common:get-linktree)
   (or (getenv "MT_LINKTREE")
       (if *configdat*
