@@ -621,7 +621,7 @@
 		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*)))))))
 
 (define (std-exit-procedure)
-  (on-exit (lambda () #t))
+  (on-exit (lambda () 0))
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
 		       #f
 		       (begin
@@ -631,7 +631,7 @@
     (if (and no-hurry (debug:debug-mode 18))
 	(rmt:print-db-stats))
     (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
-			      (if *dbstruct-db* (db:close-all *dbstruct-db*)) ;; one second allocated
+                              (if *dbstruct-db* (db:close-all *dbstruct-db*)) ;; one second allocated
 			      (if *task-db*    
 				  (let ((db (cdr *task-db*)))
 				    (if (sqlite3:database? db)
@@ -642,21 +642,28 @@
 					  (set! *task-db* #f)))))
                               (if (and *runremote*
                                        (remote-conndat *runremote*))
-                                  (close-all-connections!)) ;; for http-client
-			      (close-output-port *default-log-port*)
+                                  (begin
+                                    (close-all-connections!))) ;; for http-client
+                              (if (not (eq? *default-log-port* (current-error-port)))
+                                  (close-output-port *default-log-port*))
 			      (set! *default-log-port* (current-error-port))) "Cleanup db exit thread"))
 	  (th2 (make-thread (lambda ()
 			      (debug:print 4 *default-log-port* "Attempting clean exit. Please be patient and wait a few seconds...")
 			      (if no-hurry
-				  (thread-sleep! 5) ;; give the clean up few seconds to do it's stuff
-				  (thread-sleep! 2))
-			      (debug:print 4 *default-log-port* " ... done")
-			      )
+                                  (begin
+                                    (thread-sleep! 5)) ;; give the clean up few seconds to do it's stuff
+                                  (begin
+      				  (thread-sleep! 2)))
+      			      (debug:print 4 *default-log-port* " ... done")
+      			      )
 			    "clean exit")))
       (thread-start! th1)
       (thread-start! th2)
-      (thread-join! th1))
-    ))
+      (thread-join! th1)
+      )
+    )
+
+  0)
 
 (define (std-signal-handler signum)
   ;; (signal-mask! signum)
