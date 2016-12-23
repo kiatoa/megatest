@@ -643,7 +643,7 @@
                               (if (and *runremote*
                                        (remote-conndat *runremote*))
                                   (begin
-                                    (close-all-connections!))) ;; for http-client
+                                    (http-client#close-all-connections!))) ;; for http-client
                               (if (not (eq? *default-log-port* (current-error-port)))
                                   (close-output-port *default-log-port*))
 			      (set! *default-log-port* (current-error-port))) "Cleanup db exit thread"))
