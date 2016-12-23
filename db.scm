@@ -646,10 +646,11 @@
 	     (db:dbdat-get-db todb)
 	     full-sel)
 
+
 	    ;; first pass implementation, just insert all changed rows
       (for-each 
 	     (lambda (targdb)
-	       (let* ((db (if (sqlite3:database? (db:dbdat-get-db targdb)) (dbi:convert (db:dbdat-get-db targdb)) (db:dbdat-get-db targdb)))
+	       (let* ((db (dbi:convert (db:dbdat-get-db targdb)))
 		      (stmth  (dbi:prepare db full-ins)))
 		 ;; (db:delay-if-busy targdb) ;; NO WAITING
 		 (for-each
@@ -670,9 +671,12 @@
 				       (< i (- num-fields 1)))
 				  (loop (+ i 1))))
 			    (if (not same)
-        (begin
-				  (dbi:exec stmth (vector->list fromrow))
-				  (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
+            (begin
+              (apply dbi:prepare-exec stmth (vector->list fromrow))
+             (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
+        ;;(begin
+				 ;; (dbi:prepare-exec stmth (vector->list fromrow))
+				  ;;(hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
 			fromdat-lst))
 		  ))
 		  fromdats)
@@ -839,8 +843,9 @@
   (if (not (launch:setup))
       (debug:print 0 *default-log-port* "ERROR: not able to setup up for megatest.")
       (let* ((mtdb     (dbr:dbstruct-mtdb dbstruct))
-	     (tmpdb    (dbr:dbstruct-tmpdb dbstruct))
+	           (tmpdb    (dbr:dbstruct-tmpdb dbstruct))
              (refndb   (dbr:dbstruct-refndb dbstruct))
+             (slave-dbs (dbr:dbstruct-slave-dbs dbstruct))
 	     (allow-cleanup #t) ;; (if run-ids #f #t))
 	     (tdbdat  (tasks:open-db))
 	     (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
@@ -891,7 +896,7 @@
 	;;
 	(if (member 'new2old options)
 	    (set! data-synced
-		  (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb refndb mtdb)
+		  (+ (apply db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb refndb mtdb slave-dbs)
 		      data-synced)))
 
 
