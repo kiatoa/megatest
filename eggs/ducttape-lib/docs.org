@@ -1,0 +1,19 @@
+
+* Calendar
+** Gregorian Date
+** 
+* Date data representations
+| abbreviation | Name              | Calendar       | Data structure        | Comment                                                          |
+|--------------+-------------------+----------------+-----------------------+------------------------------------------------------------------|
+| gd           | Gregorian Date    | Gregorian      | (list Y M D)          | Y,M,D : Y(int)=year M(int)=month D(int) = day on month           |
+| isodate      | ISO 8601 date     | Gregorian      | "YYYY-MM-DD"          | string, numbers are dash separated.  Follows Gregorian reckoning |
+| wd           | Work Date         | Gregorian (*1) | "YYYYwwWW.D"          | YYYY, WW and D are integers.  WW is "work week".                 |
+| jdn          | Julian Day Number | Julian Day     | integer               | count of days since the beginning of the Julian Period           |
+| jd           | Julian Date       |                | floating point number |                                                                  |
+| dow          | Day of week       |                |                       | 0 = Sunday, 6=Saturday                                           |
+|              |                   |                |                       |                                                                  |
+** see https://en.wikipedia.org/wiki/Julian_day for discussion of Julian Date|Period|Day Number
+** Work Date is a week-denominated year.  
+
+  
+* Conversion routines
