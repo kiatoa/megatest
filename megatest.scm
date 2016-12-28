@@ -352,7 +352,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (define *watchdog* (make-thread common:watchdog "Watchdog thread"))
 
 (thread-start! *watchdog*)
-
+(BB> "thread-start! watchdog")
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))
       (debug:print-info 0 *default-log-port* "Sending log output to " (args:get-arg "-log"))
@@ -1992,7 +1992,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (not *didsomething*)
     (debug:print 0 *default-log-port* help))
-
+(BB> "thread-join! watchdog")
 (thread-join! *watchdog*)
 (set! *time-to-exit* #t)
 
