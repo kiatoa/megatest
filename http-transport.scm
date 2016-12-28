@@ -488,7 +488,7 @@
 
 (define (http-transport:server-shutdown server-id port)
   (let ((tdbdat (tasks:open-db)))
-    (debug:print-info 0 *default-log-port* "Starting to shutdown the server.")
+    (debug:print-info 0 *default-log-port* "Starting to shutdown the server. pid="(current-process-id))
     ;;
     ;; start_shutdown
     ;;
