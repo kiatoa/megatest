@@ -39,15 +39,16 @@
 
   list                   		 			: list areas $USER's can access
   log                    		 			: get listing of recent activity.
-  sauthorize  list-area-user <area code> 			: list the users that can access the area.
-  sauthorize open <path> --group <grpname>                      : Open up an area. User needs to be the owner of the area to open it. 
+  sauth  list-area-user <area code> 			: list the users that can access the area.
+  sauth open <path> --group <grpname>                      : Open up an area. User needs to be the owner of the area to open it. 
               --code <unique short identifier for an area> 
               --retrieve|--publish 
-  sauthorize grant <username> --area <area identifier>          : Grant permission to read or write to a area that is alrady opend up.    
+  sauth grant <username> --area <area identifier>          : Grant permission to read or write to a area that is alrady opend up.    
              --expiration yyyy/mm/dd --retrieve|--publish 
              [--restrict <comma separated directory names> ]  
-  sauthorize read-shell <area identifier>                       :  Open sretrieve shell for reading.  
-  sauthorize write-shell <area identifier>                      :  Open spublish shell for writing.
+  sauth read-shell <area identifier>                       :  Open sretrieve shell for reading.  
+  sauth write-shell <area identifier>                      :  Open spublish shell for writing.
+   
 Part of the Megatest tool suite.
 Learn more at http://www.kiatoa.com/fossils/megatest
 
@@ -173,9 +174,11 @@ Version: " megatest-fossil-hash)) ;; "
             (if (equal? access-type "publish")
               (run-cmd "/bin/chmod" (list "u+s,o+rx" dpath))
               (begin
-              (run-cmd "/bin/chgrp" (list group dpath))
-              (run-cmd "/bin/chmod" (list "g+s,o+rx" dpath))))
-))
+               (if (equal? group "none")
+                 (run-cmd "/bin/chmod" (list "u+s,o+rx" dpath))
+                 (begin   
+                     (run-cmd "/bin/chgrp" (list group dpath))
+                       (run-cmd "/bin/chmod" (list "g+s,o+rx" dpath))))))))
 	(run-cmd "chmod" (list "g-w" (conc *exe-path* "/" access-type)))))
 
 (define (get-exe-name path group)
@@ -193,7 +196,8 @@ name))
 (define (open-area group path code access-type)
    (let* ((exe-name (get-exe-name path group))
            (path-obj (get-obj-by-path path))
-           (code-obj (get-obj-by-code code))) 
+           (code-obj (get-obj-by-code code)))
+           ;(print path-obj)   
           (cond
             ((not (null? path-obj))
                 (if (equal? code (car path-obj))
@@ -220,9 +224,11 @@ name))
                    (print "Code " code " is used for diffrent path. Please try diffrent value of --code" ) 
                    (exit 1))
             (else
+               ; (print (exe-exist exe-name  access-type))
                 (if (not (exe-exist exe-name  access-type))
                         (copy-exe access-type exe-name group))
                 (sauthorize:db-do   (lambda (db)
+                ;(print (conc "insert into areas (code, basepath, exe_name) values ('" code "', '" path "', '" exe-name "') ")) 
              (sauthorize:db-qry db (conc "insert into areas (code, basepath, exe_name) values ('" code "', '" path "', '" exe-name "') "))))))))
 
 (define (user-has-open-perm user path access)
@@ -252,10 +258,17 @@ name))
 
 ;create executables with appropriate suids
 (define (sauthorize:open user path group code access-type)
-   (let* ((req_grpid (caddr (group-information group)))
+   (let* ((gpid (group-information group))
+         (req_grpid (if (equal? group "none")
+                      group 
+                      (if (equal? gpid #f)
+                           #f      
+                     (caddr gpid))))
          (current-grp-list (get-groups))
-         (valid-grp (is-group-washed req_grpid current-grp-list)))
-   (if (equal? valid-grp #f )
+         (valid-grp (if (equal? group "none")
+                     group
+                    (is-group-washed req_grpid current-grp-list))))
+   (if (and (not (equal? group "none")) (equal? valid-grp #f ))
        (begin
        (print "Group " group " is not washed in the current xterm!!") 
        (exit 1)))) 
@@ -264,7 +277,8 @@ name))
        (print "You can open areas owned by yourself. You do not have permissions to open path." path)
         (exit 1)))
    (if (user-has-open-perm user path access-type)
-      (begin  
+      (begin 
+       ;(print "here")   
        (open-area group path code access-type)
        (sauthorize:grant user user code "2017/12/25"  "read-admin" "") 
        (sauthorize:db-do   (lambda (db)
@@ -373,11 +387,47 @@ name))
            (if (or (null? code-obj)
                    (not (exe-exist (cadr code-obj)  "publish")))
               (begin
-              (print "Area " area " is not open for reading!!")
+              (print "Area " area " is not open for Writing!!")
               (exit 1))) 
               (sauthorize:do-as-calling-user
              (lambda ()
                 (run-cmd (conc *exe-path* "/publish/" (cadr code-obj) ) (list "shell" area))))))
+      ((publish)
+          (if (< (length args) 2)
+              (begin
+              (print "Missing argument to publish. \n publish <action> <area> [opts] ") 
+              (exit 1)))
+           (let* ((action (car args))
+                  (area (cadr args))
+                  (cmd-args (cddr args)) 
+                  (code-obj (get-obj-by-code area)))
+           (if (or (null? code-obj)
+                   (not (exe-exist (cadr code-obj)  "publish")))
+              (begin
+              (print "Area " area " is not open for writing!!")
+              (exit 1))) 
+              (sauthorize:do-as-calling-user
+             (lambda ()
+                (run-cmd (conc *exe-path* "/publish/" (cadr code-obj) ) (append (list action area ) cmd-args))))))
+      
+     ((retrieve)
+          (if (< (length args) 2)
+              (begin
+              (print "Missing argument to publish. \n publish <action> <area> [opts] ") 
+              (exit 1)))
+           (let* ((action (car args))
+                  (area (cadr args))
+                  (cmd-args (cddr args)) 
+                  (code-obj (get-obj-by-code area)))
+           (if (or (null? code-obj)
+                   (not (exe-exist (cadr code-obj)  "retrieve")))
+              (begin
+              (print "Area " area " is not open for reading!!")
+              (exit 1))) 
+              (sauthorize:do-as-calling-user
+             (lambda ()
+                (run-cmd (conc *exe-path* "/retrieve/" (cadr code-obj) ) (append (list action area ) cmd-args))))))
+
  
  
       ((open)
@@ -406,6 +456,28 @@ name))
                   (exit 1)))
                   
                 (sauthorize:open username path group area access-type)))
+         ((area-admin)
+           (let* ((usr (car args))
+                  (usr-obj (get-user usr))
+                  (user-id (car (get-user username))))
+           
+                (if (is-admin  username)
+                (begin
+                  ; (print usr-obj) 
+                  (if (null? usr-obj)
+                    (begin
+                        (sauthorize:db-do   (lambda (db)
+              ;(print (conc "INSERT INTO users (username,is_admin) VALUES ( '" usr "', 'read-admin' )"))
+             (sauthorize:db-qry db (conc "INSERT INTO users (username,is_admin) VALUES ( '" usr "', 'read-admin' )")))))
+               (begin
+                ; (print (conc "update users set is_admin = 'no' where id = " (car usr-obj) ))
+                 (sauthorize:db-do   (lambda (db)
+                (sauthorize:db-qry db (conc "update users set is_admin = 'read-admin' where id = " (car usr-obj)))))))
+                (print "User " usr " is updated with area-admin access!"))
+                (print "Admin only function"))
+                (sauthorize:db-do   (lambda (db)
+             (sauthorize:db-qry db (conc "INSERT INTO actions (cmd,user_id,area_id,action_type ) VALUES ('area-admin " usr " ', " user-id ",0, 'area-admin ')" )))))) 
+
          ((register-log)
             (if (< (length args) 4)
                 (print "Invalid arguments"))
@@ -448,8 +520,8 @@ name))
                                                (let* ((exp-date (car row)))
                                                 (if  (is-access-valid  exp-date)     
 					           (apply print (intersperse (cdr row) " | "))))))
-					    (sql db (conc "SELECT permissions.expiration, areas.basepath, areas.code, permissions.access_type  FROM users, areas, permissions where permissions.user_id = users.id and permissions.area_id = areas.id and users.username = '" username "'")))))
-	 )
+					    (sql db (conc "SELECT permissions.expiration, areas.basepath, areas.code, permissions.access_type  FROM users, areas, permissions where permissions.user_id = users.id and permissions.area_id = areas.id and users.username = '" username "'"))))))
+         
 	((log)
 	 (sauthorize:db-do  (lambda (db)
 				     (print "Logs : ")

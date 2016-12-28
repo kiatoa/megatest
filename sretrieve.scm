@@ -11,16 +11,6 @@
 (use defstruct)
 (use scsh-process)
 
-;; (use ssax)
-;; (use sxml-serializer)
-;; (use sxml-modifications)
-;; (use regex)
-;; (use srfi-69)
-;; (use regex-case)
-;; (use posix)
-;; (use json)
-;; (use csv)
-;; (use directory-utils)
 (use srfi-18)
 (use srfi-19)
 ;;(use utils)
@@ -35,21 +25,18 @@
 (declare (uses common))
 
 (declare (uses configf))
-;; (declare (uses tree))
 (declare (uses margs))
-;; (declare (uses dcommon))
-;; (declare (uses launch))
-;; (declare (uses gutils))
-;; (declare (uses db))
-;; (declare (uses synchash))
-;; (declare (uses server))
 (declare (uses megatest-version))
-;; (declare (uses tbd))
+ 
 
 (include "megatest-fossil-hash.scm")
 ;;; please create this file before using sautherise. For sample file is avaliable sample-sauth-paths.scm. 
 (include "sauth-paths.scm")
 (include "sauth-common.scm")
+
+(define (toplevel-command . args) #f)
+(use readline)
+
 
 ;;
 ;; GLOBALS
@@ -61,12 +48,10 @@
 (define *args-hash* (make-hash-table))
 (define sretrieve:help (conc "Usage: " *exe-name* " [action [params ...]]
 
-  ls                     : list contents of target area
-  get <relversion>       : retrieve data for release <version>
-    -m \"message\"       : why retrieved?
-  cp <relative path>     : copy file to current directory 
-  log                    : get listing of recent downloads
-  shell                  : start a shell-like interface
+  ls   <area>                        : list contents of target area
+  get  <area>  <reletive path>       : retrieve path to the data within <area>
+     -m \"message\"       : why retrieved?
+  shell  <area>                   : start a shell-like interface
 
 Part of the Megatest tool suite.
 Learn more at http://www.kiatoa.com/fossils/megatest
@@ -119,7 +104,6 @@ Version: " megatest-fossil-hash)) ;; "
 
 ;; Create the sqlite db
 (define (sretrieve:db-do configdat proc) 
-
   (let ((path (configf:lookup configdat "database" "location")))
     (if (not path)
 	(begin
@@ -183,8 +167,7 @@ Version: " megatest-fossil-hash)) ;; "
                   (change-directory parent-dir)  
                   (process-execute "/bin/tar" (list "chfv" "-" filename))
              )))
-))
-))
+))))
 
 
 ;; copy in file to dest, validation is done BEFORE calling this
@@ -400,7 +383,9 @@ Version: " megatest-fossil-hash)) ;; "
            (if (null? resolved-path) 
              (print (string-intersperse top-areas " "))
            (let* ((target-path (sauth-common:get-target-path  base-path-list  ext-path top-areas base-path)))
-                (print "Resolved path: " target-path)
+                ;(print "Resolved path: " target-path)
+                (if (symbolic-link? target-path)
+                   (set! target-path (conc target-path "/"))) 
                 (if (not (equal? target-path #f))
                 (begin 
                 (cond
@@ -547,9 +532,9 @@ Version: " megatest-fossil-hash)) ;; "
                   (ret-str ""))
                    (cond
                    ((null? tal)
-                      (conc ret-str " --exclude='*" hed "*'")) 
+                      (conc ret-str ".+" hed ".*")) 
                    (else 
-		  	(loop (car tal)(cdr tal)(conc ret-str " --exclude='*" hed "*'"))))))    )
+		  	(loop (car tal)(cdr tal)(conc ret-str ".+" hed ".*|"))))))    )
 
 (define (sretrieve:get-shell-cmd target-path base-path restrictions iport)
      (if (not (file-exists? target-path))
@@ -559,26 +544,35 @@ Version: " megatest-fossil-hash)) ;; "
     (begin     
         (if (is_directory target-path) 
         (begin
-           (let* ((parent-dir target-path)
+           (let* ((tmpfile (conc "/tmp/" (current-user-name) "/my-pipe"))
+                  (parent-dir target-path)
                   (last-dir-name (if  (pathname-extension target-path)  
                                       (conc(pathname-file target-path) "." (pathname-extension target-path))
                                       (pathname-file target-path)))
                   (curr-dir (current-directory))   
                   (start-dir (conc (current-directory) "/" last-dir-name))
                   (execlude (make-exclude-pattern (string-split restrictions ","))))
-                   (print execlude) 
-                   (print (file-exists? start-dir))
-                  (if  (file-exists? start-dir)
+                  ; (print tmpfile)
+                    (if  (file-exists? start-dir)
                     (begin
                          (print last-dir-name " already exist in your work dir. Do you want to over write it? [y|n]")
                         (let* ((inl (read-line iport)))
                             (if (equal? inl "y")
                               (begin
                                  (change-directory parent-dir)
+                                  (create-fifo  tmpfile)
+                                  (process-fork 
+    				   (lambda()
+                                       (sleep 1) 
+       					(with-output-to-file tmpfile
+         				(lambda ()
+            				(sretrieve:make_file parent-dir execlude parent-dir)))))
+ 
                                   (run (pipe
-                   		   (tar "chfv" "-" "." )
-                   		   (begin (system (conc "cd " start-dir ";tar  xUf - "   execlude )))))
-                                   (change-directory curr-dir))
+                   		   (tar "chfv" "-" "-T" ,tmpfile )
+                   		   (begin (system (conc "cd " start-dir ";tar  xUf - "   )))))
+                                   (change-directory curr-dir)
+                                    (system (conc "rm " tmpfile)) )
 			      (begin	
                                (print  "Nothing has been retrieved!!  ")))))
                      (begin
@@ -586,10 +580,20 @@ Version: " megatest-fossil-hash)) ;; "
                     (lambda ()
 		      (create-directory start-dir #t)))
                           (change-directory parent-dir)
+                          ; (print execlude)
+                           (create-fifo tmpfile)
+                            (process-fork 
+    				   (lambda()
+                                       (sleep 1) 
+       					(with-output-to-file tmpfile
+         				(lambda ()
+            				(sretrieve:make_file parent-dir execlude parent-dir)))))
+
                                   (run (pipe
-                   		   (tar "chfv" "-" "." )
-                   		   (begin (system (conc "cd " start-dir ";tar  xUf - "   execlude )))))
-                           (change-directory curr-dir))))) 
+                   		   (tar "chfv" "-"  "-T" ,tmpfile)
+                   		   (begin (system (conc "cd " start-dir ";tar  xUf - "    )))))
+                           (change-directory curr-dir)
+                            (system (conc "rm " tmpfile)))))) 
         (begin
            (let*((parent-dir (pathname-directory target-path))
                  (start-dir (current-directory))
@@ -605,9 +609,9 @@ Version: " megatest-fossil-hash)) ;; "
                               (begin
                                  (change-directory parent-dir)
                                   (run (pipe
-                   		   (tar "chfv" "-" "." )
-                   		   (begin (system (conc "cd " start-dir ";tar  xUf - "   execlude )))))
-                                     (change-directory curr-dir))
+                   		   (tar "chfv" "-" ,filename)
+                   		   (begin (system (conc "cd " start-dir ";tar  xUf - "   )))))
+                                     (change-directory start-dir))
 			      (begin	
                                (print  "Nothing has been retrieved!!  ")))))
                     (begin
@@ -615,8 +619,82 @@ Version: " megatest-fossil-hash)) ;; "
                  (run (pipe
                    (tar "chfv" "-" ,filename)
                    (begin (system (conc "cd " start-dir ";tar xUf -")))))
-                    (change-directory start-dir))))))))
-                     (print (current-directory)))))
+                    (change-directory start-dir)))))))))))
+
+(define (sretrieve:get-shell-cmd-line target-path base-path restrictions iport)
+     (if (not (file-exists? target-path))
+        (print "Target path does not exist!")
+    (begin
+    (if (not (equal? target-path #f))
+    (begin     
+        (if (is_directory target-path) 
+        (begin
+           (let* ((parent-dir target-path)
+                  (last-dir-name (if  (pathname-extension target-path)  
+                                      (conc(pathname-file target-path) "." (pathname-extension target-path))
+                                      (pathname-file target-path)))
+                  (curr-dir (current-directory))   
+                  (start-dir (conc (current-directory) "/" last-dir-name))
+                  (execlude (make-exclude-pattern (string-split restrictions ",")))
+                   (tmpfile (conc "/tmp/" (current-user-name) "/my-pipe-" (current-process-id))))
+                    (if  (file-exists? start-dir)
+                    (begin
+                         (print last-dir-name " already exist in your work dir.")
+                         (print  "Nothing has been retrieved!!  "))
+                     (begin
+                   ;    (sretrieve:do-as-calling-user
+                   ; (lambda ()
+		      ;(create-directory start-dir #t)))
+                          (change-directory parent-dir)
+                            (create-fifo  tmpfile)
+                                  (process-fork 
+    				   (lambda()
+                                       (sleep 1) 
+       					(with-output-to-file tmpfile
+         				(lambda ()
+            				(sretrieve:make_file parent-dir execlude parent-dir)))))
+
+                           (process-execute "/bin/tar" (append (list  "chfv" "-"  "-T" tmpfile)  (list "--ignore-failed-read")))    
+                                  ;(run (pipe
+                   		   ;(tar "chfv" "-" "." )
+                   		   ;(begin (system (conc "cd " start-dir ";tar  xUf - "   execlude )))))
+                            (system (conc "rm " tmpfile))    
+                           (change-directory curr-dir))))) 
+        (begin
+           (let*((parent-dir (pathname-directory target-path))
+                 (start-dir (current-directory))
+                 (filename (if  (pathname-extension target-path)  
+                                      (conc(pathname-file target-path) "." (pathname-extension target-path))
+                                      (pathname-file target-path)))
+                 (work-dir-file (conc (current-directory) "/" filename)))
+                 (if  (file-exists? work-dir-file)
+                    (begin
+                       (print filename " already exist in your work dir.")
+                               (print  "Nothing has been retrieved!!  "))
+                    (begin
+               (change-directory parent-dir)
+                (process-execute "/bin/tar" (append (append (list  "chfv" "-") (list filename)) (list "--ignore-failed-read"))) 
+                 ;(run (pipe
+                  ; (tar "chfv" "-" ,filename)
+                  ; (begin (system (conc "cd " start-dir ";tar xUf -")))))
+                    (change-directory start-dir)))))))))))
+
+(define (sretrieve:make_file path exclude base_path)
+   (find-files 
+     path
+     action: (lambda (p res)
+           (cond
+                ((symbolic-link? p)   
+                 (if (directory?(read-symbolic-link p)) 
+                      (sretrieve:make_file p exclude base_path)
+                      (print (string-substitute (conc base_path "/") "" p "-"))))
+                 ((directory? p)              
+                 ;;do nothing for dirs)
+                 ) 
+                (else 
+                                        
+                     (if (not (string-match (regexp exclude)  p ))
+                        (print (string-substitute (conc base_path "/") "" p "-"))))))))
 
 (define (sretrieve:shell-help)
 (conc "Usage: " *exe-name* " [action [params ...]]
@@ -634,7 +712,7 @@ Learn more at http://www.kiatoa.com/fossils/megatest
 
 Version: " megatest-fossil-hash)
 )	
-(define (toplevel-command . args) #f)
+;(define (toplevel-command . args) #f)
 (define (sretrieve:shell area)
  ; (print area)
   (use readline)
@@ -772,10 +850,12 @@ Version: " megatest-fossil-hash)
 				 (restrictions (if (equal? target-path #f)
                                                  ""
                                                (sretrieve:shell-lookup base-path))))
+                               (if (not (equal? target-path #f))
+                             (begin  
                                  (sretrieve:get-shell-cmd target-path base-path restrictions iport)
                                   (sauthorize:do-as-calling-user
                               (lambda ()
-			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\"" inl "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "get")))) ))
+			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\"" inl "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "get"))))))))
 			  (else
                             (print "Error: get cmd takes only one argument ")))))
                       ((exit)
@@ -829,50 +909,130 @@ Version: " megatest-fossil-hash)
       (pop-directory)
       res)))
 
+;(define (toplevel-command . args) #f)
 (define (sretrieve:process-action configdat action . args)
+ ;  (use readline)
     (case (string->symbol action)
       ((get)
-       (if (< (length args) 1)
+       (if (< (length args) 2)
 	   (begin 
-	     (debug:print 0 "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (print  "ERROR: Missing arguments; <area> <relative path>" )
 	     (exit 1)))
-       (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
-              (version     (car args))
-	      (msg         (or (args:get-arg "-m") ""))
-	      (package-type (or (args:get-arg "-package")
-				default-area))
-	      (exe-dir     (configf:lookup configdat "exe-info" "exe-dir")))
-	 (debug:print 0 "retrieving " version " of " package-type " as tar data on stdout")
-	 (sretrieve:get configdat user version msg)))
+       (let* ((remargs     (args:get-args args '("-m" ) '() args:arg-hash 0))
+              (iport (make-readline-port ">"))
+              (area     (car args))
+              (usr (current-user-name))
+              (area-obj  (get-obj-by-code area))
+              (user-obj (get-user usr))
+              (top-areas (sretrieve:get-accessable-projects area)) 
+              (base-path (if (null? area-obj) 
+                                      "" 
+                                     (caddr (cdr area-obj))))
+	      (sub-path       (if (null? remargs) 
+                                       "" 
+                                       (car remargs))))
+
+          (if (null? area-obj)
+          	    (begin 
+             		(print "Area " area " does not exist")
+          	         (exit 1)))
+              (let* ((target-path (sauth-common:get-target-path '()  (conc area "/" sub-path) top-areas base-path))
+				 (restrictions (if (equal? target-path #f)
+                                                 ""
+                                               (sretrieve:shell-lookup base-path))))
+             (if (not (equal? target-path #f))
+                 (begin  
+                   (sauthorize:do-as-calling-user
+                      (lambda ()
+   		        (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "get " area " " sub-path) (number->string (car user-obj))  (number->string (caddr area-obj))  "get"))))
+                        (sretrieve:get-shell-cmd-line target-path base-path restrictions  iport))))))
          ((cp)
-            (if (< (length args) 1)
-             (begin 
-	     (debug:print 0 "ERROR: Missing arguments; " (string-intersperse args ", "))
+             (if (< (length args) 2)
+	   (begin 
+	     (print  "ERROR: Missing arguments; <area> <relative path>" )
 	     (exit 1)))
-          (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
-              (file     (car args))
-	      (msg         (or (args:get-arg "-m") "")) )
-
-	 (debug:print 0 "copinging " file " to current directory " )
-	 (sretrieve:cp configdat user file msg)))
+       (let* ((remargs     (args:get-args args '("-m" ) '() args:arg-hash 0))
+              (iport (make-readline-port ">"))
+              (area     (car args))
+              (usr (current-user-name))
+              (area-obj  (get-obj-by-code area))
+              (user-obj (get-user usr))
+              (top-areas (sretrieve:get-accessable-projects area)) 
+              (base-path (if (null? area-obj) 
+                                      "" 
+                                     (caddr (cdr area-obj))))
+	      (sub-path       (if (null? remargs) 
+                                       "" 
+                                       (car remargs))))
+         ;  (print args)
+          (if (null? area-obj)
+          	    (begin 
+             		(print "Area " area " does not exist")
+          	         (exit 1)))
+              (let* ((target-path (sauth-common:get-target-path '()  (conc area "/" sub-path) top-areas base-path))
+				 (restrictions (if (equal? target-path #f)
+                                                 ""
+                                              (sretrieve:shell-lookup base-path))))
+                          ;(print target-path) 
+                          (if (not (equal? target-path #f))
+                             (begin  
+                              (sauthorize:do-as-calling-user
+                              (lambda ()
+			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "get " area " " sub-path) (number->string (car user-obj))  (number->string (caddr area-obj))  "get"))))
+                            (sretrieve:get-shell-cmd-line target-path base-path restrictions  iport))))))
       ((ls)
-            (if (< (length args) 1)
-             (begin 
-	     (debug:print 0 "ERROR: Missing arguments; " (string-intersperse args ", "))
-	     (exit 1)))
-          (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
-              (dir     (car args))
-	      (msg         (or (args:get-arg "-m") "")) )
+          (cond
+            ((< (length args) 1)
+              (begin 
+	      (print  "ERROR: Missing arguments; <area> ")
+	      (exit 1)))
+              ((equal? (length args) 1)
+                 (let*  ((area     (car args))
+                         (usr (current-user-name))
+                         (area-obj  (get-obj-by-code area))
+                         (user-obj (get-user usr))
+                         (top-areas (sretrieve:get-accessable-projects area)) 
+                         (base-path (if (null? area-obj) 
+                                      "" 
+                                     (caddr (cdr area-obj)))))
+                  (if (null? area-obj)
+          	    (begin 
+             		(print "Area " area " does not exist")
+          	         (exit 1)))
+           	 (sauth-common:shell-ls-cmd '() area top-areas base-path  '())
+                 (sauthorize:do-as-calling-user
+                   (lambda ()
+		    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" "ls" (number->string (car user-obj)) (number->string (caddr area-obj)) "ls"))))))
+             ((> (length args) 1)
+               (let*  ((remargs     (args:get-args args '("-m" ) '() args:arg-hash 0))
+                        (usr (current-user-name))
+                        (user-obj (get-user usr))
+                         (area     (car args)))
+                         (let* ((area-obj  (get-obj-by-code area))
+                               (top-areas (sretrieve:get-accessable-projects area)) 
+                               (base-path (if (null? area-obj) 
+                                      "" 
+                                     (caddr (cdr area-obj))))
+                                 
+                               (sub-path (if (null? remargs) 
+                                       area 
+                                      (conc area "/" (car remargs)))))
+                             ;(print "sub path "  sub-path)
+                            (if (null? area-obj)
+          	              (begin 
+             		        (print "Area " area " does not exist")
+          	                 (exit 1)))
+                              (sauth-common:shell-ls-cmd `()  sub-path top-areas base-path '())
+                            (sauthorize:do-as-calling-user
+				(lambda ()
+                       	       (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "ls " sub-path) (number->string (car user-obj)) (number->string (caddr area-obj)) "ls")))))))))
 
-	 (debug:print 0 "Listing files in " )
-	 (sretrieve:ls configdat user dir msg)))
        ((shell)
           (if (< (length args) 1)
              (begin 
-	     (print  "ERROR: Missing arguments area!!" )
+	     (print  "ERROR: Missing arguments <area>!!" )
 	     (exit 1))
-             (sretrieve:shell (car args)))
-       ) 
+             (sretrieve:shell (car args)))) 
       (else (debug:print 0 "Unrecognised command " action))))
 
 (define (main)
@@ -892,26 +1052,6 @@ Version: " megatest-fossil-hash)
       (case (string->symbol (car rema))
 	((help -h -help --h --help)
 	 (print sretrieve:help))
-	((list-vars) ;; print out the ini file
-	 (map print (sretrieve:get-areas configdat)))
-	((ls)
-	 (let* ((base-dir (configf:lookup configdat "settings" "base-dir")))
-	   (if base-dir
-	       (begin
-		 (print "Files in " base-dir)
-                 (sretrieve:do-as-calling-user
-                    (lambda ()
-		 (process-execute "/bin/ls" (list "-lrt" base-dir)))))
-	       (print "ERROR: No base dir specified!"))))
-	((log)
-	 (sretrieve:db-do configdat (lambda (db)
-				     (print "Logs : ")
-				     (query (for-each-row
-					     (lambda (row)
-					       (apply print (intersperse row " | "))))
-					    (sql db "SELECT * FROM actions")))))
-	;((shell)
-	; (sretrieve:shell))
 	(else
 	 (print "ERROR: Unrecognised command. Try \"sretrieve help\""))))
      ;; multi-word commands

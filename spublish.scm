@@ -57,15 +57,14 @@
 ;;
 (define *spublish:current-tab-number* 0)
 (define *args-hash* (make-hash-table))
-(define spublish:help (conc "Usage: spublish [action [params ...]]
+(define spublish:help (conc "Usage: spublish  [action [params ...]]
 
-  ls                     : list contents of target area
-  cp|publish <src file> <destination>      : copy file to target area
-  mkdir <dir name>       : maks directory in target area  
-  rm <file>              : remove file <file> from target area
-  ln <target> <link name> : creates a symlink
-  log                    :
-
+  ls       <area>              : list contents of target area
+  cp|publish <area> <src file> <destination>      : copy file to target area
+  mkdir <area> <dir name>       : maks directory in target area  
+  rm <area> <file>              : remove file <file> from target area
+  ln <area> <target> <link name> : creates a symlink
+ 
   options:
 
     -m \"message\"        : describe what was done
@@ -420,7 +419,8 @@ Version: " megatest-fossil-hash)) ;; "
                    (begin (system (conc "cd " parent-dir " ;tar chf - ." )))
                    (begin (change-directory start-dir)
                           ;(print "123")
-                          (run-cmd "tar" (list "xf" "-"))))))) 
+                          (run-cmd "tar" (list "xf" "-")))))
+                          (print "Copied data to " start-dir))) 
         (begin
            (let*((parent-dir (pathname-directory src-path))
                   (start-dir target-path)
@@ -431,8 +431,8 @@ Version: " megatest-fossil-hash)) ;; "
                  (run (pipe
                    (begin (system (conc "cd " parent-dir ";tar chf - " filename )))
                    (begin (change-directory start-dir)
-                          (run-cmd "tar" (list "xf" "-"))) 
-                  ))))))))
+                          (run-cmd "tar" (list "xf" "-")))))
+                          (print "Copied data to " start-dir)))))))
 
 
 (define (spublish:shell-mkdir targ-path)
@@ -694,141 +694,105 @@ Version: " megatest-fossil-hash)
 	(make-hash-table))))
 
 (define (spublish:process-action action . args)
-  (let* (
-         ;; (target-dir    (configf:lookup configdat "settings" "target-dir"))
-	 (user          (current-user-name))
-	 ;;(allowed-users (string-split
-	;;		 (or (configf:lookup configdat "settings" "allowed-users")
-	;;		     "")))
-)
+  ;(print args)
+  (let* ((usr          (current-user-name))
+         (user-obj (get-user usr)) 
+         (area   (car args))
+         (area-obj  (get-obj-by-code area))
+         (top-areas (spublish:get-accessable-projects area))  
+         (base-path (if (null? area-obj) 
+                         "" 
+                        (caddr (cdr area-obj))))   
+         (remargs (cdr args)))
+     (if (null? area-obj)
+          (begin 
+             (print "Area " area " does not exist")
+          (exit 1)))
     (case (string->symbol action)
       ((cp publish)
-       (if (< (length args) 2)
+       (if (< (length remargs) 2)
 	   (begin 
-	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (print "ERROR: Missing arguments; spublish <area> <src file> <destination>" )
 	     (exit 1)))
-       (let* ((remargs     (args:get-args args '("-m") '() args:arg-hash 0))
-              (dest-dir (cadr args))
-              (src-path-in (car args))
+       (let* ((filter-args     (args:get-args args '("-m") '() args:arg-hash 0))
+              (src-path-in (car filter-args))
+              (dest-path (cadr filter-args))
 	      (src-path    (with-input-from-pipe
 			    (conc "readlink -f " src-path-in)
 			    (lambda ()
 			      (read-line))))
 	      (msg         (or (args:get-arg "-m") ""))
-	      (targ-file   (pathname-strip-directory src-path)))
-	 (if (not (file-read-access? src-path))
-	     (begin
-	       (print "ERROR: source file not readable: " src-path)
-	       (exit 1)))
-	 (if (directory? src-path)
-	     (begin
-              (print "ERROR: source file is a directory, this is not supported yet.")
-	       (exit 1)))
-	     (print "publishing " src-path-in " to " target-dir)
-             (spublish:validate     target-dir dest-dir)
-	     (spublish:cp configdat user src-path target-dir targ-file dest-dir msg)))
-      ((tar)
-        (if (< (length args) 1)
-          (begin 
-	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
-	     (exit 1)))
-        (let* ((dst-dir (car args))
-               (msg         (or (args:get-arg "-m") "")))
-               (spublish:validate     target-dir  dst-dir)
-               (spublish:tar configdat user target-dir dst-dir msg)))
- 
+              (resolved-path (sauth-common:resolve-path  (conc area "/" dest-path) `() top-areas))
+              (target-path (sauth-common:get-target-path `()  (conc area "/" dest-path) top-areas base-path)))
+ 	     (if (not (equal? target-path #f))
+                 (if (equal? resolved-path #f)     
+                    (print "Invalid argument " dest-path ".. ")
+                    (begin 
+                      (spublish:shell-cp src-path target-path)   
+                      (sauthorize:do-as-calling-user
+                      (lambda ()
+		        (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\" cp " src-path-in " " dest-path  "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "cp")))))))))   
       ((mkdir)
-        (if (< (length args) 1)
+        (if (< (length remargs) 1)
           (begin 
-	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (print "ERROR: Missing arguments; <area> <path>")
 	     (exit 1)))
-        (let* ((targ-mk (car args))
-               (msg         (or (args:get-arg "-m") ""))) 
-               (print "attempting to create directory " targ-mk " in " target-dir)
-               (spublish:validate     target-dir targ-mk)
-               (spublish:mkdir configdat user target-dir targ-mk msg)))
-
+        (let* ((filter-args     (args:get-args args '("-m") '() args:arg-hash 0))
+               (mk-path (car filter-args))
+               (msg         (or (args:get-arg "-m") ""))
+               (resolved-path (sauth-common:resolve-path  mk-path (list area) top-areas))
+               (target-path (sauth-common:get-target-path (list area)  mk-path top-areas base-path))) 
+               (print "attempting to create directory " mk-path  )
+               (if (not (equal? target-path #f))
+                 (if (equal? resolved-path #f)     
+                   (print "Invalid argument " mk-path ".. ")
+                   (begin 
+                     (spublish:shell-mkdir target-path)   
+                     (sauthorize:do-as-calling-user
+                       (lambda ()
+		        (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\" mkdir " mk-path  "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "mkdir")))))))))  
       ((ln) 
-        (if (< (length args) 2)
+        (if (< (length remargs) 2)
           (begin 
-	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (print "ERROR: Missing arguments;  <area> <target> <link name>" )
 	     (exit 1)))
-        (let* ((targ-link (car args))
-               (link-name (cadr args))  
-               (sub-path (string-reverse (string-join (cdr (string-split (string-reverse link-name) "/")) "/"))) 
-               (msg         (or (args:get-arg "-m") "")))
-               (if (> (string-length(string-trim sub-path)) 0)
-                (begin 
-                  (print "attempting to create directory " sub-path " in " target-dir)
-                  (spublish:validate     target-dir sub-path)
-                  (print (conc target-dir "/" sub-path ) )
-                  (print (directory-exists?(conc target-dir "/" sub-path )))
-                  (if (directory-exists?(conc target-dir "/" sub-path ))
-                   (print "Target Directory " (conc target-dir sub-path ) " exist!!")
-                  (spublish:mkdir configdat user target-dir sub-path msg))))
-
-               (print "attempting to create link " link-name " in " target-dir)
-               (spublish:ln configdat user target-dir targ-link link-name msg)))
-
+        (let* ((filter-args     (args:get-args args '("-m") '() args:arg-hash 0))
+              (src-path (car filter-args))
+              (dest-path (cadr filter-args))   
+              (resolved-path (sauth-common:resolve-path  dest-path (list area) top-areas))
+              (target-path (sauth-common:get-target-path  (list area)  dest-path top-areas base-path))
+              (sub-path (conc "/" (string-reverse (string-join (cdr (string-split (string-reverse  target-path) "/")) "/")))))
+               (if (not (equal? target-path #f))
+                  (if (equal? resolved-path #f)     
+                    (print "Invalid argument " dest-path ".. ")
+                    (begin 
+                   (spublish:shell-ln src-path target-path sub-path)   
+                  (sauthorize:do-as-calling-user
+                 (lambda ()
+		   (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\" ln " src-path " " dest-path  "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "ln")))))))))
       ((rm)
-       (if (< (length args) 1)
+       (if (< (length remargs) 1)
 	   (begin 
-	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (print "ERROR: Missing arguments; <area> <path> ")
 	     (exit 1)))
-       (let* ((targ-file (car args))
-	      (msg         (or (args:get-arg "-m") "")))
-	 (print "attempting to remove " targ-file " from " target-dir)
-           (spublish:validate     target-dir targ-file)
-
-	 (spublish:rm configdat user target-dir targ-file msg)))
-      ((publish)
-       (if (< (length args) 3)
-	   (begin 
-	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
-	     (exit 1))
-	   (let* ((srcpath  (list-ref args 0))
-		  (areaname (list-ref args 1))
-		  (version  (list-ref args 2))
-		  (remargs  (args:get-args (drop args 2)
-					   '("-type" ;; link or copy (default is copy)
-					     "-m")
-					   '()
-					   args:arg-hash
-					   0))
-		  (publish-type (if (equal? (args:get-arg "-type") "link") 'link 'copy))
-		  (comment      (or (args:get-arg "-m") ""))
-		  (submitter    (current-user-name))
-		  (quality      (args:get-arg "-quality"))
-		  (publish-res  (spublish:publish configdat publish-type areaname version comment srcpath submitter quality)))
-	     (if (not (car publish-res))
-		 (begin
-		   (print "ERROR: " (cdr publish-res))
-		   (exit 1))))))
-      ((list-versions)
-       (let ((area-name (car args)) ;;      version patt   full print
-	     (remargs   (args:get-args args '("-vpatt") '("-full") args:arg-hash 0))
-	     (db        (spublish:open-db configdat))
-	     (versions  (spublish:get-versions-for-area db (car args) version-patt: (args:get-arg "-vpatt"))))
-	 ;; (print "area-name=" area-name " args=" args " *args-hash*=" (hash-table->alist *args-hash*))
-	 (map (lambda (x)
-		(if (args:get-arg "-full")
-		    (format #t 
-			    "~10a~10a~4a~27a~30a\n"
-			    (vector-ref x 0)
-			    (vector-ref x 1) 
-			    (vector-ref x 2) 
-			    (conc "\"" (time->string (seconds->local-time (vector-ref x 3))) "\"")
-			    (conc "\"" (vector-ref x 4) "\""))
-		    (print (vector-ref x 0))))
-	      versions)))
-       ((shell)
+       (let* ((filter-args  (args:get-args args '("-m") '() args:arg-hash 0))
+              (rm-path (car filter-args))
+              (resolved-path (sauth-common:resolve-path  rm-path (list area) top-areas))
+              (target-path (sauth-common:get-target-path (list area)  rm-path top-areas base-path)))
+	       (if (not (equal? target-path #f))
+                                 (if (equal? resolved-path #f)     
+                                 (print "Invalid argument " rm-path ".. ")
+                                  (begin 
+                                      (spublish:shell-rm target-path)   
+                                      (sauthorize:do-as-calling-user
+                              (lambda ()
+			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\" rm " rm-path "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "rm")))))))))
+      ((shell)
           (if (< (length args) 1)
              (begin 
 	     (print  "ERROR: Missing arguments area!!" )
 	     (exit 1))
-             (spublish:shell (car args)))
-       ) 
-   
+             (spublish:shell area))) 
       (else (print "Unrecognised command " action)))))
   
 ;; ease debugging by loading ~/.dashboardrc - REMOVE FROM PRODUCTION!
