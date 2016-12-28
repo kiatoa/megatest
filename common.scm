@@ -105,10 +105,9 @@
 (define *db-last-access*      (current-seconds)) ;; last db access, used in server
 (define *db-write-access*     #t)
 ;; db sync
-(define *db-last-write*       0)                 ;; used to record last touch of db
 (define *db-last-sync*        0)                 ;; last time the sync to megatest.db happened
 (define *db-sync-in-progress* #f)                ;; if there is a sync in progress do not try to start another
-(define *db-multi-sync-mutex* (make-mutex))      ;; protect access to *db-sync-in-progress*, *db-last-sync* and *db-last-write*
+(define *db-multi-sync-mutex* (make-mutex))      ;; protect access to *db-sync-in-progress*, *db-last-sync*
 ;; task db
 (define *task-db*             #f) ;; (vector db path-to-db)
 (define *db-access-allowed*   #t) ;; flag to allow access
@@ -160,6 +159,14 @@
 (define *run-info-cache*     (make-hash-table)) ;; run info is stable, no need to reget
 (define *launch-setup-mutex* (make-mutex))     ;; need to be able to call launch:setup often so mutex it and re-call the real deal only if *toppath* not set
 (define *homehost-mutex*     (make-mutex))
+
+(defstruct remote
+  (hh-dat            (common:get-homehost)) ;; homehost record ( addr . hhflag )
+  (server-url        (if *toppath* (server:read-dotserver *toppath*))) ;; (server:check-if-running *toppath*) #f))
+  (last-server-check 0)  ;; last time we checked to see if the server was alive
+  (conndat           #f)
+  (transport         *transport-type*)
+  (server-timeout    (or (server:get-timeout) 100))) ;; default to 100 seconds
 
 ;; launching and hosts
 (defstruct host
@@ -557,11 +564,13 @@
 ;;======================================================================
 
 (define (common:run-sync?)
-  (let ((ohh (common:on-homehost?))
-	(srv (args:get-arg "-server")))
-    ;; (debug:print-info 0 *default-log-port* "common:run-sync? ohh=" ohh ", srv=" srv)
     (and (common:on-homehost?)
-	 (args:get-arg "-server"))))
+	 (args:get-arg "-server")))
+
+;;   (let ((ohh (common:on-homehost?))
+;; 	(srv (args:get-arg "-server")))
+;;     (and ohh srv)))
+    ;; (debug:print-info 0 *default-log-port* "common:run-sync? ohh=" ohh ", srv=" srv)
 
 ;;;; run-ids
 ;;    if #f use *db-local-sync* : or 'local-sync-flags
@@ -570,9 +579,9 @@
   (let ((start-time         (current-seconds))
 	(res                (db:multi-db-sync dbstruct 'new2old)))
     (let ((sync-time (- (current-seconds) start-time)))
-      (debug:print-info 3 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds")
+      (debug:print-info 3 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))
       (if (common:low-noise-print 30 "sync new to old")
-	  (debug:print-info 0 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds")))
+	  (debug:print-info 0 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))))
     res))
 
 ;; currently the primary job of the watchdog is to run the sync back to megatest.db from the db in /tmp
@@ -583,15 +592,16 @@
   (let ((legacy-sync (common:run-sync?))
 	(debug-mode  (debug:debug-mode 1))
 	(last-time   (current-seconds)))
-    (debug:print-info 0 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync)
+    (debug:print-info 0 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id))
     (if legacy-sync
 	(let ((dbstruct (db:setup)))
 	  (debug:print-info 0 *default-log-port* "Server running, periodic sync started.")
 	  (let loop ()
+            ;;(BB> "watchdog loop.  pid="(current-process-id))
 	    ;; sync for filesystem local db writes
 	    ;;
 	    (mutex-lock! *db-multi-sync-mutex*)
-	    (let* ((need-sync        (>= *db-last-write* *db-last-sync*)) ;; no sync since last write
+	    (let* ((need-sync        (>= *db-last-access* *db-last-sync*)) ;; no sync since last write
 		   (sync-in-progress *db-sync-in-progress*)
 		   (should-sync      (> (- (current-seconds) *db-last-sync*) 5)) ;; sync every five seconds minimum
 		   (will-sync        (and (or need-sync should-sync)
@@ -632,10 +642,10 @@
 			(delay-loop (+ count 1))))
 		  (loop)))
 	    (if (common:low-noise-print 30)
-		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*)))))))
+		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id))))))))
 
 (define (std-exit-procedure)
-  
+  (on-exit (lambda () 0))
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
 		       #f
 		       (begin
@@ -645,7 +655,7 @@
     (if (and no-hurry (debug:debug-mode 18))
 	(rmt:print-db-stats))
     (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
-			      (if *dbstruct-db* (db:close-all *dbstruct-db*)) ;; one second allocated
+                              (if *dbstruct-db* (db:close-all *dbstruct-db*)) ;; one second allocated
 			      (if *task-db*    
 				  (let ((db (cdr *task-db*)))
 				    (if (sqlite3:database? db)
@@ -654,15 +664,22 @@
 					  (sqlite3:finalize! db #t)
 					  ;; (vector-set! *task-db* 0 #f)
 					  (set! *task-db* #f)))))
-			      (close-output-port *default-log-port*)
+                              (if (and *runremote*
+                                       (remote-conndat *runremote*))
+                                  (begin
+                                    (http-client#close-all-connections!))) ;; for http-client
+                              (if (not (eq? *default-log-port* (current-error-port)))
+                                  (close-output-port *default-log-port*))
 			      (set! *default-log-port* (current-error-port))) "Cleanup db exit thread"))
 	  (th2 (make-thread (lambda ()
 			      (debug:print 4 *default-log-port* "Attempting clean exit. Please be patient and wait a few seconds...")
 			      (if no-hurry
-				  (thread-sleep! 5) ;; give the clean up few seconds to do it's stuff
-				  (thread-sleep! 2))
-			      (debug:print 4 *default-log-port* " ... done")
-			      )
+                                  (begin
+                                    (thread-sleep! 5)) ;; give the clean up few seconds to do it's stuff
+                                  (begin
+      				  (thread-sleep! 2)))
+      			      (debug:print 4 *default-log-port* " ... done")
+      			      )
 			    "clean exit")))
 
       ;; let's try to clean up open sockets
@@ -675,7 +692,11 @@
 
       (thread-start! th1)
       (thread-start! th2)
-      (thread-join! th1))))
+      (thread-join! th1)
+      )
+    )
+
+  0)
 
 (define (std-signal-handler signum)
   ;; (signal-mask! signum)
@@ -815,16 +836,20 @@
   (or (args:get-arg "-status")(args:get-arg ":status")))
 
 (define (common:args-get-testpatt rconf)
-  (let* ((rtestpatt     (if rconf (runconfigs-get rconf "TESTPATT") #f))
-	 (args-testpatt (or (args:get-arg "-testpatt")
-			    (args:get-arg "-runtests")
-			    "%"))
-	 (testpatt    (or (and (equal? args-testpatt "%")
-			       rtestpatt)
-			  args-testpatt)))
-    (if rtestpatt (debug:print-info 0 *default-log-port* "TESTPATT from runconfigs: " rtestpatt))
-    testpatt))
-
+  (let* ((tagexpr (args:get-arg "-tagexpr"))
+         (tags-testpatt (if tagexpr (string-join (runs:get-tests-matching-tags tagexpr) ",") #f))
+         (testpatt-key  (if (args:get-arg "-mode") (args:get-arg "-mode") "TESTPATT"))
+         (args-testpatt (or (args:get-arg "-testpatt") (args:get-arg "-runtests") "%"))
+         (rtestpatt     (if rconf (runconfigs-get rconf testpatt-key) #f)))
+    (cond
+     (tags-testpatt
+      (debug:print-info 0 *default-log-port* "-tagexpr "tagexpr" selects testpatt "tags-testpatt)
+      tags-testpatt)
+     ((and (equal? args-testpatt "%") rtestpatt)
+      (debug:print-info 0 *default-log-port* "testpatt defined in "testpatt-key" from runconfigs: " rtestpatt)
+      rtestpatt)
+     (else args-testpatt))))
+     
 (define (common:get-linktree)
   (or (getenv "MT_LINKTREE")
       (if *configdat*

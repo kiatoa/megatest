@@ -861,7 +861,10 @@
 	  (setenv "MT_RUN_AREA_HOME" *toppath*)
 	  (setenv "MT_TESTSUITE_NAME" (common:get-testsuite-name)))
 	(begin
-	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")))
+	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")
+          ;;(exit 1)
+          #f
+          ))
     *toppath*))
 
 (define (get-best-disk confdat testconfig)

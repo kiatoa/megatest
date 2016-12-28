@@ -64,6 +64,8 @@
 
 (define api:write-queries
   '(
+    get-keys-write ;; dummy "write" query to force server start
+
     ;; SERVERS
     start-server
     kill-server
@@ -191,6 +193,7 @@
 	    ;; KEYS
 	    ((get-key-val-pairs)               (apply db:get-key-val-pairs dbstruct params))
 	    ((get-keys)                        (db:get-keys dbstruct))
+            ((get-keys-write)                        (db:get-keys dbstruct)) ;; force a dummy "write" query to force server
 	    ((get-key-vals)                    (apply db:get-key-vals dbstruct params))
 	    ((get-target)                      (apply db:get-target dbstruct params))
 	    ((get-targets)                     (db:get-targets dbstruct))

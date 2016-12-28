@@ -27,14 +27,6 @@
 ;;
 ;;  grep define ../rmt.scm | grep rmt: |perl -pi -e 's/\(define\s+\((\S+)\W.*$/\1/'|sort -u
 
-(defstruct remote
-  (hh-dat            (common:get-homehost)) ;; homehost record ( addr . hhflag )
-  (server-url        (if *toppath* (server:read-dotserver *toppath*))) ;; (server:check-if-running *toppath*) #f))
-  (last-server-check 0)  ;; last time we checked to see if the server was alive
-  (conndat           #f)
-  (transport         *transport-type*)
-  (server-timeout    (or (server:get-timeout) 100))) ;; default to 100 seconds
-
 ;;======================================================================
 ;;  S U P P O R T   F U N C T I O N S
 ;;======================================================================
@@ -97,6 +89,17 @@
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  3")
       (rmt:open-qry-close-locally cmd 0 params))
+
+     ;; on homehost and this is a write, we already have a server, but server has died
+     ((and (cdr (remote-hh-dat *runremote*))         ;; on homehost
+           (not (member cmd api:read-only-queries))  ;; this is a write
+           (remote-server-url *runremote*)           ;; have a server
+           (not (server:read-dotserver *toppath*)))  ;; server has died.
+      (set! *runremote* #f)
+      (mutex-unlock! *rmt-mutex*)
+      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  4.1")
+      (rmt:send-receive cmd rid params attemptnum: attemptnum))
+
      ;; on homehost and this is a write, we already have a server
      ((and (cdr (remote-hh-dat *runremote*))         ;; on homehost
            (not (member cmd api:read-only-queries))  ;; this is a write
@@ -104,12 +107,16 @@
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  4")
       (rmt:open-qry-close-locally cmd 0 params))
-     ;; on homehost and this is a write, we have a server (we know because case 4 checked)
-     ((and (cdr (remote-hh-dat *runremote*))         ;; on homehost
-	   (not (member cmd api:read-only-queries)))
-      (mutex-unlock! *rmt-mutex*)
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  4.1")
-      (rmt:open-qry-close-locally cmd 0 params))
+
+     ;; commented by bb; this was blocking server passive start on write on homehost (case 5)
+     ;; ;; on homehost and this is a write, we have a server (we know because case 4 checked)
+     ;; ((and (cdr (remote-hh-dat *runremote*))         ;; on homehost
+     ;;       (not (member cmd api:read-only-queries)))
+     ;;  (mutex-unlock! *rmt-mutex*)
+     ;;  (debug:print-info 12 *default-log-port* "rmt:send-receive, case  4.1")
+     ;;  (rmt:open-qry-close-locally cmd 0 params))
+
+     
      ;; no server contact made and this is a write, passively start a server 
      ((and (not (remote-server-url *runremote*))
 	   (not (member cmd api:read-only-queries)))
@@ -269,7 +276,7 @@
 	  (if qry-is-write
 	      (let ((start-time (current-seconds)))
 		(mutex-lock! *db-multi-sync-mutex*)
-		(set! *db-last-write* start-time) ;; the oldest "write"
+		(set! *db-last-access* start-time)  ;; THIS IS PROBABLY USELESS? (we are on a client)
                 (mutex-unlock! *db-multi-sync-mutex*)))))
     res))
 
@@ -382,6 +389,11 @@
      (let ((res (rmt:send-receive 'get-keys #f '())))
        (set! *db-keys* res)
        res)))
+
+(define (rmt:get-keys-write) ;; dummy query to force server start
+  (let ((res (rmt:send-receive 'get-keys-write #f '())))
+    (set! *db-keys* res)
+    res))
 
 ;; we don't reuse run-id's (except possibly *after* a db cleanup) so it is safe
 ;; to cache the resuls in a hash
