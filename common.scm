@@ -584,26 +584,35 @@
 	  (debug:print-info 0 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))))
     res))
 
+
+
+
+(define *wdnum* 0)
+(define *wdnum*mutex (make-mutex))
 ;; currently the primary job of the watchdog is to run the sync back to megatest.db from the db in /tmp
 ;; if we are on the homehost and we are a server (by definition we are on the homehost if we are a server)
 ;;
 (define (common:watchdog)
+  
   (thread-sleep! 0.05) ;; delay for startup
   (let ((legacy-sync (common:run-sync?))
 	(debug-mode  (debug:debug-mode 1))
-	(last-time   (current-seconds)))
-    (debug:print-info 0 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id))
-    (if legacy-sync
+	(last-time   (current-seconds))
+        (this-wd-num     (begin (mutex-lock! *wdnum*mutex) (let ((x *wdnum*)) (set! *wdnum* (add1 *wdnum*)) (mutex-unlock! *wdnum*mutex) x)))
+        )
+    (debug:print-info 0 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id)" this-wd-num="this-wd-num)
+    (if (and legacy-sync (not *time-to-exit*))
 	(let ((dbstruct (db:setup)))
 	  (debug:print-info 0 *default-log-port* "Server running, periodic sync started.")
 	  (let loop ()
-            ;;(BB> "watchdog loop.  pid="(current-process-id))
+            (BB> "watchdog loop.  pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
 	    ;; sync for filesystem local db writes
 	    ;;
 	    (mutex-lock! *db-multi-sync-mutex*)
 	    (let* ((need-sync        (>= *db-last-access* *db-last-sync*)) ;; no sync since last write
 		   (sync-in-progress *db-sync-in-progress*)
-		   (should-sync      (> (- (current-seconds) *db-last-sync*) 5)) ;; sync every five seconds minimum
+		   (should-sync      (and (not *time-to-exit*)
+                                          (> (- (current-seconds) *db-last-sync*) 5))) ;; sync every five seconds minimum
 		   (will-sync        (and (or need-sync should-sync)
 					  (not sync-in-progress)))
 		   (start-time       (current-seconds)))
@@ -635,14 +644,16 @@
 	    ;;
 	    (if (not *time-to-exit*)
 		(let delay-loop ((count 0))
+                  (BB> "delay-loop top; count="count" pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
+                                                            
 		  (if (and (not *time-to-exit*)
 			   (< count 4)) ;; was 11, changing to 4. 
 		      (begin
 			(thread-sleep! 1)
 			(delay-loop (+ count 1))))
-		  (loop)))
+		  (if (not *time-to-exit*) (loop))))
 	    (if (common:low-noise-print 30)
-		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id))))))))
+		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" this-wd-num="this-wd-num)))))))
 
 (define (std-exit-procedure)
   (on-exit (lambda () 0))
