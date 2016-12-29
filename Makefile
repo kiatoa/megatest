@@ -260,10 +260,14 @@ datashare-testing/spublish : spublish.scm $(OFILES)
 datashare-testing/sretrieve : sretrieve.scm megatest-version.o margs.o configf.o process.o 
 	csc $(CSCOPTS) sretrieve.scm megatest-version.o margs.o configf.o process.o -o datashare-testing/sretrieve
 
+datashare-testing/sauthorize : sretrieve.scm megatest-version.o margs.o configf.o process.o common.o
+	 csc sauthorize.scm megatest-version.o margs.o configf.o process.o common.o -o datashare-testing/sauthorize
+
+
 sretrieve/sretrieve : datashare-testing/sretrieve
 	csc $(CSCOPTS) -deploy -deployed sretrieve.scm megatest-version.o margs.o configf.o process.o
 	chicken-install -keep-installed $(PROXY) -deploy -prefix sretrieve defstruct srfi-18 format sql-de-lite \
-             srfi-1 posix regex regex-case srfi-69
+             srfi-1 posix regex regex-case srfi-69 
 
 # base64 dot-locking \
 #             csv-xml z3
