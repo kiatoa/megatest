@@ -228,15 +228,22 @@
 (define (server:read-dotserver->server-url areapath)
   (let* ((temp (server:read-dotserver areapath))
          (tokens (if temp (string-split temp ":") '())))
-    (if (eq? 3 (length tokens))
+    (if (eq? 4 (length tokens))
         (string-join (list-ref tokens 0) ":" (list-ref tokens 1))
         #f)))
 
 (define (server:read-dotserver->pid areapath)
   (let* ((temp (server:read-dotserver areapath))
          (tokens (if temp (string-split temp ":") '())))
-    (if (eq? 3 (length tokens))
+    (if (eq? 4 (length tokens))
         (list-ref tokens 2)
+        #f)))
+
+(define (server:read-dotserver->transport areapath)
+  (let* ((temp (server:read-dotserver areapath))
+         (tokens (if temp (string-split temp ":") '())))
+    (if (eq? 4 (length tokens))
+        (string->symbol (list-ref tokens 3))
         #f)))
 
 (define (server:running-or-starting? areapath) ;; Note: may be unreiable on non-homehost due to NFS lag
@@ -245,18 +252,19 @@
 ;; write a .server file in *toppath* with hostport
 ;; return #t on success, #f otherwise
 ;;
-(define (server:write-dotserver areapath hostportpid)
+(define (server:write-dotserver areapath host port pid transport)
   (let ((lock-file   (conc areapath "/.server.lock"))
-	(server-file (conc areapath "/.server")))
+	(server-file (conc areapath "/.server"))
+        (payload (conc host ":" port ":" pid ":" transport)))
     (if (common:simple-file-lock lock-file)
 	(let ((res (handle-exceptions
 		    exn
 		    #f ;; failed for some reason, for the moment simply return #f
 		    (with-output-to-file server-file
 		      (lambda ()
-			(print hostportpid)))
+			(print payload)))
 		    #t)))
-	  (debug:print-info 0 *default-log-port* "server file " server-file " for " hostportpid " created")
+	  (debug:print-info 0 *default-log-port* "server file " server-file " for " payload " created")
 	  (common:simple-file-release-lock lock-file)
 	  res)
 	#f)))

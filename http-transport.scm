@@ -401,9 +401,9 @@
 			(set! server-going #t)
 			(tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")
                         ;;(BB> "http-transport: ->running")
-			(server:write-dotserver *toppath* iface port (current-process-id) 'http)
+			(server:write-dotserver *toppath* iface port (current-process-id) 'http) ;; create file .server
                         (thread-start! *watchdog*)
-                        (server:complete-attempt *toppath*))
+                        (server:complete-attempt *toppath*)) ;; delete file .starting-server
 		      (begin ;; gotta exit nicely
                         ;;(BB> "http-transport: ->collision")
 			(tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "collision")

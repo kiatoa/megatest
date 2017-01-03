@@ -332,6 +332,10 @@
 (define (tasks:get-server mdb run-id #!key (retries 10))
   (let ((res  #f)
 	(best #f))
+
+    (set! res (vector id interface port pubport transport pid hostname)))
+
+    
     (handle-exceptions
      exn
      (begin
