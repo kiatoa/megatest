@@ -120,7 +120,7 @@
      ((and (not (remote-server-url *runremote*))
 	   (not (member cmd api:read-only-queries)))
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5")
-      (let ((serverconn (server:read-dotserver *toppath*))) ;; (server:check-if-running *toppath*))) ;; Do NOT want to run server:check-if-running - very expensive to do for every write call
+      (let ((serverconn (server:read-dotserver->server-url *toppath*))) ;; (server:check-if-running *toppath*))) ;; Do NOT want to run server:check-if-running - very expensive to do for every write call
 	(if serverconn
 	    (remote-server-url-set! *runremote* serverconn) ;; the string can be consumed by the client setup if needed
 	    (if (not (server:start-attempted? *toppath*))

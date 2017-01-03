@@ -139,7 +139,7 @@
      (attempt-in-progress
       (debug:print 0 *default-log-port* "INFO: Not trying to start server because attempt is in progress: "attempt-in-progress))
      (dot-server-url
-            (debug:print 0 *default-log-port* "INFO: Not trying to start server because one is already running : "dot-server-url))
+      (debug:print 0 *default-log-port* "INFO: Not trying to start server because one is already running : "dot-server-url))
      (else
       (debug:print 0 *default-log-port* "INFO: Trying to start server (" cmdln ") ...")
       (thread-start! log-rotate)
@@ -210,7 +210,8 @@
        (server:complete-attempt areapath)
        #f)
       (else #f)))))
-    
+
+
 (define (server:read-dotserver areapath)
   (let ((dotfile (conc areapath "/.server")))
     (handle-exceptions
@@ -224,10 +225,27 @@
 	     (read-line)))
 	 #f))))
 
+(define (server:read-dotserver->server-url areapath)
+  (let* ((temp (server:read-dotserver areapath))
+         (tokens (if temp (string-split temp ":") '())))
+    (if (eq? 3 (length tokens))
+        (string-join (list-ref tokens 0) ":" (list-ref tokens 1))
+        #f)))
+
+(define (server:read-dotserver->pid areapath)
+  (let* ((temp (server:read-dotserver areapath))
+         (tokens (if temp (string-split temp ":") '())))
+    (if (eq? 3 (length tokens))
+        (list-ref tokens 2)
+        #f)))
+
+(define (server:running-or-starting? areapath) ;; Note: may be unreiable on non-homehost due to NFS lag
+  (or (server:read-dotserver areapath) (server:start-attempted? areapath)))
+
 ;; write a .server file in *toppath* with hostport
 ;; return #t on success, #f otherwise
 ;;
-(define (server:write-dotserver areapath hostport)
+(define (server:write-dotserver areapath hostportpid)
   (let ((lock-file   (conc areapath "/.server.lock"))
 	(server-file (conc areapath "/.server")))
     (if (common:simple-file-lock lock-file)
@@ -236,18 +254,18 @@
 		    #f ;; failed for some reason, for the moment simply return #f
 		    (with-output-to-file server-file
 		      (lambda ()
-			(print hostport)))
+			(print hostportpid)))
 		    #t)))
-	  (debug:print-info 0 *default-log-port* "server file " server-file " for " hostport " created")
+	  (debug:print-info 0 *default-log-port* "server file " server-file " for " hostportpid " created")
 	  (common:simple-file-release-lock lock-file)
 	  res)
 	#f)))
 
 (define (server:remove-dotserver-file areapath hostport)
-  (let ((dotserver   (server:read-dotserver areapath))
+  (let ((serverurl   (server:read-dotserver->server-url areapath))
 	(server-file (conc areapath "/.server"))
 	(lock-file   (conc areapath "/.server.lock")))
-    (if (and dotserver (string-match (conc ".*:" hostport "$") dotserver)) ;; port matches, good enough info to decide to remove the file
+    (if (and serverurl (string-match (conc ".*:" hostport "$") serverurl)) ;; port matches, good enough info to decide to remove the file
 	(if (common:simple-file-lock lock-file)
 	    (begin
 	      (handle-exceptions
@@ -260,16 +278,16 @@
 ;; no longer care if multiple servers are started by accident. older servers will drop off in time.
 ;;
 (define (server:check-if-running areapath)
-  (let* ((dotserver (server:read-dotserver areapath))) ;; tdbdat (tasks:open-db)))
-    (if dotserver
+  (let* ((serverurl (server:read-dotserver->server-url areapath))) ;; tdbdat (tasks:open-db)))
+    (if serverurl
 	(let* ((res (case *transport-type*
-		      ((http)(server:ping-server dotserver))
+		      ((http)(server:ping-server serverurl))
 		      ;; ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
 		      )))
 	  (if res
-	      dotserver
+	      serverurl
 	      (begin
-                (server:remove-dotserver-file areapath ".*") ;; remove stale dotserver
+                (server:remove-dotserver-file areapath ".*") ;; remove stale dotserver file
                 #f)))
 	#f)))
 
@@ -280,7 +298,7 @@
 ;;
 (define (server:ping host-port-in #!key (do-exit #f))
   (let ((host:port (if (not host-port-in) ;; use read-dotserver to find
-		       (server:read-dotserver *toppath*)
+		       (server:read-dotserver->server-url *toppath*)
 		       (if (number? host-port-in) ;; we were handed a server-id
 			   (let ((srec (tasks:get-server-by-id (db:delay-if-busy (tasks:open-db)) host-port-in)))
 			     ;; (print "srec: " srec " host-port-in: " host-port-in)

@@ -356,25 +356,10 @@
           WHERE run_id=? AND state='running'
           ORDER BY start_time DESC LIMIT 1;" run-id) ;; (common:version-signature) run-id)
      res)))
-
+   
 (define (tasks:server-running-or-starting? mdb run-id)
-  (let ((res #f))
-    (sqlite3:for-each-row
-     (lambda (id)
-       (set! res id))
-     mdb ;; NEEDS dbprep ADDED
-     "SELECT id FROM servers WHERE run_id=? AND (state = 'running' OR (state = 'dbprep' AND  (strftime('%s','now') - start_time) < 60));" run-id)
-    res))
-
-(define (tasks:server-running? mdb run-id)
-  (let ((res #f))
-    (sqlite3:for-each-row
-     (lambda (id)
-       (set! res id))
-     mdb ;; NEEDS dbprep ADDED
-     "SELECT id FROM servers WHERE run_id=? AND state = 'running';" run-id)
-    res))
-
+  (server:running-or-starting? *toppath*))
+  
 (define (tasks:need-server run-id)
   (equal? (configf:lookup *configdat* "server" "required") "yes"))
 

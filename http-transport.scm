@@ -401,7 +401,7 @@
 			(set! server-going #t)
 			(tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")
                         ;;(BB> "http-transport: ->running")
-			(server:write-dotserver *toppath* (conc iface ":" port))
+			(server:write-dotserver *toppath* iface port (current-process-id) 'http)
                         (thread-start! *watchdog*)
                         (server:complete-attempt *toppath*))
 		      (begin ;; gotta exit nicely
@@ -458,7 +458,13 @@
 	      ;;
 	      ;; Consider implementing some smarts here to re-insert the record or kill self is
 	      ;; the db indicates so
-	      ;;
+              ;;
+              ;; BB - added this because servers are hanging about, alive and well
+              ;;      but in defunctdefault state in tdb and a .server file
+              ;;      preventing replacement servers from starting.
+              (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")
+
+              ;;
 	      ;; (if (tasks:server-am-i-the-server? tdb run-id)
 	      ;;     (tasks:server-set-state! tdb server-id "running"))
 	      ;;
