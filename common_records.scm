@@ -123,6 +123,7 @@
 	      )))))
 
 ;; Brandon's debug printer shortcut (indulge me :)
+(define *BB-process-starttime* (current-milliseconds))
 (define (BB> . in-args)
   (let* ((stack (get-call-chain))
          (location #f))
@@ -133,7 +134,7 @@
          (if (equal? this-func "BB>")
              (set! location this-loc))))
      stack)
-    (let ((dp-args (append (list 0 *default-log-port* location"   "  ) in-args)))
+    (let ((dp-args (append (list 0 *default-log-port* (conc location "@"(/ (- (current-milliseconds) *BB-process-starttime*) 1000)"   ")  ) in-args)))
       (apply debug:print dp-args))))
 
 (define *BBpp_custom_expanders_list* (make-hash-table))
