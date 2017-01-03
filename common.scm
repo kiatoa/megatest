@@ -581,7 +581,7 @@
 	(let ((dbstruct (db:setup)))
 	  (debug:print-info 0 *default-log-port* "Server running, periodic sync started.")
 	  (let loop ()
-            (BB> "watchdog loop.  pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
+            ;;(BB> "watchdog loop.  pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
 	    ;; sync for filesystem local db writes
 	    ;;
 	    (mutex-lock! *db-multi-sync-mutex*)
@@ -620,7 +620,7 @@
 	    ;;
 	    (if (not *time-to-exit*)
 		(let delay-loop ((count 0))
-                  (BB> "delay-loop top; count="count" pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
+                  ;;(BB> "delay-loop top; count="count" pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
                                                             
 		  (if (and (not *time-to-exit*)
 			   (< count 4)) ;; was 11, changing to 4. 
@@ -633,6 +633,7 @@
 
 (define (std-exit-procedure)
   (on-exit (lambda () 0))
+  ;;(BB> "std-exit-procedure called; *time-to-exit*="*time-to-exit*)
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
 		       #f
 		       (begin
@@ -679,6 +680,7 @@
 (define (std-signal-handler signum)
   ;; (signal-mask! signum)
   (set! *time-to-exit* #t)
+  ;;(BB> "got signal "signum)
   (debug:print-error 0 *default-log-port* "Received signal " signum " exiting promptly")
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))

@@ -351,8 +351,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (define *watchdog* (make-thread common:watchdog "Watchdog thread"))
 
-(thread-start! *watchdog*)
-;; (BB> "thread-start! watchdog")
+(if (not (args:get-arg "-server"))
+    (thread-start! *watchdog*)) ;; if starting a server; wait till we get to running state before kicking off watchdog
+;;(BB> "thread-start! watchdog")
+
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))
       (debug:print-info 0 *default-log-port* "Sending log output to " (args:get-arg "-log"))
@@ -1992,8 +1994,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (not *didsomething*)
     (debug:print 0 *default-log-port* help))
-(BB> "thread-join! watchdog")
-(thread-join! *watchdog*)
+;;(BB> "thread-join! watchdog")
+
+;; join the watchdog thread if it has been thread-start!ed  (it may not have been started in the case of a server that never enters running state)
+;;   (symbols returned by thread-state: created ready running blocked suspended sleeping terminated dead)
+(if (thread? *watchdog*)
+    (case (thread-state *watchdog*)
+      ((ready running blocked sleeping terminated dead)
+       (thread-join! *watchdog*))))
+
 (set! *time-to-exit* #t)
 
 (if (not (eq? *globalexitstatus* 0))

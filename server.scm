@@ -49,7 +49,19 @@
 ;; start_server
 ;;
 (define (server:launch run-id transport-type)
-  (BB> "server:launch fired for run-id="run-id" transport-type="transport-type)
+  ;;(BB> "server:launch fired for run-id="run-id" transport-type="transport-type)
+
+  (let ((attempt-in-progress (server:start-attempted? *toppath*)))
+    (when attempt-in-progress
+      (debug:print-info 0 *default-log-port* "Server start attempt in progress in other process (=> "attempt-in-progress"<=).  Aborting server launch attempt in this process ("(current-process-id)")")
+      (exit)))
+      
+  (let ((dotserver-url (server:check-if-running *toppath*)))
+    (when dotserver-url
+      (debug:print-info 0 *default-log-port* "Server already running (=> "dotserver-url"<=).  Aborting server launch attempt in this process ("(current-process-id)")")
+      (exit)
+      ))
+  
   (case transport-type
     ((http)(http-transport:launch run-id))
     ;;((nmsg)(nmsg-transport:launch run-id))
@@ -107,12 +119,14 @@
 ;;
 (define  (server:run areapath) ;; areapath is ignored for now.
   (let* ((curr-host   (get-host-name))
+         (attempt-in-progress (server:start-attempted? areapath))
+         (dot-server-url (server:check-if-running areapath))
 	 (curr-ip     (server:get-best-guess-address curr-host))
 	 (curr-pid    (current-process-id))
 	 (homehost    (common:get-homehost)) ;; configf:lookup *configdat* "server" "homehost" ))
 	 (target-host (car homehost))
 	 (testsuite   (common:get-testsuite-name))
-	 (logfile     (conc *toppath* "/logs/server.log"))
+	 (logfile     (conc areapath "/logs/server.log"))
 	 (cmdln (conc (common:get-megatest-exe)
 		      " -server " (or target-host "-") " -run-id " 0 (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
 									      (conc " -daemonize -log " logfile)
@@ -120,33 +134,39 @@
 		      " -m testsuite:" testsuite)) ;; (conc " >> " logfile " 2>&1 &")))))
 	 (log-rotate  (make-thread common:rotate-logs  "server run, rotate logs thread")))
     ;; we want the remote server to start in *toppath* so push there
-    (push-directory *toppath*)
-    (debug:print 0 *default-log-port* "INFO: Trying to start server (" cmdln ") ...")
-    (thread-start! log-rotate)
+    (push-directory areapath)
+    (cond
+     (attempt-in-progress
+      (debug:print 0 *default-log-port* "INFO: Not trying to start server because attempt is in progress: "attempt-in-progress))
+     (dot-server-url
+            (debug:print 0 *default-log-port* "INFO: Not trying to start server because one is already running : "dot-server-url))
+     (else
+      (debug:print 0 *default-log-port* "INFO: Trying to start server (" cmdln ") ...")
+      (thread-start! log-rotate)
 
-    ;; host.domain.tld match host?
-    (if (and target-host 
-	     ;; look at target host, is it host.domain.tld or ip address and does it 
-	     ;; match current ip or hostname
-	     (not (string-match (conc "("curr-host "|" curr-host"\\..*)") target-host))
-	     (not (equal? curr-ip target-host)))
-	(begin
-	  (debug:print-info 0 *default-log-port* "Starting server on " target-host ", logfile is " logfile)
-	  (setenv "TARGETHOST" target-host)))
+      ;; host.domain.tld match host?
+      (if (and target-host 
+               ;; look at target host, is it host.domain.tld or ip address and does it 
+               ;; match current ip or hostname
+               (not (string-match (conc "("curr-host "|" curr-host"\\..*)") target-host))
+               (not (equal? curr-ip target-host)))
+          (begin
+            (debug:print-info 0 *default-log-port* "Starting server on " target-host ", logfile is " logfile)
+            (setenv "TARGETHOST" target-host)))
+      
+      (setenv "TARGETHOST_LOGF" logfile)
+      (common:wait-for-normalized-load 4 " delaying server start due to load" remote-host: (get-environment-variable "TARGETHOST")) ;; do not try starting servers on an already overloaded machine, just wait forever
+      (system (conc "nbfake " cmdln))
+      (unsetenv "TARGETHOST_LOGF")
+      (if (get-environment-variable "TARGETHOST")(unsetenv "TARGETHOST"))
+      (thread-join! log-rotate)
+      (pop-directory)))))
     
-    (setenv "TARGETHOST_LOGF" logfile)
-    (common:wait-for-normalized-load 4 " delaying server start due to load" remote-host: (get-environment-variable "TARGETHOST")) ;; do not try starting servers on an already overloaded machine, just wait forever
-    (system (conc "nbfake " cmdln))
-    (unsetenv "TARGETHOST_LOGF")
-    (if (get-environment-variable "TARGETHOST")(unsetenv "TARGETHOST"))
-    (thread-join! log-rotate)
-    (pop-directory)))
-
 (define (server:get-client-signature) ;; BB> why is this proc named "get-"?  it returns nothing -- set! has not return value.
   (if *my-client-signature* *my-client-signature*
       (let ((sig (server:mk-signature)))
-	(set! *my-client-signature* sig)
-	*my-client-signature*)))
+        (set! *my-client-signature* sig)
+        *my-client-signature*)))
 
 ;; kind start up of servers, wait 40 seconds before allowing another server for a given
 ;; run-id to be launched
@@ -166,15 +186,30 @@
 ;;        (rmt:start-server run-id)))
 (define server:try-running server:run) ;; there is no more per-run servers ;; REMOVE ME. BUG.
 
+(define (server:attempting-start areapath)
+  (with-output-to-file
+      (conc areapath "/.starting-server")
+    (lambda ()
+      (print (current-process-id) " on " (get-host-name)))))
+  
+(define (server:complete-attempt areapath)
+  (delete-file* (conc areapath "/.starting-server")))
+  
 (define (server:start-attempted? areapath)
   (let ((flagfile (conc areapath "/.starting-server")))
     (handle-exceptions
      exn
      #f  ;; if things go wrong pretend we can't see the file
-     (and (file-exists? flagfile)
-	  (< (- (current-seconds)
-		(file-modification-time flagfile))
-	     15))))) ;; exists and less than 15 seconds old
+     (cond
+      ((and (file-exists? flagfile)
+            (< (- (current-seconds)
+                  (file-modification-time flagfile))
+               15)) ;; exists and less than 15 seconds old
+       (with-input-from-file flagfile (lambda () (read-line))))
+      ((file-exists? flagfile) ;; it is stale.
+       (server:complete-attempt areapath)
+       #f)
+      (else #f)))))
     
 (define (server:read-dotserver areapath)
   (let ((dotfile (conc areapath "/.server")))
@@ -233,7 +268,9 @@
 		      )))
 	  (if res
 	      dotserver
-	      #f))
+	      (begin
+                (server:remove-dotserver-file areapath ".*") ;; remove stale dotserver
+                #f)))
 	#f)))
 
 ;; called in megatest.scm, host-port is string hostname:port
