@@ -117,7 +117,7 @@
 ;; try running on that host
 ;;   incidental: rotate logs in logs/ dir.
 ;;
-(define  (server:run areapath) ;; areapath is ignored for now.
+(define  (server:run areapath) ;; areapath is *toppath* for a given testsuite area
   (let* ((curr-host   (get-host-name))
          (attempt-in-progress (server:start-attempted? areapath))
          (dot-server-url (server:check-if-running areapath))
@@ -178,12 +178,6 @@
 	  (server:run areapath)
 	  (hash-table-set! *server-kind-run* areapath (current-seconds))))))
 
-;; The generic run a server command. Dispatches the call to server 0 if run-id != 0
-;; 
-;;  (define (server:try-running run-id)
-;;    (if (eq? run-id 0)
-;;        (server:run run-id)
-;;        (rmt:start-server run-id)))
 (define server:try-running server:run) ;; there is no more per-run servers ;; REMOVE ME. BUG.
 
 (define (server:attempting-start areapath)

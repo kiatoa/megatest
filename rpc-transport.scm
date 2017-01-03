@@ -178,7 +178,7 @@
 		    (hash-table-set! *runremote* run-id server-dat)
 		    server-dat)
 		  (begin
-		    (server:try-running run-id)
+		    (server:try-running *toppath*)
 		    (thread-sleep! 2)
 		    (rpc-transport:client-setup run-id (- remtries 1)))))
  	    (let* ((server-db-info (open-run-close tasks:get-server tasks:open-db run-id)))
@@ -193,11 +193,11 @@
  			  (hash-table-set! *runremote* run-id server-dat)
 			  server-dat)
 			(begin
-			  (server:try-running run-id)
+			  (server:try-running *toppath*)
 			  (thread-sleep! 2)
 			  (rpc-transport:client-setup run-id (- remtries 1)))))
 		  (begin
-		    (server:try-running run-id)
+		    (server:try-running *toppath*)
 		    (thread-sleep! 2)
 		    (rpc-transport:client-setup run-id (- remtries 1)))))))))
 ;; 
