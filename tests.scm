@@ -143,7 +143,7 @@
 ;; returns waitons waitors tconfigdat
 ;;
 (define (tests:get-waitons test-name all-tests-registry)
-   (let* ((config  (tests:get-testconfig test-name all-tests-registry 'return-procs)))
+   (let* ((config  (tests:get-testconfig test-name #f all-tests-registry 'return-procs)))
      (let ((instr (if config 
 		      (config-lookup config "requirements" "waiton")
 		      (begin ;; No config means this is a non-existant test
@@ -293,7 +293,7 @@
 ;;
 (define (tests:check-waiver-eligibility testdat prev-testdat)
   (let* ((test-registry (make-hash-table))
-	 (testconfig  (tests:get-testconfig (db:test-get-testname testdat) test-registry #f))
+	 (testconfig  (tests:get-testconfig (db:test-get-testname testdat) (db:test-get-item-path testdat) test-registry #f))
 	 (test-rundir ;; (sdb:qry 'passstr 
 	  (db:test-get-rundir testdat)) ;; )
 	 (prev-rundir ;; (sdb:qry 'passstr 
@@ -981,7 +981,7 @@ EOF
 ;; else read the testconfig file
 ;;   if have path to test directory save the config as .testconfig and return it
 ;;
-(define (tests:get-testconfig test-name test-registry system-allowed #!key (force-create #f))
+(define (tests:get-testconfig test-name item-path test-registry system-allowed #!key (force-create #f))
   (let* ((cache-path   (tests:get-test-path-from-environment))
 	 (cache-file   (and cache-path (conc cache-path "/.testconfig")))
 	 (cache-exists (and cache-file
@@ -993,10 +993,13 @@ EOF
 			    exn
 			    #f ;; any issues, just give up with the cached version and re-read
 			    (configf:read-alist cache-file))
-			   #f)))
+			   #f))
+         (test-full-name (if (and item-path (not (string-null? item-path)))
+                             (conc test-name "/" item-path)
+                             test-name)))
     (if cached-dat
 	cached-dat
-	(let ((dat (hash-table-ref/default *testconfigs* test-name #f)))
+	(let ((dat (hash-table-ref/default *testconfigs* test-full-name #f)))
 	  (if (and  dat ;; have a locally cached version
 		    (hash-table-ref/default dat "have fulldata" #f)) ;; marked as good data?
 	      dat
@@ -1014,7 +1017,7 @@ EOF
 								      #f))
 				       #f)))
 		(if (and tcfg cache-file) (hash-table-set! tcfg "have fulldata" #t)) ;; mark this as fully read data
-		(if tcfg (hash-table-set! *testconfigs* test-name tcfg))
+		(if tcfg (hash-table-set! *testconfigs* test-full-name tcfg))
 		(if (and testexists
 			 cache-file
 			 (file-write-access? cache-path))
@@ -1242,7 +1245,8 @@ EOF
       (let loop ((hed (car test-names))
 		 (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	(debug:print-info 4 *default-log-port* "hed=" hed " at top of loop")
-	(let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs))
+        ;; don't know item-path at this time, let the testconfig get the top level testconfig
+	(let* ((config  (tests:get-testconfig hed #f all-tests-registry 'return-procs))
 	       (waitons (let ((instr (if config 
 					 (config-lookup config "requirements" "waiton")
 					 (begin ;; No config means this is a non-existant test
