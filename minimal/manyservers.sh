@@ -2,7 +2,7 @@
 
 echo manyservers.sh pid $$
 
-logdir=log-manysrv
+logdir=$PWD/log-manysrv
 
 
 function reset {
