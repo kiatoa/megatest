@@ -401,7 +401,7 @@
 			(set! server-going #t)
 			(tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")
                         ;;(BB> "http-transport: ->running")
-			(server:write-dotserver *toppath* (conc iface ":" port))
+			(server:write-dotserver *toppath* iface port (current-process-id) 'http)
                         (thread-start! *watchdog*)
                         (server:complete-attempt *toppath*))
 		      (begin ;; gotta exit nicely
@@ -430,7 +430,8 @@
 	  (begin 
 	    (debug:print-info 0 *default-log-port* "interface changed, refreshing iface and port info")
 	    (set! iface (car sdat))
-	    (set! port  (cadr sdat))))
+	    (set! port  (cadr sdat))
+            (server:write-dotserver *toppath* iface port (current-process-id) 'http)))
       
       ;; Transfer *db-last-access* to last-access to use in checking that we are still alive
       (mutex-lock! *heartbeat-mutex*)
@@ -449,21 +450,26 @@
 				   server-timeout)))
 	(if (common:low-noise-print 120 "server timeout")
 	    (debug:print-info 0 *default-log-port* "Adjusted server timeout: " adjusted-timeout))
-	(if (and *server-run*
+	(cond
+         ((not (server:confirm-dotserver *toppath* iface port (current-process-id) 'http))
+          (debug:print-info 0 *default-log-port* "Server .server file does not exist or contents do not match.  Initiate server shutdown.")
+          (http-transport:server-shutdown server-id port))
+         ((and *server-run*
 		 (> (+ last-access server-timeout)
 		    (current-seconds)))
-	    (begin
-	      (if (common:low-noise-print 120 "server continuing")
-		  (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access)))
-	      ;;
-	      ;; Consider implementing some smarts here to re-insert the record or kill self is
-	      ;; the db indicates so
-	      ;;
-	      ;; (if (tasks:server-am-i-the-server? tdb run-id)
-	      ;;     (tasks:server-set-state! tdb server-id "running"))
-	      ;;
-	      (loop 0 server-state bad-sync-count (current-milliseconds)))
-	    (http-transport:server-shutdown server-id port))))))
+          (if (common:low-noise-print 120 "server continuing")
+              (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access)))
+          ;;
+          ;; Consider implementing some smarts here to re-insert the record or kill self is
+          ;; the db indicates so
+          ;;
+          ;; (if (tasks:server-am-i-the-server? tdb run-id)
+          ;;     (tasks:server-set-state! tdb server-id "running"))
+          ;;
+          (loop 0 server-state bad-sync-count (current-milliseconds)))
+         (else
+          (debug:print-info 0 *default-log-port* "Server timeed out. seconds since last db access: " (- (current-seconds) last-access))
+          (http-transport:server-shutdown server-id port)))))))
 
 ;; code cut out from above
 ;;
