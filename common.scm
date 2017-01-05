@@ -138,7 +138,7 @@
 
 (defstruct remote
   (hh-dat            (common:get-homehost)) ;; homehost record ( addr . hhflag )
-  (server-url        (if *toppath* (server:read-dotserver *toppath*))) ;; (server:check-if-running *toppath*) #f))
+  (server-url        (if *toppath* (server:read-dotserver->url *toppath*))) ;; (server:check-if-running *toppath*) #f))
   (last-server-check 0)  ;; last time we checked to see if the server was alive
   (conndat           #f)
   (transport         *transport-type*)
