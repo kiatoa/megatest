@@ -77,7 +77,7 @@
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  1")
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; ensure we have a homehost record
-     ((not (pair? (remote-hh-dat *runremote*)))  ;; have a homehost record?
+     ((not (pair? (remote-hh-dat *runremote*)))  ;; not on homehost
       (thread-sleep! 0.1) ;; since we shouldn't get here, delay a little
       (remote-hh-dat-set! *runremote* (common:get-homehost))
       (mutex-unlock! *rmt-mutex*)
@@ -143,14 +143,16 @@
      
      ;; if not on homehost ensure we have a connection to a live server
      ;; NOTE: we *have* a homehost record by now
-     ((and (not (cdr (remote-hh-dat *runremote*)))        ;; not on a homehost 
-           (not (remote-conndat *runremote*))             ;; and no connection
-           (server:read-dotserver *toppath*))             ;; .server file exists
-      ;; something caused the server entry in tdb to disappear, but the server is still running
-      (server:remove-dotserver-file *toppath* ".*")
-      (mutex-unlock! *rmt-mutex*)
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  20")
-      (rmt:send-receive cmd rid params attemptnum: (add1 attemptnum)))
+
+     ;; ((and (not (cdr (remote-hh-dat *runremote*)))        ;; not on a homehost 
+     ;;       (not (remote-conndat *runremote*))             ;; and no connection
+     ;;       (server:read-dotserver *toppath*))             ;; .server file exists
+     ;;  ;; something caused the server entry in tdb to disappear, but the server is still running
+     ;;  (server:remove-dotserver-file *toppath* ".*")
+     ;;  (mutex-unlock! *rmt-mutex*)
+     ;;  (debug:print-info 12 *default-log-port* "rmt:send-receive, case  20")
+     ;;  (rmt:send-receive cmd rid params attemptnum: (add1 attemptnum)))
+
      ((and (not (cdr (remote-hh-dat *runremote*)))        ;; not on a homehost 
            (not (remote-conndat *runremote*)))            ;; and no connection
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  6  hh-dat: " (remote-hh-dat *runremote*) " conndat: " (remote-conndat *runremote*))

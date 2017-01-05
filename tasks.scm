@@ -450,10 +450,12 @@
 ;; no elegance here ...
 ;;
 (define (tasks:kill-server hostname pid #!key (kill-switch ""))
+  (server:remove-dotserver-file *toppath* ".*")
   (debug:print-info 0 *default-log-port* "Attempting to kill server process " pid " on host " hostname)
   (setenv "TARGETHOST" hostname)
   (setenv "TARGETHOST_LOGF" "server-kills.log")
   (system (conc "nbfake kill "kill-switch" "pid))
+
   (unsetenv "TARGETHOST_LOGF")
   (unsetenv "TARGETHOST"))
  
@@ -468,6 +470,7 @@
 	      (server-id (vector-ref sdat 0)))
 	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "killed")
 	  (debug:print-info 0 *default-log-port* "Killing server " server-id " for run-id " run-id " on host " hostname " with pid " pid)
+          (server:remove-dotserver-file *toppath* ".*")
 	  (tasks:kill-server hostname pid)
 	  (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id tag) )
 	(debug:print-info 0 *default-log-port* "No server found for run-id " run-id ", nothing to kill"))
