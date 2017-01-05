@@ -172,17 +172,17 @@
 (define (tasks:hostinfo-get-pid         vec)    (vector-ref  vec 5))
 (define (tasks:hostinfo-get-hostname    vec)    (vector-ref  vec 6))
 
-(define (tasks:server-lock-slot mdb run-id transport-type)
+(define (tasks:server-lock-slot mdb run-id)
   (tasks:server-clean-out-old-records-for-run-id mdb run-id " tasks:server-lock-slot")
   (if (< (tasks:num-in-available-state mdb run-id) 4)
       (begin 
-	(tasks:server-set-available mdb run-id transport-type)
+	(tasks:server-set-available mdb run-id)
 	(thread-sleep! (/ (random 1500) 1000)) ;; (thread-sleep! 2) ;; Try removing this. It may not be needed.
 	(tasks:server-am-i-the-server? mdb run-id))
       #f))
 	
 ;; register that this server may come online (first to register goes though with the process)
-(define (tasks:server-set-available mdb run-id transport-type)
+(define (tasks:server-set-available mdb run-id)
   (sqlite3:execute 
    mdb 
    "INSERT INTO servers (pid,hostname,port,pubport,start_time,      priority,state,mt_version,heartbeat,   interface,transport,run_id)
@@ -196,7 +196,7 @@
    (common:version-signature)    ;; mt_version
    -1                            ;; interface
    ;; (conc (server:get-transport)) ;; transport
-   (symbol->string transport-type)    ;; transport
+   (conc *transport-type*)    ;; transport
    run-id
    ))
 
@@ -404,7 +404,7 @@
 	    (if (common:low-noise-print 60 "tasks:start-and-wait-for-server" run-id)
 		(debug:print 0 *default-log-port* "Try starting server for run-id " run-id))
 	    (thread-sleep! (/ (random 2000) 1000))
-	    (server:kind-run run-id)
+	    (server:kind-run *toppath*)
 	    (thread-sleep! (min delay-time 1))
             (if (not (or (server:start-attempted? *toppath*)
                          (server:read-dotserver *toppath*))) ;; no point in trying

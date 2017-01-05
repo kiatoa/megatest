@@ -475,7 +475,7 @@
 				(runs:set-megatest-env-vars run-id inkeyvals: keydat inrunname: runname intarget: keystring testname: testname itempath: item-path) ;; these may be needed by the launching process
 				(handle-exceptions
 				 exn
-				 (tests:get-testconfig (db:test-get-testname testdat) test-registry #f)
+				 (tests:get-testconfig (db:test-get-testname testdat) (db:test-get-item-path testdat) test-registry #f)
 				 (tests:get-testconfig (db:test-get-testname testdat) test-registry #t))))
 	       (viewlog    (lambda (x)
 			     (if (file-exists? logfile)

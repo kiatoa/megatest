@@ -282,7 +282,7 @@
       (let* ((testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
 	      ;; NOTE: it is tempting to turn off force-create of testconfig but dynamic
 	      ;;       ezstep names need a full re-eval here.
-	      (tests:get-testconfig test-name tconfigreg #t force-create: #t)) ;; 'return-procs)))
+	      (tests:get-testconfig test-name item-path tconfigreg #t force-create: #t)) ;; 'return-procs)))
 	     (ezstepslst (if (hash-table? testconfig)
 			     (hash-table-ref/default testconfig "ezsteps" '())
 			     #f)))
@@ -830,7 +830,6 @@
 	      (debug:print-error 0 *default-log-port* "No " mtconfig " file found. Giving up.")
 	      (exit 2))))))
     ;; additional house keeping
-    (common:set-transport-type)
     (let* ((linktree (or (getenv "MT_LINKTREE")
 			 (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f))))
       (if linktree
@@ -1092,7 +1091,7 @@
       itemdat))
     (let* ((tregistry       (tests:get-all)) ;; third param (below) is system-allowed
            ;; for tconfig, why do we allow fallback to test-conf?
-	   (tconfig         (or (tests:get-testconfig test-name tregistry #t force-create: #t)
+	   (tconfig         (or (tests:get-testconfig test-name item-path tregistry #t force-create: #t)
 				(begin
                                   (debug:print 0 *default-log-port* "WARNING: falling back to pre-calculated testconfig. This is likely not desired.")
                                   test-conf))) ;; force re-read now that all vars are set
