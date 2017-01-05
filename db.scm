@@ -1963,12 +1963,15 @@
 ;; input data is a list (state status count)
 ;;
 (define (db:update-run-stats dbstruct run-id stats)
+  (mutex-lock! *db-stats-mutex*)
   (db:with-db
    dbstruct
    #f
    #f
+
    (lambda (db)
      ;; remove previous data
+     
      (let* ((stmt1 (sqlite3:prepare db "DELETE FROM run_stats WHERE run_id=? AND state=? AND status=?;"))
 	    (stmt2 (sqlite3:prepare db "INSERT INTO run_stats (run_id,state,status,count) VALUES (?,?,?,?);"))
 	    (res
@@ -1982,6 +1985,7 @@
 		 stats)))))
        (sqlite3:finalize! stmt1)
        (sqlite3:finalize! stmt2)
+       (mutex-unlock! *db-stats-mutex*)
        res))))
 
 (define (db:get-main-run-stats dbstruct run-id)
