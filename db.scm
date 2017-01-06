@@ -1963,7 +1963,7 @@
 ;; input data is a list (state status count)
 ;;
 (define (db:update-run-stats dbstruct run-id stats)
-  (mutex-lock! *db-stats-mutex*)
+  ;;(mutex-lock! *db-stats-mutex*)
   (db:with-db
    dbstruct
    #f
@@ -1985,7 +1985,7 @@
 		 stats)))))
        (sqlite3:finalize! stmt1)
        (sqlite3:finalize! stmt2)
-       (mutex-unlock! *db-stats-mutex*)
+       ;;(mutex-unlock! *db-stats-mutex*)
        res))))
 
 (define (db:get-main-run-stats dbstruct run-id)
