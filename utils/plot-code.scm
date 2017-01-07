@@ -10,13 +10,15 @@
 (use regex srfi-69 srfi-13)
 
 (define targs #f) 
-(define files (cddddr (argv)))
+(define files (cdr (cddddr (argv))))
 
 (let ((targdat (cadddr (argv))))
   (if (equal? targdat "-")
       (set! targs files)
       (set! targs (string-split targdat ","))))
 
+(define function-patt (car (cdr (cdddr (argv)))))
+(define function-rx   (regexp function-patt))
 (define filedat-defns (make-hash-table))
 (define filedat-usages (make-hash-table))
 
@@ -48,7 +50,8 @@
 	       (if match 
 		   (let ((fnname (cadr match)))
 		     ;; (print "   " fnname)
-		     (set! all-fns (cons fnname all-fns))
+		     (if (string-match function-rx fnname)
+			 (set! all-fns (cons fnname all-fns)))
 		     (hash-table-set! 
 		      filedat-defns 
 		      fname

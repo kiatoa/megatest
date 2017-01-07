@@ -72,5 +72,5 @@ if [[ -z "$MY_NBFAKE_HOST" ]]; then
   sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* >> $MY_NBFAKE_LOG 2>&1 &"
 else
   # run remotely
-  ssh -n -f $MY_NBFAKE_HOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* >> $MY_NBFAKE_LOG 2>&1 &\""
+  ssh -X -n -f $MY_NBFAKE_HOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* >> $MY_NBFAKE_LOG 2>&1 &\""
 fi
