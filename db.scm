@@ -1963,7 +1963,7 @@
 ;; input data is a list (state status count)
 ;;
 (define (db:update-run-stats dbstruct run-id stats)
-  ;;(mutex-lock! *db-stats-mutex*)
+  (mutex-lock! *db-stats-mutex*)
   (db:with-db
    dbstruct
    #f
@@ -1985,7 +1985,7 @@
 		 stats)))))
        (sqlite3:finalize! stmt1)
        (sqlite3:finalize! stmt2)
-       ;;(mutex-unlock! *db-stats-mutex*)
+       (mutex-unlock! *db-stats-mutex*)
        res))))
 
 (define (db:get-main-run-stats dbstruct run-id)
@@ -3177,38 +3177,42 @@
 	 (item-path    (db:test-get-item-path testdat))
          (tl-testdat   (db:get-test-info dbstruct run-id test-name ""))
          (tl-test-id   (db:test-get-id tl-testdat)))
-    (sqlite3:with-transaction
-     db
-     (lambda ()
-       (db:test-set-state-status-by-id dbstruct run-id test-id state status comment)
-       (if (not (equal? item-path "")) ;; only roll up IF incoming test is an item
-	   (let* ((state-status-counts  (db:get-all-state-status-counts-for-test db run-id test-name item-path)) ;; item-path is used to exclude current state/status of THIS test
-		  (running              (length (filter (lambda (x)
-							  (member (dbr:counts-state x) *common:running-states*))
-							state-status-counts)))
-		  (bad-not-started      (length (filter (lambda (x)
-							  (and (equal? (dbr:counts-state x) "NOT_STARTED")
-							       (not (member (dbr:counts-status x)
-									    *common:not-started-ok-statuses*))))
-							state-status-counts)))
-		  (all-curr-states   (common:special-sort  ;; worst -> best (sort of)
-                                      (delete-duplicates
-                                       (cons state (map dbr:counts-state state-status-counts)))
-                                      *common:std-states* >))
-                  (all-curr-statuses (common:special-sort  ;; worst -> best
-                                      (delete-duplicates
-				       (cons status (map dbr:counts-status state-status-counts)))
-				      *common:std-statuses* >))
-		  (newstate          (if (> running 0)
-					 "RUNNING"
-					 (if (> bad-not-started 0)
-					     "COMPLETED"
-					     (car all-curr-states))))
-		  (newstatus         (if (> bad-not-started 0)
-					 "CHECK"
-					 (car all-curr-statuses))))
-	     ;; (print "Setting toplevel to: " newstate "/" newstatus)
-	     (db:test-set-state-status-by-id dbstruct run-id tl-test-id newstate newstatus #f)))))))
+    (mutex-lock! *db-stats-mutex*)
+    (let ((tr-res
+           (sqlite3:with-transaction
+            db
+            (lambda ()
+              (db:test-set-state-status-by-id dbstruct run-id test-id state status comment)
+              (if (not (equal? item-path "")) ;; only roll up IF incoming test is an item
+                  (let* ((state-status-counts  (db:get-all-state-status-counts-for-test db run-id test-name item-path)) ;; item-path is used to exclude current state/status of THIS test
+                         (running              (length (filter (lambda (x)
+                                                                 (member (dbr:counts-state x) *common:running-states*))
+                                                               state-status-counts)))
+                         (bad-not-started      (length (filter (lambda (x)
+                                                                 (and (equal? (dbr:counts-state x) "NOT_STARTED")
+                                                                      (not (member (dbr:counts-status x)
+                                                                                   *common:not-started-ok-statuses*))))
+                                                               state-status-counts)))
+                         (all-curr-states   (common:special-sort  ;; worst -> best (sort of)
+                                             (delete-duplicates
+                                              (cons state (map dbr:counts-state state-status-counts)))
+                                             *common:std-states* >))
+                         (all-curr-statuses (common:special-sort  ;; worst -> best
+                                             (delete-duplicates
+                                              (cons status (map dbr:counts-status state-status-counts)))
+                                             *common:std-statuses* >))
+                         (newstate          (if (> running 0)
+                                                "RUNNING"
+                                                (if (> bad-not-started 0)
+                                                    "COMPLETED"
+                                                    (car all-curr-states))))
+                         (newstatus         (if (> bad-not-started 0)
+                                                "CHECK"
+                                                (car all-curr-statuses))))
+                    ;; (print "Setting toplevel to: " newstate "/" newstatus)
+                    (db:test-set-state-status-by-id dbstruct run-id tl-test-id newstate newstatus #f))))))
+          (mutex-unlock! *db-stats-mutex*))
+      trres)))
 
 (define db:roll-up-pass-fail-counts db:set-state-status-and-roll-up-items)
 
