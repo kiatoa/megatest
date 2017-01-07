@@ -182,7 +182,7 @@
 	     (success  (if (vector? dat) (vector-ref dat 0) #f))
 	     (res      (if (vector? dat) (vector-ref dat 1) #f)))
 	(if (vector? conninfo)(http-transport:server-dat-update-last-access conninfo)) ;; refresh access time
-        (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat)
+        (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat " *runremote* = "*runremote*)
 	(if success
 	    (case (remote-transport *runremote*)
 	      ((http) res)
