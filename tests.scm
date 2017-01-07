@@ -354,9 +354,9 @@
 	    result)))))
 
 (define (tests:test-force-state-status! run-id test-id state status)
-  (rmt:test-set-status-state run-id test-id status state #f)
+  (rmt:test-set-status-state run-id test-id status state #f))
   ;; (rmt:roll-up-pass-fail-counts run-id test-name item
-  (mt:process-triggers run-id test-id state status))
+  ;; (mt:process-triggers run-id test-id state status))
 
 ;; Do not rpc this one, do the underlying calls!!!
 (define (tests:test-set-status! run-id test-id state status comment dat #!key (work-area #f))

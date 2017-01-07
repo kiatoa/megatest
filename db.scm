@@ -1963,7 +1963,7 @@
 ;; input data is a list (state status count)
 ;;
 (define (db:update-run-stats dbstruct run-id stats)
-  (mutex-lock! *db-transaction-mutex*)
+  ;; (mutex-lock! *db-transaction-mutex*)
   (db:with-db
    dbstruct
    #f
@@ -1985,7 +1985,7 @@
 		 stats)))))
        (sqlite3:finalize! stmt1)
        (sqlite3:finalize! stmt2)
-       (mutex-unlock! *db-transaction-mutex*)
+       ;; (mutex-unlock! *db-transaction-mutex*)
        res))))
 
 (define (db:get-main-run-stats dbstruct run-id)
@@ -2489,7 +2489,8 @@
 		 (lambda (db)
 		   (let ((test-id (db:get-test-id dbstruct run-id testname "")))
 		     (sqlite3:execute db qry newstate newstatus run-id testname)
-		     (if test-id (mt:process-triggers run-id test-id newstate newstatus)))
+		     (if test-id (mt:process-triggers dbstruct run-id test-id newstate newstatus))
+		     )
 		   ))))
 	    testnames))
 
@@ -2513,7 +2514,7 @@
        (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
        (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment ;; (sdb:qry 'getid newcomment)
 				       test-id))))
-     (mt:process-triggers run-id test-id newstate newstatus))))
+     (mt:process-triggers dbstruct run-id test-id newstate newstatus))))
 
 ;; NEW BEHAVIOR: Count tests running in all runs!
 ;;
@@ -3157,7 +3158,7 @@
     ;; process the test_data table
     (if (and test-id state status (equal? status "AUTO")) 
 	(db:test-data-rollup dbstruct run-id test-id status))
-    (mt:process-triggers run-id test-id state status)))
+    (mt:process-triggers dbstruct run-id test-id state status)))
 
 ;; state is the priority rollup of all states
 ;; status is the priority rollup of all completed statesfu
@@ -3177,7 +3178,7 @@
 	 (item-path    (db:test-get-item-path testdat))
          (tl-testdat   (db:get-test-info dbstruct run-id test-name ""))
          (tl-test-id   (db:test-get-id tl-testdat)))
-    (mutex-lock! *db-transaction-mutex*)
+    ;; (mutex-lock! *db-transaction-mutex*)
     (let ((tr-res
            (sqlite3:with-transaction
             db
@@ -3211,7 +3212,8 @@
                                                 (car all-curr-statuses))))
                     ;; (print "Setting toplevel to: " newstate "/" newstatus)
                     (db:test-set-state-status-by-id dbstruct run-id tl-test-id newstate newstatus #f))))))
-          (mutex-unlock! *db-transaction-mutex*))
+          ;;(mutex-unlock! *db-transaction-mutex*)
+	  )
       tr-res)))
 
 (define db:roll-up-pass-fail-counts db:set-state-status-and-roll-up-items)

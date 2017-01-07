@@ -36,6 +36,7 @@
 
 (print-err "Making graph for files: " (string-intersperse targs ", "))
 (print-err "Looking at files: " (string-intersperse files ", "))
+(print-err "Function regex: " function-patt)
 
 ;; Gather the functions
 ;;
@@ -51,12 +52,13 @@
 		   (let ((fnname (cadr match)))
 		     ;; (print "   " fnname)
 		     (if (string-match function-rx fnname)
-			 (set! all-fns (cons fnname all-fns)))
-		     (hash-table-set! 
-		      filedat-defns 
-		      fname
-		      (cons fnname (hash-table-ref/default filedat-defns fname '())))
-		     ))
+			 (begin
+			   (set! all-fns (cons fnname all-fns)))
+			 (hash-table-set! 
+			  filedat-defns 
+			  fname
+			  (cons fnname (hash-table-ref/default filedat-defns fname '())))
+			 )))
 	       (loop (read-line))))))))
  files)
 
