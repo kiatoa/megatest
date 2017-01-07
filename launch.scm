@@ -1123,8 +1123,8 @@
 				      ((dashboard) "megatest")
 				      (else exe)))))
 	   (launcher        (common:get-launcher *configdat* test-name item-path)) ;; (config-lookup *configdat* "jobtools"     "launcher"))
-	   (test-sig   (conc (common:get-testsuite-name) ":" test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
-	   (work-area  #f)
+	   (test-sig        (conc (common:get-testsuite-name) ":" test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
+	   (work-area       #f)
 	   (toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
 	   (diskpath   #f)
 	   (cmdparms   #f)

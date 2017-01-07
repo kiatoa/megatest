@@ -99,6 +99,7 @@
 (define *task-db*             #f) ;; (vector db path-to-db)
 (define *db-access-allowed*   #t) ;; flag to allow access
 (define *db-access-mutex*     (make-mutex))
+(define *db-transaction-mutex* (make-mutex))
 (define *db-cache-path*       #f)
 
 ;; SERVER
