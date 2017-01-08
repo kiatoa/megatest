@@ -5,9 +5,11 @@ general #MTLOWESTLOAD xena zeus
 launcher nbfake
 maxload 1.5
 flexi-launcher yes
+# useshell no
 
 [setup]
-launch-delay 0
+launch-delay 1
+launchwait no
 
 [launchers]
 % general

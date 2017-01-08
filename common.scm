@@ -101,6 +101,7 @@
 (define *db-access-mutex*     (make-mutex))
 (define *db-transaction-mutex* (make-mutex))
 (define *db-cache-path*       #f)
+(define *db-with-db-mutex*    (make-mutex))
 
 ;; SERVER
 (define *my-client-signature* #f)
@@ -117,6 +118,8 @@
 (define *home-host*         #f)
 (define *total-non-write-delay* 0)
 (define *heartbeat-mutex*   (make-mutex))
+(define *api-process-request-count* 0)
+(define *max-api-process-requests* 0)
 
 ;; client
 (define *rmt-mutex*         (make-mutex))     ;; remote access calls mutex 
