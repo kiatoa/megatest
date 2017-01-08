@@ -144,7 +144,7 @@
 	    ((delete-old-deleted-test-records) (apply db:delete-old-deleted-test-records dbstruct params))
 	    ((test-set-state-status)           (apply db:test-set-state-status dbstruct params))
 	    ((test-set-top-process-pid)        (apply db:test-set-top-process-pid dbstruct params))
-	    ((set-state-status-and-roll-up-items)        (apply db:set-state-status-and-roll-up-items dbstruct params))
+	    ((set-state-status-and-roll-up-items) (apply db:set-state-status-and-roll-up-items dbstruct params))
 	    ;; ((update-pass-fail-counts)         (apply db:general-call dbstruct 'update-pass-fail-counts params))
 	    ((top-test-set-per-pf-counts)      (apply db:top-test-set-per-pf-counts dbstruct params))
 	    ((test-set-archive-block-id)       (apply db:test-set-archive-block-id dbstruct params))
