@@ -503,8 +503,8 @@
 ;; (define (rmt:delete-test-step-records run-id test-id)
 ;;   (rmt:send-receive 'delete-test-step-records run-id (list run-id test-id)))
 
-(define (rmt:test-set-status-state run-id test-id status state msg)
-  (rmt:send-receive 'test-set-status-state run-id (list run-id test-id status state msg)))
+(define (rmt:test-set-state-status run-id test-id state status msg)
+  (rmt:send-receive 'test-set-state-status run-id (list run-id test-id state status msg)))
 
 (define (rmt:test-toplevel-num-items run-id test-name)
   (rmt:send-receive 'test-toplevel-num-items run-id (list run-id test-name)))
