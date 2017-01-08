@@ -170,6 +170,7 @@
      (else
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9")
+      (mutex-lock! *rmt-mutex*)
       (let* ((conninfo (remote-conndat *runremote*))
 	     (dat      (case (remote-transport *runremote*)
 			 ((http) (condition-case ;; handling here has caused a lot of problems. However it is needed to deal with attemtped communication to servers that have gone away
@@ -182,18 +183,23 @@
 	     (success  (if (vector? dat) (vector-ref dat 0) #f))
 	     (res      (if (vector? dat) (vector-ref dat 1) #f)))
 	(if (vector? conninfo)(http-transport:server-dat-update-last-access conninfo)) ;; refresh access time
+	;; (mutex-unlock! *rmt-mutex*)
         (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat " *runremote* = "*runremote*)
 	(if success
 	    (case (remote-transport *runremote*)
-	      ((http) res)
+	      ((http)
+	       (mutex-unlock! *rmt-mutex*)
+	       res)
 	      (else
 	       (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " is unknown")
+	       (mutex-unlock! *rmt-mutex*)
 	       (exit 1)))
 	    (begin
 	      (debug:print 0 *default-log-port* "WARNING: communication failed. Trying again, try num: " attemptnum)
 	      (remote-conndat-set!    *runremote* #f)
 	      (remote-server-url-set! *runremote* #f)
               (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
+	      (mutex-unlock! *rmt-mutex*)
 	      (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))))))))
 

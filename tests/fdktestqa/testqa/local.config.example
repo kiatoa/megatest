@@ -1,0 +1,13 @@
+[host-types]
+general #MTLOWESTLOAD xena zeus
+
+[jobtools]
+launcher nbfake
+maxload 1.5
+flexi-launcher yes
+
+[setup]
+launch-delay 0
+
+[launchers]
+% general

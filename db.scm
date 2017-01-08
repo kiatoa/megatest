@@ -2494,10 +2494,10 @@
 		   ))))
 	    testnames))
 
-;; speed up for common cases with a little logic
-;; NB// Ultimately this will be deprecated in deference to mt:test-set-state-status-by-id
-;;
-(define (db:test-set-state-status-by-id dbstruct run-id test-id newstate newstatus newcomment)
+;; ;; speed up for common cases with a little logic
+;; ;; NB// Ultimately this will be deprecated in deference to mt:test-set-state-status-by-id
+;; ;;
+(define (db:test-set-state-status dbstruct run-id test-id newstate newstatus newcomment)
   (db:with-db
    dbstruct
    run-id
@@ -3145,20 +3145,20 @@
     ((zmq nmsg)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg))) ;; rpc
 
-;; This is to be the big daddy call
-;;
-(define (db:test-set-state-status dbstruct run-id test-id state status msg)
-  (let ((dbdat  (db:get-db dbstruct run-id)))
-    (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
-	(db:general-call dbdat 'set-test-start-time (list test-id)))
-    ;; (if msg
-    ;; 	(db:general-call dbdat 'state-status-msg (list state status msg test-id))
-    ;; 	(db:general-call dbdat 'state-status     (list state status test-id)))
-    (db:set-state-status-and-roll-up-items dbstruct run-id test-id #f state status msg)
-    ;; process the test_data table
-    (if (and test-id state status (equal? status "AUTO")) 
-	(db:test-data-rollup dbstruct run-id test-id status))
-    (mt:process-triggers dbstruct run-id test-id state status)))
+;; ; This is to be the big daddy call NOPE: Replaced by db:set-state-status-and-roll-up-items
+;; ;
+;; define (db:test-set-state-status dbstruct run-id test-id state status msg)
+;;  (let ((dbdat  (db:get-db dbstruct run-id)))
+;;    (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
+;; 	(db:general-call dbdat 'set-test-start-time (list test-id)))
+;;    ;; (if msg
+;;    ;; 	(db:general-call dbdat 'state-status-msg (list state status msg test-id))
+;;    ;; 	(db:general-call dbdat 'state-status     (list state status test-id)))
+;;    (db:set-state-status-and-roll-up-items dbstruct run-id test-id #f state status msg)
+;;    ;; process the test_data table
+;;    (if (and test-id state status (equal? status "AUTO")) 
+;; 	(db:test-data-rollup dbstruct run-id test-id status))
+;;    (mt:process-triggers dbstruct run-id test-id state status)))
 
 ;; state is the priority rollup of all states
 ;; status is the priority rollup of all completed statesfu
@@ -3177,13 +3177,17 @@
 			   test-name))
 	 (item-path    (db:test-get-item-path testdat))
          (tl-testdat   (db:get-test-info dbstruct run-id test-name ""))
-         (tl-test-id   (db:test-get-id tl-testdat)))
-    ;; (mutex-lock! *db-transaction-mutex*)
+         (tl-test-id   (db:test-get-id tl-testdat))
+	 (dbdat        (db:get-db dbstruct run-id)))
+    (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
+	(db:general-call dbdat 'set-test-start-time (list test-id)))
+    (mutex-lock! *db-transaction-mutex*)
     (let ((tr-res
            (sqlite3:with-transaction
             db
             (lambda ()
-              (db:test-set-state-status-by-id dbstruct run-id test-id state status comment)
+              ;; (db:test-set-state-status-by-id dbstruct run-id test-id state status comment)
+	      (db:test-set-state-status dbstruct run-id test-id state status comment)
               (if (not (equal? item-path "")) ;; only roll up IF incoming test is an item
                   (let* ((state-status-counts  (db:get-all-state-status-counts-for-test db run-id test-name item-path)) ;; item-path is used to exclude current state/status of THIS test
                          (running              (length (filter (lambda (x)
@@ -3211,9 +3215,10 @@
                                                 "CHECK"
                                                 (car all-curr-statuses))))
                     ;; (print "Setting toplevel to: " newstate "/" newstatus)
-                    (db:test-set-state-status-by-id dbstruct run-id tl-test-id newstate newstatus #f))))))
-          ;;(mutex-unlock! *db-transaction-mutex*)
-	  )
+                    (db:test-set-state-status dbstruct run-id tl-test-id newstate newstatus #f)))))))
+      (mutex-unlock! *db-transaction-mutex*)
+      (if (and test-id state status (equal? status "AUTO")) 
+	  (db:test-data-rollup dbstruct run-id test-id status))
       tr-res)))
 
 (define (db:get-all-state-status-counts-for-test db run-id test-name item-path)

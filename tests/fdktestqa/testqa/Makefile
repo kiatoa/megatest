@@ -7,12 +7,12 @@ RUNNAME   = a
 NUMTESTS  = 20
 
 all :
-	$(MEGATEST) -remove-runs -target a/b :runname c -testpatt %/%
-	$(MEGATEST) -runtests % -target a/b :runname c
+	$(MEGATEST) -remove-runs -target a/b -runname c -testpatt %/%
+	$(MEGATEST) -run -testpatt % -target a/b -runname c
 
 bigbig :
 	for tn in a b c d;do \
-	   ($(MEGATEST) -runtests % -target a/b :runname $tn & ) ; \
+	   ($(MEGATEST) -run -testpatt % -target a/b -runname $tn & ) ; \
 	done
 
 waitonpatt :
@@ -24,13 +24,13 @@ waitonall :
 	NUMTESTS=20 megatest -run -target a/b -runname waitonall -testpatt alltop
 
 bigrun :
-	NUMTESTS=$(NUMTESTS) $(MEGATEST) -runtests bigrun -target a/bigrun :runname a$(shell date +%V)
+	NUMTESTS=$(NUMTESTS) $(MEGATEST) -run -testpatt bigrun -target a/bigrun -runname a$(shell date +%V)
 
 bigrun2 :
-	NUMTESTS=$(NUMTESTS) $(MEGATEST) -runtests bigrun2 -target a/bigrun2 :runname a$(shell date +%V)
+	NUMTESTS=$(NUMTESTS) $(MEGATEST) -run -testpatt bigrun2 -target a/bigrun2 -runname a$(shell date +%V)
 
 bigrun3 :
-	NUMTESTS=$(NUMTESTS) $(MEGATEST) -runtests bigrun3 -target a/bigrun3 :runname $(RUNNAME)
+	NUMTESTS=$(NUMTESTS) $(MEGATEST) -run -testpatt bigrun3 -target a/bigrun3 -runname $(RUNNAME)
 
 dashboard : 
 	mkdir -p ../simpleruns
@@ -43,4 +43,4 @@ compile :
 	(cd ../../..;make -j && make install)
 
 clean :
-	rm -rf ../simple*/*/* megatest.db db/* ../simple*/.db/* logs/* monitor.db
+	rm -rf ../simple*/*/* megatest.db db/* ../simple*/.db/* logs/* monitor.db /tmp/$(USER)/megatest_localdb/testqa
