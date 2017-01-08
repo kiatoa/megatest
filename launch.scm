@@ -66,14 +66,15 @@
     (if (file-exists? cname)
 	(let* ((dat  (read-config cname #f #f))
 	       (csvr (db:logpro-dat->csv dat stepname))
-	       (csvt (let-values (( (fmt-cell fmt-record fmt-csv) (make-format ",")))
-				 (fmt-csv (map list->csv-record csvr))))
+	       (csvt (let-values (((fmt-cell fmt-record fmt-csv) (make-format ",")))
+		       (fmt-csv (map list->csv-record csvr))))
 	       (status (configf:lookup dat "final" "exit-status"))
 	       (msg     (configf:lookup dat "final" "message")))
-          ;;(if csvt  ;; this if blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
+          (if csvt  ;; this if blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
               (rmt:csv->test-data run-id test-id csvt)
-            ;;  (BB> "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
-            ;;  )
+	      (debug:print 0 *default-log-port* "ERROR: no csvdat exists for run-id: " run-id " test-id: " test-id " stepname: " stepname ", check that logpro version is 1.15 or newer"))
+	  ;;  (BB> "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
+	  ;;  )
 	  (cond
 	   ((equal? status "PASS") "PASS") ;; skip the message part if status is pass
 	   (status (conc (configf:lookup dat "final" "exit-status") ": " (if msg msg "no message")))
@@ -255,7 +256,7 @@
 
   ;; (thread-sleep! 0.3)
   ;; (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
-  (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "RUNNING" #f) 
+  (rmt:set-state-status-and-roll-up-items run-id test-name item-path #f "RUNNING" #f) 
   ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
   ;; if there is a runscript do it first
@@ -659,7 +660,7 @@
 					    new-status
 					    (args:get-arg "-m") #f)
 		    ;; need to update the top test record if PASS or FAIL and this is a subtest
-		    ;; NO NEED TO CALL roll-up-pass-fail-counts HERE, THIS IS DONE IN roll-up-pass-fail-counts called by tests:test-set-status!
+		    ;; NO NEED TO CALL set-state-status-and-roll-up-items HERE, THIS IS DONE IN set-state-status-and-roll-up-items called by tests:test-set-status!
 		    ))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
@@ -1156,7 +1157,7 @@
       ;;
       ;; the following call handles waiver propogation. cannot yet condense into roll-up-pass-fail
       (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
-      (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "LAUNCHED" #f)
+      (rmt:set-state-status-and-roll-up-items run-id test-name item-path #f "LAUNCHED" #f)
       ;; (pp (hash-table->alist tconfig))
       (set! diskpath (get-best-disk *configdat* tconfig))
       (if diskpath

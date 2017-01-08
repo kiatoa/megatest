@@ -930,7 +930,7 @@
 		      (hash-table-set! test-registry hed 'removed)
 		      (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "TEN_STRIKES" #f)
 		      ;; I'm unclear on if this roll up is needed - it may be the root cause of the "all set to FAIL" bug.
-		      (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "FAIL" #f) ;; treat as FAIL
+		      (rmt:set-state-status-and-roll-up-items run-id test-name item-path #f "FAIL" #f) ;; treat as FAIL
 		      (list (if (null? tal)(car newtal)(car tal))
 			    tal
 			    reg
