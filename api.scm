@@ -145,7 +145,6 @@
 	    ((test-set-state-status)           (apply db:test-set-state-status dbstruct params))
 	    ((test-set-top-process-pid)        (apply db:test-set-top-process-pid dbstruct params))
 	    ((set-state-status-and-roll-up-items) (apply db:set-state-status-and-roll-up-items dbstruct params))
-	    ;; ((update-pass-fail-counts)         (apply db:general-call dbstruct 'update-pass-fail-counts params))
 	    ((top-test-set-per-pf-counts)      (apply db:top-test-set-per-pf-counts dbstruct params))
 	    ((test-set-archive-block-id)       (apply db:test-set-archive-block-id dbstruct params))
 
@@ -253,9 +252,7 @@
 	    ((general-call)                 (let ((stmtname   (car params))
 						  (run-id     (cadr params))
 						  (realparams (cddr params)))
-					      (db:with-db dbstruct run-id #t ;; these are all for modifying the db
-							  (lambda (db)
-							    (db:general-call db stmtname realparams)))))
+					      (db:general-call dbstruct stmtname realparams)))
 	    ((sdb-qry)                      (apply sdb:qry params))
 	    ((ping)                         (current-process-id))
 
@@ -273,12 +270,15 @@
 ;; NB// Runs on the server as part of the server loop
 ;;
 (define (api:process-request dbstruct $) ;; the $ is the request vars proc
+  (set! *api-process-request-count* (+ *api-process-request-count* 1))
   (let* ((cmd     ($ 'cmd))
 	 (paramsj ($ 'params))
 	 (params  (db:string->obj paramsj transport: 'http)) ;; (rmt:json-str->dat paramsj))
 	 (resdat  (api:execute-requests dbstruct (vector cmd params))) ;; #( flag result )
 	 (res     (vector-ref resdat 1)))
-
+    (if (> *api-process-request-count* *max-api-process-requests*)
+	(set! *max-api-process-requests* *api-process-request-count*))
+    (set! *api-process-request-count* (- *api-process-request-count* 1))
     ;; This can be here but needs controls to ensure it doesn't run more than every 4 seconds
     ;; (rmt:dat->json-str
     ;;  (if (or (string? res)

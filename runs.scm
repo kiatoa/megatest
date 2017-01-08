@@ -1675,6 +1675,7 @@
 		    ;; seek and kill in flight -runtests with % as testpatt here
 		    ;; (if (equal? testpatt "%")
 		    (tasks:kill-runner target run-name testpatt)
+		    
 		    ;; (debug:print 0 *default-log-port* "not attempting to kill any run launcher processes as testpatt is " testpatt))
 		    (debug:print 1 *default-log-port* "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((set-state-status)
