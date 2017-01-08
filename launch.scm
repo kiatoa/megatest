@@ -459,7 +459,7 @@
 			   (set! *time-to-exit* #t)
 			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
 			   (let ((th1 (make-thread (lambda ()
-						     (tests:test-force-state-status! run-id test-id "INCOMPLETE" "KILLED")
+						     (rmt:test-set-state-status run-id test-id "INCOMPLETE" "KILLED" #f)
 						     (print "Killed by signal " signum ". Exiting")
 						     (thread-sleep! 1)
 						     (exit 1))))
@@ -483,13 +483,19 @@
 	    (cond
 	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
 	      (debug:print 0 *default-log-port* "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
-	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")) ;; prime it for running
+	      ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
+	      (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
+	      ) ;; prime it for running
 	     ((member (db:test-get-state test-info) '("RUNNING" "REMOTEHOSTSTART"))
 	      (if (process:alive-on-host? test-host test-pid)
 		  (debug:print-error 0 *default-log-port* "test state is "  (db:test-get-state test-info) " and process " test-pid " is still running on host " test-host ", cannot proceed")
-		  (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")))
+		  ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
+		  (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
+		  ))
 	     ((not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
-	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a"))
+	      ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
+	      (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
+	      )
 	     (else ;; (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ"))
 	      (debug:print-error 0 *default-log-port* "test state is " (db:test-get-state test-info) ", cannot proceed")
 	      (exit))))

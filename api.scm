@@ -74,7 +74,7 @@
     test-set-state-status-by-id
     delete-test-records
     delete-old-deleted-test-records
-    test-set-status-state
+    test-set-state-status
     test-set-top-process-pid
     roll-up-pass-fail-counts
     update-pass-fail-counts
@@ -142,7 +142,7 @@
 	    ((test-set-state-status-by-id)     (apply db:test-set-state-status-by-id dbstruct params))
 	    ((delete-test-records)             (apply db:delete-test-records dbstruct params))
 	    ((delete-old-deleted-test-records) (apply db:delete-old-deleted-test-records dbstruct params))
-	    ((test-set-status-state)           (apply db:test-set-status-state dbstruct params))
+	    ((test-set-state-status)           (apply db:test-set-state-status dbstruct params))
 	    ((test-set-top-process-pid)        (apply db:test-set-top-process-pid dbstruct params))
 	    ((roll-up-pass-fail-counts)        (apply db:roll-up-pass-fail-counts dbstruct params))
 	    ;; ((update-pass-fail-counts)         (apply db:general-call dbstruct 'update-pass-fail-counts params))

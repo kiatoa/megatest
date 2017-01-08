@@ -1502,7 +1502,7 @@
 	    (debug:print 0 *default-log-port* "WARNING: Marking test(s); " (string-intersperse (map conc all-ids) ", ") " as INCOMPLETE")
             (for-each
              (lambda (test-id)
-               (db:test-set-status-state dbstruct run-id test-id "COMPLETE" "DEAD" "Test failed to complete"))
+               (db:test-set-state-status dbstruct run-id test-id "COMPLETE" "DEAD" "Test failed to complete"))
              all-ids))))))
 
 ;; ALL REPLACED BY THE BLOCK ABOVE
@@ -3146,8 +3146,8 @@
     (else msg))) ;; rpc
 
 ;; This is to be the big daddy call
-
-(define (db:test-set-status-state dbstruct run-id test-id status state msg)
+;;
+(define (db:test-set-state-status dbstruct run-id test-id state status msg)
   (let ((dbdat  (db:get-db dbstruct run-id)))
     (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
 	(db:general-call dbdat 'set-test-start-time (list test-id)))

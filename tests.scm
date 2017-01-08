@@ -353,11 +353,6 @@
 	    (pop-directory)
 	    result)))))
 
-(define (tests:test-force-state-status! run-id test-id state status)
-  (rmt:test-set-status-state run-id test-id status state #f))
-  ;; (rmt:roll-up-pass-fail-counts run-id test-name item
-  ;; (mt:process-triggers run-id test-id state status))
-
 ;; Do not rpc this one, do the underlying calls!!!
 (define (tests:test-set-status! run-id test-id state status comment dat #!key (work-area #f))
   (let* ((real-status status)
@@ -398,8 +393,8 @@
     ;; update the primary record IF state AND status are defined
     (if (and state status)
 	(begin
-	  (rmt:test-set-status-state run-id test-id real-status state (if waived waived comment))
-	  ;; (mt:process-triggers run-id test-id state real-status) ;; triggers are called in test-set-status-state
+	  (rmt:test-set-state-status run-id test-id state real-status (if waived waived comment))
+	  ;; (mt:process-triggers run-id test-id state real-status) ;; triggers are called in test-set-state-status
 	  ))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
@@ -484,7 +479,6 @@
 		(let ((script (configf:lookup *configdat* "testrollup" test-name)))
 		  (print "Obtained lock for " outputfilename)
 		  (rmt:roll-up-pass-fail-counts run-id test-name "" #f #f #f)
-		  ;; (rmt:test-set-status-state run-id test-name #f #f #f) ;; (rmt:top-test-set-per-pf-counts run-id test-name)
 		  (if script
 		      (system (conc script " > " outputfilename " & "))
 		      (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename))
