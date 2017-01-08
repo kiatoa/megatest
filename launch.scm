@@ -1236,7 +1236,7 @@
 					(let ((cmdstr (string-intersperse fullcmd " ")))
 					  (if launchwait
 					      cmdstr
-					      (conc cmdstr " >> mt_launch.log 2>&1")))
+					      (conc cmdstr " >> mt_launch.log 2>&1 &")))
 					(car fullcmd))
 				    (if useshell
 					'()
