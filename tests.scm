@@ -440,7 +440,7 @@
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (if (not (equal? item-path ""))
-	(rmt:roll-up-pass-fail-counts run-id test-name item-path state status #f))
+	(rmt:set-state-status-and-roll-up-items run-id test-name item-path state status #f))
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
@@ -478,7 +478,7 @@
 	    (if have-lock
 		(let ((script (configf:lookup *configdat* "testrollup" test-name)))
 		  (print "Obtained lock for " outputfilename)
-		  (rmt:roll-up-pass-fail-counts run-id test-name "" #f #f #f)
+		  (rmt:set-state-status-and-roll-up-items run-id test-name "" #f #f #f)
 		  (if script
 		      (system (conc script " > " outputfilename " & "))
 		      (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename))

@@ -3216,48 +3216,6 @@
 	  )
       tr-res)))
 
-(define db:roll-up-pass-fail-counts db:set-state-status-and-roll-up-items)
-
-;; call with state = #f to roll up with out accounting for state/status of this item
-;;
-;;    (define (db:roll-up-pass-fail-counts dbstruct run-id test-name item-path state status)
-;;      (if (not (equal? item-path "")) ;; if asked to do this for a specific item then do an incremental update
-;;          (let* ((dbdat         (db:get-db dbstruct run-id))
-;;                 (toptestdat    (db:get-test-info dbstruct run-id test-name item-path))
-;;                 (currtopstate  (db:test-get-state toptestdat))
-;;                 (currtopstatus (db:test-get-status toptestdat))
-;;                 (nextss        (common:apply-state-status currtopstate currtopstatus state status))
-;;                 (newtopstate   (car nextss))  ;; #f or a symbol
-;;                 (newtopstatus  (cdr nextss))) ;; #f or a symbol
-;;            (if (not newtopstate) ;; need to calculate it
-;;                
-;;            ;; We rely on the toplevel to track status as state varies. I.e. preserve an ABORT
-;;            
-;;                 
-;;    	;;	(db    (db:dbdat-get-db dbdat)))
-;;    	(db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
-;;    	(db:top-test-set-per-pf-counts dbstruct run-id test-name))))
-;;      
-;;    ;;     (case (string->symbol status)
-;;    ;;       ((RUNNING)  (db:general-call dbdat 'top-test-set-running (list test-name)))
-;;    ;;       ((LAUNCHED) (db:general-call dbdat 'top-test-set (list "LAUNCHED" test-name)))
-;;    ;;       ((ABORT INCOMPLETE) (db:general-call dbdat 'top-test-set (list status test-name))))
-;;        
-;;    ;;     (if (or (not state)
-;;    ;; 	    (not (equal? item-path "")))
-;;    ;; 	;; just do a rollup
-;;    ;; 	(begin
-;;    ;; 	  (db:top-test-set-per-pf-counts dbdat run-id test-name)
-;;    ;; 	  #f)
-;;    ;; 	(begin
-;;    ;; 	  ;; NOTE: No else clause needed for this case
-;;    ;; 	  (case (string->symbol status)
-;;    ;; 	    ((RUNNING)  (db:general-call dbdat 'top-test-set-running (list test-name)))
-;;    ;; 	    ((LAUNCHED) (db:general-call dbdat 'top-test-set (list "LAUNCHED" test-name)))
-;;    ;; 	    ((ABORT INCOMPLETE) (db:general-call dbdat 'top-test-set (list status test-name))))
-;;    ;; 	  #f)
-;;    ;; 	)))
-
 (define (db:get-all-state-status-counts-for-test db run-id test-name item-path)
   (sqlite3:map-row
    (lambda (state status count)
@@ -3341,7 +3299,7 @@
         '(update-test-rundat      "INSERT INTO test_rundat (test_id,update_time,cpuload,diskfree,diskusage,run_duration) VALUES (?,?,?,?,?,?);")
 	'(update-test-state       "UPDATE tests SET state=? WHERE state=? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
 	'(update-test-status      "UPDATE tests SET status=? WHERE status like ? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
-	;; stuff for roll-up-pass-fail-counts
+	;; stuff for set-state-status-and-roll-up-items
 	'(update-pass-fail-counts "UPDATE tests 
              SET fail_count=(SELECT count(id) FROM tests WHERE testname=? AND item_path != '' AND status IN ('FAIL','CHECK','INCOMPLETE','ABORT')),
                  pass_count=(SELECT count(id) FROM tests WHERE testname=? AND item_path != '' AND status IN ('PASS','WARN','WAIVED'))
@@ -3449,7 +3407,7 @@
 
 ;; do not run these as part of the transaction
 (define db:special-queries   '(rollup-tests-pass-fail
-			       ;; db:roll-up-pass-fail-counts  ;; WHY NOT!?
+			       ;; db:set-state-status-and-roll-up-items  ;; WHY NOT!?
 			       login
 			       immediate
 			       flush
