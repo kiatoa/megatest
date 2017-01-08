@@ -43,4 +43,4 @@ compile :
 	(cd ../../..;make -j && make install)
 
 clean :
-	rm -rf ../simple*/*/* megatest.db db/* ../simple*/.db/* logs/* monitor.db /tmp/$(USER)/megatest_localdb/testqa
+	rm -rf ../simple*/*/* megatest.db db/* ../simple*/.db/* logs/* monitor.db /tmp/$(USER)/megatest_localdb/testqa .server
