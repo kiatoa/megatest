@@ -102,6 +102,7 @@
 (define *db-transaction-mutex* (make-mutex))
 (define *db-cache-path*       #f)
 (define *db-with-db-mutex*    (make-mutex))
+(define *db-api-call-time*    (make-hash-table)) ;; hash of command => (list of times)
 
 ;; SERVER
 (define *my-client-signature* #f)
@@ -964,6 +965,16 @@
       #f ;; better than an exception for my needs
       (fold (lambda (a b)
 	      (if (comp a b) a b))
+	    (car lst)
+	    lst)))
+
+;; get min or max, use > for max and < for min, this works around the limits on apply
+;;
+(define (common:sum lst)
+  (if (null? lst)
+      0
+      (fold (lambda (a b)
+	      (+ a b))
 	    (car lst)
 	    lst)))
 

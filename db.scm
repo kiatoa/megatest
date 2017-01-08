@@ -2011,6 +2011,21 @@
 	"SELECT state,status,count FROM run_stats WHERE run_id=? AND run_id IN (SELECT id FROM runs WHERE state NOT IN ('DELETED','deleted'));"
 	run-id))))
 
+(define (db:print-current-query-stats)
+  ;; generate stats from *db-api-call-time*
+  (let ((ordered-keys (sort (hash-table-keys *db-api-call-time*)
+			    (lambda (a b)
+			      (let ((sum-a (common:sum (hash-table-ref *db-api-call-time* a)))
+				    (sum-b (common:sum (hash-table-ref *db-api-call-time* b))))
+				(> sum-a sum-b))))))
+    (for-each
+     (lambda (cmd-key)
+       (let* ((dat  (hash-table-ref *db-api-call-time* cmd-key))
+	      (avg  (if (> (length dat) 0)
+			(/ (common:sum dat)(length dat)))))
+	 (debug:print-info 0 *default-log-port* cmd-key "\tavg: " avg " max: " (common:max dat) " min: " (common:min-max < dat) " num: " (length dat))))
+     ordered-keys)))
+
 (define (db:get-all-run-ids dbstruct)
   (db:with-db
    dbstruct
