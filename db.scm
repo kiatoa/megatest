@@ -628,7 +628,7 @@
 	     (lambda (targdb)
 	       (let* ((db     (db:dbdat-get-db targdb))
 		      (stmth  (sqlite3:prepare db full-ins)))
-		 ;; (db:delay-if-busy targdb) ;; NO WAITING
+		 (db:delay-if-busy targdb) ;; NO WAITING
 		 (for-each
 		  (lambda (fromdat-lst)
 		    (sqlite3:with-transaction
