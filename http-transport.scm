@@ -507,21 +507,24 @@
     (set! *time-to-exit* #t) ;; tell on-exit to be fast as we've already cleaned up
     (portlogger:open-run-close portlogger:set-port port "released")
     (thread-sleep! 5)
-    (debug:print-info 0 *default-log-port* "Max cached queries was    " *max-cache-size*)
-    (debug:print-info 0 *default-log-port* "Number of cached writes   " *number-of-writes*)
-    (debug:print-info 0 *default-log-port* "Average cached write time "
-		      (if (eq? *number-of-writes* 0)
-			  "n/a (no writes)"
-			  (/ *writes-total-delay*
-			     *number-of-writes*))
-		      " ms")
-    (debug:print-info 0 *default-log-port* "Number non-cached queries "  *number-non-write-queries*)
-    (debug:print-info 0 *default-log-port* "Average non-cached time   "
-		      (if (eq? *number-non-write-queries* 0)
-			  "n/a (no queries)"
-			  (/ *total-non-write-delay* 
-			     *number-non-write-queries*))
-		      " ms")
+;; (debug:print-info 0 *default-log-port* "Max cached queries was    " *max-cache-size*)
+;; (debug:print-info 0 *default-log-port* "Number of cached writes   " *number-of-writes*)
+;; (debug:print-info 0 *default-log-port* "Average cached write time "
+;; 		      (if (eq? *number-of-writes* 0)
+;; 			  "n/a (no writes)"
+;; 			  (/ *writes-total-delay*
+;; 			     *number-of-writes*))
+;; 		      " ms")
+;; (debug:print-info 0 *default-log-port* "Number non-cached queries "  *number-non-write-queries*)
+;; (debug:print-info 0 *default-log-port* "Average non-cached time   "
+;; 		      (if (eq? *number-non-write-queries* 0)
+;; 			  "n/a (no queries)"
+;; 			  (/ *total-non-write-delay* 
+;; 			     *number-non-write-queries*))
+    ;; 		      " ms")
+
+    (db:print-current-query-stats)
+    
     (debug:print-info 0 *default-log-port* "Server shutdown complete. Exiting")
     (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running complete")
     ;; if the .server file contained :myport then we can remove it
