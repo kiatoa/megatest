@@ -256,7 +256,7 @@
 
   ;; (thread-sleep! 0.3)
   ;; (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
-  (rmt:set-state-status-and-roll-up-items run-id test-name item-path #f "RUNNING" #f) 
+  (rmt:set-state-status-and-roll-up-items run-id test-name item-path "RUNNING" #f #f) 
   ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
   ;; if there is a runscript do it first
