@@ -1150,7 +1150,7 @@
                      archived     INTEGER   DEFAULT 0, -- 0=no, > 1=archive block id where test data can be found
                      last_update  INTEGER DEFAULT (strftime('%s','now')),
                         CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path));")
-     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path);")
+     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path, uname);")
      (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_tests_trigger AFTER UPDATE ON tests
                              FOR EACH ROW
                                BEGIN 
@@ -1965,7 +1965,7 @@
 	  (cons (list state status count) res))
 	'()
 	db
-	"SELECT state,status,count(id) AS count FROM tests WHERE run_id=? AND NOT(uname='n/a' AND item_path='') GROUP BY state,status;;"
+	"SELECT state,status,count(id) AS count FROM tests WHERE run_id=? AND NOT(uname='n/a' AND item_path='') GROUP BY state,status;"
 	run-id))))
 
 ;; Update run_stats for given run_id
