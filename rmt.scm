@@ -203,25 +203,24 @@
 	      (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))))))))
 
-(define (rmt:update-db-stats run-id rawcmd params duration)
-  (mutex-lock! *db-stats-mutex*)
-  (handle-exceptions
-   exn
-   (begin
-     (debug:print 0 *default-log-port* "WARNING: stats collection failed in update-db-stats")
-     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-     (print "exn=" (condition->list exn))
-     #f) ;; if this fails we don't care, it is just stats
-   (let* ((cmd      (conc "run-id=" run-id " " (if (eq? rawcmd 'general-call) (car params) rawcmd)))
-	  (stat-vec (hash-table-ref/default *db-stats* cmd #f)))
-     (if (not (vector? stat-vec))
-	 (let ((newvec (vector 0 0)))
-	   (hash-table-set! *db-stats* cmd newvec)
-	   (set! stat-vec newvec)))
-     (vector-set! stat-vec 0 (+ (vector-ref stat-vec 0) 1))
-     (vector-set! stat-vec 1 (+ (vector-ref stat-vec 1) duration))))
-  (mutex-unlock! *db-stats-mutex*))
-
+;; (define (rmt:update-db-stats run-id rawcmd params duration)
+;;   (mutex-lock! *db-stats-mutex*)
+;;   (handle-exceptions
+;;    exn
+;;    (begin
+;;      (debug:print 0 *default-log-port* "WARNING: stats collection failed in update-db-stats")
+;;      (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+;;      (print "exn=" (condition->list exn))
+;;      #f) ;; if this fails we don't care, it is just stats
+;;    (let* ((cmd      (conc "run-id=" run-id " " (if (eq? rawcmd 'general-call) (car params) rawcmd)))
+;; 	  (stat-vec (hash-table-ref/default *db-stats* cmd #f)))
+;;      (if (not (vector? stat-vec))
+;; 	 (let ((newvec (vector 0 0)))
+;; 	   (hash-table-set! *db-stats* cmd newvec)
+;; 	   (set! stat-vec newvec)))
+;;      (vector-set! stat-vec 0 (+ (vector-ref stat-vec 0) 1))
+;;      (vector-set! stat-vec 1 (+ (vector-ref stat-vec 1) duration))))
+;;   (mutex-unlock! *db-stats-mutex*))
 
 (define (rmt:print-db-stats)
   (let ((fmtstr "~40a~7-d~9-d~20,2-f")) ;; "~20,2-f"
