@@ -98,7 +98,7 @@
   (if (stack? (dbr:dbstruct-dbstack dbstruct))
       (if (stack-empty? (dbr:dbstruct-dbstack dbstruct))
           (let ((newdb (db:open-megatest-db path: (db:dbfile-path))))
-            (stack-push! (dbr:dbstruct-dbstack dbstruct) newdb)
+            ;; (stack-push! (dbr:dbstruct-dbstack dbstruct) newdb)
             newdb)
           (stack-pop! (dbr:dbstruct-dbstack dbstruct)))
       (db:open-db dbstruct)))
