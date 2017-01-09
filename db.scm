@@ -2290,15 +2290,18 @@
 	 (keys    (rmt:get-keys))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND ")))
     (let ((prev-run-ids '()))
-      (db:with-db dbstruct #f #f ;; #f means work with the zeroth db - i.e. the runs db
-       (lambda (db)
-	 (apply sqlite3:for-each-row
-		(lambda (id)
-		  (set! prev-run-ids (cons id prev-run-ids)))
-		db
-		(conc "SELECT id FROM runs WHERE " qrystr " AND state != 'deleted' AND id != ?;")
-		(append kvalues (list run-id)))))
-      prev-run-ids)))
+      (if (null? keyvals)
+          '()
+          (begin
+            (db:with-db dbstruct #f #f ;; #f means work with the zeroth db - i.e. the runs db
+                        (lambda (db)
+                          (apply sqlite3:for-each-row
+                                 (lambda (id)
+                                   (set! prev-run-ids (cons id prev-run-ids)))
+                                 db
+                                 (conc "SELECT id FROM runs WHERE " qrystr " AND state != 'deleted' AND id != ?;")
+                                 (append kvalues (list run-id)))))
+            prev-run-ids)))))
 
 ;;======================================================================
 ;;  T E S T S
@@ -2473,7 +2476,8 @@
   (db:general-call dbstruct 'delete-test-data-records (list test-id))
   (db:with-db
    dbstruct #f #f
-   (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id)))
+   (lambda (db)
+     (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id))))
 
 ;; 
 (define (db:delete-old-deleted-test-records dbstruct)
