@@ -393,7 +393,7 @@
     ;; update the primary record IF state AND status are defined
     (if (and state status)
 	(begin
-	  (rmt:test-set-state-status run-id test-id state real-status (if waived waived comment))
+	  (rmt:set-state-status-and-roll-up-items run-id test-id item-path state real-status (if waived waived comment))
 	  ;; (mt:process-triggers run-id test-id state real-status) ;; triggers are called in test-set-state-status
 	  ))
     
@@ -439,8 +439,8 @@
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
-    (if (not (equal? item-path ""))
-	(rmt:set-state-status-and-roll-up-items run-id test-name item-path state status #f))
+    ;;;;;; (if (not (equal? item-path ""))
+    ;;;;;;     (rmt:set-state-status-and-roll-up-items run-id test-name item-path state status #f) ;;;;;)
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
