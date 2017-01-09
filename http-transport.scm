@@ -385,7 +385,7 @@
 	       (server-state 'available)
 	       (bad-sync-count 0)
 	       (start-time     (current-milliseconds)))
-
+      ;;(BB> "http-transport: top of loop; count="count" server-state="server-state" bad-sync-count="bad-sync-count" server-going="server-going)
       ;; Use this opportunity to sync the tmp db to megatest.db
       (if (not server-going) ;; *dbstruct-db* 
 	    ;; Removed code is pasted below (keeping it around until we are clear it is not needed).
@@ -395,16 +395,20 @@
 		  (if (equal? new-server-id server-id)
 		      (begin
 			(tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
+                        ;;(BB> "http-transport: ->dbprep")
 			(thread-sleep! 0.5) ;; give some margin for queries to complete before switching from file based access to server based access
 			(set! *dbstruct-db*  (db:setup)) ;;  run-id))
 			(set! server-going #t)
 			(tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")
-			(server:write-dotserver *toppath* (conc iface ":" port))
-			(delete-file* (conc *toppath* "/.starting-server")))
+                        ;;(BB> "http-transport: ->running")
+			(server:write-dotserver *toppath* iface port (current-process-id) 'http)
+                        (thread-start! *watchdog*)
+                        (server:complete-attempt *toppath*))
 		      (begin ;; gotta exit nicely
+                        ;;(BB> "http-transport: ->collision")
 			(tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "collision")
 			(http-transport:server-shutdown server-id port))))))
-
+      
       ;; when things go wrong we don't want to be doing the various queries too often
       ;; so we strive to run this stuff only every four seconds or so.
       (let* ((sync-time (- (current-milliseconds) start-time))
@@ -426,7 +430,8 @@
 	  (begin 
 	    (debug:print-info 0 *default-log-port* "interface changed, refreshing iface and port info")
 	    (set! iface (car sdat))
-	    (set! port  (cadr sdat))))
+	    (set! port  (cadr sdat))
+            (server:write-dotserver *toppath* iface port (current-process-id) 'http)))
       
       ;; Transfer *db-last-access* to last-access to use in checking that we are still alive
       (mutex-lock! *heartbeat-mutex*)
@@ -445,21 +450,26 @@
 				   server-timeout)))
 	(if (common:low-noise-print 120 "server timeout")
 	    (debug:print-info 0 *default-log-port* "Adjusted server timeout: " adjusted-timeout))
-	(if (and *server-run*
+	(cond
+         ((not (server:confirm-dotserver *toppath* iface port (current-process-id) 'http))
+          (debug:print-info 0 *default-log-port* "Server .server file does not exist or contents do not match.  Initiate server shutdown.")
+          (http-transport:server-shutdown server-id port))
+         ((and *server-run*
 		 (> (+ last-access server-timeout)
 		    (current-seconds)))
-	    (begin
-	      (if (common:low-noise-print 120 "server continuing")
-		  (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access)))
-	      ;;
-	      ;; Consider implementing some smarts here to re-insert the record or kill self is
-	      ;; the db indicates so
-	      ;;
-	      ;; (if (tasks:server-am-i-the-server? tdb run-id)
-	      ;;     (tasks:server-set-state! tdb server-id "running"))
-	      ;;
-	      (loop 0 server-state bad-sync-count (current-milliseconds)))
-	    (http-transport:server-shutdown server-id port))))))
+          (if (common:low-noise-print 120 "server continuing")
+              (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access)))
+          ;;
+          ;; Consider implementing some smarts here to re-insert the record or kill self is
+          ;; the db indicates so
+          ;;
+          ;; (if (tasks:server-am-i-the-server? tdb run-id)
+          ;;     (tasks:server-set-state! tdb server-id "running"))
+          ;;
+          (loop 0 server-state bad-sync-count (current-milliseconds)))
+         (else
+          (debug:print-info 0 *default-log-port* "Server timeed out. seconds since last db access: " (- (current-seconds) last-access))
+          (http-transport:server-shutdown server-id port)))))))
 
 ;; code cut out from above
 ;;
@@ -488,6 +498,7 @@
 
 (define (http-transport:server-shutdown server-id port)
   (let ((tdbdat (tasks:open-db)))
+    ;;(BB> "http-transport:server-shutdown called")
     (debug:print-info 0 *default-log-port* "Starting to shutdown the server. pid="(current-process-id))
     ;;
     ;; start_shutdown
@@ -515,6 +526,7 @@
     (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running complete")
     ;; if the .server file contained :myport then we can remove it
     (server:remove-dotserver-file *toppath* port)
+    ;;(BB> "http-transport:server-shutdown -> exit")
     (exit)))
 
 ;; all routes though here end in exit ...
@@ -522,10 +534,7 @@
 ;; start_server? 
 ;;
 (define (http-transport:launch run-id)
-  (with-output-to-file
-      (conc *toppath* "/.starting-server")
-    (lambda ()
-      (print (current-process-id) " on " (get-host-name))))
+  (server:attempting-start *toppath*)
   (let* ((tdbdat (tasks:open-db)))
     (set! *run-id*   run-id)
     (if (args:get-arg "-daemonize")
@@ -541,7 +550,7 @@
 	  (debug:print 0 *default-log-port* "INFO: Server for run-id " run-id " already running")
 	  (exit 0))
 	(begin ;; ok, no server detected, clean out any lingering records
-	   (tasks:server-force-clean-running-records-for-run-id  (db:delay-if-busy tdbdat) run-id "notresponding")))
+          (tasks:server-force-clean-running-records-for-run-id  (db:delay-if-busy tdbdat) run-id "notresponding")))
     (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id))
 	       (remtries  4))
       (if (not server-id)
@@ -554,7 +563,7 @@
 		;; since we didn't get the server lock we are going to clean up and bail out
 		(debug:print-info 2 *default-log-port* "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
 		(tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat) " http-transport:launch")
-		(delete-file* (conc *toppath* "/.starting-server"))
+                (server:complete-attempt *toppath*)
 		))
 	  (let* ((th2 (make-thread (lambda ()
 				     (debug:print-info 0 *default-log-port* "Server run thread started")

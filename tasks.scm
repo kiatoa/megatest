@@ -404,7 +404,7 @@
 	    (if (common:low-noise-print 60 "tasks:start-and-wait-for-server" run-id)
 		(debug:print 0 *default-log-port* "Try starting server for run-id " run-id))
 	    (thread-sleep! (/ (random 2000) 1000))
-	    (server:kind-run run-id)
+	    (server:kind-run *toppath*)
 	    (thread-sleep! (min delay-time 1))
             (if (not (or (server:start-attempted? *toppath*)
                          (server:read-dotserver *toppath*))) ;; no point in trying

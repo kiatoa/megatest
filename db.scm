@@ -293,14 +293,23 @@
                       (cfgdb #f))
                       (for-each (lambda (dbitem)
                             (let* ((stringsplit (string-split (cadr dbitem)))
-                                  (dbtype (car stringsplit))
-                                  (dbpath (cadr stringsplit)))
-                            (set! cfgdb (dbi:open (string->symbol dbtype) (cons (cons 'dbname dbpath) '()) ))
-                            (db:initialize-main-db cfgdb)
-                            (db:initialize-run-id-db cfgdb)
-                            (set! res (cons (cons cfgdb dbpath) res))))
+                                  (dbtype (string->symbol (car stringsplit)))
+                                  (dbinfo '())
+                                  (cred '()))
+                              (for-each 
+                                (lambda (x)
+                                  (if (not (eqv? (string->symbol x) dbtype))
+                                  (let* ((pair (string-split x ":")))
+                                    (if (not (eqv? pair '()))
+                                      (set! dbinfo (cons (cons (string->symbol (car pair)) (cadr pair)) dbinfo))))))
+                              stringsplit)
+                              (set! cfgdb (dbi:open dbtype dbinfo))
+                              (set! res (cons (cons cfgdb (alist-ref 'host dbinfo)) res))
+                              ))
                       dblist)
-                      (dbr:dbstruct-slave-dbs-set! dbstruct res))))
+                      (print res)
+                      (dbr:dbstruct-slave-dbs-set! dbstruct res)
+                      )))
 
           ;;	    (mutex-unlock! *rundb-mutex*)
           (if (and (not dbfexists)
@@ -548,6 +557,7 @@
 ;;    IFF field-name exists
 ;;
 (define (db:sync-tables tbls last-update fromdb todb . slave-dbs)
+  (print "Slave-dbs: " slave-dbs)
   (set! todb (cons (dbi:convert (db:dbdat-get-db todb)) (db:dbdat-get-path todb)))
   (set! fromdb (cons (dbi:convert (db:dbdat-get-db fromdb)) (db:dbdat-get-path fromdb)))
 
@@ -605,9 +615,10 @@
 							  "")
 				   ";"))
 		 (full-ins   (conc "INSERT OR REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) "
-				   " VALUES ( " (string-intersperse (make-list num-fields "?") ",") " );"))
+           " VALUES ( " (string-intersperse (make-list num-fields "?") ",") " );"))
 		 (fromdat    '())
 		 (fromdats   '())
+     (tabletypes '())
 		 (totrecords 0)
 		 (batch-len  (string->number (or (configf:lookup *configdat* "sync" "batchsize") "10")))
 		 (todat      (make-hash-table))
@@ -650,6 +661,21 @@
 	    ;; first pass implementation, just insert all changed rows
       (for-each 
 	     (lambda (targdb)
+        (if (eqv? (dbi:db-dbtype (db:dbdat-get-db targdb)) 'pgd)
+          (let* ((prep ""))
+            (for-each 
+              (lambda (row)
+                (set! tabletypes (cons (cons (string->symbol (vector-ref row 1)) (vector-ref row 2)) tabletypes)))
+              (dbi:pull-metadata (db:dbdat-get-db fromdb) tablename))
+            (set! prep (string-intersperse (map (lambda (x) (alist-ref (string->symbol (car x)) tabletypes)) fields) ","))
+            (set! prep (conc "PREPARE full-ins (" prep ") AS INSERT OR REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) VALUES ( "))
+              (let loop ((i 1))
+                  (set! prep (conc prep "$" i ","))
+                (if (< i (- num-fields 1))
+                (loop (+ i 1))
+                (set! prep (conc prep "$" (+ i 1) ")"))))
+            (set! full-ins prep)))
+
 	       (let* ((db (dbi:convert (db:dbdat-get-db targdb)))
 		      (stmth  (dbi:prepare db full-ins)))
 		 ;; (db:delay-if-busy targdb) ;; NO WAITING
