@@ -134,11 +134,11 @@
 		      (print "db:with-db called with dbdat instead of dbstruct, FIXME!!")
 		      dbstruct))) ;; cheat, allow for passing in a dbdat
 	 (db    (db:dbdat-get-db dbdat))
-	 (use-mutex (> *api-process-request-count* 50)))
+	 (use-mutex (> *api-process-request-count* 25)))
     (if (and use-mutex
 	     (common:low-noise-print 120 "over-50-parallel-api-requests"))
 	(debug:print-info 0 *default-log-port* *api-process-request-count* " parallel api requests being processed in process " (current-process-id) ", throttling access"))
-    (if (common:low-noise-print 120 "parallel-api-requests")
+    (if (common:low-noise-print 120 (conc "parallel-api-requests" *max-api-process-requests*))
 	(debug:print-info 0 *default-log-port* "Parallel api request count: " *api-process-request-count* " max parallel requests: " *max-api-process-requests*))
     (handle-exceptions
      exn
@@ -2296,7 +2296,8 @@
 		(lambda (id)
 		  (set! prev-run-ids (cons id prev-run-ids)))
 		db
-		(conc "SELECT id FROM runs WHERE " qrystr " AND state != 'deleted' AND id != ?;") (append kvalues (list run-id)))))
+		(conc "SELECT id FROM runs WHERE " qrystr " AND state != 'deleted' AND id != ?;")
+		(append kvalues (list run-id)))))
       prev-run-ids)))
 
 ;;======================================================================
