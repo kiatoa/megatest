@@ -785,7 +785,7 @@
   ;;  exn
   ;;  '()
   ;;  (sqlite3:first-row
-  (let ((db (db:delay-if-busy (db:get-db dbstruct #f)))
+  (let ((db (db:delay-if-busy (db:get-db dbstruct)))
 	(res '()))
     (sqlite3:for-each-row 
      (lambda (a . b)
