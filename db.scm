@@ -133,7 +133,10 @@
 ;; r/w is a flag to indicate if the db is modified by this query #t = yes, #f = no
 ;;
 (define (db:with-db dbstruct run-id r/w proc . params)
-  (let* ((dbdat (db:get-db dbstruct))
+  (let* ((have-struct (dbr:dbstruct? dbstruct))
+         (dbdat (if have-struct 
+                    (db:get-db dbstruct)
+                    #f))
 	 (db    (db:dbdat-get-db dbdat))
 	 (use-mutex (> *api-process-request-count* 25)))
     (if (and use-mutex
@@ -152,7 +155,7 @@
      (let ((res (apply proc db params)))
        (if use-mutex (mutex-unlock! *db-with-db-mutex*))
        ;; (if (vector? dbstruct)(db:done-with dbstruct run-id r/w))
-       (stack-push! (dbr:dbstruct-dbstack dbstruct) dbdat)
+       (if dbdat (stack-push! (dbr:dbstruct-dbstack dbstruct) dbdat))
        res))))
 
 ;;======================================================================
@@ -3187,7 +3190,7 @@
          (tl-test-id   (db:test-get-id tl-testdat)))
     (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
 	(db:general-call dbstruct 'set-test-start-time (list test-id)))
-    ;; (mutex-lock! *db-transaction-mutex*)
+    (mutex-lock! *db-transaction-mutex*)
     (db:with-db
      dbstruct #f #f
      (lambda (db)
@@ -3195,8 +3198,8 @@
               (sqlite3:with-transaction
                db
                (lambda ()
-                 ;; (db:test-set-state-status-by-id dbstruct run-id test-id state status comment)
-                 (db:test-set-state-status dbstruct run-id test-id state status comment)
+                 ;; NB// Pass the db so it is part fo the transaction
+                 (db:test-set-state-status db run-id test-id state status comment)
                  (if (not (equal? item-path "")) ;; only roll up IF incoming test is an item
                      (let* ((state-status-counts  (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path)) ;; item-path is used to exclude current state/status of THIS test
                             (running              (length (filter (lambda (x)
@@ -3223,9 +3226,9 @@
                             (newstatus         (if (> bad-not-started 0)
                                                    "CHECK"
                                                    (car all-curr-statuses))))
-                       ;; (print "Setting toplevel to: " newstate "/" newstatus)
-                       (db:test-set-state-status dbstruct run-id tl-test-id newstate newstatus #f)))))))
-         ;; (mutex-unlock! *db-transaction-mutex*)
+                       ;; NB// Pass the db so it is part of the transaction
+                       (db:test-set-state-status db run-id tl-test-id newstate newstatus #f)))))))
+         (mutex-unlock! *db-transaction-mutex*)
          (if (and test-id state status (equal? status "AUTO")) 
              (db:test-data-rollup dbstruct run-id test-id status))
          tr-res)))))
