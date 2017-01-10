@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack)
 (require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -99,7 +99,10 @@
 (define *task-db*             #f) ;; (vector db path-to-db)
 (define *db-access-allowed*   #t) ;; flag to allow access
 (define *db-access-mutex*     (make-mutex))
+(define *db-transaction-mutex* (make-mutex))
 (define *db-cache-path*       #f)
+(define *db-with-db-mutex*    (make-mutex))
+(define *db-api-call-time*    (make-hash-table)) ;; hash of command => (list of times)
 
 ;; SERVER
 (define *my-client-signature* #f)
@@ -116,6 +119,8 @@
 (define *home-host*         #f)
 (define *total-non-write-delay* 0)
 (define *heartbeat-mutex*   (make-mutex))
+(define *api-process-request-count* 0)
+(define *max-api-process-requests* 0)
 
 ;; client
 (define *rmt-mutex*         (make-mutex))     ;; remote access calls mutex 
@@ -960,6 +965,16 @@
       #f ;; better than an exception for my needs
       (fold (lambda (a b)
 	      (if (comp a b) a b))
+	    (car lst)
+	    lst)))
+
+;; get min or max, use > for max and < for min, this works around the limits on apply
+;;
+(define (common:sum lst)
+  (if (null? lst)
+      0
+      (fold (lambda (a b)
+	      (+ a b))
 	    (car lst)
 	    lst)))
 
