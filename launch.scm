@@ -66,14 +66,15 @@
     (if (file-exists? cname)
 	(let* ((dat  (read-config cname #f #f))
 	       (csvr (db:logpro-dat->csv dat stepname))
-	       (csvt (let-values (( (fmt-cell fmt-record fmt-csv) (make-format ",")))
-				 (fmt-csv (map list->csv-record csvr))))
+	       (csvt (let-values (((fmt-cell fmt-record fmt-csv) (make-format ",")))
+		       (fmt-csv (map list->csv-record csvr))))
 	       (status (configf:lookup dat "final" "exit-status"))
 	       (msg     (configf:lookup dat "final" "message")))
-          ;;(if csvt  ;; this if blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
+          (if csvt  ;; this if blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
               (rmt:csv->test-data run-id test-id csvt)
-            ;;  (BB> "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
-            ;;  )
+	      (debug:print 0 *default-log-port* "ERROR: no csvdat exists for run-id: " run-id " test-id: " test-id " stepname: " stepname ", check that logpro version is 1.15 or newer"))
+	  ;;  (BB> "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
+	  ;;  )
 	  (cond
 	   ((equal? status "PASS") "PASS") ;; skip the message part if status is pass
 	   (status (conc (configf:lookup dat "final" "exit-status") ": " (if msg msg "no message")))
@@ -255,7 +256,7 @@
 
   ;; (thread-sleep! 0.3)
   ;; (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
-  (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "RUNNING" #f) 
+  (rmt:set-state-status-and-roll-up-items run-id test-name item-path "RUNNING" #f #f) 
   ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
   ;; if there is a runscript do it first
@@ -459,7 +460,7 @@
 			   (set! *time-to-exit* #t)
 			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
 			   (let ((th1 (make-thread (lambda ()
-						     (tests:test-force-state-status! run-id test-id "INCOMPLETE" "KILLED")
+						     (rmt:test-set-state-status run-id test-id "INCOMPLETE" "KILLED" #f)
 						     (print "Killed by signal " signum ". Exiting")
 						     (thread-sleep! 1)
 						     (exit 1))))
@@ -483,13 +484,19 @@
 	    (cond
 	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
 	      (debug:print 0 *default-log-port* "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
-	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")) ;; prime it for running
+	      ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
+	      (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
+	      ) ;; prime it for running
 	     ((member (db:test-get-state test-info) '("RUNNING" "REMOTEHOSTSTART"))
 	      (if (process:alive-on-host? test-host test-pid)
 		  (debug:print-error 0 *default-log-port* "test state is "  (db:test-get-state test-info) " and process " test-pid " is still running on host " test-host ", cannot proceed")
-		  (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")))
+		  ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
+		  (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
+		  ))
 	     ((not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
-	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a"))
+	      ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
+	      (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
+	      )
 	     (else ;; (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ"))
 	      (debug:print-error 0 *default-log-port* "test state is " (db:test-get-state test-info) ", cannot proceed")
 	      (exit))))
@@ -653,7 +660,7 @@
 					    new-status
 					    (args:get-arg "-m") #f)
 		    ;; need to update the top test record if PASS or FAIL and this is a subtest
-		    ;; NO NEED TO CALL roll-up-pass-fail-counts HERE, THIS IS DONE IN roll-up-pass-fail-counts called by tests:test-set-status!
+		    ;; NO NEED TO CALL set-state-status-and-roll-up-items HERE, THIS IS DONE IN set-state-status-and-roll-up-items called by tests:test-set-status!
 		    ))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
@@ -1123,8 +1130,8 @@
 				      ((dashboard) "megatest")
 				      (else exe)))))
 	   (launcher        (common:get-launcher *configdat* test-name item-path)) ;; (config-lookup *configdat* "jobtools"     "launcher"))
-	   (test-sig   (conc (common:get-testsuite-name) ":" test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
-	   (work-area  #f)
+	   (test-sig        (conc (common:get-testsuite-name) ":" test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
+	   (work-area       #f)
 	   (toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
 	   (diskpath   #f)
 	   (cmdparms   #f)
@@ -1150,7 +1157,7 @@
       ;;
       ;; the following call handles waiver propogation. cannot yet condense into roll-up-pass-fail
       (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
-      (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "LAUNCHED" #f)
+      (rmt:set-state-status-and-roll-up-items run-id test-name item-path #f "LAUNCHED" #f)
       ;; (pp (hash-table->alist tconfig))
       (set! diskpath (get-best-disk *configdat* tconfig))
       (if diskpath
@@ -1229,7 +1236,7 @@
 					(let ((cmdstr (string-intersperse fullcmd " ")))
 					  (if launchwait
 					      cmdstr
-					      (conc cmdstr " >> mt_launch.log 2>&1")))
+					      (conc cmdstr " >> mt_launch.log 2>&1 &")))
 					(car fullcmd))
 				    (if useshell
 					'()

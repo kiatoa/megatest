@@ -66,7 +66,12 @@
     ((http)(http-transport:launch run-id))
     ;;((nmsg)(nmsg-transport:launch run-id))
     ((rpc)  (rpc-transport:launch run-id))
-    (else (debug:print-error 0 *default-log-port* "unknown server type " transport-type))))
+    (else (debug:print-error 0 *default-log-port* "unknown server type " transport-type)))
+
+  ;; is this a good place to print server exit stats?
+  (debug:print 0 "SERVER: max parallel api requests: " *max-api-process-requests*)
+  
+  )
 ;;       (else   (debug:print-error 0 *default-log-port* "No known transport set, transport=" transport ", using rpc")
 ;; 	      (rpc-transport:launch run-id)))))
 
