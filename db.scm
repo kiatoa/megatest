@@ -137,7 +137,9 @@
          (dbdat (if have-struct 
                     (db:get-db dbstruct)
                     #f))
-	 (db    (db:dbdat-get-db dbdat))
+	 (db    (if have-struct
+		    (db:dbdat-get-db dbdat)
+		    dbstruct))
 	 (use-mutex (> *api-process-request-count* 25)))
     (if (and use-mutex
 	     (common:low-noise-print 120 "over-50-parallel-api-requests"))
