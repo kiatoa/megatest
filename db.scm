@@ -565,7 +565,6 @@
 ;;    IFF field-name exists
 ;;
 (define (db:sync-tables tbls last-update fromdb todb . slave-dbs)
-  (print "Slave-dbs: " slave-dbs)
   (set! todb (cons (dbi:convert (db:dbdat-get-db todb)) (db:dbdat-get-path todb)))
   (set! fromdb (cons (dbi:convert (db:dbdat-get-db fromdb)) (db:dbdat-get-path fromdb)))
 
