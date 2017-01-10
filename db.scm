@@ -296,7 +296,16 @@
                                   (dbtype (string->symbol (car stringsplit)))
                                   (dbinfo '())
                                   (cred '()))
-                              (for-each 
+                            
+                            (if (eqv? 'sqlite3 dbtype)
+                              ((set! dbinfo (cadr stringsplit))
+                              (set! cfgdb (dbi:open 'sqlite3 (cons (cons 'dbname dbinfo) '()) ))
+                              (db:initialize-main-db cfgdb)
+                              (db:initialize-run-id-db cfgdb)
+                              (set! res (cons (cons cfgdb dbinfo) res))))
+
+                            (if (eqv? 'pg dbtype)
+                              ((for-each 
                                 (lambda (x)
                                   (if (not (eqv? (string->symbol x) dbtype))
                                   (let* ((pair (string-split x ":")))
@@ -305,9 +314,8 @@
                               stringsplit)
                               (set! cfgdb (dbi:open dbtype dbinfo))
                               (set! res (cons (cons cfgdb (alist-ref 'host dbinfo)) res))
-                              ))
+                              ))))
                       dblist)
-                      (print res)
                       (dbr:dbstruct-slave-dbs-set! dbstruct res)
                       )))
 
