@@ -109,7 +109,7 @@
     tasks-set-state-given-param-key
     ))
 
-;; These are called by the server on recipt of /api calls
+;; These are called by the server on receipt of /api calls
 ;;    - keep it simple, only return the actual result of the call, i.e. no meta info here
 ;;
 ;;    - returns #( flag result )
@@ -118,9 +118,12 @@
   (handle-exceptions
    exn
    (let ((call-chain (get-call-chain)))
+     (debug:print 0 *default-log-port* "------------------------------")
      (debug:print 0 *default-log-port* "WARNING: api:execute-requests received an exception from peer")
+     (debug:print 0 *default-log-port* "dbstruct="dbstruct"  dat="dat)
      (print-call-chain (current-error-port))
-     (debug:print 0 *default-log-port* " message: "  ((condition-property-accessor 'exn 'message) exn))       
+     (debug:print 0 *default-log-port* " message: "  ((condition-property-accessor 'exn 'message) exn))
+     (debug:print 0 *default-log-port* "------------------------------")
      (vector #f (vector exn call-chain dat))) ;; return some stuff for debug if an exception happens
    (if (not (vector? dat))                    ;; it is an error to not receive a vector
        (vector #f #f "remote must be called with a vector")       
@@ -296,4 +299,3 @@
     ;;      res 
     ;;      (list "ERROR, not string, list, number or boolean" 1 cmd params res)))))
     (db:obj->string res transport: 'http)))
-

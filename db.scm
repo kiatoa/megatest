@@ -144,9 +144,12 @@
     (handle-exceptions
      exn
      (begin
+       (debug:print 0 *default-log-port* "------------------------------")
        (print-call-chain (current-error-port))
        (debug:print-error 0 *default-log-port* "sqlite3 issue in db:with-db, dbstruct=" dbstruct ", run-id=" run-id ", proc=" proc ", params=" params " error: " ((condition-property-accessor 'exn 'message) exn))
        ;; there is no recovering at this time. exit
+       (set! *time-to-exit* #t)
+       (debug:print 0 *default-log-port* "------------------------------")
        (exit 50))
      (if use-mutex (mutex-lock! *db-with-db-mutex*))
      (let ((res (apply proc db params)))
@@ -351,9 +354,38 @@
                          (stack->list (dbr:dbstruct-dbstack dbstruct))))
               (mdb (db:dbdat-get-db (dbr:dbstruct-mtdb   dbstruct)))
               (rdb (db:dbdat-get-db (dbr:dbstruct-refndb dbstruct))))
-          (map sqlite3:finalize! tdbs)
-          (if mdb (sqlite3:finalize! mdb))
-          (if rdb (sqlite3:finalize! rdb))))))
+          (map
+           (lambda (db)
+             (handle-exception
+              exn
+              (begin
+                (debug:print 0 *default-log-port* "------------------------------")
+                (debug:print 0 *default-log-port* "EXCEPTION: stack db database finalize failed: "db)
+                (print-call-chain (current-error-port))
+                (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+                (debug:print 0 *default-log-port* "------------------------------"))
+              (sqlite3:finalize! db)))
+           tdbs)
+          
+          (handle-exception
+           exn
+           (begin
+             (debug:print 0 *default-log-port* "------------------------------")
+             (debug:print 0 *default-log-port* "EXCEPTION: mdb database finalize failed.")
+             (print-call-chain (current-error-port))
+             (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+             (debug:print 0 *default-log-port* "------------------------------"))
+           (if mdb (sqlite3:finalize! mdb)))
+
+          (handle-exception
+           exn
+           (begin
+             (debug:print 0 *default-log-port* "------------------------------")
+             (debug:print 0 *default-log-port* "EXCEPTION: rdb database finalize failed.")
+             (print-call-chain (current-error-port))
+             (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+             (debug:print 0 *default-log-port* "------------------------------"))
+           (if rdb (sqlite3:finalize! rdb)))))))
   
 ;;   (let ((locdbs (dbr:dbstruct-locdbs dbstruct)))
 ;;     (if (hash-table? locdbs)
@@ -1967,7 +1999,7 @@
 ;; input data is a list (state status count)
 ;;
 (define (db:update-run-stats dbstruct run-id stats)
-  ;; (mutex-lock! *db-transaction-mutex*)
+  (mutex-lock! *db-transaction-mutex*)
   (db:with-db
    dbstruct
    #f
@@ -1989,7 +2021,7 @@
 		 stats)))))
        (sqlite3:finalize! stmt1)
        (sqlite3:finalize! stmt2)
-       ;; (mutex-unlock! *db-transaction-mutex*)
+       (mutex-unlock! *db-transaction-mutex*)
        res))))
 
 (define (db:get-main-run-stats dbstruct run-id)
@@ -3187,7 +3219,7 @@
          (tl-test-id   (db:test-get-id tl-testdat)))
     (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
 	(db:general-call dbstruct 'set-test-start-time (list test-id)))
-    ;; (mutex-lock! *db-transaction-mutex*)
+    (mutex-lock! *db-transaction-mutex*)
     (db:with-db
      dbstruct #f #f
      (lambda (db)
@@ -3225,7 +3257,7 @@
                                                    (car all-curr-statuses))))
                        ;; (print "Setting toplevel to: " newstate "/" newstatus)
                        (db:test-set-state-status dbstruct run-id tl-test-id newstate newstatus #f)))))))
-         ;; (mutex-unlock! *db-transaction-mutex*)
+         (mutex-unlock! *db-transaction-mutex*)
          (if (and test-id state status (equal? status "AUTO")) 
              (db:test-data-rollup dbstruct run-id test-id status))
          tr-res)))))
