@@ -294,27 +294,25 @@
                       (for-each (lambda (dbitem)
                             (let* ((stringsplit (string-split (cadr dbitem)))
                                   (dbtype (string->symbol (car stringsplit)))
-                                  (dbinfo '())
-                                  (cred '()))
-                            
-                            (if (eqv? 'sqlite3 dbtype)
-                              ((set! dbinfo (cadr stringsplit))
-                              (set! cfgdb (dbi:open 'sqlite3 (cons (cons 'dbname dbinfo) '()) ))
-                              (db:initialize-main-db cfgdb)
-                              (db:initialize-run-id-db cfgdb)
-                              (set! res (cons (cons cfgdb dbinfo) res))))
-
-                            (if (eqv? 'pg dbtype)
-                              ((for-each 
-                                (lambda (x)
-                                  (if (not (eqv? (string->symbol x) dbtype))
-                                  (let* ((pair (string-split x ":")))
-                                    (if (not (eqv? pair '()))
-                                      (set! dbinfo (cons (cons (string->symbol (car pair)) (cadr pair)) dbinfo))))))
-                              stringsplit)
-                              (set! cfgdb (dbi:open dbtype dbinfo))
-                              (set! res (cons (cons cfgdb (alist-ref 'host dbinfo)) res))
-                              ))))
+                                  (dbpath (cadr stringsplit)))
+                            (case dbtype
+                              ((sqlite3) 
+                                (set! cfgdb (dbi:open dbtype (cons (cons 'dbname dbpath) '()) ))
+                                (db:initialize-main-db (dbi:db-conn cfgdb))
+                                (db:initialize-run-id-db (dbi:db-conn cfgdb))
+                                (set! res (cons (cons cfgdb dbpath) res)))
+                              ((pg)
+                                (let* ((dbinfo '()))
+                                  (for-each 
+                                    (lambda (x)
+                                      (if (not (eqv? (string->symbol x) dbtype))
+                                        (let* ((pair (string-split x ":")))
+                                          (if (not (eqv? pair '()))
+                                            (set! dbinfo (cons (cons (string->symbol (car pair)) (cadr pair)) dbinfo))))))
+                                  stringsplit)
+                                  (set! cfgdb (dbi:open dbtype dbinfo))
+                                  (set! res (cons (cons cfgdb (alist-ref 'host dbinfo)) res))
+                                  )))))
                       dblist)
                       (dbr:dbstruct-slave-dbs-set! dbstruct res)
                       )))
@@ -553,15 +551,15 @@
        (let ((db (dbi:open 'sqlite3 (cons (cons ('dbname dbpath) '())))))
 	 (cond
 	  ((equal? fname "megatest.db")
-	   (dbi:execute db "DELETE FROM tests WHERE state='DELETED';"))
+	   (sqlite3:executeute db "DELETE FROM tests WHERE state='DELETED';"))
 	  ((equal? fname "main.db")
-	   (dbi:execute db "DELETE FROM runs WHERE state='deleted';"))
+	   (sqlite3:executeute db "DELETE FROM runs WHERE state='deleted';"))
 	  ((string-match "\\d.db" fname)
-	   (dbi:execute db "UPDATE tests SET state='DELETED' WHERE state='DELETED';"))
+	   (sqlite3:executeute db "UPDATE tests SET state='DELETED' WHERE state='DELETED';"))
 	  ((equal? fname "monitor.db")
-	   (dbi:execute "DELETE FROM servers WHERE state LIKE 'defunct%';"))
+	   (sqlite3:executeute "DELETE FROM servers WHERE state LIKE 'defunct%';"))
 	  (else
-	   (dbi:execute db "vacuum;")))
+	   (sqlite3:executeute db "vacuum;")))
 	 
 	 (dbi:close db)
 	 #t))))))
@@ -676,19 +674,20 @@
 	    ;; first pass implementation, just insert all changed rows
 	    (for-each 
 	     (lambda (targdb)
-        (if (eqv? (dbi:db-dbtype (db:dbdat-get-db targdb)) 'pg)
+        (set! targdb (dbi:convert (db:dbdat-get-db targdb)))
+        (if (eqv? (dbi:db-dbtype targdb) 'pg)
           (let* ((prep ""))
             (for-each 
               (lambda (row)
                 (set! tabletypes (cons (cons (string->symbol (vector-ref row 1)) (vector-ref row 2)) tabletypes)))
               (dbi:pull-metadata (db:dbdat-get-db fromdb) tablename))
             (set! prep (string-intersperse (map (lambda (x) (alist-ref (string->symbol (car x)) tabletypes)) fields) ","))
-            (set! prep (conc "PREPARE full-ins (" prep ") AS INSERT OR REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) VALUES ( "))
+            (set! prep (conc "PREPARE fullins (" prep ") AS REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) VALUES ( "))
               (let loop ((i 1))
                   (set! prep (conc prep "$" i ","))
                 (if (< i (- num-fields 1))
                 (loop (+ i 1))
-                (set! prep (conc prep "$" (+ i 1) ")"))))
+                (set! prep (conc prep "$" (+ i 1) " );"))))
             (set! full-ins prep)))
 
 	       (let* ((db (dbi:convert (db:dbdat-get-db targdb)))
@@ -1068,7 +1067,7 @@
 	 (havekeys (> (length keys) 0))
 	 (keystr   (keys->keystr keys))
 	 (fieldstr (keys->key/field keys))
-	 (db       (dbi:convert (db:dbdat-get-db dbdat))))
+	 (db       (db:dbdat-get-db dbdat)))
     (for-each (lambda (key)
 		(let ((keyn key))
 		  (if (member (string-downcase keyn)
@@ -1078,14 +1077,14 @@
 			(print "ERROR: your key cannot be named " keyn " as this conflicts with the same named field in the runs table, you must remove your megatest.db and <linktree>/.db before trying again.")
 			(exit 1)))))
 	      keys)
-    (dbi:with-transaction
+    (sqlite3:with-transaction
      db
      (lambda ()
-       (dbi:exec db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
        (for-each (lambda (key)
-		   (dbi:exec db "INSERT OR REPLACE INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
+		   (sqlite3:execute db "INSERT OR REPLACE INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
 		 keys)
-       (dbi:exec db (conc 
+       (sqlite3:execute db (conc 
 			    "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, \n			 " 
 			    fieldstr (if havekeys "," "") "
 			 runname    TEXT DEFAULT 'norun',
@@ -1098,26 +1097,26 @@
 			 pass_count INTEGER DEFAULT 0,
                          last_update INTEGER DEFAULT (strftime('%s','now')),
 			 CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
-       (dbi:exec db "CREATE TRIGGER IF NOT EXISTS update_runs_trigger AFTER UPDATE ON runs
+       (sqlite3:execute db "CREATE TRIGGER IF NOT EXISTS update_runs_trigger AFTER UPDATE ON runs
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE runs SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-       (dbi:exec db "CREATE TABLE IF NOT EXISTS run_stats (
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS run_stats (
                               id     INTEGER PRIMARY KEY,
                               run_id INTEGER,
                               state  TEXT,
                               status TEXT,
                               count  INTEGER,
                               last_update INTEGER DEFAULT (strftime('%s','now')))")
-       (dbi:exec db "CREATE TRIGGER  IF NOT EXISTS update_run_stats_trigger AFTER UPDATE ON run_stats
+       (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_run_stats_trigger AFTER UPDATE ON run_stats
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE run_stats SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-       (dbi:exec db "CREATE TABLE IF NOT EXISTS test_meta (
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (
                                      id          INTEGER PRIMARY KEY,
                                      testname    TEXT DEFAULT '',
                                      author      TEXT DEFAULT '',
@@ -1130,7 +1129,7 @@
                                      tags        TEXT DEFAULT '',
                                      jobgroup    TEXT DEFAULT 'default',
                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
-       (dbi:exec db "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
                                 action TEXT DEFAULT '',
                                 owner TEXT,
                                 state TEXT DEFAULT 'new',
@@ -1142,7 +1141,7 @@
                                 creation_time TIMESTAMP DEFAULT (strftime('%s','now')),
                                 execution_time TIMESTAMP);")
        ;; archive disk areas, cached info from [archive-disks]
-       (dbi:exec db "CREATE TABLE IF NOT EXISTS archive_disks (
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archive_disks (
                                 id INTEGER PRIMARY KEY,
                                 archive_area_name TEXT,
                                 disk_path TEXT,
@@ -1150,7 +1149,7 @@
                                 last_df_time TIMESTAMP DEFAULT (strftime('%s','now')),
                                 creation_time TIMESTAMP DEFAULT (strftime('%','now')));")
        ;; individual bup (or tar) data chunks
-       (dbi:exec db "CREATE TABLE IF NOT EXISTS archive_blocks (
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archive_blocks (
                                 id INTEGER PRIMARY KEY,
                                 archive_disk_id INTEGER,
                                 disk_path TEXT,
@@ -1160,23 +1159,23 @@
        ;; tests allocated to what chunks. reusing a chunk for a test/item_path is very efficient
        ;; NB// the per run/test recording of where the archive is stored is done in the test
        ;;      record. 
-       (dbi:exec db "CREATE TABLE IF NOT EXISTS archive_allocations (
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archive_allocations (
                                 id INTEGER PRIMARY KEY,
                                 archive_block_id INTEGER,
                                 testname TEXT,
                                 item_path TEXT,
                                 creation_time TIMESTAMP DEFAULT (strftime('%','now')));")
        ;; move this clean up call somewhere else
-       (dbi:exec db "DELETE FROM tasks_queue WHERE state='done' AND creation_time < ?;" (- (current-seconds)(* 24 60 60))) ;; remove older than 24 hrs
-       (dbi:exec db (conc "CREATE INDEX IF NOT EXISTS runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
+       (sqlite3:execute db "DELETE FROM tasks_queue WHERE state='done' AND creation_time < ?;" (- (current-seconds)(* 24 60 60))) ;; remove older than 24 hrs
+       (sqlite3:execute db (conc "CREATE INDEX IF NOT EXISTS runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
        ;; (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
-       (dbi:exec db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
-       (dbi:exec db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
                                   CONSTRAINT metadat_constraint UNIQUE (var));")
-       (dbi:exec db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
        ;; Must do this *after* running patch db !! No more. 
        ;; cannot use db:set-var since it will deadlock, hardwire the code here
-       (dbi:exec db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" "MEGATEST_VERSION" (common:version-signature))
+       (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" "MEGATEST_VERSION" (common:version-signature))
        (debug:print-info 11 *default-log-port* "db:initialize END")))))
 
 ;;======================================================================
@@ -1184,11 +1183,10 @@
 ;;======================================================================
 
 (define (db:initialize-run-id-db db)
-  (set! db (dbi:convert db))
-  (dbi:with-transaction 
+  (sqlite3:with-transaction 
    db
    (lambda ()
-     (dbi:exec db "CREATE TABLE IF NOT EXISTS tests 
+     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tests 
                     (id INTEGER PRIMARY KEY,
                      run_id       INTEGER   DEFAULT -1,
                      testname     TEXT      DEFAULT 'noname',
@@ -1212,14 +1210,14 @@
                      archived     INTEGER   DEFAULT 0, -- 0=no, > 1=archive block id where test data can be found
                      last_update  INTEGER DEFAULT (strftime('%s','now')),
                         CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path));")
-     (dbi:exec db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path);")
-     (dbi:exec db "CREATE TRIGGER  IF NOT EXISTS update_tests_trigger AFTER UPDATE ON tests
+     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path);")
+     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_tests_trigger AFTER UPDATE ON tests
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE tests SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-     (dbi:exec db "CREATE TABLE IF NOT EXISTS test_steps 
+     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
                               (id INTEGER PRIMARY KEY,
                                test_id INTEGER, 
                                stepname TEXT, 
@@ -1230,14 +1228,14 @@
                                logfile TEXT DEFAULT '',
                                last_update  INTEGER DEFAULT (strftime('%s','now')),
                                CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
-     (dbi:exec db "CREATE INDEX IF NOT EXISTS teststeps_index ON tests (run_id, testname, item_path);")
-     (dbi:exec db "CREATE TRIGGER  IF NOT EXISTS update_teststeps_trigger AFTER UPDATE ON test_steps
+     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS teststeps_index ON tests (run_id, testname, item_path);")
+     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_teststeps_trigger AFTER UPDATE ON test_steps
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE test_steps SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-     (dbi:exec db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
+     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
                                 test_id INTEGER,
                                 category TEXT DEFAULT '',
                                 variable TEXT,
@@ -1250,14 +1248,14 @@
                                 type TEXT DEFAULT '',
                                 last_update  INTEGER DEFAULT (strftime('%s','now')),
                               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
-     (dbi:exec db "CREATE INDEX IF NOT EXISTS test_data_index ON test_data (test_id);")
-     (dbi:exec db "CREATE TRIGGER  IF NOT EXISTS update_test_data_trigger AFTER UPDATE ON test_data
+     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS test_data_index ON test_data (test_id);")
+     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_test_data_trigger AFTER UPDATE ON test_data
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE test_data SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-     (dbi:exec db "CREATE TABLE IF NOT EXISTS test_rundat (
+     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_rundat (
                               id           INTEGER PRIMARY KEY,
                               test_id      INTEGER,
                               update_time  TIMESTAMP,
@@ -1265,7 +1263,7 @@
                               diskfree     INTEGER DEFAULT -1,
                               diskusage    INTGER DEFAULT -1,
                               run_duration INTEGER DEFAULT 0);")
-     (dbi:exec db "CREATE TABLE IF NOT EXISTS archives (
+     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archives (
                               id           INTEGER PRIMARY KEY,
                               test_id      INTEGER,
                               state        TEXT DEFAULT 'new',
