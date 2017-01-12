@@ -33,8 +33,9 @@
 ;; if a server is either running or in the process of starting call client:setup
 ;; else return #f to let the calling proc know that there is no server available
 ;;
-(define (rmt:get-connection-info run-id)
-  (let ((cinfo (remote-conndat *runremote*)))
+(define (rmt:get-connection-info areapath) ;; TODO: push areapath down.
+  (let ((cinfo (remote-conndat *runremote*))
+        (run-id 0))
     (if cinfo
 	cinfo
 	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)
@@ -76,7 +77,7 @@
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  1")
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; ensure we have a homehost record
-     ((not (pair? (remote-hh-dat *runremote*)))  ;; have a homehost record?
+     ((not (pair? (remote-hh-dat *runremote*)))  ;; not on homehost
       (thread-sleep! 0.1) ;; since we shouldn't get here, delay a little
       (remote-hh-dat-set! *runremote* (common:get-homehost))
       (mutex-unlock! *rmt-mutex*)
@@ -116,43 +117,60 @@
      ;;  (rmt:open-qry-close-locally cmd 0 params))
 
      
-     ;; no server contact made and this is a write, passively start a server 
-     ((and (not (remote-server-url *runremote*))
+     ;;  on homehost, no server contact made and this is a write, passively start a server 
+     ((and (cdr (remote-hh-dat *runremote*)) ; new
+           (not (remote-server-url *runremote*))
 	   (not (member cmd api:read-only-queries)))
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5")
-      (let ((serverconn (server:read-dotserver *toppath*))) ;; (server:check-if-running *toppath*))) ;; Do NOT want to run server:check-if-running - very expensive to do for every write call
-	(if serverconn
-	    (remote-server-url-set! *runremote* serverconn) ;; the string can be consumed by the client setup if needed
+      (let ((server-url (server:read-dotserver->url *toppath*))) ;; (server:check-if-running *toppath*))) ;; Do NOT want to run server:check-if-running - very expensive to do for every write call
+	(if server-url
+	    (remote-server-url-set! *runremote* server-url) ;; the string can be consumed by the client setup if needed
 	    (if (not (server:start-attempted? *toppath*))
 		(server:kind-run *toppath*))))
-      (if (cdr (remote-hh-dat *runremote*)) ;; we are on the homehost, just do the call
-          (begin
-            (mutex-unlock! *rmt-mutex*)
-	    (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5.1")
-            (rmt:open-qry-close-locally cmd 0 params))
-          (begin                            ;; not on homehost, start server and wait
-            (mutex-unlock! *rmt-mutex*)
-	    (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5.2")
-	    (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
-            (rmt:send-receive cmd rid params attemptnum: attemptnum))))
+             (mutex-unlock! *rmt-mutex*)
+             (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5.1")
+             (rmt:open-qry-close-locally cmd 0 params))
+
+
+
+     ;;;
+           ;;     (begin                            ;; not on homehost, start server and wait
+            ;; (mutex-unlock! *rmt-mutex*)
+	    ;; (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5.2")
+	    ;; (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
+            ;; (rmt:send-receive cmd rid params attemptnum: attemptnum))   ;)  ;)
+;;;;
+     
      ;; if not on homehost ensure we have a connection to a live server
      ;; NOTE: we *have* a homehost record by now
-     ((and (not (cdr (remote-hh-dat *runremote*)))        ;; are we on a homehost?
+
+     ;; ((and (not (cdr (remote-hh-dat *runremote*)))        ;; not on a homehost 
+     ;;       (not (remote-conndat *runremote*))             ;; and no connection
+     ;;       (server:read-dotserver *toppath*))             ;; .server file exists
+     ;;  ;; something caused the server entry in tdb to disappear, but the server is still running
+     ;;  (server:remove-dotserver-file *toppath* ".*")
+     ;;  (mutex-unlock! *rmt-mutex*)
+     ;;  (debug:print-info 12 *default-log-port* "rmt:send-receive, case  20")
+     ;;  (rmt:send-receive cmd rid params attemptnum: (add1 attemptnum)))
+
+     ((and (not (cdr (remote-hh-dat *runremote*)))        ;; not on a homehost 
            (not (remote-conndat *runremote*)))            ;; and no connection
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  6  hh-dat: " (remote-hh-dat *runremote*) " conndat: " (remote-conndat *runremote*))
       (mutex-unlock! *rmt-mutex*)
       (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
-      (remote-conndat-set! *runremote* (rmt:get-connection-info 0)) ;; calls client:setup which calls client:setup-http
-      (rmt:send-receive cmd rid params attemptnum: attemptnum))
+      (remote-conndat-set! *runremote* (rmt:get-connection-info *toppath*)) ;; calls client:setup which calls client:setup-http
+      (rmt:send-receive cmd rid params attemptnum: attemptnum)) ;; TODO: add back-off timeout as
      ;; all set up if get this far, dispatch the query
      ((cdr (remote-hh-dat *runremote*)) ;; we are on homehost
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  7")
       (rmt:open-qry-close-locally cmd (if rid rid 0) params))
+
      ;; not on homehost, do server query
      (else
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9")
+      (mutex-lock! *rmt-mutex*)
       (let* ((conninfo (remote-conndat *runremote*))
 	     (dat      (case (remote-transport *runremote*)
 			 ((http) (condition-case ;; handling here has caused a lot of problems. However it is needed to deal with attemtped communication to servers that have gone away
@@ -165,40 +183,44 @@
 	     (success  (if (vector? dat) (vector-ref dat 0) #f))
 	     (res      (if (vector? dat) (vector-ref dat 1) #f)))
 	(if (vector? conninfo)(http-transport:server-dat-update-last-access conninfo)) ;; refresh access time
-        (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat)
+	;; (mutex-unlock! *rmt-mutex*)
+        (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat " *runremote* = "*runremote*)
 	(if success
 	    (case (remote-transport *runremote*)
-	      ((http) res)
+	      ((http)
+	       (mutex-unlock! *rmt-mutex*)
+	       res)
 	      (else
 	       (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " is unknown")
+	       (mutex-unlock! *rmt-mutex*)
 	       (exit 1)))
 	    (begin
 	      (debug:print 0 *default-log-port* "WARNING: communication failed. Trying again, try num: " attemptnum)
 	      (remote-conndat-set!    *runremote* #f)
 	      (remote-server-url-set! *runremote* #f)
               (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
+	      (mutex-unlock! *rmt-mutex*)
 	      (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))))))))
 
-(define (rmt:update-db-stats run-id rawcmd params duration)
-  (mutex-lock! *db-stats-mutex*)
-  (handle-exceptions
-   exn
-   (begin
-     (debug:print 0 *default-log-port* "WARNING: stats collection failed in update-db-stats")
-     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-     (print "exn=" (condition->list exn))
-     #f) ;; if this fails we don't care, it is just stats
-   (let* ((cmd      (conc "run-id=" run-id " " (if (eq? rawcmd 'general-call) (car params) rawcmd)))
-	  (stat-vec (hash-table-ref/default *db-stats* cmd #f)))
-     (if (not (vector? stat-vec))
-	 (let ((newvec (vector 0 0)))
-	   (hash-table-set! *db-stats* cmd newvec)
-	   (set! stat-vec newvec)))
-     (vector-set! stat-vec 0 (+ (vector-ref stat-vec 0) 1))
-     (vector-set! stat-vec 1 (+ (vector-ref stat-vec 1) duration))))
-  (mutex-unlock! *db-stats-mutex*))
-
+;; (define (rmt:update-db-stats run-id rawcmd params duration)
+;;   (mutex-lock! *db-stats-mutex*)
+;;   (handle-exceptions
+;;    exn
+;;    (begin
+;;      (debug:print 0 *default-log-port* "WARNING: stats collection failed in update-db-stats")
+;;      (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+;;      (print "exn=" (condition->list exn))
+;;      #f) ;; if this fails we don't care, it is just stats
+;;    (let* ((cmd      (conc "run-id=" run-id " " (if (eq? rawcmd 'general-call) (car params) rawcmd)))
+;; 	  (stat-vec (hash-table-ref/default *db-stats* cmd #f)))
+;;      (if (not (vector? stat-vec))
+;; 	 (let ((newvec (vector 0 0)))
+;; 	   (hash-table-set! *db-stats* cmd newvec)
+;; 	   (set! stat-vec newvec)))
+;;      (vector-set! stat-vec 0 (+ (vector-ref stat-vec 0) 1))
+;;      (vector-set! stat-vec 1 (+ (vector-ref stat-vec 1) duration))))
+;;   (mutex-unlock! *db-stats-mutex*))
 
 (define (rmt:print-db-stats)
   (let ((fmtstr "~40a~7-d~9-d~20,2-f")) ;; "~20,2-f"
@@ -486,8 +508,8 @@
 ;; (define (rmt:delete-test-step-records run-id test-id)
 ;;   (rmt:send-receive 'delete-test-step-records run-id (list run-id test-id)))
 
-(define (rmt:test-set-status-state run-id test-id status state msg)
-  (rmt:send-receive 'test-set-status-state run-id (list run-id test-id status state msg)))
+(define (rmt:test-set-state-status run-id test-id state status msg)
+  (rmt:send-receive 'test-set-state-status run-id (list run-id test-id state status msg)))
 
 (define (rmt:test-toplevel-num-items run-id test-name)
   (rmt:send-receive 'test-toplevel-num-items run-id (list run-id test-name)))
@@ -550,8 +572,8 @@
 
 ;; state and status are extra hints not usually used in the calculation
 ;;
-(define (rmt:roll-up-pass-fail-counts run-id test-name item-path state status comment)
-  (rmt:send-receive 'roll-up-pass-fail-counts run-id (list run-id test-name item-path state status comment)))
+(define (rmt:set-state-status-and-roll-up-items run-id test-name item-path state status comment)
+  (rmt:send-receive 'set-state-status-and-roll-up-items run-id (list run-id test-name item-path state status comment)))
 
 (define (rmt:update-pass-fail-counts run-id test-name)
   (rmt:general-call 'update-pass-fail-counts run-id test-name test-name test-name))

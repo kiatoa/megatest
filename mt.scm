@@ -130,8 +130,8 @@
 ;;  T R I G G E R S
 ;;======================================================================
 
-(define (mt:process-triggers run-id test-id newstate newstatus)
-  (let* ((test-dat      (rmt:get-test-info-by-id run-id test-id)))
+(define (mt:process-triggers dbstruct run-id test-id newstate newstatus)
+  (let* ((test-dat      (db:get-test-info-by-id dbstruct run-id test-id)))
     (if test-dat
 	(let* ((test-rundir   ;; (rmt:sdb-qry 'getstr ;; (filedb:get-path *fdb*
 		(db:test-get-rundir test-dat)) ;; ) ;; )
@@ -188,14 +188,14 @@
 	;;  (if newstate   (rmt:general-call 'set-test-state   run-id newstate   test-id))
 	;;  (if newstatus  (rmt:general-call 'set-test-status  run-id newstatus  test-id))
 	;;  (if newcomment (rmt:general-call 'set-test-comment run-id newcomment test-id))))
-	(rmt:roll-up-pass-fail-counts run-id test-id #f newstate newstatus newcomment)
-	(mt:process-triggers run-id test-id newstate newstatus)
+	(rmt:set-state-status-and-roll-up-items run-id test-id #f newstate newstatus newcomment)
+	;; (mt:process-triggers run-id test-id newstate newstatus)
 	#t)))
 
 (define (mt:test-set-state-status-by-testname run-id test-name item-path new-state new-status new-comment)
   (let ((test-id (rmt:get-test-id run-id test-name item-path)))
-    (rmt:roll-up-pass-fail-counts run-id test-name item-path new-state new-status new-comment)
-    (mt:process-triggers run-id test-id new-state new-status)
+    (rmt:set-state-status-and-roll-up-items run-id test-name item-path new-state new-status new-comment)
+    ;; (mt:process-triggers run-id test-id new-state new-status)
     #t))
 	;;(mt:test-set-state-status-by-id run-id test-id new-state new-status new-comment)))
 

@@ -10,7 +10,7 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest directory-utils)
+(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest directory-utils posix-extras)
 ;; (use zmq)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
@@ -51,12 +51,12 @@
 (define (server:launch run-id transport-type)
   ;;(BB> "server:launch fired for run-id="run-id" transport-type="transport-type)
 
-  (let ((attempt-in-progress (server:start-attempted? *toppath*)))
+  (let ((attempt-in-progress (server:start-attempted? *toppath*))) ; check for .server-starting
     (when attempt-in-progress
       (debug:print-info 0 *default-log-port* "Server start attempt in progress in other process (=> "attempt-in-progress"<=).  Aborting server launch attempt in this process ("(current-process-id)")")
       (exit)))
       
-  (let ((dotserver-url (server:check-if-running *toppath*)))
+  (let ((dotserver-url (server:check-if-running *toppath*))) ;; check for .server  
     (when dotserver-url
       (debug:print-info 0 *default-log-port* "Server already running (=> "dotserver-url"<=).  Aborting server launch attempt in this process ("(current-process-id)")")
       (exit)
@@ -66,7 +66,12 @@
     ((http)(http-transport:launch run-id))
     ;;((nmsg)(nmsg-transport:launch run-id))
     ((rpc)  (rpc-transport:launch run-id))
-    (else (debug:print-error 0 *default-log-port* "unknown server type " transport-type))))
+    (else (debug:print-error 0 *default-log-port* "unknown server type " transport-type)))
+
+  ;; is this a good place to print server exit stats?
+  (debug:print 0 "SERVER: max parallel api requests: " *max-api-process-requests*)
+  
+  )
 ;;       (else   (debug:print-error 0 *default-log-port* "No known transport set, transport=" transport ", using rpc")
 ;; 	      (rpc-transport:launch run-id)))))
 
@@ -204,24 +209,42 @@
        (server:complete-attempt areapath)
        #f)
       (else #f)))))
-    
+
 (define (server:read-dotserver areapath)
   (let ((dotfile (conc areapath "/.server")))
     (handle-exceptions
      exn
      #f  ;; if things go wrong pretend we can't see the file
-     (if (and (file-exists? dotfile)
-	      (file-read-access? dotfile))
-	 (with-input-from-file
-	     dotfile
-	   (lambda ()
-	     (read-line)))
-	 #f))))
+     (cond
+      ((not (file-exists? dotfile))
+       #f)
+      ((not (file-read-access? dotfile))
+       #f)
+      ((> (server:dotserver-age-seconds areapath) (+ 5 (server:get-timeout)))
+       (server:remove-dotserver-file areapath ".*")
+       #f)
+      (else
+       (let* ((line
+               (with-input-from-file
+                   dotfile
+                 (lambda ()
+                   (read-line))))
+              (tokens (if (string? line) (string-split line ":") #f)))
+         (cond
+          ((eq? 4 (length tokens))
+           tokens)
+          (else #f))))))))
+       
+(define (server:read-dotserver->url areapath)
+  (let ((dotserver-tokens (server:read-dotserver areapath)))
+    (if dotserver-tokens
+        (conc (list-ref dotserver-tokens 0) ":" (list-ref dotserver-tokens 1))
+        #f)))
 
 ;; write a .server file in *toppath* with hostport
 ;; return #t on success, #f otherwise
 ;;
-(define (server:write-dotserver areapath hostport)
+(define (server:write-dotserver areapath host port pid transport)
   (let ((lock-file   (conc areapath "/.server.lock"))
 	(server-file (conc areapath "/.server")))
     (if (common:simple-file-lock lock-file)
@@ -230,18 +253,59 @@
 		    #f ;; failed for some reason, for the moment simply return #f
 		    (with-output-to-file server-file
 		      (lambda ()
-			(print hostport)))
+			(print (conc host ":" port ":" pid ":" transport))))
 		    #t)))
-	  (debug:print-info 0 *default-log-port* "server file " server-file " for " hostport " created")
+	  (debug:print-info 0 *default-log-port* "server file " server-file " for " host ":" port " created pid="pid)
 	  (common:simple-file-release-lock lock-file)
 	  res)
 	#f)))
 
+
+;; this will check that the .server file present matches the server calling this procedure.
+;; if parameters match (this-pid and transport) the file will be touched and #t returned
+;; otherwise #f will be returned.
+(define (server:confirm-dotserver areapath this-iface this-port this-pid this-transport)
+  (let* ((tokens (server:read-dotserver areapath)))
+    (cond
+     ((not tokens)
+      (debug:print-info 0 *default-log-port* "INFO: .server file does not exist.")
+      #f)
+     ((not (eq? 4 (length tokens)))
+      (debug:print-info 0 *default-log-port* "INFO: .server file is corrupt.  There are not 4 tokens as expeted; there are "(length tokens)".")
+      #f)
+     ((not (equal? this-iface (list-ref tokens 0)))
+      (debug:print-info 0 *default-log-port* "INFO: .server file mismatch.  for iface, server has value >"(list-ref tokens 0)"< but this server's value is >"this-iface"<")
+      #f)
+     ((not (equal? (->string this-port)  (list-ref tokens 1)))
+      (debug:print-info 0 *default-log-port* "INFO: .server file mismatch.  for port, .server has value >"(list-ref tokens 1)"< but this server's value is >"(->string this-port)"<")
+      #f)
+     ((not (equal? (->string this-pid)   (list-ref tokens 2)))
+      (debug:print-info 0 *default-log-port* "INFO: .server file mismatch.  for pid, .server has value >"(list-ref tokens 2)"< but this server's value is >"(->string this-pid)"<")
+      #f)
+     ((not (equal? (->string this-transport) (->string (list-ref tokens 3))))
+      (debug:print-info 0 *default-log-port* "INFO: .server file mismatch.  for transport, .server has value >"(list-ref tokens 3)"< but this server's value is >"this-transport"<")
+      #f)
+     (else (server:touch-dotserver areapath)
+      #t))))
+
+(define (server:touch-dotserver areapath)
+  (let ((server-file (conc areapath "/.server")))
+    (change-file-times server-file (current-seconds) (current-seconds))))
+
+(define (server:dotserver-age-seconds areapath)
+  (let ((server-file (conc areapath "/.server")))
+    (begin
+      (handle-exceptions
+       exn
+       #f
+       (- (current-seconds)
+          (file-modification-time server-file))))))
+    
 (define (server:remove-dotserver-file areapath hostport)
-  (let ((dotserver   (server:read-dotserver areapath))
+  (let ((dotserver-url   (server:read-dotserver->url areapath))
 	(server-file (conc areapath "/.server"))
 	(lock-file   (conc areapath "/.server.lock")))
-    (if (and dotserver (string-match (conc ".*:" hostport "$") dotserver)) ;; port matches, good enough info to decide to remove the file
+    (if (and dotserver-url (string-match (conc ".*:" hostport "$") dotserver-url)) ;; port matches, good enough info to decide to remove the file
 	(if (common:simple-file-lock lock-file)
 	    (begin
 	      (handle-exceptions
@@ -249,19 +313,21 @@
 	       #f
 	       (delete-file* server-file))
 	      (debug:print-info 0 *default-log-port* "server file " server-file " for " hostport " removed")
-	      (common:simple-file-release-lock lock-file))))))
+	      (common:simple-file-release-lock lock-file))
+            (debug:print-info 0 *default-log-port* "server file " server-file " for " hostport " NOT removed - could not get lock."))
+        (debug:print-info 0 *default-log-port* "server file " server-file " for " hostport " NOT removed - dotserver-url("dotserver-url") did not match hostport pattern ("hostport")"))))
 
 ;; no longer care if multiple servers are started by accident. older servers will drop off in time.
 ;;
 (define (server:check-if-running areapath)
-  (let* ((dotserver (server:read-dotserver areapath))) ;; tdbdat (tasks:open-db)))
-    (if dotserver
+  (let* ((dotserver-url (server:read-dotserver->url areapath))) ;; tdbdat (tasks:open-db)))
+    (if dotserver-url
 	(let* ((res (case *transport-type*
-		      ((http)(server:ping-server dotserver))
+		      ((http)(server:ping-server dotserver-url))
 		      ;; ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
 		      )))
 	  (if res
-	      dotserver
+	      dotserver-url
 	      (begin
                 (server:remove-dotserver-file areapath ".*") ;; remove stale dotserver
                 #f)))
@@ -274,7 +340,7 @@
 ;;
 (define (server:ping host-port-in #!key (do-exit #f))
   (let ((host:port (if (not host-port-in) ;; use read-dotserver to find
-		       (server:read-dotserver *toppath*)
+		       (server:read-dotserver->url *toppath*)
 		       (if (number? host-port-in) ;; we were handed a server-id
 			   (let ((srec (tasks:get-server-by-id (db:delay-if-busy (tasks:open-db)) host-port-in)))
 			     ;; (print "srec: " srec " host-port-in: " host-port-in)
