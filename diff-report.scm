@@ -15,7 +15,7 @@
 
 ;; TODO:dashboard not on homehost message exit
 
-
+(use matchable)
 (define (tests-mindat->hash tests-mindat)
   (let* ((res (make-hash-table)))
     (for-each
@@ -117,7 +117,6 @@
       (if hide-clean
           (filter
            (lambda (item)
-             ;;(print item)
              (not
               (equal?
                "CLEAN"
@@ -126,13 +125,12 @@
           res))))
 
 (define (run-name->run-id runname)
-  (let* ((qry-res (rmt:get-runs runname 1 0 '())))
-    (if (eq? 2 (vector-length qry-res))
-        (vector-ref (car (vector-ref qry-res 1)) 1)
-        #f)))
-
-
-
+  (if (number? runname)
+      runname
+      (let* ((qry-res (rmt:get-runs runname 1 0 '())))
+        (if (eq? 2 (vector-length qry-res))
+            (vector-ref (car (vector-ref qry-res 1)) 1)
+            #f))))
 
 (define (run-name->tests-mindat runname)
   (let* ((run-id (run-name->run-id runname))
@@ -151,40 +149,54 @@
          (last-update 0)
          (mode #f)
          )
-    (print run-id)
     (map
+     ;; (lambda (row)
+     ;;   (match row
+     ;;     ((#(id test-name item-path state status)
+     ;;       (list test-name item-path (list id state status))))
+     ;;     (else #f)))
      (lambda (row)
        (let* ((id        (vector-ref row 0))
               (test-name  (vector-ref row 1))
               (item-path (vector-ref row 2))
               (state     (vector-ref row 3))
               (status    (vector-ref row 4)))
-         ;;(hash-table-set! ht (cons testname item_path) (list id state status))
-         (list test-name item-path (list id state status))
-         ;;(print testname id))
-       ))
+             (list test-name item-path (list id state status))))
+     
      (rmt:get-tests-for-run run-id
                             testpatt states statuses
                             offset limit
                             not-in sort-by sort-order
                             qryvals
                             last-update
-                            mode))
-    ;(print (rmt:get-tests-for-run run-id testpatt  states statuses offset limit not-in "%" "%" #f "id,testname,testpath,state,status" 0 'normal))
-    ;(print run-id)
-
-    ))
-
-(print (run-name->tests-mindat "all60"))
+                            mode))))
 
 
+(define (diff-runs run1 run2)
+  (let* ((src-tests-mindat  (run-name->tests-mindat run1))
+         (dest-tests-mindat (run-name->tests-mindat run2)))
+    (xor-tests-mindat src-tests-mindat dest-tests-mindat)));; #!key (hide-c
 
-(let* ((src-tests-mindat  (run-name->tests-mindat "all57"))
-       (dest-tests-mindat (run-name->tests-mindat "all60")))
-  (print (xor-tests-mindat src-tests-mindat dest-tests-mindat)));; #!key (hide-clean #f))
 
-;;(exit)
+(define (rundiff-find-by-state run-diff state)
+    (filter
+     (lambda (x)
+       (equal? (list-ref (caddr x) 1) state))
+     run-diff))
 
-;;EOF
+  
+(define (summarize-run-diff run-diff)
+  (let* ((diff-states (list "CLEAN" "DIRTY-BETTER" "DIRTY-WORSE" "BOTH-BAD" "DIFF-MISSING" "DIFF-NEW" )))
+    (for-each
+     (lambda (state)
+       (print "state="state "; "
+              (length (rundiff-find-by-state run-diff state))))
+     diff-states)))
+
+     
+(let* ((run-diff (diff-runs "all57" "all60"))
+       (diff-summary (summarize-run-diff run-diff)))
+  (pretty-print diff-summary))
 
          
+;;  (match de (  (test-name test-path ( test-id "BOTH-BAD" test-status))   test-path) (else #f))
