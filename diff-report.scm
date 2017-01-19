@@ -15,7 +15,6 @@
 
 ;; TODO:dashboard not on homehost message exit
 
-(use matchable)
 (define (tests-mindat->hash tests-mindat)
   (let* ((res (make-hash-table)))
     (for-each
