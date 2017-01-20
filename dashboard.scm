@@ -527,7 +527,7 @@ Misc
                 100)))
 	 (states      (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
 	 (statuses    (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)))
-         (do-not-use-db-file-timestamps #t) ;; (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")) ;; this still hosts runs-summary-tab
+         (do-not-use-db-file-timestamps #f) ;; (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")) ;; this still hosts runs-summary-tab
          (do-not-use-query-timestamps   #t) ;; (configf:lookup *configdat* "setup" "do-not-use-query-timestamps")) ;; this no longer troubles runs-summary-tab
 	 (sort-info   (get-curr-sort))
 	 (sort-by     (vector-ref sort-info 1))
@@ -554,7 +554,7 @@ Misc
 			    (dboard:rundat-db-path-set! run-dat db-pth)
 			    db-pth)))
 	 (tmptests    (if (or do-not-use-db-file-timestamps
-			      (>=  (common:lazy-modification-time db-path) last-update))
+			      (>=  (common:lazy-sqlite-db-modification-time db-path) last-update))
                           (db:dispatch-query access-mode rmt:get-tests-for-run db:get-tests-for-run
                                              run-id testnamepatt states statuses  ;; run-id testpatt states statuses
                                              (dboard:rundat-run-data-offset run-dat)
@@ -2694,7 +2694,7 @@ Misc
   
 (define *tim* (iup:timer))
 (define *ord* #f)
-(iup:attribute-set! *tim* "TIME" 300)
+(iup:attribute-set! *tim* "TIME" 300 )
 (iup:attribute-set! *tim* "RUN" "YES")
 
 (define *last-recalc-ended-time* 0)
