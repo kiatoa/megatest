@@ -30,6 +30,18 @@ echo "#!/bin/bash" > $target
 if [[ $cmd =~ dboard ]]; then
     cat >> $target <<'EOF'
 
+# disable if not running on homehost
+if [[ -e .homehost ]]; then
+  homehostname=$( host `cat .homehost` | awk '{print $NF}' | sed 's/\.$//' )
+  hostname=$( hostname -f )
+
+  if [[ ! ($homehostname == $hostname) ]]; then
+    echo "ERROR: this host ($hostname) is not the homehost ($homehostname) for this megatest run area.  Cannot start dashboard."
+    echo "       Please log into homehost before launching dashboard."
+    exit 1
+  fi
+fi
+
 # check that $DISPLAY is set
 if [[ -z $DISPLAY ]]; then
    echo 'ERROR: $DISPLAY environment variable is not set; megatest dashboard requires X display address to be set in $DISPLAY.'
