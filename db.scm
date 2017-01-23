@@ -682,14 +682,13 @@
                 (set! tabletypes (cons (cons (string->symbol (vector-ref row 1)) (vector-ref row 2)) tabletypes)))
               (dbi:pull-metadata (db:dbdat-get-db fromdb) tablename))
             (set! prep (string-intersperse (map (lambda (x) (alist-ref (string->symbol (car x)) tabletypes)) fields) ","))
-            (set! prep (conc "PREPARE fullins (" prep ") AS REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) VALUES ( "))
+            (set! prep (conc "PREPARE fullins (" prep ") AS INSERT INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) VALUES ( "))
               (let loop ((i 1))
                   (set! prep (conc prep "$" i ","))
                 (if (< i (- num-fields 1))
                 (loop (+ i 1))
                 (set! prep (conc prep "$" (+ i 1) " );"))))
             (set! full-ins prep)))
-
 	       (let* ((db (dbi:convert (db:dbdat-get-db targdb)))
 		      (stmth  (dbi:prepare db full-ins)))
 		 ;; (db:delay-if-busy targdb) ;; NO WAITING
