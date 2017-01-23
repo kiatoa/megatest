@@ -15,8 +15,7 @@ clean:
 	rm -f *.so *.import.scm test_ducttape test_example foo *.c *.o
 
 install:
-	echo tbd
-	/bin/false
+	chicken-install
 
 test:
 	chicken-install -no-install

@@ -1,12 +1,12 @@
 (module ducttape-lib
     (
      runs-ok
-     glib-debug-level
-     glib-debug-regex-filter
-     glib-silent-mode
-     glib-quiet-mode
-     glib-log-file
-     glib-color-mode
+     ducttape-debug-level
+     ducttape-debug-regex-filter
+     ducttape-silent-mode
+     ducttape-quiet-mode
+     ducttape-log-file
+     ducttape-color-mode
      iputs-preamble
      script-name
      idbg
@@ -21,8 +21,8 @@
      skim-cmdline-opts-withargs-by-regex 
      concat-lists
      process-command-line
-     glib-append-logfile
-     glib-activate-logfile
+     ducttape-append-logfile
+     ducttape-activate-logfile
      isys
      do-or-die
      counter-maker
@@ -55,7 +55,7 @@
   (define (toplevel-command sym proc) (lambda () #f))
 ;;;; utility procedures
 
-                                        ; begin credit: megatest's process.scm
+  ;; begin credit: megatest's process.scm
   (define (port->list fh )
     (if (eof-object? fh) #f
         (let loop ((curr (read-line fh))
@@ -70,7 +70,7 @@
       (if (not (eof-object? (peek-char port)))
           (loop (conc res (read-char port)))
           res)))
-                                        ; end credit: megatest's process.scm
+  ;; end credit: megatest's process.scm
 
   (define (counter-maker)
     (let ((acc 0))
@@ -98,8 +98,8 @@
             ;;Error: (process-wait) waiting for child process failed - No child processes: 10872
             (close-output-port outport)
             #f))))
-
-                                        ; weird - alist-ref changes signature csc vs. csi... explitly defining.
+  
+  ;; weird - alist-ref arg order changes signature csc vs. csi... explitly defining.
   (define (my-alist-ref key alist)
     (let ((res (assoc key alist)))
       (if res (cdr res) #f)))
@@ -213,51 +213,51 @@
 ;;; setup general_lib env var parameters
 
   ;; show warning/note/error/debug prefixes using ansi colors
-  (define glib-color-mode
-    (make-parameter (get-environment-variable "GLIB_COLORIZE")))
+  (define ducttape-color-mode
+    (make-parameter (get-environment-variable "DUCTTAPE_COLORIZE")))
 
   ;; if defined, has number value.  if number value > 0, show debug messages
   ;; value should be decremented in subshells -- idea is raising debug level will show debug messages deeper and deeper in process call stack
-  (define glib-debug-level
+  (define ducttape-debug-level
     (make-parameter
-     (let ( (raw-debug-level (get-environment-variable "GLIB_DEBUG_LEVEL")) )
+     (let ( (raw-debug-level (get-environment-variable "DUCTTAPE_DEBUG_LEVEL")) )
        (if raw-debug-level
            (let ((num-debug-level (runs-ok (string->number raw-debug-level))))
              (if (integer? num-debug-level)
                  (begin
                    (let ((new-num-debug-level (- num-debug-level 1)))
                      (if (> new-num-debug-level 0) ;; decrement
-                         (setenv "GLIB_DEBUG_LEVEL" (number->string new-num-debug-level))
-                         (unsetenv "GLIB_DEBUG_LEVEL")))
+                         (setenv "DUCTTAPE_DEBUG_LEVEL" (number->string new-num-debug-level))
+                         (unsetenv "DUCTTAPE_DEBUG_LEVEL")))
                    num-debug-level) ; it was set and > 0, mode is value
                  (begin
-                   (unsetenv "GLIB_DEBUG_LEVEL") ;; value was invalid, unset it
+                   (unsetenv "DUCTTAPE_DEBUG_LEVEL") ;; value was invalid, unset it
                    #f))) ; value was invalid, mode is f
            #f)))) ; var not set, mode is f
 
 
-  (define glib-debug-mode (if (glib-debug-level)  #t  #f))
+  (define ducttape-debug-mode (if (ducttape-debug-level)  #t  #f))
 
-  ;; glib-debug-regex-filter suppresses non-matching debug messages
-  (define glib-debug-regex-filter
+  ;; ducttape-debug-regex-filter suppresses non-matching debug messages
+  (define ducttape-debug-regex-filter
     (make-parameter
-     (let ((raw-debug-pattern (get-environment-variable "GLIB_DEBUG_PATTERN")))
+     (let ((raw-debug-pattern (get-environment-variable "DUCTTAPE_DEBUG_PATTERN")))
        (if raw-debug-pattern
            raw-debug-pattern
            "."))))
 
   ;; silent mode suppresses Note and Warning type messages
-  (define glib-silent-mode
-    (make-parameter (get-environment-variable "GLIB_SILENT_MODE")))
+  (define ducttape-silent-mode
+    (make-parameter (get-environment-variable "DUCTTAPE_SILENT_MODE")))
 
   ;; quiet mode suppresses Note type messages
-  (define glib-quiet-mode
-    (make-parameter (get-environment-variable "GLIB_QUIET_MODE")))
+  (define ducttape-quiet-mode
+    (make-parameter (get-environment-variable "DUCTTAPE_QUIET_MODE")))
 
   ;; if log file is defined, warning/note/error/debug messages are appended
   ;; to named logfile.
-  (define glib-log-file
-    (make-parameter (get-environment-variable "GLIB_LOG_FILE")))
+  (define ducttape-log-file
+    (make-parameter (get-environment-variable "DUCTTAPE_LOG_FILE")))
 
 
 
@@ -270,14 +270,14 @@
   (define (script-name)
     (car (reverse (string-split (car (argv)) "/"))))
 
-  (define (glib-timestamp)
+  (define (ducttape-timestamp)
     (rfc3339->string (time->rfc3339 (seconds->local-time))))
 
 
   (define (iputs-preamble msg-type #!optional (suppress-color #f))
     (let ((do-color (and
                      (not suppress-color)
-                     (glib-color-mode)
+                     (ducttape-color-mode)
                      (terminal-port? (current-error-port)))))
       (case msg-type
         ((note)
@@ -301,28 +301,28 @@
              "Debug:"
              )))))
 
-  (define (glib-append-logfile msg-type message #!optional (suppress-preamble #f))
+  (define (ducttape-append-logfile msg-type message #!optional (suppress-preamble #f))
     (let
         ((txt 
           (string-join 
            (list 
-            (glib-timestamp) 
+            (ducttape-timestamp) 
             (script-name)
             (if suppress-preamble
                 message
                 (string-join  (list (iputs-preamble msg-type #t) message) " ")))
            " | ")))
 
-      (if (glib-log-file)
+      (if (ducttape-log-file)
           (runs-ok
-           (call-with-output-file (glib-log-file)
+           (call-with-output-file (ducttape-log-file)
              (lambda (output-port)
                (format output-port "~A ~%" txt)
                )
              #:append))
           #t)))
 
-  (define (glib-activate-logfile #!optional (logfile #f))
+  (define (ducttape-activate-logfile #!optional (logfile #f))
     ;; from python ducttape-lib.py
                                         ; message = "START - pid=%d ppid=%d argv=(%s) pwd=%s user=%s host=%s"%(pid,ppid," ".join("'"+x+"'" for x in sys.argv),os.environ['PWD'],os.getenv('USER','nouser'),os.getenv('HOST','nohost') )
     (let ((pid (number->string (current-process-id)))
@@ -339,19 +339,19 @@
           (host (or (get-environment-variable "HOST") "nohost")))
       (if logfile
           (begin
-            (glib-log-file logfile)
-            (setenv "GLIB_LOG_FILE" (glib-log-file))))
-      (glib-append-logfile 'note (format #f "START - pid=~A ppid=~A argv=(~A) pwd=~A user=~A host=~A" pid ppid argv pwd user host) #t)))         
+            (ducttape-log-file logfile)
+            (setenv "DUCTTAPE_LOG_FILE" (ducttape-log-file))))
+      (ducttape-append-logfile 'note (format #f "START - pid=~A ppid=~A argv=(~A) pwd=~A user=~A host=~A" pid ppid argv pwd user host) #t)))         
 
   ;; immediately activate logfile (will be noop if logfile disabled)
-  (glib-activate-logfile)
+  (ducttape-activate-logfile)
 
   ;; log exit code
   (define (set-exit-handler)
     (let ((orig-exit-handler (exit-handler)))
       (exit-handler 
        (lambda (exitcode) 
-         (glib-append-logfile 'note (format #f "Exit ~A by sys.exit" exitcode) #t)
+         (ducttape-append-logfile 'note (format #f "Exit ~A by sys.exit" exitcode) #t)
          (orig-exit-handler exitcode)))))
   (set-exit-handler)
   
@@ -367,10 +367,10 @@
            (message (apply conc
                   (map ->string message-list))))
 
-      (glib-append-logfile 'dbg message)
-      (if (glib-debug-level)
-          (if (<= debug-level-threshold (glib-debug-level))
-              (if (string-search (glib-debug-regex-filter) message)
+      (ducttape-append-logfile 'dbg message)
+      (if (ducttape-debug-level)
+          (if (<= debug-level-threshold (ducttape-debug-level))
+              (if (string-search (ducttape-debug-regex-filter) message)
                   (begin 
                     (format (current-error-port) "~A ~A (~A)~%" (iputs-preamble 'dbg) message (script-name))))))))
 
@@ -378,15 +378,15 @@
     (let* ((message
             (apply conc
              (map ->string (cons message-first message-rest)))))
-      (glib-append-logfile 'err message)
+      (ducttape-append-logfile 'err message)
       (format (current-error-port) "~A ~A (~A)~%" (iputs-preamble 'err) message (script-name))))
 
   (define (iwarn message-first  . message-rest)
     (let* ((message
             (apply conc
              (map ->string (cons message-first message-rest)))))
-      (glib-append-logfile 'warn message)
-      (if (not (glib-silent-mode))
+      (ducttape-append-logfile 'warn message)
+      (if (not (ducttape-silent-mode))
           (begin
             (format (current-error-port) "~A ~A (~A)~%" (iputs-preamble 'warn) message (script-name))))))
 
@@ -394,8 +394,8 @@
     (let* ((message
             (apply conc
              (map ->string (cons message-first message-rest)))))
-      (glib-append-logfile 'note message)
-      (if (not (or (glib-silent-mode) (glib-quiet-mode)))
+      (ducttape-append-logfile 'note message)
+      (if (not (or (ducttape-silent-mode) (ducttape-quiet-mode)))
           (begin 
             (format (current-error-port) "~A ~A (~A)~%" (iputs-preamble 'note) message (script-name))))))
 
@@ -727,7 +727,7 @@
   
 
   ;; recognize ducttape-lib command line switches (--quiet, --silent, --color, -d.., -dp.., -logfile)
-  ;;    - reset parameters; reset GLIB_* env vars to match user specified intent
+  ;;    - reset parameters; reset DUCTTAPE_* env vars to match user specified intent
   ;;    - mutate (command-line-arguments) parameter to subtract these recognized and handled switches
   ;;       * beware -- now (argv) and (command-line-arguments) are inconsistent... cannot mutate (argv) alas.  Use (command-line-arguments)
   (define (process-command-line)
@@ -736,43 +736,43 @@
     (let ((quiet-opts (skim-cmdline-opts-noarg-by-regex "--?quiet")))
       (if (not (null? quiet-opts))
           (begin
-            (setenv "GLIB_QUIET_MODE" "1")
-            (glib-quiet-mode "1"))))
+            (setenv "DUCTTAPE_QUIET_MODE" "1")
+            (ducttape-quiet-mode "1"))))
 
     ;; --silent
     (let ((silent-opts (skim-cmdline-opts-noarg-by-regex "--?silent")))
       (if (not (null? silent-opts))
           (begin
-            (setenv "GLIB_SILENT_MODE" "1")
-            (glib-silent-mode "1"))))
+            (setenv "DUCTTAPE_SILENT_MODE" "1")
+            (ducttape-silent-mode "1"))))
 
     ;; -color
     (let ((color-opts (skim-cmdline-opts-noarg-by-regex "--?colou?r(ize)?")))
       (if (not (null? color-opts))
           (begin
-            (setenv "GLIB_COLORIZE" "1")
-            (glib-color-mode "1"))))
+            (setenv "DUCTTAPE_COLORIZE" "1")
+            (ducttape-color-mode "1"))))
 
     ;; -nocolor
     (let ((nocolor-opts (skim-cmdline-opts-noarg-by-regex "--?nocolou?r(ize)?")))
       (if (not (null? nocolor-opts))
           (begin
-            (unsetenv "GLIB_COLORIZE" )
-            (glib-color-mode #f))))
+            (unsetenv "DUCTTAPE_COLORIZE" )
+            (ducttape-color-mode #f))))
 
     ;; -logfile
     (let ((logfile-opts (skim-cmdline-opts-withargs-by-regex "--?log(-?file)?")))
       (if (not (null? logfile-opts))
           (begin
-            (glib-log-file (car (reverse logfile-opts)))
-            (setenv "GLIB_LOG_FILE" (glib-log-file)))))
+            (ducttape-log-file (car (reverse logfile-opts)))
+            (setenv "DUCTTAPE_LOG_FILE" (ducttape-log-file)))))
 
     ;; -d -dd -d#
     (let ((debug-opts (skim-cmdline-opts-noarg-by-regex "-d(d*|\\d+)"))
-          (initial-debuglevel (if (glib-debug-level) (glib-debug-level) 0) ))
+          (initial-debuglevel (if (ducttape-debug-level) (ducttape-debug-level) 0) ))
       (if (not (null? debug-opts))
           (begin
-            (glib-debug-level
+            (ducttape-debug-level
              (let loop ((opts debug-opts) (debuglevel initial-debuglevel))
                (if (null? opts)
                    debuglevel
@@ -784,15 +784,15 @@
                      (cond
                       (ds (loop restopts (+ debuglevel (string-length (cadr ds)))))
                       (dnum  (loop restopts (string->number (cadr dnum)))))))))
-            (setenv "GLIB_DEBUG_LEVEL" (number->string (glib-debug-level))))))
+            (setenv "DUCTTAPE_DEBUG_LEVEL" (number->string (ducttape-debug-level))))))
 
 
     ;; -dp <pat> / --debug-pattern <pat>
     (let ((debugpat-opts (skim-cmdline-opts-withargs-by-regex "--?(debug-pattern|dp)")))
       (if (not (null? debugpat-opts))
           (begin
-            (glib-debug-regex-filter (string-join debugpat-opts "|"))
-            (setenv "GLIB_DEBUG_PATTERN" (glib-debug-regex-filter)))))) 
+            (ducttape-debug-regex-filter (string-join debugpat-opts "|"))
+            (setenv "DUCTTAPE_DEBUG_PATTERN" (ducttape-debug-regex-filter)))))) 
 
   ;; handle command line immediately; 
   (process-command-line)                    
