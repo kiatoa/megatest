@@ -69,6 +69,7 @@ Megatest, documentation at http://www.kiatoa.com/fossils/megatest
 
 Usage: megatest [options]
   -h                      : this help
+  -manual                 : show the Megatest user manual
   -version                : print megatest version (currently " megatest-version ")
 
 Launching and managing runs
