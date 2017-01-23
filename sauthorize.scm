@@ -192,6 +192,23 @@ Version: " megatest-fossil-hash)) ;; "
              (exit 1)))))
 name))
 
+(define (sauthorize:valid-unix-user username)
+    (let* ((ret-val #f))
+    (let-values (((inp oup pid)
+              (process "/usr/bin/id" (list username))))
+        (let loop ((inl (read-line inp)))
+          (if (string? inl) 
+          (if (string-contains inl  "No such user") 
+            (set! ret-val #f)
+             (set! ret-val #t)))   
+          (if (eof-object? inl)
+              (begin
+                   (close-input-port inp)
+                  (close-output-port oup))
+            (loop (read-line inp)))))
+            ret-val))
+
+
 ;check if a paths/codes are vaid and if area is alrady open  
 (define (open-area group path code access-type)
    (let* ((exe-name (get-exe-name path group))
@@ -286,13 +303,18 @@ name))
          (print "Area has " path "  been opened for " access-type ))))
 
 (define (sauthorize:grant auser guser area exp-date access-type restrict)
-    ; check if user exist
+    ; check if user exist in db
     (let* ((area-obj (get-area area))
            (auser-obj (get-user auser)) 
            (user-obj (get-user guser)))
           
         (if (null? user-obj)
            (begin
+            ;; is guser a valid unix user
+            (if (not (sauthorize:valid-unix-user guser))
+               (begin  
+                (print "User " guser " is Invalid unix user!!")
+                 (exit 1)))
             (sauthorize:db-do   (lambda (db)
              (sauthorize:db-qry db (conc "insert into users (username, is_admin) values ('" guser "', 'no') "))))
              (set! user-obj (get-user guser))))
