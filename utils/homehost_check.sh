@@ -1,4 +1,4 @@
-#!/bin/sh
+#! /bin/bash
 
 #exits 1 when current host is not homehost.
 
