@@ -2,7 +2,7 @@
 ;;   cat /etc/apache2/mime.types | grep -v '^#' | perl -ne 'print "(\"$2\" . \"$1\")\n" if /(\S+)\s+(\S+)/' > mimetypes.scm
 ;; + manual manipulation
 
-(define glib_ext2mimetype '(("ez" . "application/andrew-inset")
+(define ducttape_ext2mimetype '(("ez" . "application/andrew-inset")
 ("aw" . "application/applixware")
 ("atom" . "application/atom+xml")
 ("atomcat" . "application/atomcat+xml")
@@ -778,5 +778,5 @@
 ("ice" . "x-conference/x-cooltalk")))
 
 (define (ext->mimetype ext)
-  (let ((x (assoc ext glib_ext2mimetype)))
+  (let ((x (assoc ext ducttape_ext2mimetype)))
    (if x (cdr x) "text/plain")))

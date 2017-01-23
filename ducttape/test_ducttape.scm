@@ -8,28 +8,28 @@
 ;(trace skim-cmdline-opts-withargs-by-regex)
 ;(trace keyword-skim)
 ;(trace re-match?)
-(define (reset-glib)
-  (unsetenv "GLIB_DEBUG_LEVEL")
-  (glib-debug-level #f)
+(define (reset-ducttape)
+  (unsetenv "ducttape_DEBUG_LEVEL")
+  (ducttape-debug-level #f)
 
-  (unsetenv "GLIB_DEBUG_PATTERN")
-  (glib-debug-regex-filter ".")
+  (unsetenv "ducttape_DEBUG_PATTERN")
+  (ducttape-debug-regex-filter ".")
 
-  (unsetenv "GLIB_LOG_FILE")
-  (glib-log-file #f)
+  (unsetenv "ducttape_LOG_FILE")
+  (ducttape-log-file #f)
 
-  (unsetenv "GLIB_SILENT_MODE")
-  (glib-silent-mode #f)
+  (unsetenv "ducttape_SILENT_MODE")
+  (ducttape-silent-mode #f)
 
-  (unsetenv "GLIB_QUIET_MODE")
-  (glib-quiet-mode #f)
+  (unsetenv "ducttape_QUIET_MODE")
+  (ducttape-quiet-mode #f)
 
-  (unsetenv "GLIB_COLOR_MODE")
-  (glib-color-mode #f)
+  (unsetenv "ducttape_COLOR_MODE")
+  (ducttape-color-mode #f)
 )
 
-(define (reset-glib-with-cmdline-list cmdline-list)
-  (reset-glib)
+(define (reset-ducttape-with-cmdline-list cmdline-list)
+  (reset-ducttape)
 
   (command-line-arguments cmdline-list)
   (process-command-line)
@@ -37,36 +37,36 @@
 
 
 (define (direct-iputs-test)
-  (glib-color-mode #f)
+  (ducttape-color-mode #f)
   (ierr "I'm an error")
   (iwarn "I'm a warning")
   (inote "I'm a note")
 
-  (glib-debug-level 1)
+  (ducttape-debug-level 1)
   (idbg "I'm a debug statement")
-  (glib-debug-level #f)
+  (ducttape-debug-level #f)
   (idbg "I'm a hidden debug statement")
 
-  (glib-silent-mode #t)
+  (ducttape-silent-mode #t)
   (iwarn "I shouldn't show up")
   (inote "I shouldn't show up either")
   (ierr "I should show up 1")
-  (glib-silent-mode #f)
+  (ducttape-silent-mode #f)
 
-  (glib-quiet-mode #t)
+  (ducttape-quiet-mode #t)
   (iwarn "I should show up 2")
   (inote "I shouldn't show up though")
   (ierr "I should show up 3")
-  (glib-quiet-mode #f)
+  (ducttape-quiet-mode #f)
 
-  (glib-debug-level 1)
+  (ducttape-debug-level 1)
   (idbg "foo")
   (iputs "dbg" "debug message")
   (iputs "e" "error message")
   (iputs "w" "warning message")
   (iputs "n" "note message")
 
-  (glib-color-mode #t)
+  (ducttape-color-mode #t)
   (ierr "I'm an error COLOR")
   (iwarn "I'm a warning COLOR")
   (inote "I'm a note COLOR")
@@ -242,49 +242,49 @@
   (test-group
    "Command line processor parameter settings"
 
-   (reset-glib-with-cmdline-list '())
-   (test-assert "(nil) debug mode should be off" (not (glib-debug-level)))
-   (test-assert "(nil): debug pattern should be '.'" (equal? "." (glib-debug-regex-filter)))
-   (test-assert "(nil): colors should be off" (not (glib-color-mode)))
-   (test-assert "(nil): silent mode should be off" (not (glib-silent-mode)))
-   (test-assert "(nil): quiet mode should be off" (not (glib-quiet-mode)))
-   (test-assert "(nil): logfile should be off" (not (glib-log-file)))
+   (reset-ducttape-with-cmdline-list '())
+   (test-assert "(nil) debug mode should be off" (not (ducttape-debug-level)))
+   (test-assert "(nil): debug pattern should be '.'" (equal? "." (ducttape-debug-regex-filter)))
+   (test-assert "(nil): colors should be off" (not (ducttape-color-mode)))
+   (test-assert "(nil): silent mode should be off" (not (ducttape-silent-mode)))
+   (test-assert "(nil): quiet mode should be off" (not (ducttape-quiet-mode)))
+   (test-assert "(nil): logfile should be off" (not (ducttape-log-file)))
 
-   (reset-glib-with-cmdline-list '("-d"))
-   (test-assert "-d: debug mode should be on at level 1" (eq? 1 (glib-debug-level)))
+   (reset-ducttape-with-cmdline-list '("-d"))
+   (test-assert "-d: debug mode should be on at level 1" (eq? 1 (ducttape-debug-level)))
 
-   (reset-glib-with-cmdline-list '("-dd"))
-   (test "-dd: debug level should be 2" 2 (glib-debug-level))
+   (reset-ducttape-with-cmdline-list '("-dd"))
+   (test "-dd: debug level should be 2" 2 (ducttape-debug-level))
 
-   (reset-glib-with-cmdline-list '("-ddd"))
-   (test "-ddd: debug level should be 3" 3 (glib-debug-level))
+   (reset-ducttape-with-cmdline-list '("-ddd"))
+   (test "-ddd: debug level should be 3" 3 (ducttape-debug-level))
 
-   (reset-glib-with-cmdline-list '("-d2"))
-   (test "-d2: debug level should be 2" 2 (glib-debug-level))
+   (reset-ducttape-with-cmdline-list '("-d2"))
+   (test "-d2: debug level should be 2" 2 (ducttape-debug-level))
 
-   (reset-glib-with-cmdline-list '("-d3"))
-   (test "-d3: debug level should be 3" 3 (glib-debug-level))
+   (reset-ducttape-with-cmdline-list '("-d3"))
+   (test "-d3: debug level should be 3" 3 (ducttape-debug-level))
 
-   (reset-glib-with-cmdline-list '("-dp" "foo"))
-   (test "-dp foo: debug pattern should be 'foo'" "foo" (glib-debug-regex-filter))
+   (reset-ducttape-with-cmdline-list '("-dp" "foo"))
+   (test "-dp foo: debug pattern should be 'foo'" "foo" (ducttape-debug-regex-filter))
 
-   (reset-glib-with-cmdline-list '("--debug-pattern" "foo"))
-   (test "--debug-pattern foo: debug pattern should be 'foo'" "foo" (glib-debug-regex-filter))
+   (reset-ducttape-with-cmdline-list '("--debug-pattern" "foo"))
+   (test "--debug-pattern foo: debug pattern should be 'foo'" "foo" (ducttape-debug-regex-filter))
 
-   (reset-glib-with-cmdline-list '("-dp" "foo" "-dp" "bar"))
-   (test "-dp foo -dp bar: debug pattern should be 'foo|bar'"  "foo|bar" (glib-debug-regex-filter))
+   (reset-ducttape-with-cmdline-list '("-dp" "foo" "-dp" "bar"))
+   (test "-dp foo -dp bar: debug pattern should be 'foo|bar'"  "foo|bar" (ducttape-debug-regex-filter))
 
-   (reset-glib-with-cmdline-list '("--quiet"))
-   (test-assert "-quiet: quiet mode should be active" (glib-quiet-mode))
+   (reset-ducttape-with-cmdline-list '("--quiet"))
+   (test-assert "-quiet: quiet mode should be active" (ducttape-quiet-mode))
 
-   (reset-glib-with-cmdline-list '("--silent"))
-   (test-assert "-silent: silent mode should be active" (glib-silent-mode))
+   (reset-ducttape-with-cmdline-list '("--silent"))
+   (test-assert "-silent: silent mode should be active" (ducttape-silent-mode))
 
-   (reset-glib-with-cmdline-list '("--color"))
-   (test-assert "-color: color mode should be active" (glib-color-mode))
+   (reset-ducttape-with-cmdline-list '("--color"))
+   (test-assert "-color: color mode should be active" (ducttape-color-mode))
 
-   (reset-glib-with-cmdline-list '("--log" "foo"))
-   (test "--log foo: logfile should be 'foo'" "foo" (glib-log-file))
+   (reset-ducttape-with-cmdline-list '("--log" "foo"))
+   (test "--log foo: logfile should be 'foo'" "foo" (ducttape-log-file))
 
 ))
 
@@ -327,9 +327,9 @@
   (direct-iputs-test)
 
   ; following use unit test test-egg
-  (reset-glib)
+  (reset-ducttape)
   (test-argprocessor-funcs)
-  (reset-glib)
+  (reset-ducttape)
   (test-argprocessor)
   (test-systemstuff)
   (test-misc)
