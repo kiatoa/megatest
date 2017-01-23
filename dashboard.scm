@@ -519,12 +519,8 @@ Misc
 (define (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)
   (let* ((start-time   (current-seconds))
 	 (access-mode  (dboard:tabdat-access-mode tabdat))
-         (num-to-get   (let ((num-tests-from-config (configf:lookup *configdat* "setup" "num-tests-to-get")))
-			 (if num-tests-from-config
-			     (begin
-			       (BB> "override num-tests 100 -> "num-tests-from-config)
-			       (string->number num-tests-from-config))
-			     100)))
+         (num-to-get   (string->number (or (configf:lookup *configdat* "setup" "num-tests-to-get")
+                                           "200")))
 	 (states       (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
 	 (statuses     (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)))
          (do-not-use-db-file-timestamps #f) ;; (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")) ;; this still hosts runs-summary-tab
@@ -589,7 +585,7 @@ Misc
     ;; data has been read
     ;; set last-update to 0 if still getting data incrementally ;; NO NEED, handled above
     ;;
-    (debug:print 0 *default-log-port* "got-all: " got-all " multi-get: " multi-get " num-to-get: " num-to-get " (length tmptests): " (length tmptests) " db-modified: " db-modified " db-mod-time: " db-mod-time " db-path: " db-path)
+    ;; (debug:print 0 *default-log-port* "got-all: " got-all " multi-get: " multi-get " num-to-get: " num-to-get " (length tmptests): " (length tmptests) " db-modified: " db-modified " db-mod-time: " db-mod-time " db-path: " db-path)
     (if got-all
 	(begin
 	  (dboard:rundat-last-update-set!     run-dat (- start-time 2))

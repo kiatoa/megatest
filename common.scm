@@ -823,7 +823,7 @@
 (define (common:args-get-testpatt rconf)
   (let* ((tagexpr (args:get-arg "-tagexpr"))
          (tags-testpatt (if tagexpr (string-join (runs:get-tests-matching-tags tagexpr) ",") #f))
-         (testpatt-key  (if (args:get-arg "-mode") (args:get-arg "-mode") "TESTPATT"))
+         (testpatt-key  (if (args:get-arg "--modepatt") (args:get-arg "--modepatt") "TESTPATT"))
          (args-testpatt (or (args:get-arg "-testpatt") (args:get-arg "-runtests") "%"))
          (rtestpatt     (if rconf (runconfigs-get rconf testpatt-key) #f)))
     (cond

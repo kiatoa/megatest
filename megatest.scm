@@ -69,6 +69,7 @@ Megatest, documentation at http://www.kiatoa.com/fossils/megatest
 
 Usage: megatest [options]
   -h                      : this help
+  -manual                 : show the Megatest user manual
   -version                : print megatest version (currently " megatest-version ")
 
 Launching and managing runs
@@ -95,7 +96,7 @@ Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs e
   -runname                : required, name for this particular test run
   -state                  : Applies to runs, tests or steps depending on context
   -status                 : Applies to runs, tests or steps depending on context
-  -mode key               : load testpatt from <key> in runconfigs instead of default TESTPATT
+  --modepatt key          : load testpatt from <key> in runconfigs instead of default TESTPATT if -testpatt and -tagexpr are not specified
   -tagexpr tag1,tag2%,..  : select tests with tags matching expression
 
 Test helpers (for use inside tests)
@@ -214,7 +215,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-status"
 			"-list-runs"
 			"-testpatt"
-                        "-mode"
+                        "--modepatt"
                         "-tagexpr"
 			"-itempatt"
 			"-setlog"
