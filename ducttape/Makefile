@@ -12,17 +12,16 @@ help:
 	@echo ""
 
 clean:
-	rm -f *.so *.import.scm test_glib test_example foo *.c *.o
+	rm -f *.so *.import.scm test_ducttape test_example foo *.c *.o
 
 install:
-	echo tbd
-	/bin/false
+	chicken-install
 
 test:
 	chicken-install -no-install
-	csc test_glib.scm
+	csc test_ducttape.scm
 
-	./test_glib
+	./test_ducttape
 	if (-e foo) rm -f foo
 
 test_example:
