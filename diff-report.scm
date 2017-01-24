@@ -15,6 +15,10 @@
 
 ;; TODO:dashboard not on homehost message exit
 
+(use matchable)
+(use ducttape-lib)
+(define css "")
+
 (define (tests-mindat->hash tests-mindat)
   (let* ((res (make-hash-table)))
     (for-each
@@ -65,15 +69,15 @@
               (let* ((test-name (car key))
                      (item-path (cdr key))
 
-                     (dest-value (hash-table-ref/default dest-hash key #f)) ;; (list test-id state status)
-                     (dest-test-id  (if dest-value (list-ref dest-value 0) #f))
-                     (dest-state    (if dest-value (list-ref dest-value 1) #f))
-                     (dest-status   (if dest-value (list-ref dest-value 2) #f))
+                     (dest-value    (hash-table-ref/default dest-hash key (list #f #f #f))) ;; (list test-id state status)
+                     (dest-test-id  (list-ref dest-value 0))
+                     (dest-state    (list-ref dest-value 1))
+                     (dest-status   (list-ref dest-value 2))
 
-                     (src-value     (hash-table-ref/default src-hash key #f))   ;; (list test-id state status)
-                     (src-test-id   (if src-value (list-ref src-value 0) #f))
-                     (src-state     (if src-value (list-ref src-value 1) #f))
-                     (src-status    (if src-value (list-ref src-value 2) #f))
+                     (src-value     (hash-table-ref/default src-hash key (list #f #f #f)))   ;; (list test-id state status)
+                     (src-test-id   (list-ref src-value 0))
+                     (src-state     (list-ref src-value 1))
+                     (src-status    (list-ref src-value 2))
 
                      (incomplete-statuses '("DELETED" "INCOMPLETE" "STUCK/DEAD" "N/A")) ;; if any of these statuses apply, treat test as incomplete
 
@@ -93,23 +97,22 @@
 
                        ;; src !complete, dest complete -> better
                        ((and (not dest-complete) (not src-complete))
-                        (list dest-test-id "BOTH-BAD" "BOTH-INCOMPLETE"))
+                        (list dest-test-id "BOTH-BAD" "BOTH-INCOMPLETE") src-value dest-value)
                        ((not dest-complete)
-                        (list src-test-id "DIFF-MISSING" "DEST-INCOMPLETE"))  
+                        (list src-test-id "DIFF-MISSING" "DEST-INCOMPLETE") src-value dest-value)  
                        ((not src-complete)
-                        (list dest-test-id "DIFF-NEW" "SRC-INCOMPLETE"))      
+                        (list dest-test-id "DIFF-NEW" "SRC-INCOMPLETE") src-value dest-value)      
                        ((and
                          (equal? src-state dest-state)
                          (equal? src-status dest-status))
-                        (list dest-test-id  (conc "CLEAN") (conc "CLEAN-" dest-status) )) 
+                        (list dest-test-id  (conc "CLEAN") (conc "CLEAN-" dest-status) src-value dest-value)) 
                        ;;    better or worse: pass > warn > waived > skip > fail > abort
                        ;;     pass > warn > waived > skip > fail > abort
                        
                        ((= 1 status-compare-result) ;; src is better, dest is worse
-                        (list dest-test-id "DIRTY-WORSE" (conc src-status "->" dest-status)))
+                        (list dest-test-id "DIRTY-WORSE" (conc src-status "->" dest-status) src-value dest-value))
                        (else
-                        (list dest-test-id "DIRTY-BETTER" (conc src-status "->" dest-status)))
-                       )))
+                        (list dest-test-id "DIRTY-BETTER" (conc src-status "->" dest-status) src-value dest-value)))))
                 (list test-name item-path  xor-new-item)))
             all-keys)))
 
@@ -186,16 +189,90 @@
   
 (define (summarize-run-diff run-diff)
   (let* ((diff-states (list "CLEAN" "DIRTY-BETTER" "DIRTY-WORSE" "BOTH-BAD" "DIFF-MISSING" "DIFF-NEW" )))
-    (for-each
+    (map
      (lambda (state)
-       (print "state="state "; "
-              (length (rundiff-find-by-state run-diff state))))
+       (list state 
+             (length (rundiff-find-by-state run-diff state))))
      diff-states)))
 
-     
-(let* ((run-diff (diff-runs "all57" "all60"))
-       (diff-summary (summarize-run-diff run-diff)))
-  (pretty-print diff-summary))
+(define (stml->string in-stml)
+  (with-output-to-string
+    (lambda ()
+      (s:output-new
+       (current-output-port)
+       in-stml))))
+
+(define (test-state-status->diff-report-cell state status)
+  (s:td status))
+
+(define (diff-state-status->diff-report-cell state status)
+  (s:td state 'bgcolor "#33ff33"))
+
+(define (run-diff->diff-report src-runname dest-runname run-diff)
+  (let* ((test-count (length run-diff))
+         (summary-table
+          (apply s:table 'cellspacing "0" 'border "1"
+                 (s:tr
+                  (s:th "Diff type")
+                  (s:th "% share")
+                  (s:th "Count"))
+                 
+                 (map
+                  (lambda (state-count)
+                    (s:tr
+                     (s:td (car state-count))
+                     (s:td (* 100 (/ (cadr state-count) test-count)))
+                     (s:td (cadr state-count))))
+                  (summarize-run-diff run-diff))))
+         (main-table
+          (apply s:table 'cellspacing "0" 'border "1"
+                 (s:tr
+                  (s:th "Test name")
+                  (s:th "Item Path")
+                  (s:th (conc "Source=" src-runname))
+                  (s:th (conc "Dest=" dest-runname))
+                  (s:th "Diff"))
+                 (map
+                  (lambda (run-diff-item)
+                    (match run-diff-item
+                      ((test-name item-path (junk-id diff-state diff-status (src-test-id src-state src-status) (dest-test-id dest-state dest-status)))
+                       (s:tr
+                        (s:td test-name)
+                        (s:td item-path)
+                        (test-state-status->diff-report-cell src-state src-status)
+                        (test-state-status->diff-report-cell dest-state dest-status)
+                        (diff-state-status->diff-report-cell diff-state diff-status)))
+                      (else "")))
+                  (filter (lambda (run-diff-item)
+                            (match run-diff-item
+                              ((test-name item-path (junk-id diff-state diff-status (src-test-id src-state src-status) (dest-test-id dest-state dest-status)))
+                               (not (equal? diff-state "CLEAN")))
+                              (else #f)))
+                            run-diff)))))
+    (stml->string (s:body
+                   summary-table
+                   main-table))))
+    
+                    
+            
+          
+                               
+
+(let* ((src-runname "all57")
+       (dest-runname "all60")
+       (to "bjbarcla")
+       (subj (conc "[MEGATEST DIFF] "src-runname" vs. "dest-runname))
+       (run-diff (diff-runs src-runname dest-runname))
+       (diff-summary (summarize-run-diff run-diff))
+       (html-report (run-diff->diff-report src-runname dest-runname run-diff)))
+  ;;(pretty-print run-diff)
+  ;;(pretty-print diff-summary)
+
+  (sendmail to subj html-report use_html: #t)
+  ;;(print html-report)
+  )
 
          
-;;  (match de (  (test-name test-path ( test-id "BOTH-BAD" test-status))   test-path) (else #f))
+;; (match de
+;;   ((test-name test-path ( test-id "BOTH-BAD" test-status))   test-path)
+;;   (else #f))
