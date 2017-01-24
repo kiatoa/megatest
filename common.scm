@@ -823,7 +823,7 @@
 (define (common:args-get-testpatt rconf)
   (let* ((tagexpr (args:get-arg "-tagexpr"))
          (tags-testpatt (if tagexpr (string-join (runs:get-tests-matching-tags tagexpr) ",") #f))
-         (testpatt-key  (if (args:get-arg "-mode") (args:get-arg "-mode") "TESTPATT"))
+         (testpatt-key  (if (args:get-arg "--modepatt") (args:get-arg "--modepatt") "TESTPATT"))
          (args-testpatt (or (args:get-arg "-testpatt") (args:get-arg "-runtests") "%"))
          (rtestpatt     (if rconf (runconfigs-get rconf testpatt-key) #f)))
     (cond
@@ -1089,6 +1089,20 @@
    exn
    0
    (file-modification-time fpath)))
+
+;; find timestamp of newest file associated with a sqlite db file
+(define (common:lazy-sqlite-db-modification-time fpath)
+  (let* ((glob-list (handle-exceptions
+                    exn
+                    '("/no/such/file")
+                    (glob (conc fpath "*"))))
+         (file-list (if (eq? 0 (length glob-list))
+                        '("/no/such/file")
+                        glob-list)))
+  (apply max
+   (map
+    common:lazy-modification-time 
+    file-list))))
 
 ;; return a nice clean pathname made absolute
 (define (common:nice-path dir)

@@ -368,11 +368,11 @@ Misc
   tests          ;; hash of id => testdat
   ((tests-by-name (make-hash-table)) : hash-table) ;; hash of testfullname => testdat
   key-vals
-  ((last-update   0)                 : fixnum) ;; last query to db got records from before last-update
-  ((data-changed  #f)                : boolean)
-  ((run-data-offset  0)              : number)      ;; get only 100 items per call, set back to zero when received less that 100 items
-  (db-path #f)
-  )
+  ((last-update   0)                 : number)    ;; last query to db got records from before last-update
+  ((last-db-time  0)                 : number)    ;; last timestamp on megatest.db
+  ((data-changed  #f)                : boolean)   
+  ((run-data-offset  0)              : number)      ;; get only 100 items per call, set back to zero when received less than 100 items
+  (db-path #f))
 
 ;; register dboard:rundat with BBpp
 ;; this is used by BBpp (Brandon's pretty printer) to convert dboard:rundat into a composition of lists that pp will handle
@@ -517,74 +517,83 @@ Misc
 ;;    NOTE: Yes, this is used
 ;;
 (define (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals)
-  (let* ((access-mode  (dboard:tabdat-access-mode tabdat))
-         (num-to-get
-          (let ((num-tests-from-config (configf:lookup *configdat* "setup" "num-tests-to-get")))
-            (if num-tests-from-config
-                (begin
-                  (BB> "override num-tests 100 -> "num-tests-from-config)
-                  (string->number num-tests-from-config))
-                100)))
-	 (states      (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
-	 (statuses    (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)))
-         (do-not-use-db-file-timestamps #t) ;; (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")) ;; this still hosts runs-summary-tab
-         (do-not-use-query-timestamps   #t) ;; (configf:lookup *configdat* "setup" "do-not-use-query-timestamps")) ;; this no longer troubles runs-summary-tab
-	 (sort-info   (get-curr-sort))
-	 (sort-by     (vector-ref sort-info 1))
-	 (sort-order  (vector-ref sort-info 2))
-	 (bubble-type (if (member sort-order '(testname))
-			  'testname
-			  'itempath))
+  (let* ((start-time   (current-seconds))
+	 (access-mode  (dboard:tabdat-access-mode tabdat))
+         (num-to-get   (string->number (or (configf:lookup *configdat* "setup" "num-tests-to-get")
+                                           "200")))
+	 (states       (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
+	 (statuses     (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)))
+         (do-not-use-db-file-timestamps #f) ;; (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")) ;; this still hosts runs-summary-tab
+         (do-not-use-query-timestamps   #f) ;; (configf:lookup *configdat* "setup" "do-not-use-query-timestamps")) ;; this no longer troubles runs-summary-tab
+	 (sort-info    (get-curr-sort))
+	 (sort-by      (vector-ref sort-info 1))
+	 (sort-order   (vector-ref sort-info 2))
+	 (bubble-type  (if (member sort-order '(testname))
+			   'testname
+			   'itempath))
 	 ;; note: the rundat is normally created in "update-rundat". 
-	 (run-dat    (or (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f)
-			 (let ((rd (dboard:rundat-make-init run: run key-vals: key-vals)))
-			   (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id rd)
-			   rd)))
+	 (run-dat      (or (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f)
+			   (let ((rd (dboard:rundat-make-init run: run key-vals: key-vals)))
+			     (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id rd)
+			     rd)))
 	 ;; (prev-tests  (dboard:rundat-tests prev-dat)) ;; (vector-ref prev-dat 1))
-         (last-update
-          (if do-not-use-query-timestamps
-              0
-              (dboard:rundat-last-update run-dat)
-              ;;(hash-table-ref/default (dboard:tabdat-run-update-times tabdat) run-id 0)
-              ))
-
-	 (db-path     (or (dboard:rundat-db-path run-dat)
-			  (let* ((db-dir (tasks:get-task-db-path))
-				 (db-pth (conc db-dir "/" run-id ".db")))
-			    (dboard:rundat-db-path-set! run-dat db-pth)
-			    db-pth)))
-	 (tmptests    (if (or do-not-use-db-file-timestamps
-			      (>=  (common:lazy-modification-time db-path) last-update))
-                          (db:dispatch-query access-mode rmt:get-tests-for-run db:get-tests-for-run
-                                             run-id testnamepatt states statuses  ;; run-id testpatt states statuses
-                                             (dboard:rundat-run-data-offset run-dat)
-                                             num-to-get
-                                             (dboard:tabdat-hide-not-hide tabdat) ;; no-in
-                                             sort-by                              ;; sort-by
-                                             sort-order                           ;; sort-order
-                                             #f ;; 'shortlist                           ;; qrytype
-                                             (if (dboard:tabdat-filters-changed tabdat) 
-                                                 0
-                                                 last-update) ;; last-update
-                                             *dashboard-mode*) ;; use dashboard mode
-			  '()))
+         (last-update  (if (or do-not-use-query-timestamps
+			       (dboard:tabdat-filters-changed tabdat))
+			   0
+			   (dboard:rundat-last-update run-dat)))
+	 (last-db-time (if do-not-use-db-file-timestamps
+			   0
+			   (dboard:rundat-last-db-time run-dat)))
+	 (db-path      (or (dboard:rundat-db-path run-dat)
+			   (let* ((db-dir (common:get-db-tmp-area))
+				  (db-pth (conc db-dir "/megatest.db")))
+			     (dboard:rundat-db-path-set! run-dat db-pth)
+			     db-pth)))
+	 (db-mod-time  (common:lazy-sqlite-db-modification-time db-path))
+	 (db-modified  (>= db-mod-time last-db-time))
+	 (multi-get    (> (dboard:rundat-run-data-offset run-dat) 0))  ;; multi-get in progress
+	 (tmptests     (if (or do-not-use-db-file-timestamps
+			       (dboard:tabdat-filters-changed tabdat)
+			       db-modified)
+			   (db:dispatch-query access-mode rmt:get-tests-for-run db:get-tests-for-run
+					      run-id testnamepatt states statuses     ;; run-id testpatt states statuses
+					      (dboard:rundat-run-data-offset run-dat) ;; query offset
+					      num-to-get
+					      (dboard:tabdat-hide-not-hide tabdat) ;; no-in
+					      sort-by                              ;; sort-by
+					      sort-order                           ;; sort-order
+					      #f ;; 'shortlist                     ;; qrytype
+					      last-update                          ;; last-update
+					      *dashboard-mode*)                    ;; use dashboard mode
+			   '()))
 	 (use-new    (dboard:tabdat-hide-not-hide tabdat))
 	 (tests-ht   (if (dboard:tabdat-filters-changed tabdat)
 			 (let ((ht (make-hash-table)))
 			   (dboard:rundat-tests-set! run-dat ht)
 			   ht)
-			 (dboard:rundat-tests run-dat))))
-	 ;;(start-time (current-seconds)))
+			 (dboard:rundat-tests run-dat)))
+	 (got-all      (< (length tmptests) num-to-get))               ;; got all for this round  
+	 )
+
+    ;; if we saw the db modified, reset it (the signal has already been used)
+    (if (and got-all ;; (not multi-get)
+	     db-modified)
+	(dboard:rundat-last-db-time-set!    run-dat (- start-time 2)))
 
     ;; to limit the amount of data transferred each cycle use limit of num-to-get and offset
-    (dboard:rundat-run-data-offset-set! 
-     run-dat 
-     (if (< (length tmptests) num-to-get)
-	 0
-	 (let ((newval (+ num-to-get (dboard:rundat-run-data-offset run-dat))))
-	   ;; (print "Incremental get, offset=" (dboard:rundat-run-data-offset run-dat) " retrieved: " (length tmptests) " newval: " newval)
-	   newval)))
-     
+    ;; DO NOT bump time indexes last-update and last-db-time until all the first pass of the
+    ;; data has been read
+    ;; set last-update to 0 if still getting data incrementally ;; NO NEED, handled above
+    ;;
+    ;; (debug:print 0 *default-log-port* "got-all: " got-all " multi-get: " multi-get " num-to-get: " num-to-get " (length tmptests): " (length tmptests) " db-modified: " db-modified " db-mod-time: " db-mod-time " db-path: " db-path)
+    (if got-all
+	(begin
+	  (dboard:rundat-last-update-set!     run-dat (- start-time 2))
+	  (dboard:rundat-run-data-offset-set! run-dat 0))
+	(begin
+	  (dboard:rundat-run-data-offset-set! run-dat
+					      (+ num-to-get (dboard:rundat-run-data-offset run-dat)))))
+
     (for-each 
      (lambda (tdat)
        (let ((test-id (db:test-get-id tdat))
@@ -595,18 +604,6 @@ Misc
 	     (hash-table-set! tests-ht test-id tdat))))
      tmptests)
     
-    ;; set last-update to 0 if still getting data incrementally
-
-    (if (> (dboard:rundat-run-data-offset run-dat) 0)
-	(begin
-	  ;; (print "run-data-offset: " (dboard:rundat-run-data-offset run-dat) ", setting last-update to 0")
-	  ;; (dboard:rundat-last-update-set! run-dat 0)
-          (dboard:rundat-last-update-set! run-dat 0))
-        ;; (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- start-time 3))
-        
-	(dboard:rundat-last-update-set! run-dat (- (current-seconds) 2))) ;; go back two seconds in time to ensure all changes are captured.
-
-    ;; (debug:print-info 0 *default-log-port* "tests-ht: " (hash-table-keys tests-ht))
     tests-ht))
 
 ;; tmptests   - new tests data
@@ -2694,7 +2691,7 @@ Misc
   
 (define *tim* (iup:timer))
 (define *ord* #f)
-(iup:attribute-set! *tim* "TIME" 300)
+(iup:attribute-set! *tim* "TIME" 300 )
 (iup:attribute-set! *tim* "RUN" "YES")
 
 (define *last-recalc-ended-time* 0)
