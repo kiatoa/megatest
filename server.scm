@@ -49,31 +49,11 @@
 ;; start_server
 ;;
 (define (server:launch run-id transport-type)
-  ;;(BB> "server:launch fired for run-id="run-id" transport-type="transport-type)
-
-  (let ((attempt-in-progress (server:start-attempted? *toppath*))) ; check for .server-starting
-    (when attempt-in-progress
-      (debug:print-info 0 *default-log-port* "Server start attempt in progress in other process (=> "attempt-in-progress"<=).  Aborting server launch attempt in this process ("(current-process-id)")")
-      (exit)))
-      
-  (let ((dotserver-url (server:check-if-running *toppath*))) ;; check for .server  
-    (when dotserver-url
-      (debug:print-info 0 *default-log-port* "Server already running (=> "dotserver-url"<=).  Aborting server launch attempt in this process ("(current-process-id)")")
-      (exit)
-      ))
-  
   (case transport-type
     ((http)(http-transport:launch))
     ;;((nmsg)(nmsg-transport:launch run-id))
     ((rpc)  (rpc-transport:launch run-id))
-    (else (debug:print-error 0 *default-log-port* "unknown server type " transport-type)))
-
-  ;; is this a good place to print server exit stats?
-  (debug:print 0 "SERVER: max parallel api requests: " *max-api-process-requests*)
-  
-  )
-;;       (else   (debug:print-error 0 *default-log-port* "No known transport set, transport=" transport ", using rpc")
-;; 	      (rpc-transport:launch run-id)))))
+    (else (debug:print-error 0 *default-log-port* "unknown server type " transport-type))))
 
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
@@ -133,44 +113,39 @@
 	 (testsuite   (common:get-testsuite-name))
 	 (logfile     (conc areapath "/logs/server-" curr-pid "-" target-host ".log"))
 	 (cmdln (conc (common:get-megatest-exe)
-		      " -server " (or target-host "-") " -run-id " 0 (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
-									      (conc " -daemonize -log " logfile)
-									      "")
+		      " -server " (or target-host "-") (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
+							   " -daemonize "
+							   "")
+		      " -log " logfile
 		      " -m testsuite:" testsuite)) ;; (conc " >> " logfile " 2>&1 &")))))
 	 (log-rotate  (make-thread common:rotate-logs  "server run, rotate logs thread")))
     ;; we want the remote server to start in *toppath* so push there
     (push-directory areapath)
-    (cond
-     ;; (attempt-in-progress
-     ;;  (debug:print 0 *default-log-port* "INFO: Not trying to start server because attempt is in progress: "attempt-in-progress))
-     ;; (dot-server-url
-     ;;        (debug:print 0 *default-log-port* "INFO: Not trying to start server because one is already running : "dot-server-url))
-     (else
-      (debug:print 0 *default-log-port* "INFO: Trying to start server (" cmdln ") ...")
-      (thread-start! log-rotate)
-
-      ;; host.domain.tld match host?
-      (if (and target-host 
-               ;; look at target host, is it host.domain.tld or ip address and does it 
-               ;; match current ip or hostname
-               (not (string-match (conc "("curr-host "|" curr-host"\\..*)") target-host))
-               (not (equal? curr-ip target-host)))
-          (begin
-            (debug:print-info 0 *default-log-port* "Starting server on " target-host ", logfile is " logfile)
-            (setenv "TARGETHOST" target-host)))
+    (debug:print 0 *default-log-port* "INFO: Trying to start server (" cmdln ") ...")
+    (thread-start! log-rotate)
+    
+    ;; host.domain.tld match host?
+    (if (and target-host 
+	     ;; look at target host, is it host.domain.tld or ip address and does it 
+	     ;; match current ip or hostname
+	     (not (string-match (conc "("curr-host "|" curr-host"\\..*)") target-host))
+	     (not (equal? curr-ip target-host)))
+	(begin
+	  (debug:print-info 0 *default-log-port* "Starting server on " target-host ", logfile is " logfile)
+	  (setenv "TARGETHOST" target-host)))
       
-      (setenv "TARGETHOST_LOGF" logfile)
-      (common:wait-for-normalized-load 4 " delaying server start due to load" remote-host: (get-environment-variable "TARGETHOST")) ;; do not try starting servers on an already overloaded machine, just wait forever
-      (system (conc "nbfake " cmdln))
-      (unsetenv "TARGETHOST_LOGF")
-      (if (get-environment-variable "TARGETHOST")(unsetenv "TARGETHOST"))
-      (thread-join! log-rotate)
-      (pop-directory)))))
+    (setenv "TARGETHOST_LOGF" "server.log") ;; logfile)
+    (common:wait-for-normalized-load 4 " delaying server start due to load" remote-host: (get-environment-variable "TARGETHOST")) ;; do not try starting servers on an already overloaded machine, just wait forever
+    (system (conc "nbfake " cmdln))
+    (unsetenv "TARGETHOST_LOGF")
+    (if (get-environment-variable "TARGETHOST")(unsetenv "TARGETHOST"))
+    (thread-join! log-rotate)
+    (pop-directory)))
 
 ;; given a path to a server log return: host port startseconds
 ;;
 (define (server:logf-get-start-info logf)
-  (let ((rx (regexp "^SERVER STARTED: (\\S+):(\\d+) AT (\\d+)"))) ;; SERVER STARTED: host:port AT timesecs
+  (let ((rx (regexp "^SERVER STARTED: (\\S+):(\\d+) AT ([\\d\\.]+)"))) ;; SERVER STARTED: host:port AT timesecs
     (with-input-from-file
 	logf
       (lambda ()
@@ -182,10 +157,14 @@
 		    (if (< lnum 500) ;; give up if more than 500 lines of server log read
 			(loop (read-line)(+ lnum 1))
 			(list #f #f #f))
-		    (cdr mlst)))
-	      (list #f #f #F)))))))
+		    (let ((dat  (cdr mlst)))
+		      (list (car dat) ;; host
+			    (string->number (cadr dat)) ;; port
+			    (string->number (caddr dat))))))
+	      (list #f #f #f)))))))
 
 ;; get a list of servers with all relevant data
+;; ( mod-time host port start-time )
 ;;
 (define (server:get-list areapath)
   (if (directory-exists? areapath)
@@ -196,11 +175,39 @@
 		       (tal  (cdr server-logs))
 		       (res '()))
 	      (let* ((mod-time (file-modification-time hed))
-		     (serv-rec (cons mod-time (server:logf-get-start-info hed)))
-		     (new-res  (cons res serv-rec)))
+		     (serv-dat (server:logf-get-start-info hed))
+		     (serv-rec (cons mod-time serv-dat))
+		     (new-res  (cons serv-rec res)))
 		(if (null? tal)
 		    new-res
 		    (loop (car tal)(cdr tal) new-res))))))))
+
+;; given a list of servers get a list of valid servers, i.e. at least
+;; 10 seconds old, has started and is less than 1 hour old and is
+;; active (i.e. mod-time < 10 seconds
+;;
+;; mod-time host port start-time
+;;
+;; sort by start-time descending. I.e. get the oldest first. Young servers will thus drop off
+;; and servers should stick around for about two hours or so.
+;;
+(define (server:get-best srvlst)
+  (let ((now (current-seconds)))
+    (sort
+     (filter (lambda (rec)
+	       (let ((start-time (list-ref rec 3))
+		     (mod-time   (list-ref rec 0)))
+		 (print "start-time: " start-time " mod-time: " mod-time)
+		 (and start-time mod-time
+		      (> (- now start-time) 1)    ;; been running at least 1 seconds
+		      (< (- now mod-time)   10)   ;; still alive - file touched in last 10 seconds
+		      (< (- now start-time) 3600) ;; under one hour running time
+		      )))
+	     srvlst)
+     (lambda (a b)
+       (< (list-ref a 3)
+	  (list-ref b 3))))))
+		
 
 (define (server:get-client-signature) ;; BB> why is this proc named "get-"?  it returns nothing -- set! has not return value.
   (if *my-client-signature* *my-client-signature*
