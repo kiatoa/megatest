@@ -43,6 +43,7 @@
   sauth open <path> --group <grpname>                      : Open up an area. User needs to be the owner of the area to open it. 
               --code <unique short identifier for an area> 
               --retrieve|--publish 
+  sauth open <area code>  --retrieve|--publish             : update the binaries with the lates changes
   sauth grant <username> --area <area identifier>          : Grant permission to read or write to a area that is alrady opend up.    
              --expiration yyyy/mm/dd --retrieve|--publish 
              [--restrict <comma separated directory names> ]  
@@ -302,6 +303,32 @@ name))
              (sauthorize:db-qry db (conc "INSERT INTO actions (cmd,user_id,area_id,action_type ) VALUES ('sauthorize open " path " --code " code " --group " group " --" access-type "'," (car (get-user user)) "," (car (get-area code)) ", 'open' )"))))
          (print "Area has " path "  been opened for " access-type ))))
 
+(define (sauthorize:update username exe area access-type)
+  (let* ((parts (string-split exe "_"))
+         (owner (car parts))
+         (group (cadr parts))
+         (gpid (group-information group))
+         (req_grpid (if (equal? group "none")
+                      group 
+                      (if (equal? gpid #f)
+                           #f      
+                     (caddr gpid))))
+ 
+         (current-grp-list (get-groups))
+         (valid-grp (if (equal? group "none")
+                     group
+                    (is-group-washed req_grpid current-grp-list))))
+         (if (not (equal? username owner))
+            (begin
+              (print "You cannot update " area ". Only " owner " can update this area!!") 
+               (exit 1)))
+          (copy-exe access-type exe group)
+           (print "recording action..")    
+          (sauthorize:db-do   (lambda (db)
+             
+             (sauthorize:db-qry db (conc "INSERT INTO actions (cmd,user_id,area_id,action_type ) VALUES ('sauthorize update " area " --" access-type "'," (car (get-user username)) "," (car (get-area area)) ", 'update' )"))))
+         (print "Area has " area "  been update!!" )))
+
 (define (sauthorize:grant auser guser area exp-date access-type restrict)
     ; check if user exist in db
     (let* ((area-obj (get-area area))
@@ -478,6 +505,24 @@ name))
                   (exit 1)))
                   
                 (sauthorize:open username path group area access-type)))
+         ((update)
+            (if (< (length args) 2)
+              (begin
+              (print "sauthorize update cmd takes 2 arguments!! \n Useage: sauthorize update <area-code> --retrieve|--publish") 
+              (exit 1)))
+              (let* ((area (car args))
+                     (code-obj (get-obj-by-code area))
+                    (access-type (get-access-type (cdr args))))
+               (if  (and (not (equal? access-type "publish")) (not (equal? access-type "retrieve")))
+                  (begin 
+                  (print "Access type can be --retrieve|--publish ")
+                  (exit 1)))
+              (if (or (null? code-obj)
+                   (not (exe-exist (cadr code-obj)  access-type)))
+              (begin
+              (print "Area " area " is not open for reading!!")
+              (exit 1))) 
+              (sauthorize:update username (cadr code-obj) area access-type ))) 
          ((area-admin)
            (let* ((usr (car args))
                   (usr-obj (get-user usr))

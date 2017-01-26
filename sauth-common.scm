@@ -18,7 +18,7 @@
 	     (debug:print 2 "ERROR: problem accessing db " dbpath
 			  ((condition-property-accessor 'exn 'message) exn))
 	     (exit 1))
-          ;  (print  "calling proc " proc "db path " dbpath )
+            ;(print  "calling proc " proc "db path " dbpath )
 	   (call-with-database
             dbpath
 	    (lambda (db)
@@ -30,6 +30,7 @@
 
 ;;execute a query
 (define (sauthorize:db-qry db qry)
+  ;(print qry)
   (exec (sql db  qry)))
 
 

@@ -50,7 +50,8 @@
 ;;; please create this file before using sautherise. For sample file is avaliable sample-sauth-paths.scm. 
 (include "sauth-paths.scm")
 (include "sauth-common.scm")
-
+(define (toplevel-command . args) #f)
+(use readline)
 
 ;;
 ;; GLOBALS
@@ -458,27 +459,34 @@ Version: " megatest-fossil-hash)) ;; "
     (cons #t "Successfully saved data"))))
  
 
-(define (spublish:shell-rm targ-path)
+(define (spublish:shell-rm targ-path iport)
     (if (not (file-exists? targ-path))
 	(begin
 	  (print "ERROR: target path " targ-path " does not exist!!"))
-        (let* ((th1         (make-thread
-			 (lambda ()
-			   (delete-file  targ-path )
-			   (print " ... path " targ-path " deleted"))
-			 "rm thread"))
-	   (th2         (make-thread
-			 (lambda ()
-			   (let loop ()
-			     (thread-sleep! 15)
-			     (display ".")
-			     (flush-output)
-			     (loop)))
+        (begin 
+           (print "Are you sure you want to delete " targ-path "?[y/n]") 
+            (let* ((inl (read-line iport)))
+                (if (equal? inl "y")
+	             (let* ((th1         (make-thread
+			     (lambda ()
+                                ;(print "hi")
+                                (if (directory? targ-path)
+                                 (delete-directory targ-path #t)     
+			        (delete-file  targ-path ))
+			        (print " ... path " targ-path " deleted"))
+			        "rm thread"))
+	   		    (th2         (make-thread
+			      (lambda ()
+			         (let loop ()
+			            (thread-sleep! 15)
+			            (display ".")
+			            (flush-output)
+			            (loop)))
 			 "action is happening thread")))
-      (thread-start! th1)
-      (thread-start! th2)
-      (thread-join! th1)
-    (cons #t "Successfully saved data"))))
+      			(thread-start! th1)
+      			(thread-start! th2)
+      			(thread-join! th1)
+    			(cons #t "Successfully saved data")))))))
 
 (define (spublish:shell-ln src-path target-path sub-path)
    (if (not (file-exists? sub-path))
@@ -514,6 +522,7 @@ Version: " megatest-fossil-hash)
 (define (spublish:shell area)
  ; (print area)
   (use readline)
+
   (let* ((path      '())
 	 (prompt    "spublish> ")
 	 (args      (argv))
@@ -620,7 +629,7 @@ Version: " megatest-fossil-hash)
                                  (if (equal? resolved-path #f)     
                                  (print "Invalid argument " rm-path ".. ")
                                   (begin 
-                                      (spublish:shell-rm target-path)   
+                                      (spublish:shell-rm target-path iport)   
                                       (sauthorize:do-as-calling-user
                               (lambda ()
 			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\"" inl "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "rm")))))))
@@ -778,12 +787,14 @@ Version: " megatest-fossil-hash)
        (let* ((filter-args  (args:get-args args '("-m") '() args:arg-hash 0))
               (rm-path (car filter-args))
               (resolved-path (sauth-common:resolve-path  rm-path (list area) top-areas))
+               (prompt    ">")
+              (iport     (make-readline-port prompt))
               (target-path (sauth-common:get-target-path (list area)  rm-path top-areas base-path)))
 	       (if (not (equal? target-path #f))
                                  (if (equal? resolved-path #f)     
                                  (print "Invalid argument " rm-path ".. ")
                                   (begin 
-                                      (spublish:shell-rm target-path)   
+                                      (spublish:shell-rm target-path iport)   
                                       (sauthorize:do-as-calling-user
                               (lambda ()
 			    (run-cmd (conc *sauth-path* "/sauthorize") (list "register-log" (conc "\" rm " rm-path "\"") (number->string (car user-obj))  (number->string (caddr area-obj))  "rm")))))))))
