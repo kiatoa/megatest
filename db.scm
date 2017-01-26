@@ -416,7 +416,7 @@
    ;;       '("id"             #f)
    ;;       '("str"            #f))
    (list "tests" 
-   '("id"             "INTEGER")
+   '("id"             "INTEGER" 'key)
    '("run_id"         "INTEGER")
    '("testname"       "TEXT")
    '("host"           "TEXT")
@@ -438,7 +438,7 @@
    '("pass_count"     "INTEGER")
    '("archived"       "INTEGER"))
   (list "test_steps"
-   '("id"             "INTEGER")
+   '("id"             "INTEGER" 'key)
    '("test_id"        "INTEGER")
    '("stepname"       "TEXT")
    '("state"          "TEXT")
@@ -447,7 +447,7 @@
    '("comment"        "TEXT")
    '("logfile"        "TEXT"))
    (list "test_data"
-   '("id"             "INTEGER")
+   '("id"             "INTEGER" 'key)
    '("test_id"        "INTEGER")
    '("category"       "TEXT")
    '("variable"       "TEXT")
@@ -465,12 +465,15 @@
   (let ((keys  (db:get-keys dbstruct)))
     (list
      (list "keys"
-	   '("id"        "INTEGER")
+	   '("id"        "INTEGER" 'key)
 	   '("fieldname" "TEXT")
 	   '("fieldtype" "TEXT"))
-     (list "metadat" '("var" "TEXT") '("val" "TEXT"))
+     (list "metadat" 
+       '("id"   "INTEGER" 'key)
+       '("var"  "TEXT") 
+       '("val"  "TEXT"))
      (list "runs" 
-		   '("id"             "INTEGER")
+		   '("id"             "INTEGER" 'key)
        '("release"        "TEXT")
        '("iteration"      "TEXT")
        '("testsuite_mode" "TEXT")
@@ -484,7 +487,7 @@
        '("pass_count"     "INTEGER"))
 
      (list "test_meta"
-	   '("id"             "INTEGER")
+	   '("id"             "INTEGER" 'key)
 	   '("testname"       "TEXT")
 	   '("owner"          "TEXT")
 	   '("description"    "TEXT")
@@ -692,7 +695,7 @@
                   (set! prep (conc prep "$" i ","))
                 (if (< i (- num-fields 1))
                 (loop (+ i 1))
-                (set! prep (conc prep "$" (+ i 1) " ) ON CONFLICT DO NOTHING;"))))
+                (set! prep (conc prep "$" (+ i 1) " );"))))
             (set! full-ins prep)))
 	       (let* ((db (dbi:convert (db:dbdat-get-db targdb)))
 		      (stmth  (dbi:prepare db full-ins)))
