@@ -338,7 +338,7 @@
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
-  (debug:print-info 0 *default-log-port* "Starting the sync-back, keep alive thread in server for run-id=" run-id)
+  (debug:print-info 0 *default-log-port* "Starting the sync-back, keep alive thread in server")
   (let* ((server-start-time (current-seconds))
 	 (server-info (let loop ((start-time (current-seconds))
 				 (changed    #t)
@@ -360,8 +360,7 @@
                                 (sleep 4)
 				(if (> (- (current-seconds) start-time) 120) ;; been waiting for two minutes
 				    (begin
-				      (debug:print-error 0 *default-log-port* "transport appears to have died, exiting server " server-id " for run " run-id)
-				      ;; (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id "failed to start, never received server alive signature")
+				      (debug:print-error 0 *default-log-port* "transport appears to have died, exiting server")
 				      (exit))
 				    (loop start-time
 					  (equal? sdat last-sdat)
@@ -400,14 +399,14 @@
       (set! sdat *server-info*)
       (mutex-unlock! *heartbeat-mutex*)
       
-      (if (or (not (equal? sdat (list iface port)))
-	      (not server-id))
+      (if (not (equal? sdat (list iface port)))
 	  (let ((new-iface (car sdat))
 		(new-port  (cadr sdat)))
 	    (debug:print-info 0 *default-log-port* "WARNING: interface changed, refreshing iface and port info")
 	    (set! iface new-iface)
 	    (set! port  new-port)
-	    (debug:print 0 *default-log-port* "SERVER STARTED: " iface ":" port " " (current-seconds))))
+	    (debug:print 0 *default-log-port* "SERVER STARTED: " iface ":" port " AT " (current-seconds))
+	    (flush-output *default-log-port*)))
       
       ;; Transfer *db-last-access* to last-access to use in checking that we are still alive
       (mutex-lock! *heartbeat-mutex*)
@@ -415,7 +414,9 @@
       (mutex-unlock! *heartbeat-mutex*)
       
       (if (common:low-noise-print 120 (conc "server running on " iface ":" port))
-	  (debug:print-info 0 *default-log-port* "SERVER STARTED: " iface ":" port " " (current-seconds)))
+	  (begin
+	    (debug:print 0 *default-log-port* "SERVER STARTED: " iface ":" port " AT " (current-seconds))
+	    (flush-output *default-log-port*)))
 
       (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600))
 	     (adjusted-timeout (if (> hrs-since-start 1)
@@ -432,9 +433,9 @@
           (loop 0 server-state bad-sync-count (current-milliseconds)))
          (else
           (debug:print-info 0 *default-log-port* "Server timeed out. seconds since last db access: " (- (current-seconds) last-access))
-          (http-transport:server-shutdown server-id port)))))))
+          (http-transport:server-shutdown port)))))))
 
-(define (http-transport:server-shutdown server-id port)
+(define (http-transport:server-shutdown port)
   (let ((tdbdat (tasks:open-db)))
     ;;(BB> "http-transport:server-shutdown called")
     (debug:print-info 0 *default-log-port* "Starting to shutdown the server. pid="(current-process-id))
@@ -465,10 +466,6 @@
     (db:print-current-query-stats)
     
     (debug:print-info 0 *default-log-port* "Server shutdown complete. Exiting")
-    ;; (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running complete")
-    ;; if the .server file contained :myport then we can remove it
-    ;; (server:remove-dotserver-file *toppath* port)
-    ;;(BB> "http-transport:server-shutdown -> exit")
     (exit)))
 
 ;; all routes though here end in exit ...
