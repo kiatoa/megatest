@@ -10,7 +10,7 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest directory-utils posix-extras)
+(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest directory-utils posix-extras matchable)
 ;; (use zmq)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
@@ -111,12 +111,12 @@
 	 (homehost    (common:get-homehost)) ;; configf:lookup *configdat* "server" "homehost" ))
 	 (target-host (car homehost))
 	 (testsuite   (common:get-testsuite-name))
-	 (logfile     (conc areapath "/logs/server-" curr-pid "-" target-host ".log"))
+	 (logfile     (conc areapath "/logs/server.log")) ;; -" curr-pid "-" target-host ".log"))
 	 (cmdln (conc (common:get-megatest-exe)
 		      " -server " (or target-host "-") (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
 							   " -daemonize "
 							   "")
-		      " -log " logfile
+		      ;; " -log " logfile
 		      " -m testsuite:" testsuite)) ;; (conc " >> " logfile " 2>&1 &")))))
 	 (log-rotate  (make-thread common:rotate-logs  "server run, rotate logs thread")))
     ;; we want the remote server to start in *toppath* so push there
@@ -167,26 +167,29 @@
 ;; ( mod-time host port start-time )
 ;;
 (define (server:get-list areapath)
-  (if (directory-exists? areapath)
-      (let ((server-logs (glob (conc areapath "/logs/server-*.log"))))
-	(if (null? server-logs)
-	    '()
-	    (let loop ((hed  (car server-logs))
-		       (tal  (cdr server-logs))
-		       (res '()))
-	      (let* ((mod-time (file-modification-time hed))
-		     (serv-dat (server:logf-get-start-info hed))
-		     (serv-rec (cons mod-time serv-dat))
-		     (new-res  (cons serv-rec res)))
-		(if (null? tal)
-		    new-res
-		    (loop (car tal)(cdr tal) new-res))))))))
+  (let ((fname-rx (regexp "^(|.*/)server-(\\d+)-(\\S+).log$")))
+    (if (directory-exists? areapath)
+	(let ((server-logs (glob (conc areapath "/logs/server-*.log"))))
+	  (if (null? server-logs)
+	      '()
+	      (let loop ((hed  (car server-logs))
+			 (tal  (cdr server-logs))
+			 (res '()))
+		(let* ((mod-time (file-modification-time hed))
+		       (serv-dat (server:logf-get-start-info hed))
+		       (serv-rec (cons mod-time serv-dat))
+		       (fmatch   (string-match fname-rx hed))
+		       (pid      (if fmatch (string->number (list-ref fmatch 2)) #f))
+		       (new-res  (cons (append serv-rec (list pid)) res)))
+		  (if (null? tal)
+		      new-res
+		      (loop (car tal)(cdr tal) new-res)))))))))
 
 ;; given a list of servers get a list of valid servers, i.e. at least
 ;; 10 seconds old, has started and is less than 1 hour old and is
 ;; active (i.e. mod-time < 10 seconds
 ;;
-;; mod-time host port start-time
+;; mod-time host port start-time pid
 ;;
 ;; sort by start-time descending. I.e. get the oldest first. Young servers will thus drop off
 ;; and servers should stick around for about two hours or so.
@@ -197,7 +200,7 @@
      (filter (lambda (rec)
 	       (let ((start-time (list-ref rec 3))
 		     (mod-time   (list-ref rec 0)))
-		 (print "start-time: " start-time " mod-time: " mod-time)
+		 ;; (print "start-time: " start-time " mod-time: " mod-time)
 		 (and start-time mod-time
 		      (> (- now start-time) 1)    ;; been running at least 1 seconds
 		      (< (- now mod-time)   10)   ;; still alive - file touched in last 10 seconds
@@ -207,7 +210,13 @@
      (lambda (a b)
        (< (list-ref a 3)
 	  (list-ref b 3))))))
-		
+
+(define (server:record->url servr)
+  (match-let (((mod-time host port start-time pid)
+	       servr))
+    (if (and host port)
+	(conc host ":" port)
+	#f)))
 
 (define (server:get-client-signature) ;; BB> why is this proc named "get-"?  it returns nothing -- set! has not return value.
   (if *my-client-signature* *my-client-signature*
@@ -362,7 +371,11 @@
 ;; no longer care if multiple servers are started by accident. older servers will drop off in time.
 ;;
 (define (server:check-if-running areapath)
-  (let* ((dotserver-url (server:read-dotserver->url areapath))) ;; tdbdat (tasks:open-db)))
+  (let* ((servers       (server:get-best (server:get-list areapath)))
+	 (best-server   (if (null? servers) #f (car servers)))
+	 (dotserver-url (if best-server
+			    (server:record->url best-server)
+			    #f))) ;; (server:read-dotserver->url areapath))) ;; tdbdat (tasks:open-db)))
     (if dotserver-url
 	(let* ((res (case *transport-type*
 		      ((http)(server:ping-server dotserver-url))
@@ -371,9 +384,14 @@
 	  (if res
 	      dotserver-url
 	      (begin
-                (server:remove-dotserver-file areapath ".*") ;; remove stale dotserver
+		(server:kill best-server)
                 #f)))
 	#f)))
+
+(define (server:kill servr)
+  (match-let (((mod-time hostname port start-time pid)
+	       servr))
+    (tasks:kill-server hostname pid)))
 
 ;; called in megatest.scm, host-port is string hostname:port
 ;;
@@ -382,7 +400,7 @@
 ;;
 (define (server:ping host-port-in #!key (do-exit #f))
   (let ((host:port (if (not host-port-in) ;; use read-dotserver to find
-		       (server:read-dotserver->url *toppath*)
+		       (server:check-if-running *toppath*)
 		       (if (number? host-port-in) ;; we were handed a server-id
 			   (let ((srec (tasks:get-server-by-id (db:delay-if-busy (tasks:open-db)) host-port-in)))
 			     ;; (print "srec: " srec " host-port-in: " host-port-in)
