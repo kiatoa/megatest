@@ -164,11 +164,23 @@
 	      (list #f #f #f)))))))
 
 ;; get a list of servers with all relevant data
-;; ( mod-time host port start-time )
+;; ( mod-time host port start-time pid )
 ;;
 (define (server:get-list areapath)
   (let ((fname-rx (regexp "^(|.*/)server-(\\d+)-(\\S+).log$")))
-    (if (directory-exists? areapath)
+    ;; if the directory exists continue to get the list
+    ;; otherwise attempt to create the logs dir and then
+    ;; continue
+    (if (if (directory-exists? (conc areapath "/logs"))
+	    #t
+	    (if (file-write-access? areapath)
+		(begin
+		  (condition-case
+		      (create-directory (conc areapath "/logs") #t)
+		    (exn (i/o file)(debug:print 0 *default-log-port* "ERROR: Cannot create directory at " (conc areapath "/logs")))
+		    (exn ()(debug:print 0 *default-log-port* "ERROR: Unknown error attemtping to get server list.")))
+		  (directory-exists? (conc areapath "/logs")))
+		#f))
 	(let ((server-logs (glob (conc areapath "/logs/server-*.log"))))
 	  (if (null? server-logs)
 	      '()
@@ -236,113 +248,6 @@
 
 (define server:try-running server:run) ;; there is no more per-run servers ;; REMOVE ME. BUG.
 
-;; (define (server:attempting-start areapath)
-;;   (with-output-to-file
-;;       (conc areapath "/.starting-server")
-;;     (lambda ()
-;;       (print (current-process-id) " on " (get-host-name)))))
-;;   
-;; (define (server:complete-attempt areapath)
-;;   (delete-file* (conc areapath "/.starting-server")))
-;;   
-;; (define (server:start-attempted? areapath)
-;;   (let ((flagfile (conc areapath "/.starting-server")))
-;;     (handle-exceptions
-;;      exn
-;;      #f  ;; if things go wrong pretend we can't see the file
-;;      (cond
-;;       ((and (file-exists? flagfile)
-;;             (< (- (current-seconds)
-;;                   (file-modification-time flagfile))
-;;                15)) ;; exists and less than 15 seconds old
-;;        (with-input-from-file flagfile (lambda () (read-line))))
-;;       ((file-exists? flagfile) ;; it is stale.
-;;        (server:complete-attempt areapath)
-;;        #f)
-;;       (else #f)))))
-;; 
-;; (define (server:read-dotserver areapath)
-;;   (let ((dotfile (conc areapath "/.server")))
-;;     (handle-exceptions
-;;      exn
-;;      #f  ;; if things go wrong pretend we can't see the file
-;;      (cond
-;;       ((not (file-exists? dotfile))
-;;        #f)
-;;       ((not (file-read-access? dotfile))
-;;        #f)
-;;       ((> (server:dotserver-age-seconds areapath) (+ 5 (server:get-timeout)))
-;;        (server:remove-dotserver-file areapath ".*")
-;;        #f)
-;;       (else
-;;        (let* ((line
-;;                (with-input-from-file
-;;                    dotfile
-;;                  (lambda ()
-;;                    (read-line))))
-;;               (tokens (if (string? line) (string-split line ":") #f)))
-;;          (cond
-;;           ((eq? 4 (length tokens))
-;;            tokens)
-;;           (else #f))))))))
-;;        
-;; (define (server:read-dotserver->url areapath)
-;;   (let ((dotserver-tokens (server:read-dotserver areapath)))
-;;     (if dotserver-tokens
-;;         (conc (list-ref dotserver-tokens 0) ":" (list-ref dotserver-tokens 1))
-;; #f)))
-;; 
-;; ;; write a .server file in *toppath* with hostport
-;; ;; return #t on success, #f otherwise
-;; ;;
-;; (define (server:write-dotserver areapath host port pid transport)
-;;   (let ((lock-file   (conc areapath "/.server.lock"))
-;; 	(server-file (conc areapath "/.server")))
-;;     (if (common:simple-file-lock lock-file)
-;; 	(let ((res (handle-exceptions
-;; 		    exn
-;; 		    #f ;; failed for some reason, for the moment simply return #f
-;; 		    (with-output-to-file server-file
-;; 		      (lambda ()
-;; 			(print (conc host ":" port ":" pid ":" transport))))
-;; 		    #t)))
-;; 	  (debug:print-info 0 *default-log-port* "server file " server-file " for " host ":" port " created pid="pid)
-;; 	  (common:simple-file-release-lock lock-file)
-;; 	  res)
-;; 	#f)))
-;; 
-;; 
-;; ;; this will check that the .server file present matches the server calling this procedure.
-;; ;; if parameters match (this-pid and transport) the file will be touched and #t returned
-;; ;; otherwise #f will be returned.
-;; (define (server:confirm-dotserver areapath this-iface this-port this-pid this-transport)
-;;   (let* ((tokens (server:read-dotserver areapath)))
-;;     (cond
-;;      ((not tokens)
-;;       (debug:print-info 0 *default-log-port* "INFO: .server file does not exist.")
-;;       #f)
-;;      ((not (eq? 4 (length tokens)))
-;;       (debug:print-info 0 *default-log-port* "INFO: .server file is corrupt.  There are not 4 tokens as expeted; there are "(length tokens)".")
-;;       #f)
-;;      ((not (equal? this-iface (list-ref tokens 0)))
-;;       (debug:print-info 0 *default-log-port* "INFO: .server file mismatch.  for iface, server has value >"(list-ref tokens 0)"< but this server's value is >"this-iface"<")
-;;       #f)
-;;      ((not (equal? (->string this-port)  (list-ref tokens 1)))
-;;       (debug:print-info 0 *default-log-port* "INFO: .server file mismatch.  for port, .server has value >"(list-ref tokens 1)"< but this server's value is >"(->string this-port)"<")
-;;       #f)
-;;      ((not (equal? (->string this-pid)   (list-ref tokens 2)))
-;;       (debug:print-info 0 *default-log-port* "INFO: .server file mismatch.  for pid, .server has value >"(list-ref tokens 2)"< but this server's value is >"(->string this-pid)"<")
-;;       #f)
-;;      ((not (equal? (->string this-transport) (->string (list-ref tokens 3))))
-;;       (debug:print-info 0 *default-log-port* "INFO: .server file mismatch.  for transport, .server has value >"(list-ref tokens 3)"< but this server's value is >"this-transport"<")
-;;       #f)
-;;      (else (server:touch-dotserver areapath)
-;;       #t))))
-;; 
-;; (define (server:touch-dotserver areapath)
-;;   (let ((server-file (conc areapath "/.server")))
-;;     (change-file-times server-file (current-seconds) (current-seconds))))
-
 (define (server:dotserver-age-seconds areapath)
   (let ((server-file (conc areapath "/.server")))
     (begin
@@ -352,22 +257,6 @@
        (- (current-seconds)
           (file-modification-time server-file))))))
     
-;; (define (server:remove-dotserver-file areapath hostport)
-;;   (let ((dotserver-url   (server:read-dotserver->url areapath))
-;; 	(server-file (conc areapath "/.server"))
-;; 	(lock-file   (conc areapath "/.server.lock")))
-;;     (if (and dotserver-url (string-match (conc ".*:" hostport "$") dotserver-url)) ;; port matches, good enough info to decide to remove the file
-;; 	(if (common:simple-file-lock lock-file)
-;; 	    (begin
-;; 	      (handle-exceptions
-;; 	       exn
-;; 	       #f
-;; 	       (delete-file* server-file))
-;; 	      (debug:print-info 0 *default-log-port* "server file " server-file " for " hostport " removed")
-;; 	      (common:simple-file-release-lock lock-file))
-;;             (debug:print-info 0 *default-log-port* "server file " server-file " for " hostport " NOT removed - could not get lock."))
-;;         (debug:print-info 0 *default-log-port* "server file " server-file " for " hostport " NOT removed - dotserver-url("dotserver-url") did not match hostport pattern ("hostport")"))))
-
 ;; no longer care if multiple servers are started by accident. older servers will drop off in time.
 ;;
 (define (server:check-if-running areapath)
