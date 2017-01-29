@@ -10,7 +10,7 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use  srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest) ;; sqlite3
+(use  srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest posix-extras) ;; sqlite3
 ;; (import (prefix sqlite3 sqlite3:))
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars intarweb spiffy-directory-listing)
@@ -369,7 +369,8 @@
          (port        (cadr server-info))
          (last-access 0)
 	 (server-timeout (server:get-timeout))
-	 (server-going  #f))
+	 (server-going  #f)
+	 (server-log-file (args:get-arg "-log"))) ;; always set when we are a server
     (let loop ((count         0)
 	       (server-state 'available)
 	       (bad-sync-count 0)
@@ -429,7 +430,9 @@
 		 (> (+ last-access server-timeout)
 		    (current-seconds)))
           (if (common:low-noise-print 120 "server continuing")
-              (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access)))
+              (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
+	      (let ((curr-time (current-seconds)))
+		(change-file-times server-log-file curr-time curr-time)))
           (loop 0 server-state bad-sync-count (current-milliseconds)))
          (else
           (debug:print-info 0 *default-log-port* "Server timeed out. seconds since last db access: " (- (current-seconds) last-access))
