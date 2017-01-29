@@ -381,7 +381,7 @@
 	    (debug:print 0 *default-log-port* "SERVER: dbprep")
 	    (set! *dbstruct-db*  (db:setup)) ;;  run-id))
 	    (set! server-going #t)
-	    (debug:print 0 *default-log-port* "SERVER: running") ;; NOTE: the server is NOT yet marked as running in the log. We do that in the keep-running routine.
+	    (debug:print 0 *default-log-port* "SERVER: running, megatest version: " (common:get-full-version)) ;; NOTE: the server is NOT yet marked as running in the log. We do that in the keep-running routine.
 	    (thread-start! *watchdog*)))
       
       ;; when things go wrong we don't want to be doing the various queries too often
@@ -427,15 +427,16 @@
 	    (debug:print-info 0 *default-log-port* "Adjusted server timeout: " adjusted-timeout))
 	(cond
          ((and *server-run*
-		 (> (+ last-access server-timeout)
-		    (current-seconds)))
+	       (> (+ last-access server-timeout)
+		  (current-seconds))
+	       (< (- (current-seconds) server-start-time) 3600)) ;; do not update log or touch log if we've been running for more than one hour.
           (if (common:low-noise-print 120 "server continuing")
               (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
 	      (let ((curr-time (current-seconds)))
 		(change-file-times server-log-file curr-time curr-time)))
           (loop 0 server-state bad-sync-count (current-milliseconds)))
          (else
-          (debug:print-info 0 *default-log-port* "Server timeed out. seconds since last db access: " (- (current-seconds) last-access))
+          (debug:print-info 0 *default-log-port* "Server timed out. seconds since last db access: " (- (current-seconds) last-access))
           (http-transport:server-shutdown port)))))))
 
 (define (http-transport:server-shutdown port)
