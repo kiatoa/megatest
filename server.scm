@@ -255,8 +255,9 @@
       (if (or server-url
 	      (> (current-seconds) give-up-time))
 	  server-url
-	  (begin
-	    (server:kind-run areapath)
+	  (let ((num-ok (server:get-best (server:get-list areapath))))
+	    (if (< num-ok 2) ;; if there are no decent candidates for servers then try starting a new one
+		(server:kind-run areapath))
 	    (thread-sleep! 5)
 	    (loop (server:check-if-running areapath)))))))
 
