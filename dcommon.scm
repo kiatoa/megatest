@@ -664,7 +664,7 @@
 						  vals)
 					(set! rownum (+ rownum 1)))
 				      (iup:attribute-set! servers-matrix "REDRAW" "ALL")))
-				    (sort servers (lambda (a b)(< (car a)(car b))))))))))
+				    (sort servers (lambda (a b)(> (car a)(car b))))))))))
     (set! colnum 0)
     (for-each (lambda (colname)
 		(iup:attribute-set! servers-matrix (conc "0:" colnum) colname)

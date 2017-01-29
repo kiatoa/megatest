@@ -88,10 +88,6 @@
   (case (server:get-transport)
     ((rpc)  (db:obj->string (vector success/fail query-sig result)))
     ((http) (db:obj->string (vector success/fail query-sig result)))
-    ((zmq)
-     (let ((pub-socket (vector-ref *runremote* 1)))
-       (send-message pub-socket return-addr send-more: #t)
-       (send-message pub-socket (db:obj->string (vector success/fail query-sig result)))))
     ((fs)   result)
     (else 
      (debug:print-error 0 *default-log-port* "unrecognised transport type: " *transport-type*)
@@ -134,7 +130,7 @@
 	  (debug:print-info 0 *default-log-port* "Starting server on " target-host ", logfile is " logfile)
 	  (setenv "TARGETHOST" target-host)))
       
-    (setenv "TARGETHOST_LOGF" "server.log") ;; logfile)
+    (setenv "TARGETHOST_LOGF" logfile)
     (common:wait-for-normalized-load 4 " delaying server start due to load" remote-host: (get-environment-variable "TARGETHOST")) ;; do not try starting servers on an already overloaded machine, just wait forever
     (system (conc "nbfake " cmdln))
     (unsetenv "TARGETHOST_LOGF")
@@ -223,6 +219,13 @@
        (< (list-ref a 3)
 	  (list-ref b 3))))))
 
+(define (server:get-first-best areapath)
+  (let ((srvrs (server:get-best (server:get-list areapath))))
+    (if (and srvrs
+	     (not (null? srvrs)))
+	(car srvrs)
+	#f)))
+
 (define (server:record->url servr)
   (match-let (((mod-time host port start-time pid)
 	       servr))
@@ -246,6 +249,17 @@
 	  (server:run areapath)
 	  (hash-table-set! *server-kind-run* areapath (current-seconds))))))
 
+(define (server:start-and-wait areapath #!key (timeout 60))
+  (let ((give-up-time (+ (current-seconds) timeout)))
+    (let loop ((server-url (server:check-if-running areapath)))
+      (if (or server-url
+	      (> (current-seconds) give-up-time))
+	  server-url
+	  (begin
+	    (server:kind-run areapath)
+	    (thread-sleep! 5)
+	    (loop (server:check-if-running areapath)))))))
+
 (define server:try-running server:run) ;; there is no more per-run servers ;; REMOVE ME. BUG.
 
 (define (server:dotserver-age-seconds areapath)
@@ -267,13 +281,13 @@
 			    #f))) ;; (server:read-dotserver->url areapath))) ;; tdbdat (tasks:open-db)))
     (if dotserver-url
 	(let* ((res (case *transport-type*
-		      ((http)(server:ping-server dotserver-url))
+		      ((http)(server:ping dotserver-url))
 		      ;; ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
 		      )))
 	  (if res
 	      dotserver-url
 	      (begin
-		(server:kill best-server)
+		;; (server:kill best-server)
                 #f)))
 	#f)))
 
@@ -289,21 +303,21 @@
 ;;
 (define (server:ping host-port-in #!key (do-exit #f))
   (let ((host:port (if (not host-port-in) ;; use read-dotserver to find
-		       (server:check-if-running *toppath*)
-		       (if (number? host-port-in) ;; we were handed a server-id
-			   (let ((srec (tasks:get-server-by-id (db:delay-if-busy (tasks:open-db)) host-port-in)))
-			     ;; (print "srec: " srec " host-port-in: " host-port-in)
-			     (if srec
-				 (conc (vector-ref srec 3) ":" (vector-ref srec 4))
-				 (conc "no such server-id " host-port-in)))
-			   host-port-in))))
+		       #f ;; (server:check-if-running *toppath*)
+		;; (if (number? host-port-in) ;; we were handed a server-id
+		;; 	   (let ((srec (tasks:get-server-by-id (db:delay-if-busy (tasks:open-db)) host-port-in)))
+		;; 	     ;; (print "srec: " srec " host-port-in: " host-port-in)
+		;; 	     (if srec
+		;; 		 (conc (vector-ref srec 3) ":" (vector-ref srec 4))
+		;; 		 (conc "no such server-id " host-port-in)))
+		       host-port-in))) ;; )
     (let* ((host-port (if host:port
 			  (let ((slst (string-split   host:port ":")))
 			    (if (eq? (length slst) 2)
 				(list (car slst)(string->number (cadr slst)))
 				#f))
-			  #f))
-	   (toppath       (launch:setup)))
+			  #f)))
+;;	   (toppath       (launch:setup)))
       ;; (print "host-port=" host-port)
       (if (not host-port)
 	  (begin
@@ -318,11 +332,13 @@
 	    (if (and (list? login-res)
 		     (car login-res))
 		(begin
-		  (print "LOGIN_OK")
-		  (if do-exit (exit 0)))
+		  ;; (print "LOGIN_OK")
+		  (if do-exit (exit 0))
+		  #t)
 		(begin
-		  (print "LOGIN_FAILED")
-		  (if do-exit (exit 1)))))))))
+		  ;; (print "LOGIN_FAILED")
+		  (if do-exit (exit 1))
+		  #f)))))))
 
 ;; run ping in separate process, safest way in some cases
 ;;
