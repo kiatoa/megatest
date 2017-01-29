@@ -622,7 +622,7 @@
 	 (colnames       (list "Id" "MTver" "Pid" "Host" "Interface:OutPort" "RunTime" "State" "RunId"))
 	 (updater        (lambda ()
 			   (if (dashboard:monitor-changed? commondat tabdat)
-			       (let ((servers  (server:get-list *toppath*)))
+			       (let ((servers  (server:get-list *toppath* limit: 10)))
 				 ;; (tasks:get-all-servers (db:delay-if-busy tdbdat))))
 				 (iup:attribute-set! servers-matrix "NUMLIN" (length servers))
 				 ;; (set! colnum 0)
@@ -639,7 +639,7 @@
 						 server))
 				      (let* ((uptime  (- (current-seconds) mod-time))
 					     (runtime (if start-time
-							  (- (current-seconds) start-time)
+							  (- mod-time start-time)
 							  0))
 					     (vals (list "-"  ;; (vector-ref server 0) ;; Id
 							 "-"  ;; (vector-ref server 9) ;; MT-Ver

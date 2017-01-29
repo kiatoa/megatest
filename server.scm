@@ -162,8 +162,9 @@
 ;; get a list of servers with all relevant data
 ;; ( mod-time host port start-time pid )
 ;;
-(define (server:get-list areapath)
-  (let ((fname-rx (regexp "^(|.*/)server-(\\d+)-(\\S+).log$")))
+(define (server:get-list areapath #!key (limit #f))
+  (let ((fname-rx    (regexp "^(|.*/)server-(\\d+)-(\\S+).log$"))
+	(day-seconds (* 24 60 60)))
     ;; if the directory exists continue to get the list
     ;; otherwise attempt to create the logs dir and then
     ;; continue
@@ -177,20 +178,30 @@
 		    (exn ()(debug:print 0 *default-log-port* "ERROR: Unknown error attemtping to get server list.")))
 		  (directory-exists? (conc areapath "/logs")))
 		#f))
-	(let ((server-logs (glob (conc areapath "/logs/server-*.log"))))
+	(let* ((server-logs   (glob (conc areapath "/logs/server-*.log")))
+	       (num-serv-logs (length server-logs)))
 	  (if (null? server-logs)
 	      '()
 	      (let loop ((hed  (car server-logs))
 			 (tal  (cdr server-logs))
 			 (res '()))
-		(let* ((mod-time (file-modification-time hed))
-		       (serv-dat (server:logf-get-start-info hed))
+		(let* ((mod-time  (file-modification-time hed))
+		       (down-time (- (current-seconds) mod-time))
+		       (serv-dat  (if (or (< num-serv-logs 10)
+				  	  (< down-time day-seconds))
+				     (server:logf-get-start-info hed)
+				     '())) ;; don't waste time processing server files not touched in the past day if there are more than ten servers to look at
 		       (serv-rec (cons mod-time serv-dat))
 		       (fmatch   (string-match fname-rx hed))
 		       (pid      (if fmatch (string->number (list-ref fmatch 2)) #f))
-		       (new-res  (cons (append serv-rec (list pid)) res)))
-		  (if (null? tal)
-		      new-res
+		       (new-res  (if (null? serv-dat)
+				     res
+				     (cons (append serv-rec (list pid)) res))))
+		(if (null? tal)
+		    (if (and limit
+			     (> (length new-res) limit))
+			new-res ;; (take new-res limit)  <= need intelligent sorting before this will work
+			new-res)
 		      (loop (car tal)(cdr tal) new-res)))))))))
 
 ;; given a list of servers get a list of valid servers, i.e. at least
@@ -211,7 +222,7 @@
 		 ;; (print "start-time: " start-time " mod-time: " mod-time)
 		 (and start-time mod-time
 		      (> (- now start-time) 1)    ;; been running at least 1 seconds
-		      (< (- now mod-time)   10)   ;; still alive - file touched in last 10 seconds
+		      (< (- now mod-time)   16)   ;; still alive - file touched in last 16 seconds
 		      (< (- now start-time) 3600) ;; under one hour running time
 		      )))
 	     srvlst)
