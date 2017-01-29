@@ -15,10 +15,10 @@
 
 ;; dbstruct vector containing all the relevant dbs like main.db, megatest.db, run.db etc
 
-(use (srfi 18) extras tcp stack) ;; RADT => use of require-extension?
+(use (srfi 18) extras tcp stack)
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking z3 typed-records matchable)
 (import (prefix sqlite3 sqlite3:))
-(import (prefix base64 base64:)) ;; RADT => prefix??
+(import (prefix base64 base64:))
 
 (declare (unit db))
 (declare (uses common))
@@ -145,7 +145,7 @@
 	     (common:low-noise-print 120 "over-50-parallel-api-requests"))
 	(debug:print-info 0 *default-log-port* *api-process-request-count* " parallel api requests being processed in process " (current-process-id) ", throttling access"))
     (if (common:low-noise-print 600 (conc "parallel-api-requests" *max-api-process-requests*))
-	(debug:print-info 0 *default-log-port* "Parallel api request count: " *api-process-request-count* " max parallel requests: " *max-api-process-requests*))
+	(debug:print-info 2 *default-log-port* "Parallel api request count: " *api-process-request-count* " max parallel requests: " *max-api-process-requests*))
     (handle-exceptions
      exn
      (begin
@@ -2043,8 +2043,11 @@
 
 ;; get some basic run stats
 ;;
+;; data structure:
+;;
 ;; ( (runname (( state  count ) ... ))
-;;   (   ...  
+;;   (   ...
+;;
 (define (db:get-run-stats dbstruct)
   (let* ((totals       (make-hash-table))
 	 (curr         (make-hash-table))
