@@ -38,8 +38,8 @@
         (run-id 0))
     (if cinfo
 	cinfo
-	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)
-	    (client:setup run-id)
+	(if (server:check-if-running areapath)
+	    (client:setup areapath)
 	    #f))))
 
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
@@ -95,7 +95,7 @@
            (not (member cmd api:read-only-queries))  ;; this is a write
            (remote-server-url *runremote*)           ;; have a server
            (not (server:check-if-running *toppath*)))  ;; server has died.
-      (set! *runremote* #f)
+      (set! *runremote* (make-remote))
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  4.1")
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
@@ -125,7 +125,7 @@
            (not (remote-conndat *runremote*)))            ;; and no connection
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  6  hh-dat: " (remote-hh-dat *runremote*) " conndat: " (remote-conndat *runremote*))
       (mutex-unlock! *rmt-mutex*)
-      (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
+      (server:start-and-wait *toppath*)
       (remote-conndat-set! *runremote* (rmt:get-connection-info *toppath*)) ;; calls client:setup which calls client:setup-http
       (rmt:send-receive cmd rid params attemptnum: attemptnum)) ;; TODO: add back-off timeout as
      ;; all set up if get this far, dispatch the query
@@ -168,7 +168,7 @@
 	      (remote-server-url-set! *runremote* #f)
               (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
 	      (mutex-unlock! *rmt-mutex*)
-	      (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
+	      (server:start-and-wait *toppath*)
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))))))))
 
 ;; (define (rmt:update-db-stats run-id rawcmd params duration)
