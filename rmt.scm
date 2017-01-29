@@ -38,8 +38,8 @@
         (run-id 0))
     (if cinfo
 	cinfo
-	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)
-	    (client:setup run-id)
+	(if (server:check-if-running areapath)
+	    (client:setup areapath)
 	    #f))))
 
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
@@ -94,8 +94,8 @@
      ((and (cdr (remote-hh-dat *runremote*))         ;; on homehost
            (not (member cmd api:read-only-queries))  ;; this is a write
            (remote-server-url *runremote*)           ;; have a server
-           (not (server:read-dotserver *toppath*)))  ;; server has died.
-      (set! *runremote* #f)
+           (not (server:check-if-running *toppath*)))  ;; server has died.
+      (set! *runremote* (make-remote))
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  4.1")
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
@@ -108,56 +108,24 @@
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  4")
       (rmt:open-qry-close-locally cmd 0 params))
 
-     ;; commented by bb; this was blocking server passive start on write on homehost (case 5)
-     ;; ;; on homehost and this is a write, we have a server (we know because case 4 checked)
-     ;; ((and (cdr (remote-hh-dat *runremote*))         ;; on homehost
-     ;;       (not (member cmd api:read-only-queries)))
-     ;;  (mutex-unlock! *rmt-mutex*)
-     ;;  (debug:print-info 12 *default-log-port* "rmt:send-receive, case  4.1")
-     ;;  (rmt:open-qry-close-locally cmd 0 params))
-
-     
      ;;  on homehost, no server contact made and this is a write, passively start a server 
      ((and (cdr (remote-hh-dat *runremote*)) ; new
            (not (remote-server-url *runremote*))
 	   (not (member cmd api:read-only-queries)))
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5")
-      (let ((server-url (server:read-dotserver->url *toppath*))) ;; (server:check-if-running *toppath*))) ;; Do NOT want to run server:check-if-running - very expensive to do for every write call
+      (let ((server-url  (server:check-if-running *toppath*))) ;; (server:read-dotserver->url *toppath*))) ;; (server:check-if-running *toppath*))) ;; Do NOT want to run server:check-if-running - very expensive to do for every write call
 	(if server-url
 	    (remote-server-url-set! *runremote* server-url) ;; the string can be consumed by the client setup if needed
-	    (if (not (server:start-attempted? *toppath*))
-		(server:kind-run *toppath*))))
-             (mutex-unlock! *rmt-mutex*)
-             (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5.1")
-             (rmt:open-qry-close-locally cmd 0 params))
-
-
-
-     ;;;
-           ;;     (begin                            ;; not on homehost, start server and wait
-            ;; (mutex-unlock! *rmt-mutex*)
-	    ;; (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5.2")
-	    ;; (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
-            ;; (rmt:send-receive cmd rid params attemptnum: attemptnum))   ;)  ;)
-;;;;
-     
-     ;; if not on homehost ensure we have a connection to a live server
-     ;; NOTE: we *have* a homehost record by now
-
-     ;; ((and (not (cdr (remote-hh-dat *runremote*)))        ;; not on a homehost 
-     ;;       (not (remote-conndat *runremote*))             ;; and no connection
-     ;;       (server:read-dotserver *toppath*))             ;; .server file exists
-     ;;  ;; something caused the server entry in tdb to disappear, but the server is still running
-     ;;  (server:remove-dotserver-file *toppath* ".*")
-     ;;  (mutex-unlock! *rmt-mutex*)
-     ;;  (debug:print-info 12 *default-log-port* "rmt:send-receive, case  20")
-     ;;  (rmt:send-receive cmd rid params attemptnum: (add1 attemptnum)))
+	    (server:kind-run *toppath*)))
+      (mutex-unlock! *rmt-mutex*)
+      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5.1")
+      (rmt:open-qry-close-locally cmd 0 params))
 
      ((and (not (cdr (remote-hh-dat *runremote*)))        ;; not on a homehost 
            (not (remote-conndat *runremote*)))            ;; and no connection
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  6  hh-dat: " (remote-hh-dat *runremote*) " conndat: " (remote-conndat *runremote*))
       (mutex-unlock! *rmt-mutex*)
-      (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
+      (server:start-and-wait *toppath*)
       (remote-conndat-set! *runremote* (rmt:get-connection-info *toppath*)) ;; calls client:setup which calls client:setup-http
       (rmt:send-receive cmd rid params attemptnum: attemptnum)) ;; TODO: add back-off timeout as
      ;; all set up if get this far, dispatch the query
@@ -200,7 +168,7 @@
 	      (remote-server-url-set! *runremote* #f)
               (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
 	      (mutex-unlock! *rmt-mutex*)
-	      (tasks:start-and-wait-for-server (tasks:open-db) 0 15)
+	      (server:start-and-wait *toppath*)
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))))))))
 
 ;; (define (rmt:update-db-stats run-id rawcmd params duration)
