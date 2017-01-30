@@ -103,7 +103,7 @@ Misc
 
 (if (not (common:on-homehost?))
     (begin
-      (debug:print 0 "ERROR: Current policy requires running dashboard on homehost: " (common:get-homehost))))
+      (debug:print 0 *default-log-port* "ERROR: Current policy requires running dashboard on homehost: " (common:get-homehost))))
     
 ;; TODO: Move this inside (main)
 ;;
