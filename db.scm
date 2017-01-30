@@ -688,19 +688,23 @@
 	     (lambda (targdb)
         (set! targdb (dbi:convert (db:dbdat-get-db targdb)))
         (if (eqv? (dbi:db-dbtype targdb) 'pg)
-          (let* ((prep ""))
+          (let* ((prep "")
+                 (set-stmt "")
+                 (key (car (map car fields)))
+                 (list-fields (map car fields)))
             (set! prep (string-intersperse (map cadr fields) ","))
-            (set! prep (conc "PREPARE fullins (" prep ") AS INSERT INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) VALUES ( ")) ;;maybe add lookup in the future depending on where types are needed
+            (set! prep (conc "PREPARE fullupdate (" prep ") AS UPDATE " tablename " SET ")) ;;maybe add lookup in the future depending on where types are needed
               (let loop ((i 1))
-                  (set! prep (conc prep "$" i ","))
-                (if (< i (- num-fields 1))
+                  (set! set-stmt (conc set-stmt (list-ref list-fields i) " = $" (+ i 1) ", "))
+                (if (< i (- (length list-fields) 2))
                 (loop (+ i 1))
-                (set! prep (conc prep "$" (+ i 1) " );"))))
-            (set! full-ins prep)))
+                (set! set-stmt (conc set-stmt (list-ref list-fields (+ i 1)) " = $" (+ i 2) " WHERE " key " = $1;"))))
+            (set! full-ins (conc prep set-stmt))))
 	       (let* ((db (dbi:convert (db:dbdat-get-db targdb)))
 		      (stmth  (dbi:prepare db full-ins)))
 		 ;; (db:delay-if-busy targdb) ;; NO WAITING
-		 (for-each
+		 
+     (for-each
 		  (lambda (fromdat-lst)
 		    (dbi:with-transaction
 		     db
@@ -709,7 +713,9 @@
 			(lambda (fromrow)
 			  (let* ((a    (vector-ref fromrow 0))
 				 (curr (hash-table-ref/default todat a #f))
-				 (same #t))
+				 (same #t)
+         (res #f)
+         (len (length (vector->list fromrow))))
 			    (let loop ((i 0))
 			      (if (or (not curr)
 				      (not (equal? (vector-ref fromrow i)(vector-ref curr i))))
@@ -717,10 +723,19 @@
 			      (if (and same
 				       (< i (- num-fields 1)))
 				  (loop (+ i 1))))
-			    (if (not same)
-            (begin
-              (apply dbi:prepare-exec stmth (vector->list fromrow))
-             (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
+          (if (not same)
+              (begin 
+                (set! res (apply dbi:prepare-exec stmth (vector->list fromrow)))
+                (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))
+          (if (and (not same) (eqv? (dbi:get-res res 'affected-rows) 0))
+                  (let* ((prep ""))
+                    (set! prep (string-intersperse (map cadr fields) ","))
+                    (set! prep (conc "INSERT INTO " tablename " ( " (string-intersperse (map car fields) ",")
+                     " ) VALUES ( " (string-intersperse (make-list len "?") ",") " );")) ;;maybe add lookup in the future depending on where types are needed 
+                      (begin 
+                        (hash-table-set! numrecs tablename (- 1 (hash-table-ref/default numrecs tablename 0)))
+                        (apply dbi:exec db prep (vector->list fromrow))
+                        (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0))))))))
         ;;(begin
 				 ;; (dbi:prepare-exec stmth (vector->list fromrow))
 				  ;;(hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
