@@ -221,9 +221,9 @@
 		     (mod-time   (list-ref rec 0)))
 		 ;; (print "start-time: " start-time " mod-time: " mod-time)
 		 (and start-time mod-time
-		      (> (- now start-time) 1)    ;; been running at least 1 seconds
+		      (> (- now start-time) 0)    ;; been running at least 0 seconds
 		      (< (- now mod-time)   16)   ;; still alive - file touched in last 16 seconds
-		      (< (- now start-time) 3600) ;; under one hour running time
+		      (< (- now start-time) (string->number (or (configf:lookup *configdat* "server" "runtime") "3600"))) ;; under one hour running time
 		      )))
 	     srvlst)
      (lambda (a b)
@@ -266,7 +266,7 @@
       (if (or server-url
 	      (> (current-seconds) give-up-time))
 	  server-url
-	  (let ((num-ok (server:get-best (server:get-list areapath))))
+	  (let ((num-ok (length (server:get-best (server:get-list areapath)))))
 	    (if (< num-ok 2) ;; if there are no decent candidates for servers then try starting a new one
 		(server:kind-run areapath))
 	    (thread-sleep! 5)
