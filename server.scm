@@ -286,21 +286,28 @@
 ;; no longer care if multiple servers are started by accident. older servers will drop off in time.
 ;;
 (define (server:check-if-running areapath)
-  (let* ((servers       (server:get-best (server:get-list areapath)))
-	 (best-server   (if (null? servers) #f (car servers)))
-	 (dotserver-url (if best-server
-			    (server:record->url best-server)
-			    #f))) ;; (server:read-dotserver->url areapath))) ;; tdbdat (tasks:open-db)))
-    (if dotserver-url
-	(let* ((res (case *transport-type*
-		      ((http)(server:ping dotserver-url))
-		      ;; ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
-		      )))
-	  (if res
-	      dotserver-url
-	      (begin
-		;; (server:kill best-server)
-                #f)))
+  (let* ((servers       (server:get-best (server:get-list areapath))))
+    (if (null? servers)
+        #f
+        (let loop ((hed (car servers))
+                   (tal (cdr servers)))
+          (let ((res (server:check-server hed)))
+            (if res
+                res
+                (if (null? tal)
+                    #f
+                    (loop (car tal)(cdr tal)))))))))
+
+;; ping the given server
+;;
+(define (server:check-server server-record)
+  (let* ((server-url (server:record->url server-record))
+         (res        (case *transport-type*
+                       ((http)(server:ping server-url))
+                       ;; ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
+                       )))
+    (if res
+        server-url
 	#f)))
 
 (define (server:kill servr)
