@@ -32,7 +32,7 @@
   (reset-ducttape)
 
   (command-line-arguments cmdline-list)
-  (process-command-line)
+  (ducttape-process-command-line)
 )
 
 
@@ -136,7 +136,7 @@
            (expected-err
             (if (equal? systype "Darwin")
                 "ls: /zzzzz: No such file or directory"
-                "/bin/ls: cannot access /zzzzz: No such file or directory"))
+                "/bin/ls: .* /zzzzz: No such file or directory"))
 
            )
        (test "isys: /bin/ls /zzzzz should have exit code 2" expected-code ec)
