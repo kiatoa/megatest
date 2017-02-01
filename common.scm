@@ -244,15 +244,28 @@
   (if (not (directory-exists? "logs"))(create-directory "logs"))
   (directory-fold 
    (lambda (file rem)
-     (if (and (string-match "^.*.log" file)
-	      (> (file-size (conc "logs/" file)) 200000))
-	 (let ((gzfile (conc "logs/" file ".gz")))
-	   (if (file-exists? gzfile)
-	       (begin
-		 (debug:print-info 0 *default-log-port* "removing " gzfile)
-		 (delete-file gzfile)))
-	   (debug:print-info 0 *default-log-port* "compressing " file)
-	   (system (conc "gzip logs/" file)))))
+     (handle-exceptions
+      exn
+      (debug:print-info 0 *default-log-port* "failed to rotate log " file ", probably handled by another process.")
+      (let* ((fullname (conc "logs/" file))
+             (file-age (- (current-seconds)(file-modification-time fullname))))
+        (if (or (and (string-match "^.*.log" file)
+                     (> (file-size fullname) 200000))
+                (and (string-match "^server-.*.log" file)
+                     (> (- (current-seconds) (file-modification-time fullname))
+                        (* 8 60 60))))
+            (let ((gzfile (conc fullname ".gz")))
+              (if (file-exists? gzfile)
+                  (begin
+                    (debug:print-info 0 *default-log-port* "removing " gzfile)
+                    (delete-file gzfile)))
+              (debug:print-info 0 *default-log-port* "compressing " file)
+              (system (conc "gzip " fullname)))
+            (if (> file-age (* (string->number (or (configf:lookup *configdat* "setup" "log-expire-days") "30")) 24 3600))
+                (handle-exceptions
+                 exn
+                 #f
+                 (delete-file fullname)))))))
    '()
    "logs"))
 

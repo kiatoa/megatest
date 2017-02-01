@@ -221,9 +221,9 @@
 		     (mod-time   (list-ref rec 0)))
 		 ;; (print "start-time: " start-time " mod-time: " mod-time)
 		 (and start-time mod-time
-		      (> (- now start-time) 1)    ;; been running at least 1 seconds
+		      (> (- now start-time) 0)    ;; been running at least 0 seconds
 		      (< (- now mod-time)   16)   ;; still alive - file touched in last 16 seconds
-		      (< (- now start-time) 3600) ;; under one hour running time
+		      (< (- now start-time) (string->number (or (configf:lookup *configdat* "server" "runtime") "3600"))) ;; under one hour running time
 		      )))
 	     srvlst)
      (lambda (a b)
@@ -253,12 +253,18 @@
 ;; kind start up of servers, wait 40 seconds before allowing another server for a given
 ;; run-id to be launched
 (define (server:kind-run areapath)
-  (let ((last-run-time (hash-table-ref/default *server-kind-run* areapath #f)))
-    (if (or (not last-run-time)
-	    (> (- (current-seconds) last-run-time) 30))
-	(begin
-	  (server:run areapath)
-	  (hash-table-set! *server-kind-run* areapath (current-seconds))))))
+  (let* ((last-run-dat (hash-table-ref/default *server-kind-run* areapath '(0 0))) ;; callnum, whenrun
+         (call-num     (car last-run-dat))
+         (when-run     (cadr last-run-dat))
+         (run-delay    (+ (case call-num
+                            ((0)    0)
+                            ((1)   20)
+                            ((2)  300)
+                            (else 600))
+                          (random 5)))) ;; add a small random number just in case a lot of jobs hit the work hosts simultaneously
+    (if	(> (- (current-seconds) when-run) run-delay)
+        (server:run areapath))
+    (hash-table-set! *server-kind-run* areapath (list (+ call-num 1)(current-seconds)))))
 
 (define (server:start-and-wait areapath #!key (timeout 60))
   (let ((give-up-time (+ (current-seconds) timeout)))
@@ -266,7 +272,7 @@
       (if (or server-url
 	      (> (current-seconds) give-up-time))
 	  server-url
-	  (let ((num-ok (server:get-best (server:get-list areapath))))
+	  (let ((num-ok (length (server:get-best (server:get-list areapath)))))
 	    (if (< num-ok 2) ;; if there are no decent candidates for servers then try starting a new one
 		(server:kind-run areapath))
 	    (thread-sleep! 5)
@@ -286,21 +292,28 @@
 ;; no longer care if multiple servers are started by accident. older servers will drop off in time.
 ;;
 (define (server:check-if-running areapath)
-  (let* ((servers       (server:get-best (server:get-list areapath)))
-	 (best-server   (if (null? servers) #f (car servers)))
-	 (dotserver-url (if best-server
-			    (server:record->url best-server)
-			    #f))) ;; (server:read-dotserver->url areapath))) ;; tdbdat (tasks:open-db)))
-    (if dotserver-url
-	(let* ((res (case *transport-type*
-		      ((http)(server:ping dotserver-url))
-		      ;; ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
-		      )))
-	  (if res
-	      dotserver-url
-	      (begin
-		;; (server:kill best-server)
-                #f)))
+  (let* ((servers       (server:get-best (server:get-list areapath))))
+    (if (null? servers)
+        #f
+        (let loop ((hed (car servers))
+                   (tal (cdr servers)))
+          (let ((res (server:check-server hed)))
+            (if res
+                res
+                (if (null? tal)
+                    #f
+                    (loop (car tal)(cdr tal)))))))))
+
+;; ping the given server
+;;
+(define (server:check-server server-record)
+  (let* ((server-url (server:record->url server-record))
+         (res        (case *transport-type*
+                       ((http)(server:ping server-url))
+                       ;; ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
+                       )))
+    (if res
+        server-url
 	#f)))
 
 (define (server:kill servr)
