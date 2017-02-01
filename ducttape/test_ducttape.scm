@@ -115,6 +115,8 @@
 
      )))
 
+
+
 (define (test-systemstuff)
   (test-group
    "system commands"
@@ -337,7 +339,15 @@
   ) ; end main()
 
 (main)
-(sendmail "brandon.j.barclay@intel.com" "6hello subject"  "test body")
+(sendmail "brandon.j.barclay@intel.com" "6hello subject"  "test body" )
+
+(let* ((image-file "/nfs/site/home/bjbarcla/megatest-logo.png")
+       (cid "mtlogo")
+       (image-alist (list (cons image-file cid)))
+       (body  (conc "Hello world<br /><img cid:"cid" alt=\"test image\"><br>bye!")))
+
+  (sendmail "brandon.j.barclay@intel.com" "7hello subject"  body use_html: #t images-with-content-id-alist: image-alist)
+  (print "sent image mail"))
 ;(sendmail "bjbarcla" "2hello subject html"  "test body<h1>hello</h1><i>italics</i>" use_html: #t)
 ;(sendmail "bb" "4hello attach subject html"  "<h2>hmm</h2>" use_html: #t attach-files-list: '( "/Users/bb/Downloads/wdmycloud-manual-4779-705103.pdf" ) )
 
