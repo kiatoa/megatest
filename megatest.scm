@@ -372,8 +372,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (thread-start! *watchdog*)) ;; if starting a server; wait till we get to running state before kicking off watchdog
 ;;(BB> "thread-start! watchdog")
 
+;; bracket open-output-file with code to make leading directory if it does not exist and handle exceptions
+(define (open-logfile logpath)
+  (condition-case
+   (let* ((log-dir (or (pathname-directory logpath) ".")))
+     (if (not (directory-exists? log-dir))
+         (system (conc "mkdir -p " log-dir)))
+     (open-output-file logpath))
+   (exn ()
+        (debug:print-error 0 *default-log-port* "Could not open log file for write: "logpath)
+        (define *didsomething* #t)  
+        (exit 1))))
+
 (if (args:get-arg "-log")
-    (let ((oup (open-output-file (args:get-arg "-log"))))
+    (let ((oup (open-logfile (args:get-arg "-log"))))
       (debug:print-info 0 *default-log-port* "Sending log output to " (args:get-arg "-log"))
       (set! *default-log-port* oup)))
 
