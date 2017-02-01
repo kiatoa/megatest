@@ -253,12 +253,18 @@
 ;; kind start up of servers, wait 40 seconds before allowing another server for a given
 ;; run-id to be launched
 (define (server:kind-run areapath)
-  (let ((last-run-time (hash-table-ref/default *server-kind-run* areapath #f)))
-    (if (or (not last-run-time)
-	    (> (- (current-seconds) last-run-time) 30))
-	(begin
-	  (server:run areapath)
-	  (hash-table-set! *server-kind-run* areapath (current-seconds))))))
+  (let* ((last-run-dat (hash-table-ref/default *server-kind-run* areapath '(0 0))) ;; callnum, whenrun
+         (call-num     (car last-run-dat))
+         (when-run     (cadr last-run-dat))
+         (run-delay    (+ (case call-num
+                            ((0)    0)
+                            ((1)   20)
+                            ((2)  300)
+                            (else 600))
+                          (random 5)))) ;; add a small random number just in case a lot of jobs hit the work hosts simultaneously
+    (if	(> (- (current-seconds) when-run) run-delay)
+        (server:run areapath))
+    (hash-table-set! *server-kind-run* areapath (list (+ call-num 1)(current-seconds)))))
 
 (define (server:start-and-wait areapath #!key (timeout 60))
   (let ((give-up-time (+ (current-seconds) timeout)))
