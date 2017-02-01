@@ -20,7 +20,7 @@
      skim-cmdline-opts-noarg-by-regex
      skim-cmdline-opts-withargs-by-regex 
      concat-lists
-     process-command-line
+     ducttape-process-command-line
      ducttape-append-logfile
      ducttape-activate-logfile
      isys
@@ -48,7 +48,10 @@
      )
 
   (import scheme chicken extras ports data-structures )
-  (use posix regex ansi-escape-sequences test srfi-1 irregex slice srfi-13 rfc3339 scsh-process directory-utils uuid-lib filepath srfi-19 ) ; linenoise
+  (use posix regex ansi-escape-sequences test srfi-1 irregex slice srfi-13 rfc3339)
+  ;;scsh-process ;; dropping scsh-process, it was clobbering posix's process and process*
+  (use directory-utils uuid-lib filepath srfi-19 ) ; linenoise
+  
   (include "mimetypes.scm") ; provides ext->mimetype
   (include "workweekdate.scm")
   (define ducttape-lib-version 1.00)
@@ -184,19 +187,6 @@
           (begin
             (ierr (conc "Command  > " command " "  "< failed with " exit-code " because: \n" stderr-str) )
             (if nodie #f (exit exit-code))))))
-
-
-
-
-  ;; this is broken.  one day i will fix it and thus understand run/collecting... don't use isys-broken.
-  (define (isys-broken  command-list)
-
-    (let-values ( ( (rv outport errport) (run/collecting (1 2) ("ls" "-l")  ) ) ) 
-      (print "rv is " rv)
-      (print "op is " outport)
-      (print "ep is " errport)
-      (values rv (port->string outport) (port->string errport))))
-
 
 
   ;; runs-ok: evaluate expression while suppressing exceptions.
@@ -343,19 +333,15 @@
             (setenv "DUCTTAPE_LOG_FILE" (ducttape-log-file))))
       (ducttape-append-logfile 'note (format #f "START - pid=~A ppid=~A argv=(~A) pwd=~A user=~A host=~A" pid ppid argv pwd user host) #t)))         
 
-  ;; immediately activate logfile (will be noop if logfile disabled)
-  (ducttape-activate-logfile)
 
   ;; log exit code
-  (define (set-exit-handler)
+  (define (set-ducttape-log-exit-handler)
     (let ((orig-exit-handler (exit-handler)))
       (exit-handler 
        (lambda (exitcode) 
          (ducttape-append-logfile 'note (format #f "Exit ~A by sys.exit" exitcode) #t)
          (orig-exit-handler exitcode)))))
-  (set-exit-handler)
-  
-  ;; TODO: hook exception handler so we can log exception before we sign off.
+
 
   (define (idbg first-message  . rest-args)
     (let* ((debug-level-threshold
@@ -617,67 +603,6 @@
                   (loop next-rest)))))))
 
 
-
-
-  ;; (define (launch-repl )
-  ;;   (use linenoise)
-  ;;   (current-input-port (make-linenoise-port))
-
-  ;;   (let ((histfile (conc (or (get-environment-variable "HOME") ".") "/." (script-name) "-hist")))
-  
-  ;;     (set-history-length! 30000)
-  
-  ;;     (load-history-from-file histfile)
-  
-  ;;     (let loop ((l (linenoise "> ")))
-  ;;       (cond ((equal? l "bye")
-  ;;              (save-history-to-file histfile)
-  ;;              "Bye!")
-  ;;             ((eof-object? l)
-  ;;              (save-history-to-file histfile)
-  ;;              (exit))
-  ;;             (else
-  ;;              (display l)
-  ;;              (handle-exceptions exn
-  ;;                  ;;(print-call-chain (current-error-port))
-  ;;                  (let ((message ((condition-property-accessor 'exn 'message) exn)))
-  ;;                    (print "exn> " message )
-  ;;                    ;;(pp (condition->list exn))
-  ;;                    ;;(exit)
-  ;;                    ;;(display "Went wrong")
-  ;;                    (newline))
-  ;;                (print (eval l)))))
-  ;;       (newline)
-  ;;       (history-add l)
-  ;;       (loop (linenoise "> ")))))
-  
-  ;; (define (launch-repl2 )
-  ;;   (use readline)
-  ;;   (use apropos)
-  ;;   (use trace)
-  ;;   ;(import csi)
-  ;;   (current-input-port (make-readline-port (conc (script-name) "> ") "... "))
-  ;;  ; (install-history-file #f (conc (or (get-environment-variable "HOME") ".") "/." (script-name) "_history"))
-  ;;   (parse-and-bind "set editing-mode emacs")
-  ;;   (install-history-file)
-  ;;   (let loop ((foo #f))
-
-  ;;     (let ((expr (read)))
-  ;;       (cond
-  ;;        ((eof-object? expr) (exit))
-  ;;        (else
-  ;;         (handle-exceptions exn
-  ;;             ;;(print-call-chain (current-error-port))
-  ;;             (let ((message ((condition-property-accessor 'exn 'message) exn)))
-  ;;               (print "exn> " message )
-  ;;               ;;(pp (condition->list exn))
-  ;;               ;;(exit)
-  ;;               ;;(display "Went wrong")
-  ;;               (newline))
-  ;;           (print (eval expr))))))
-  ;;     (loop #f))
-  ;;   )
-
 ;;;; process command line options
 
   ;; get command line switches (have no subsequent arg; eg. [-foo])
@@ -741,7 +666,9 @@
   ;;    - reset parameters; reset DUCTTAPE_* env vars to match user specified intent
   ;;    - mutate (command-line-arguments) parameter to subtract these recognized and handled switches
   ;;       * beware -- now (argv) and (command-line-arguments) are inconsistent... cannot mutate (argv) alas.  Use (command-line-arguments)
-  (define (process-command-line)
+  ;; WARNING: this defines command line arguments that may clash with your program.  Only call this if you
+  ;; are sure they can coexist.
+  (define (ducttape-process-command-line)
 
     ;; --quiet
     (let ((quiet-opts (skim-cmdline-opts-noarg-by-regex "--?quiet")))
@@ -805,8 +732,16 @@
             (ducttape-debug-regex-filter (string-join debugpat-opts "|"))
             (setenv "DUCTTAPE_DEBUG_PATTERN" (ducttape-debug-regex-filter)))))) 
 
+
+  ;;; following code commented out; side effects not wanted on startup
+  ;; immediately activate logfile (will be noop if logfile disabled)
+  ;;(ducttape-activate-logfile)
+  ;;(set-ducttape-log-exit-handler)
+  
+  ;; TODO: hook exception handler so we can log exception before we sign off.
+
   ;; handle command line immediately; 
-  (process-command-line)                    
+  ;;(process-command-line)                    
 
 
   ) ; end module
