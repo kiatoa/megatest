@@ -9,22 +9,22 @@
 ;(trace keyword-skim)
 ;(trace re-match?)
 (define (reset-ducttape)
-  (unsetenv "ducttape_DEBUG_LEVEL")
+  (unsetenv "DUCTTAPE_DEBUG_LEVEL")
   (ducttape-debug-level #f)
 
-  (unsetenv "ducttape_DEBUG_PATTERN")
+  (unsetenv "DUCTTAPE_DEBUG_PATTERN")
   (ducttape-debug-regex-filter ".")
 
-  (unsetenv "ducttape_LOG_FILE")
+  (unsetenv "DUCTTAPE_LOG_FILE")
   (ducttape-log-file #f)
 
-  (unsetenv "ducttape_SILENT_MODE")
+  (unsetenv "DUCTTAPE_SILENT_MODE")
   (ducttape-silent-mode #f)
 
-  (unsetenv "ducttape_QUIET_MODE")
+  (unsetenv "DUCTTAPE_QUIET_MODE")
   (ducttape-quiet-mode #f)
 
-  (unsetenv "ducttape_COLOR_MODE")
+  (unsetenv "DUCTTAPE_COLOR_MODE")
   (ducttape-color-mode #f)
 )
 
@@ -32,7 +32,7 @@
   (reset-ducttape)
 
   (command-line-arguments cmdline-list)
-  (ducttape-process-command-line)
+  (process-command-line)
 )
 
 
@@ -136,7 +136,7 @@
            (expected-err
             (if (equal? systype "Darwin")
                 "ls: /zzzzz: No such file or directory"
-                "/bin/ls: .* /zzzzz: No such file or directory"))
+                "/bin/ls: cannot access /zzzzz: No such file or directory"))
 
            )
        (test "isys: /bin/ls /zzzzz should have exit code 2" expected-code ec)
