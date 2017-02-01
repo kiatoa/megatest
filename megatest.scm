@@ -45,6 +45,7 @@
 (declare (uses api))
 (declare (uses tasks)) ;; only used for debugging.
 (declare (uses env))
+(declare (uses diff-report))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -69,6 +70,7 @@ Megatest, documentation at http://www.kiatoa.com/fossils/megatest
 
 Usage: megatest [options]
   -h                      : this help
+  -manual                 : show the Megatest user manual
   -version                : print megatest version (currently " megatest-version ")
 
 Launching and managing runs
@@ -95,7 +97,7 @@ Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs e
   -runname                : required, name for this particular test run
   -state                  : Applies to runs, tests or steps depending on context
   -status                 : Applies to runs, tests or steps depending on context
-  -mode key               : load testpatt from <key> in runconfigs instead of default TESTPATT
+  --modepatt key          : load testpatt from <key> in runconfigs instead of default TESTPATT if -testpatt and -tagexpr are not specified
   -tagexpr tag1,tag2%,..  : select tests with tags matching expression
 
 Test helpers (for use inside tests)
@@ -176,6 +178,14 @@ Utilities
                             cmd: keep-html, restore, save, save-remove
   -generate-html          : create a simple html tree for browsing your runs
 
+Diff report
+  -diff-rep               : generate diff report (must include -src-target, -src-runname, -target, -runname
+                                                  and either -diff-email or -diff-html)
+  -src-target <target>
+  -src-runname <target>
+  -diff-email <emails>    : comma separated list of email addresses to send diff report
+  -diff-html  <rep.html>  : path to html file to generate
+
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
   -pathmod path           : insert path, i.e. path/runame/itempath/logfile.html
@@ -214,7 +224,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-status"
 			"-list-runs"
 			"-testpatt"
-                        "-mode"
+                        "--modepatt"
                         "-tagexpr"
 			"-itempatt"
 			"-setlog"
@@ -268,6 +278,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-sort"
 			"-target-db"
 			"-source-db"
+
+                        "-src-target"
+                        "-src-runname"
+                        "-diff-email"
+                        "-diff-html"
 			)
  		 (list  "-h" "-help" "--help"
 			"-manual"
@@ -327,7 +342,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
-		       )
+
+                        "-diff-rep"
+                        )
 		 args:arg-hash
 		 0))
 
@@ -1868,6 +1885,26 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; fakeout readline
 (include "readline-fix.scm")
+
+
+(when (args:get-arg "-diff-rep")
+  (when (and
+         (not (args:get-arg "-diff-html"))
+         (not (args:get-arg "-diff-email")))
+    (debug:print 0 *default-log-port* "Must specify -diff-html or -diff-email with -diff-rep")
+    (set! *didsomething* 1)
+    (exit 1))
+  
+  (let* ((toppath (launch:setup)))
+    (do-diff-report
+     (args:get-arg "-src-target")
+     (args:get-arg "-src-runname")
+     (args:get-arg "-target")
+     (args:get-arg "-runname")
+     (args:get-arg "-diff-html")
+     (args:get-arg "-diff-email"))
+    (set! *didsomething* #t)
+    (exit 0)))
 
 (if (or (getenv "MT_RUNSCRIPT")
 	(args:get-arg "-repl")

@@ -1,20 +1,9 @@
-;; #!/bin/bash
 
-;; #;; rmt:get-tests-for-run
-
-
-;; #;; (let* ((dbstruct        (db:get-db
-
-        
-;; #;; (db:get-tests-for-run dbstruct run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)
-
-;; #;; (rmt:get-test-info-by-id run-id test-id)
-;; #;;  (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)
-
-;; megatest -repl << EOF
-
-;; TODO:dashboard not on homehost message exit
-
+(declare (unit diff-report))
+(declare (uses common))
+(declare (uses rmt))
+         
+(include "common_records.scm")
 (use matchable)
 (use fmt)
 (use ducttape-lib)
@@ -137,6 +126,23 @@
             (vector-ref (car (vector-ref qry-res 1)) 1)
             #f))))
 
+(define (diff:target+run-name->run-id target run-name)
+  (let* ((keys (rmt:get-keys))
+         (target-parts (if target (string-split target "/") (map (lambda (x) "%") keys))))
+    (if (not (eq? (length keys) (length keys)))
+        (begin
+          (print "Error: Target ("target") item count does not match fields count target tokens="target-parts" fields="keys)
+          #f)
+        (let* ((target-map (zip keys target-parts))
+               (qry-res (rmt:get-runs run-name 1 0 target-map)))
+
+          (if (eq? 2 (vector-length qry-res))
+              (let ((first-ent (vector-ref qry-res 1)))
+                (if (> (length first-ent) 0)
+                    (vector-ref (car first-ent) 1)
+                    #f))
+              #f)))))
+
 (define (diff:run-id->tests-mindat run-id #!key (testpatt "%/%"))
   (let* ((states '())
          (statuses '())
@@ -203,6 +209,10 @@
              (length (diff:rundiff-find-by-state run-diff state))))
      diff-states)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Presentation code below, business logic above ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (define (diff:stml->string in-stml)
   (with-output-to-string
     (lambda ()
@@ -262,7 +272,11 @@ ___  ___                 _            _
          (start-time  (hash-table-ref/default info-hash "event_time" 0)))
     (list target run-name start-time)))
 
-(define (diff:run-diff->diff-report src-run-id dest-run-id run-diff)
+(define (diff:deliver-diff-report src-run-id dest-run-id
+                                    #!key
+                                    (html-output-file #f)
+                                    (email-subject-prefix "[MEGATEST DIFF]")
+                                    (email-recipients-list '())  )
   (let* ((src-info         (diff:run-id->target+run-name+starttime src-run-id))
          (src-target       (car src-info))
          (src-run-name     (cadr src-info))
@@ -271,7 +285,9 @@ ___  ___                 _            _
          (dest-target      (car dest-info))
          (dest-run-name    (cadr dest-info))
          (dest-start       (conc (seconds->string (caddr dest-info)) " " (local-timezone-abbreviation)))
-         
+
+
+         (run-diff (diff:diff-runs src-run-id dest-run-id ))
          (test-count (length run-diff))
          (summary-table
           (apply s:table 'cellspacing "0" 'border "1"
@@ -330,8 +346,9 @@ ___  ___                 _            _
                               ((test-name item-path (junk-id diff-state diff-status (src-test-id src-state src-status) (dest-test-id dest-state dest-status)))
                                (not (equal? diff-state "CLEAN")))
                               (else #f)))
-                            run-diff)))))
-    (diff:stml->string (s:body
+                            run-diff))))
+         (email-subject (conc email-subject-prefix " " src-target "/" src-run-name" vs. "dest-target"/"dest-run-name))
+         (html-body     (diff:stml->string (s:body
                    (diff:megatest-html-diff-logo)
                    (s:h2 "Summary")
                    (s:table 'border "0"
@@ -344,27 +361,48 @@ ___  ___                 _            _
                      (s:td summary-table)
                      (s:td meta-table)))
                    (s:h2 "Diffs + consistently failing tests")
-                   main-table))))
-                               
+                   main-table)))
 
-(let* ((src-run-name "all57")
-       (dest-run-name "all60")
-       (src-run-id (diff:run-name->run-id src-run-name))
-       (dest-run-id (diff:run-name->run-id dest-run-name))
-       (to "bjbarcla")
-       (subj (conc "[MEGATEST DIFF] "src-run-name" vs. "dest-run-name))
-       (run-diff
-        (diff:diff-runs src-run-id dest-run-id ))
-       (diff-summary
-        (diff:summarize-run-diff run-diff))
-       (email-body
-        (diff:run-diff->diff-report src-run-id dest-run-id run-diff)))
-  ;;(pretty-print run-diff)
-  ;;(pretty-print diff-summary)
-  ;;(with-output-to-file "/tmp/bjbarcla/foo.html" (lambda () (print email-body)))
-  (sendmail to subj email-body use_html: #t)
+         )
+    (if html-output-file
+        (with-output-to-file html-output-file (lambda () (print html-body))))
+    (when (and email-recipients-list (> (length email-recipients-list) 0))
+      (sendmail (string-join email-recipients-list ",") email-subject html-body use_html: #t))
+    html-body))
+      
+
   
-  ;;(print html-report)
-  )
 
-         
+
+;; (let* ((src-run-name "all57")
+;;        (dest-run-name "all60")
+;;        (src-run-id (diff:run-name->run-id src-run-name))
+;;        (dest-run-id (diff:run-name->run-id dest-run-name))
+;;        (to-list (list "bjbarcla")))
+;;   (diff:deliver-diff-report src-run-id dest-run-id email-recipients-list: to-list html-output-file: "/tmp/bjbarcla/zippy.html")
+;;   )
+
+(define (do-diff-report src-target src-runname dest-target dest-runname html-file to-list-raw)
+  (let* (;;(src-target "nope%")
+         ;;(src-runname "all57")
+         ;;(dest-target "%")
+         ;;(dest-runname "all60")
+         (src-run-id (diff:target+run-name->run-id src-target src-runname))
+         (dest-run-id (diff:target+run-name->run-id dest-target dest-runname))
+         ;(html-file "/tmp/bjbarcla/zippy.html")
+         (to-list (if (string? to-list-raw) (string-split to-list-raw ",:") #f))
+         )
+    
+    (cond
+     ((not src-run-id)
+      (print "No match for source target/runname="src-target"/"src-runname)
+      (print "Cannot proceed.")
+      #f)
+     ((not dest-run-id)
+      (print "No match for source target/runname="dest-target"/"dest-runname)
+      (print "Cannot proceed.")
+      #f)
+     (else
+      (diff:deliver-diff-report src-run-id dest-run-id email-recipients-list: to-list html-output-file: html-file)))))
+
+  

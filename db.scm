@@ -144,7 +144,7 @@
     (if (and use-mutex
 	     (common:low-noise-print 120 "over-50-parallel-api-requests"))
 	(debug:print-info 0 *default-log-port* *api-process-request-count* " parallel api requests being processed in process " (current-process-id) ", throttling access"))
-    (if (common:low-noise-print 120 (conc "parallel-api-requests" *max-api-process-requests*))
+    (if (common:low-noise-print 600 (conc "parallel-api-requests" *max-api-process-requests*))
 	(debug:print-info 0 *default-log-port* "Parallel api request count: " *api-process-request-count* " max parallel requests: " *max-api-process-requests*))
     (handle-exceptions
      exn

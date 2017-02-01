@@ -497,7 +497,9 @@
                     bcc_addr
                     more-headers
                     use_html
-                    (attach-files-list '()))
+                    (attach-files-list '())
+                    (images-with-content-id-alist '())
+                    )
 
     (define (sendmail-proc sendmail-port)
       (define (wl line-str)
@@ -533,6 +535,7 @@
           (wl (conc "Content-Type: multipart/alternative; boundary=\"" mailpart-body-uuid "\""))
           (wl "")
           )
+
         
         (define (email-text-body)
           (body-boundary)
@@ -553,8 +556,8 @@
           (wl "")
           (wl body)
           (body-boundary))
-        
-        (define (attach-file file)
+
+        (define (attach-file file #!key (content-id #f))
           (let* ((filename
                   (filepath:take-file-name file))
                  (ext-with-dot
@@ -567,6 +570,8 @@
             (boundary)
             (wl (conc "Content-Type: " mimetype "; name=\"" filename "\""))
             (wl "Content-Transfer-Encoding: uuencode")
+            (if content-id
+                (wl (conc "Content-Id: " content-id)))
             (wl (conc "Content-Disposition: attachment; filename=\"" filename "\""))
             (wl "")
             (do-or-die
@@ -574,6 +579,11 @@
              foreach-stdout:
              (lambda (line)
                (wl line)))))
+
+        (define (embed-image file+content-id)
+          (let ((file (car file+content-id))
+                (content-id (cdr file+content-id)))
+            (attach-file file content-id: content-id)))
         
         ;; send the email
         (email-mime-header)
@@ -581,6 +591,7 @@
             (email-html-body)
             (email-text-body))
         (for-each attach-file attach-files-list)
+        (for-each embed-image images-with-content-id-alist)
         (boundary)
         (close-output-port sendmail-port)))
     
