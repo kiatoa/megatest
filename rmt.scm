@@ -64,7 +64,7 @@
      ;; reset the connection if it has been unused too long
      ((and *runremote*
            (remote-conndat *runremote*)
-	   (let ((expire-time (- start-time (remote-server-timeout *runremote*))))
+	   (let ((expire-time (+ (- start-time (remote-server-timeout *runremote*))(random 30)))) ;; add 30 seconds of noise so that not all running tests expire at the same time causing a storm of server starts
 	     (< (http-transport:server-dat-get-last-access (remote-conndat *runremote*)) expire-time)))
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  8")
       (remote-conndat-set! *runremote* #f)
