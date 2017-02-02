@@ -571,9 +571,37 @@
 ul.LinkedList { display: block; }
 /* ul.LinkedList ul { display: none; } */
 .HandCursorStyle { cursor: pointer; cursor: hand; }  /* For IE */
+th {background-color: #8c8c8c;}
+td.test {background-color: #d9dbdd;}
+td.PASS {background-color: #347533;}
+td.FAIL {background-color: #cc2812;}
+
   </style>
+  <script src=/nfs/site/disks/ch_ciaf_disk023/fdk_gwa_disk003/pjhatwal/fdk/docs/qa-env-team/jquery-3.1.0.slim.min.js></script>
+
 
   <script type="text/JavaScript">
+
+    function filtersome() {
+  $("tr").show();
+  $(".test").filter(
+    function() {
+      var names = $('#testname').val().split(',');
+      var good=1;
+      for (var i=0, len=names.length; i<len; i++) {
+        var uname=names[i];
+        console.log("Trying to check for " + uname); 
+        if($(this).text().indexOf(uname) != -1) {
+          good= 0;
+          console.log("Found "+uname);
+        }
+      }
+      return good; 
+    }
+  ).parent().hide();
+//  $(".sum").show();
+}
+  
     // Add this to the onload event of the BODY element
     function addEvents() {
       activateTree(document.getElementById("LinkedList1"));
@@ -639,10 +667,141 @@ EOF
    (append (take (vector->list run) numkeys)
 	   (list (vector-ref run (+ 1 numkeys)))))
 
+
+(define (tests:get-rest-data runs header numkeys)
+   (let ((resh (make-hash-table)))
+   (for-each
+     (lambda (run)
+        (let* ((run-id (db:get-value-by-header run header "id"))
+               (run-dir      (tests:run-record->test-path run numkeys))
+	       (test-data    (rmt:get-tests-for-run
+				   run-id
+                                   "%"       ;; testnamepatt
+				   '()        ;; states
+				   '()        ;; statuses
+				   #f         ;; offset
+				   #f         ;; num-to-get
+				   #f         ;; hide/not-hide
+				   #f         ;; sort-by
+				   #f         ;; sort-order
+				   #f         ;; 'shortlist                           ;; qrytype
+                                   0         ;; last update
+				   #f)))
+            
+            (map (lambda (test)
+                 (let* ((test-name (vector-ref test 2))
+                        (test-html-path (conc (vector-ref test 10) "/" (vector-ref test 13)))
+                        (test-item (conc test-name ":" (vector-ref test 11)))
+                        (test-status (vector-ref test 4)))
+                         
+                (if (not (hash-table-ref/default resh test-name  #f))
+                      (hash-table-set! resh test-name   (make-hash-table)))
+                (if (not (hash-table-ref/default (hash-table-ref/default resh test-name  #f)  test-item  #f))
+                       (hash-table-set! (hash-table-ref/default resh test-name  #f) test-item   (make-hash-table))) 
+               (hash-table-set!  (hash-table-ref/default (hash-table-ref/default resh test-name  #f) test-item #f) run-id (list test-status test-html-path)))) 
+        test-data)))
+      runs)
+   resh))
+
 ;; (tests:create-html-tree "test-index.html")
 ;;
 (define (tests:create-html-tree outf)
-  (let* ((lockfile  (conc outf ".lock"))
+   (let* ((lockfile  (conc outf ".lock"))
+	 (runs-to-process '())
+         (linktree  (common:get-linktree))
+          (area-name (common:get-testsuite-name))
+	  (keys      (rmt:get-keys))
+	  (numkeys   (length keys))
+         (total-runs  (rmt:get-num-runs "%"))
+         (pg-size 10)   )
+    (if (common:simple-file-lock lockfile)
+        (begin
+         (print total-runs)    
+        (let loop ((page 0))
+	(let* ((oup       (open-output-file (or outf (conc linktree "/page" page ".html"))))
+               (start (* page pg-size)) 
+	       (runsdat   (rmt:get-runs "%" pg-size start (map (lambda (x)(list x "%")) keys)))
+	       (header    (vector-ref runsdat 0))
+	       (runs      (vector-ref runsdat 1))
+               (ctr 0)
+               (test-runs-hash (tests:get-rest-data runs header numkeys))
+               (test-list (hash-table-keys test-runs-hash))
+               (get-prev-links (lambda (page linktree )   
+                            (let* ((link  (if (not (eq? page 0))
+                                            (s:a "&lt;&lt;prev" 'href (conc  linktree "/page" (- page 1) ".html"))
+                                            (s:a "" 'href (conc  linktree "/page"  page ".html")))))
+                               link)))
+                (get-next-links (lambda (page linktree total-runs)   
+                            (let* ((link  (if (> total-runs (+ 1 (* page pg-size)))
+                                            (s:a "next&gt;&gt;" 'href (conc  linktree "/page"  (+ page 1) ".html"))
+                                             (s:a "" 'href (conc  linktree "/page" page  ".html")))))
+                               link))))
+	  (s:output-new
+	   oup
+	   (s:html tests:css-jscript-block
+		   (s:title "Summary for " area-name)
+		   (s:body 'onload "addEvents();"
+                          (get-prev-links page linktree)
+                          (get-next-links page linktree total-runs)
+                           
+			   (s:h1 "Summary for " area-name)
+                           (s:h3 "Filter" )
+                           (s:input 'type "text"  'name "testname" 'id "testname" 'length "30" 'onkeyup "filtersome()")
+  
+			   ;; top list
+			   (s:table 'id "LinkedList1" 'border "1"
+                            (map (lambda (key)
+				 (let* ((res (s:tr 'class "something" 
+				  (s:th key )
+                                   (map (lambda (run)
+                                   (s:th  (vector-ref run ctr)))
+                                  runs))))
+                             (set! ctr (+ ctr 1))
+                               res))
+                               keys)
+                               (s:tr
+				 (s:th "Run Name")
+                                  (map (lambda (run)
+                                   (s:th  (vector-ref run 3)))
+                                  runs))
+                              
+                               (map (lambda (test-name)
+                                 (let* ((item-hash (hash-table-ref/default test-runs-hash test-name  #f))
+                                         (item-keys (sort (hash-table-keys item-hash) string<=?))) 
+                                          (map (lambda (item-name)  
+  		                             (let* ((res (s:tr  'class item-name
+				                         (s:td  item-name 'class "test" )
+                                                           (map (lambda (run)
+                                                               (let* ((run-test (hash-table-ref/default item-hash item-name  #f))
+                                                                      (run-id (db:get-value-by-header run header "id"))
+                                                                      (result (hash-table-ref/default run-test run-id "n/a"))
+                                                                      (status (if (string? result)
+                                                                                 (begin 
+                                                                                  ; (print "string" result)
+                                                                                     result)
+                                                                                 (begin 
+                                                                                   ;  (print "not string" result )
+                                                                                 (car result)))))
+                                                                       (s:td  status 'class status)))
+                                                                runs))))
+                                                        res))
+                                                   item-keys)))
+                               test-list)))))
+          (close-output-port oup)
+         ; (set! page (+ 1 page))
+          (if (> total-runs (* (+ 1 page) pg-size))
+           (loop (+ 1  page)))))
+	  (common:simple-file-release-lock lockfile))
+	            
+	#f)))
+
+
+
+
+
+
+(define (tests:create-html-tree-old outf)
+   (let* ((lockfile  (conc outf ".lock"))
 	 (runs-to-process '()))
     (if (common:simple-file-lock lockfile)
 	(let* ((linktree  (common:get-linktree))
@@ -683,6 +842,7 @@ EOF
                                                                 (conc run-name " (Not able to create summary at " targ-path ")")))))))))))
           (close-output-port oup)
 	  (common:simple-file-release-lock lockfile)
+               
 	  (for-each
 	   (lambda (run)
 	     (let* ((test-subpath (tests:run-record->test-path run numkeys))
@@ -760,6 +920,11 @@ EOF
            runs)
           #t)
 	#f)))
+
+
+
+
+
 
 
 ;; CHECK - WAS THIS ADDED OR REMOVED? MANUAL MERGE WITH API STUFF!!!
