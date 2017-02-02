@@ -223,7 +223,10 @@
 		 (and start-time mod-time
 		      (> (- now start-time) 0)    ;; been running at least 0 seconds
 		      (< (- now mod-time)   16)   ;; still alive - file touched in last 16 seconds
-		      (< (- now start-time) (string->number (or (configf:lookup *configdat* "server" "runtime") "3600"))) ;; under one hour running time
+		      (< (- now start-time) 
+                         (+ (- (string->number (or (configf:lookup *configdat* "server" "runtime") "3600"))
+                               180)
+                            (random 360))) ;; under one hour running time +/- 180
 		      )))
 	     srvlst)
      (lambda (a b)
