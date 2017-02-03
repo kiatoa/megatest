@@ -2005,7 +2005,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-generate-html")
     (let* ((toppath (launch:setup)))
       (if (tests:create-html-tree #f)
-          (debug:print-info 0 *default-log-port* "HTML output created in " toppath "/lt/runs-index.html")
+          (debug:print-info 0 *default-log-port* "HTML output created in " toppath "/lt/page#.html")
           (debug:print 0 *default-log-port* "Failed to create HTML output in " toppath "/lt/runs-index.html"))
       (set! *didsomething* #t)))
 
