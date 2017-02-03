@@ -16,7 +16,7 @@
 ;; dbstruct vector containing all the relevant dbs like main.db, megatest.db, run.db etc
 
 (use (srfi 18) extras tcp stack) ;; RADT => use of require-extension?
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking z3 typed-records)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking z3 typed-records sql-null)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:)) ;; RADT => prefix??
 (include "/nfs/site/disks/icf_fdk_cw_gwa002/srehman/fossil/dbi/dbi.scm")
@@ -531,6 +531,8 @@
 	 (fname    (pathname-strip-directory dbpath)))
     (debug:print-info 0 *default-log-port* "Checking db " dbpath " for errors.")
     (cond
+     ((eqv? (dbi:db-dbtype (db:dbdat-get-db dbdat)) 'pg)
+      #t)
      ((not (file-write-access? dbdir))
       (debug:print 0 *default-log-port* "WARNING: can't write to " dbdir ", can't fix " fname)
       #f)
@@ -599,7 +601,7 @@
      (for-each (lambda (dbdat)
 		 (let ((dbpath (db:dbdat-get-path dbdat)))
 		   (debug:print 0 *default-log-port* " dbpath:  " dbpath)
-		   (if (not (db:repair-db dbdat))
+		   (if (not (db:repair-db dbdat)) 
 		       (begin
 			 (debug:print-error 0 *default-log-port* "Failed to rebuild " dbpath ", exiting now.")
 			 (exit)))))
@@ -723,6 +725,7 @@
 			      (if (and same
 				       (< i (- num-fields 1)))
 				  (loop (+ i 1))))
+          (if (eqv? (dbi:db-dbtype db) 'pg) (set! fromrow (list->vector (map (lambda (x) (if (and (string? x) (string-null? x)) (sql-null) x)) (vector->list fromrow)))))
           (if (not same)
               (begin 
                 (set! res (apply dbi:prepare-exec stmth (vector->list fromrow)))
@@ -952,6 +955,39 @@
 ;; 		   (db:replace-test-records dbstruct run-id testrecs)
 ;; 		   (sqlite3:finalize! (db:dbdat-get-db (dbr:dbstruct-rundb dbstruct)))))
 ;; 	       run-ids)))
+
+  (if (member 'synctoconfig options)
+      (if (configf:get-section *configdat* "ext-sync")
+                (let* ((dblist (configf:get-section *configdat* "ext-sync"))
+                      (res '())
+                      (cfgdb #f))
+                      (for-each (lambda (dbitem)
+                            (let* ((stringsplit (string-split (cadr dbitem)))
+                                  (dbtype (string->symbol (car stringsplit)))
+                                  (dbpath (cadr stringsplit)))
+                            (case dbtype
+                              ((sqlite3) 
+                                (set! cfgdb (dbi:open dbtype (cons (cons 'dbname dbpath) '()) ))
+                                (db:initialize-main-db (dbi:db-conn cfgdb))
+                                (db:initialize-run-id-db (dbi:db-conn cfgdb))
+                                (set! res (cons (cons cfgdb dbpath) res)))
+                              ((pg)
+                                (let* ((dbinfo '()))
+                                  (for-each 
+                                    (lambda (x)
+                                      (if (not (eqv? (string->symbol x) dbtype))
+                                        (let* ((pair (string-split x ":")))
+                                          (if (not (eqv? pair '()))
+                                            (set! dbinfo (cons (cons (string->symbol (car pair)) (cadr pair)) dbinfo))))))
+                                  stringsplit)
+                                  (set! cfgdb (dbi:open dbtype dbinfo))
+                                  (set! res (cons (cons cfgdb (alist-ref 'host dbinfo)) res))
+                                  )))))
+                      dblist)
+                      (for-each (lambda (todb)
+                        (db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb todb)) res)
+                      
+                      )))
 
 	;; now ensure all newdb data are synced to megatest.db
 	;; do not use the run-ids list passed in to the function
