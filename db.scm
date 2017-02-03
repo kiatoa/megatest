@@ -15,10 +15,10 @@
 
 ;; dbstruct vector containing all the relevant dbs like main.db, megatest.db, run.db etc
 
-(use (srfi 18) extras tcp stack) ;; RADT => use of require-extension?
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking z3 typed-records)
+(use (srfi 18) extras tcp stack)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking z3 typed-records matchable)
 (import (prefix sqlite3 sqlite3:))
-(import (prefix base64 base64:)) ;; RADT => prefix??
+(import (prefix base64 base64:))
 
 (declare (unit db))
 (declare (uses common))
@@ -145,7 +145,7 @@
 	     (common:low-noise-print 120 "over-50-parallel-api-requests"))
 	(debug:print-info 0 *default-log-port* *api-process-request-count* " parallel api requests being processed in process " (current-process-id) ", throttling access"))
     (if (common:low-noise-print 600 (conc "parallel-api-requests" *max-api-process-requests*))
-	(debug:print-info 0 *default-log-port* "Parallel api request count: " *api-process-request-count* " max parallel requests: " *max-api-process-requests*))
+	(debug:print-info 2 *default-log-port* "Parallel api request count: " *api-process-request-count* " max parallel requests: " *max-api-process-requests*))
     (handle-exceptions
      exn
      (begin
@@ -827,16 +827,17 @@
 	     (tmpdb    (db:get-db dbstruct))
              (refndb   (dbr:dbstruct-refndb dbstruct))
 	     (allow-cleanup #t) ;; (if run-ids #f #t))
-	     (tdbdat  (tasks:open-db))
-	     (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
+	     ;; (tdbdat  (tasks:open-db))
+	     (servers (server:get-list *toppath*)) ;; (tasks:get-all-servers (db:delay-if-busy tdbdat)))
 	     (data-synced 0)) ;; count of changed records (I hope)
     
 	;; kill servers
 	(if (member 'killservers options)
 	    (for-each
 	     (lambda (server)
-	       (tasks:server-delete-record (db:delay-if-busy tdbdat) (vector-ref server 0) "dbmigration")
-	       (tasks:kill-server (vector-ref server 2)(vector-ref server 1)))
+	       (match-let (((mod-time host port start-time pid) server))
+		 (if (and host pid)
+		     (tasks:kill-server host pid))))
 	     servers))
 
 	;; clear out junk records
@@ -2042,8 +2043,11 @@
 
 ;; get some basic run stats
 ;;
+;; data structure:
+;;
 ;; ( (runname (( state  count ) ... ))
-;;   (   ...  
+;;   (   ...
+;;
 (define (db:get-run-stats dbstruct)
   (let* ((totals       (make-hash-table))
 	 (curr         (make-hash-table))
