@@ -273,10 +273,10 @@
   (let ((give-up-time (+ (current-seconds) timeout)))
     (let loop ((server-url (server:check-if-running areapath)))
       (if (or server-url
-	      (> (current-seconds) give-up-time))
+	      (> (current-seconds) give-up-time)) ;; server-url will be #f if no server available.
 	  server-url
 	  (let ((num-ok (length (server:get-best (server:get-list areapath)))))
-	    (if (< num-ok 2) ;; if there are no decent candidates for servers then try starting a new one
+	    (if (< num-ok 1) ;; if there are no decent candidates for servers then try starting a new one
 		(server:kind-run areapath))
 	    (thread-sleep! 5)
 	    (loop (server:check-if-running areapath)))))))
