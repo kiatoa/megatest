@@ -370,7 +370,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (not (args:get-arg "-server"))
     (thread-start! *watchdog*)) ;; if starting a server; wait till we get to running state before kicking off watchdog
-;;(BB> "thread-start! watchdog")
 
 ;; bracket open-output-file with code to make leading directory if it does not exist and handle exceptions
 (define (open-logfile logpath)
@@ -384,9 +383,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
         (define *didsomething* #t)  
         (exit 1))))
 
-(if (args:get-arg "-log")
-    (let ((oup (open-logfile (args:get-arg "-log"))))
-      (debug:print-info 0 *default-log-port* "Sending log output to " (args:get-arg "-log"))
+    
+(if (or (args:get-arg "-log")(args:get-arg "-server")) ;; redirect the log always when a server
+    (let* ((tl   (or (args:get-arg "-log")(launch:setup)))   ;; run launch:setup if -server
+	   (logf (or (args:get-arg "-log") ;; use -log unless we are a server, then craft a logfile name
+		     (conc tl "/logs/server-" (current-process-id) "-" (get-host-name) ".log")))
+	   (oup  (open-output-log logf)))
+      (if (not (args:get-arg "-log"))
+	  (hash-table-set! args:arg-hash "-log" logf)) ;; fake out future queries of -log
+      (debug:print-info 0 *default-log-port* "Sending log output to " logf)
       (set! *default-log-port* oup)))
 
 (if (or (args:get-arg "-h")
@@ -729,46 +734,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;   we start the server if not running else start the client thread
 ;;======================================================================
 
+;; Server? Start up here.
+;;
 (if (args:get-arg "-server")
-
-    ;; Server? Start up here.
-    ;;
     (let ((tl        (launch:setup))
-	;; (run-id    (and (args:get-arg "-run-id")
-	;; 		  (string->number (args:get-arg "-run-id"))))
           (transport-type (string->symbol (or (args:get-arg "-transport") "http"))))
-      ;; (if run-id
-      ;;   (begin
       (server:launch 0 transport-type)
       (set! *didsomething* #t)))
-;;     ;; (debug:print-error 0 *default-log-port* "server requires run-id be specified with -run-id")))
-;; 
-;;     ;; Not a server? This section will decide how to communicate
-;;     ;;
-;;     ;;  Setup client for all expect listed here
-;;     (if (null? (lset-intersection 
-;; 		equal?
-;; 		(hash-table-keys args:arg-hash)
-;; 		'("-list-servers"
-;; 		  "-stop-server"
-;;                   "-kill-server"
-;; 		  "-show-cmdinfo"
-;; 		  "-list-runs"
-;; 		  "-ping")))
-;; 	(if (launch:setup)
-;; 	    (let ((run-id    (and (args:get-arg "-run-id")
-;; 				  (string->number (args:get-arg "-run-id")))))
-;; 	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
-;; 	      ;; if not list or kill then start a client (if appropriate)
-;; 	      (if (or (args-defined? "-h" "-version" "-create-megatest-area" "-create-test")
-;; 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
-;; 		  (debug:print-info 1 *default-log-port* "Server connection not needed")
-;; 		  (begin
-;; 		    ;; (if run-id 
-;; 		    ;;     (client:launch run-id) 
-;; 		    ;;     (client:launch 0)      ;; without run-id we'll start a server for "0"
-;; 		    #t
-;; 		    ))))))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server")
