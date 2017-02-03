@@ -143,7 +143,7 @@
 
 (defstruct remote
   (hh-dat            (common:get-homehost)) ;; homehost record ( addr . hhflag )
-  (server-url        (if *toppath* (server:read-dotserver->url *toppath*))) ;; (server:check-if-running *toppath*) #f))
+  (server-url        (if *toppath* (server:check-if-running *toppath*))) ;; (server:check-if-running *toppath*) #f))
   (last-server-check 0)  ;; last time we checked to see if the server was alive
   (conndat           #f)
   (transport         *transport-type*)
@@ -244,15 +244,28 @@
   (if (not (directory-exists? "logs"))(create-directory "logs"))
   (directory-fold 
    (lambda (file rem)
-     (if (and (string-match "^.*.log" file)
-	      (> (file-size (conc "logs/" file)) 200000))
-	 (let ((gzfile (conc "logs/" file ".gz")))
-	   (if (file-exists? gzfile)
-	       (begin
-		 (debug:print-info 0 *default-log-port* "removing " gzfile)
-		 (delete-file gzfile)))
-	   (debug:print-info 0 *default-log-port* "compressing " file)
-	   (system (conc "gzip logs/" file)))))
+     (handle-exceptions
+      exn
+      (debug:print-info 0 *default-log-port* "failed to rotate log " file ", probably handled by another process.")
+      (let* ((fullname (conc "logs/" file))
+             (file-age (- (current-seconds)(file-modification-time fullname))))
+        (if (or (and (string-match "^.*.log" file)
+                     (> (file-size fullname) 200000))
+                (and (string-match "^server-.*.log" file)
+                     (> (- (current-seconds) (file-modification-time fullname))
+                        (* 8 60 60))))
+            (let ((gzfile (conc fullname ".gz")))
+              (if (file-exists? gzfile)
+                  (begin
+                    (debug:print-info 0 *default-log-port* "removing " gzfile)
+                    (delete-file gzfile)))
+              (debug:print-info 0 *default-log-port* "compressing " file)
+              (system (conc "gzip " fullname)))
+            (if (> file-age (* (string->number (or (configf:lookup *configdat* "setup" "log-expire-days") "30")) 24 3600))
+                (handle-exceptions
+                 exn
+                 #f
+                 (delete-file fullname)))))))
    '()
    "logs"))
 
@@ -574,19 +587,18 @@
 ;; if we are on the homehost and we are a server (by definition we are on the homehost if we are a server)
 ;;
 (define (common:watchdog)
-  
   (thread-sleep! 0.05) ;; delay for startup
   (let ((legacy-sync (common:run-sync?))
 	(debug-mode  (debug:debug-mode 1))
 	(last-time   (current-seconds))
-        (this-wd-num     (begin (mutex-lock! *wdnum*mutex) (let ((x *wdnum*)) (set! *wdnum* (add1 *wdnum*)) (mutex-unlock! *wdnum*mutex) x)))
-        )
+        (this-wd-num     (begin (mutex-lock! *wdnum*mutex) (let ((x *wdnum*)) (set! *wdnum* (add1 *wdnum*)) (mutex-unlock! *wdnum*mutex) x))))
     (debug:print-info 0 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id)" this-wd-num="this-wd-num)
     (if (and legacy-sync (not *time-to-exit*))
-	(let ((dbstruct (db:setup)))
+	(let* ((dbstruct (db:setup))
+	       (mtdb     (dbr:dbstruct-mtdb dbstruct))
+	       (mtpath   (db:dbdat-get-path mtdb)))
 	  (debug:print-info 0 *default-log-port* "Server running, periodic sync started.")
 	  (let loop ()
-            ;;(BB> "watchdog loop.  pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
 	    ;; sync for filesystem local db writes
 	    ;;
 	    (mutex-lock! *db-multi-sync-mutex*)
@@ -594,9 +606,13 @@
 		   (sync-in-progress *db-sync-in-progress*)
 		   (should-sync      (and (not *time-to-exit*)
                                           (> (- (current-seconds) *db-last-sync*) 5))) ;; sync every five seconds minimum
+		   (start-time       (current-seconds))
+		   (mt-mod-time      (file-modification-time mtpath))
+		   (recently-synced  (> (- start-time mt-mod-time) 4))
 		   (will-sync        (and (or need-sync should-sync)
-					  (not sync-in-progress)))
-		   (start-time       (current-seconds)))
+					  (not sync-in-progress)
+					  (not recently-synced))))
+	      ;; (if recently-synced (debug:print-info 0 *default-log-port* "Skipping sync due to recently-synced flag=" recently-synced))
 	      ;; (debug:print-info 0 *default-log-port* "need-sync: " need-sync " sync-in-progress: " sync-in-progress " should-sync: " should-sync " will-sync: " will-sync)
 	      (if will-sync (set! *db-sync-in-progress* #t))
 	      (mutex-unlock! *db-multi-sync-mutex*)
