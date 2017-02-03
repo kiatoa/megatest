@@ -388,7 +388,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (let* ((tl   (or (args:get-arg "-log")(launch:setup)))   ;; run launch:setup if -server
 	   (logf (or (args:get-arg "-log") ;; use -log unless we are a server, then craft a logfile name
 		     (conc tl "/logs/server-" (current-process-id) "-" (get-host-name) ".log")))
-	   (oup  (open-output-log logf)))
+	   (oup  (open-logfile logf)))
       (if (not (args:get-arg "-log"))
 	  (hash-table-set! args:arg-hash "-log" logf)) ;; fake out future queries of -log
       (debug:print-info 0 *default-log-port* "Sending log output to " logf)
