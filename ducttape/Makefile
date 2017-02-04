@@ -1,5 +1,3 @@
-SHELL=/bin/tcsh -f
-
 help:
 	@echo ""
 	@echo "make targets:"
@@ -22,7 +20,7 @@ test:
 	csc test_ducttape.scm
 
 	./test_ducttape
-	if (-e foo) rm -f foo
+	rm -f foo
 
 test_example:
 	@csc test_example.scm
