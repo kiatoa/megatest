@@ -14,7 +14,7 @@
 (import (prefix iup iup:))
 (use canvas-draw)
 (import canvas-draw-iup)
-(use regex typed-records)
+(use regex typed-records matchable)
 
 (declare (unit dcommon))
 
@@ -622,7 +622,8 @@
 	 (colnames       (list "Id" "MTver" "Pid" "Host" "Interface:OutPort" "RunTime" "State" "RunId"))
 	 (updater        (lambda ()
 			   (if (dashboard:monitor-changed? commondat tabdat)
-			       (let ((servers (tasks:get-all-servers (db:delay-if-busy tdbdat))))
+			       (let ((servers  (server:get-list *toppath* limit: 10)))
+				 ;; (tasks:get-all-servers (db:delay-if-busy tdbdat))))
 				 (iup:attribute-set! servers-matrix "NUMLIN" (length servers))
 				 ;; (set! colnum 0)
 				 ;; (for-each (lambda (colname)
@@ -634,32 +635,36 @@
 				 (for-each 
 				  (lambda (server)
 				    (set! colnum 0)
-				    (let* ((vals (list (vector-ref server 0) ;; Id
-						       (vector-ref server 9) ;; MT-Ver
-						       (vector-ref server 1) ;; Pid
-						       (vector-ref server 2) ;; Hostname
-						       (conc (vector-ref server 3) ":" (vector-ref server 4)) ;; IP:Port
-						       (seconds->hr-min-sec (- (current-seconds)(vector-ref server 6)))
-						       ;; (vector-ref server 5) ;; Pubport
-						       ;; (vector-ref server 10) ;; Last beat
-						       ;; (vector-ref server 6) ;; Start time
-						       ;; (vector-ref server 7) ;; Priority
-						       ;; (vector-ref server 8) ;; State
-						       (vector-ref server 8) ;; State
-						       (vector-ref server 12)  ;; RunId
-						       )))
-				      (for-each (lambda (val)
-						  (let* ((row-col (conc rownum ":" colnum))
-							 (curr-val (iup:attribute servers-matrix row-col)))
-						    (if (not (equal? (conc val) curr-val))
-							(begin
-							  (iup:attribute-set! servers-matrix row-col val)
-							  (iup:attribute-set! servers-matrix "FITTOTEXT" (conc "C" colnum))))
-						    (set! colnum (+ 1 colnum))))
-						vals)
-				      (set! rownum (+ rownum 1)))
-				    (iup:attribute-set! servers-matrix "REDRAW" "ALL"))
-				  servers))))))
+				    (match-let (((mod-time host port start-time pid)
+						 server))
+				      (let* ((uptime  (- (current-seconds) mod-time))
+					     (runtime (if start-time
+							  (- mod-time start-time)
+							  0))
+					     (vals (list "-"  ;; (vector-ref server 0) ;; Id
+							 "-"  ;; (vector-ref server 9) ;; MT-Ver
+							 pid  ;; (vector-ref server 1) ;; Pid
+							 host ;; (vector-ref server 2) ;; Hostname
+							 (conc host ":" port) ;; (conc (vector-ref server 3) ":" (vector-ref server 4)) ;; IP:Port
+							 (seconds->hr-min-sec runtime) ;; (- (current-seconds) start-time)) ;; (vector-ref server 6)))
+							 (cond
+							  ((< uptime 5)  "alive")
+							  ((< uptime 16) "probably alive");; less than 15 seconds since mod, call it alive (vector-ref server 8) ;; State
+							  (else "dead"))
+							 "-" ;; (vector-ref server 12)  ;; RunId
+							 )))
+					(for-each (lambda (val)
+						    (let* ((row-col (conc rownum ":" colnum))
+							   (curr-val (iup:attribute servers-matrix row-col)))
+						      (if (not (equal? (conc val) curr-val))
+							  (begin
+							    (iup:attribute-set! servers-matrix row-col val)
+							    (iup:attribute-set! servers-matrix "FITTOTEXT" (conc "C" colnum))))
+						      (set! colnum (+ 1 colnum))))
+						  vals)
+					(set! rownum (+ rownum 1)))
+				      (iup:attribute-set! servers-matrix "REDRAW" "ALL")))
+				    (sort servers (lambda (a b)(> (car a)(car b))))))))))
     (set! colnum 0)
     (for-each (lambda (colname)
 		(iup:attribute-set! servers-matrix (conc "0:" colnum) colname)
