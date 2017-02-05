@@ -52,9 +52,9 @@
 
 (define (client:setup areapath #!key (remaining-tries 100) (failed-connects 0))
   (case (server:get-transport)
-    ((rpc) (rpc-transport:client-setup run-id remaining-tries: remaining-tries failed-connects: failed-connects)) ;;(client:setup-rpc run-id))
+    ((rpc) (rpc-transport:client-setup remaining-tries: remaining-tries failed-connects: failed-connects)) ;;(client:setup-rpc run-id))
     ((http)(client:setup-http areapath remaining-tries: remaining-tries failed-connects: failed-connects))
-    (else  (rpc-transport:client-setup run-id remaining-tries: remaining-tries failed-connects: failed-connects)))) ;; (client:setup-rpc run-id))))
+    (else  (rpc-transport:client-setup remaining-tries: remaining-tries failed-connects: failed-connects)))) ;; (client:setup-rpc run-id))))
 
 ;; Do all the connection work, look up the transport type and set up the
 ;; connection if required.
@@ -101,7 +101,7 @@
 			(begin    ;; login failed but have a server record, clean out the record and try again
 			  (debug:print-info 0 *default-log-port* "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
 			  (case *transport-type* 
-			    ((http)(http-transport:close-connections run-id)))
+			    ((http)(http-transport:close-connections)))
 			  (remote-conndat-set! *runremote* #f)  ;; (hash-table-delete! *runremote* run-id)
 			  (thread-sleep! 1)
 			  (client:setup-http areapath remaining-tries: (- remaining-tries 1))
