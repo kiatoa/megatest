@@ -16,6 +16,7 @@ echo sudo apt-get install libreadline-dev
 echo sudo apt-get install libwebkitgtk-dev 
 echo sudo apt-get install libpangox-1.0-0 zlib1g-dev libfreetype6-dev cmake
 echo sudo apt-get install libssl-dev
+echo sudo apt-get install uuid-dev
 echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
 echo
 echo Set OPTION to std, currently OPTION=$OPTION
@@ -192,7 +193,7 @@ for egg in matchable readline apropos base64 regex-literals format "regex-case" 
 	locale-timezone loops low-level-macros procedural-macros refdb rfc3339 scsh-process \
 	sexp-diff sha1 shell slice srfi-101 srfi-19 srfi-19-core srfi-19-date srfi-19-io \
 	srfi-19-period srfi-19-support srfi-19-time srfi-19-timezone srfi-29 srfi-37 srfi-78 syslog \
-	udp uuid uuid-lib zlib
+	udp uuid uuid-lib zlib 
 
 do
 	echo "Installing $egg"

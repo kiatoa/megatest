@@ -285,7 +285,7 @@
 
 ;; careful closing of connections stored in *runremote*
 ;;
-(define (http-transport:close-connections run-id)
+(define (http-transport:close-connections)
   (let* ((server-dat (if *runremote*
                          (remote-conndat *runremote*)
                          #f))) ;; (hash-table-ref/default *runremote* run-id #f)))
