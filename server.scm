@@ -100,8 +100,6 @@
 ;;
 (define  (server:run areapath) ;; areapath is *toppath* for a given testsuite area
   (let* ((curr-host   (get-host-name))
-         ;; (attempt-in-progress (server:start-attempted? areapath))
-         ;; (dot-server-url (server:check-if-running areapath))
 	 (curr-ip     (server:get-best-guess-address curr-host))
 	 (curr-pid    (current-process-id))
 	 (homehost    (common:get-homehost)) ;; configf:lookup *configdat* "server" "homehost" ))
@@ -269,9 +267,9 @@
         (server:run areapath))
     (hash-table-set! *server-kind-run* areapath (list (+ call-num 1)(current-seconds)))))
 
-(define (server:start-and-wait areapath #!key (timeout 60))
+(define (server:start-and-wait area-dat areapath #!key (timeout 60))
   (let ((give-up-time (+ (current-seconds) timeout)))
-    (let loop ((server-url (server:check-if-running areapath)))
+    (let loop ((server-url (server:check-if-running area-dat areapath)))
       (if (or server-url
 	      (> (current-seconds) give-up-time)) ;; server-url will be #f if no server available.
 	  server-url
@@ -279,7 +277,7 @@
 	    (if (< num-ok 1) ;; if there are no decent candidates for servers then try starting a new one
 		(server:kind-run areapath))
 	    (thread-sleep! 5)
-	    (loop (server:check-if-running areapath)))))))
+	    (loop (server:check-if-running area-dat areapath)))))))
 
 (define server:try-running server:run) ;; there is no more per-run servers ;; REMOVE ME. BUG.
 
@@ -294,13 +292,13 @@
     
 ;; no longer care if multiple servers are started by accident. older servers will drop off in time.
 ;;
-(define (server:check-if-running areapath)
+(define (server:check-if-running area-dat areapath)
   (let* ((servers       (server:get-best (server:get-list areapath))))
     (if (null? servers)
         #f
         (let loop ((hed (car servers))
                    (tal (cdr servers)))
-          (let ((res (server:check-server hed)))
+          (let ((res (server:check-server area-dat hed)))
             (if res
                 res
                 (if (null? tal)
@@ -309,10 +307,10 @@
 
 ;; ping the given server
 ;;
-(define (server:check-server server-record)
+(define (server:check-server area-dat server-record)
   (let* ((server-url (server:record->url server-record))
          (res        (case *transport-type*
-                       ((http)(server:ping server-url))
+                       ((http)(server:ping area-dat server-url))
                        ;; ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
                        )))
     (if res
@@ -329,15 +327,9 @@
 ;; NOTE: This is NOT called directly from clients as not all transports support a client running
 ;;       in the same process as the server.
 ;;
-(define (server:ping host-port-in #!key (do-exit #f))
+(define (server:ping area-dat host-port-in #!key (do-exit #f))
   (let ((host:port (if (not host-port-in) ;; use read-dotserver to find
-		       #f ;; (server:check-if-running *toppath*)
-		;; (if (number? host-port-in) ;; we were handed a server-id
-		;; 	   (let ((srec (tasks:get-server-by-id (db:delay-if-busy (tasks:open-db)) host-port-in)))
-		;; 	     ;; (print "srec: " srec " host-port-in: " host-port-in)
-		;; 	     (if srec
-		;; 		 (conc (vector-ref srec 3) ":" (vector-ref srec 4))
-		;; 		 (conc "no such server-id " host-port-in)))
+		       #f
 		       host-port-in))) ;; )
     (let* ((host-port (if host:port
 			  (let ((slst (string-split   host:port ":")))
@@ -345,8 +337,6 @@
 				(list (car slst)(string->number (cadr slst)))
 				#f))
 			  #f)))
-;;	   (toppath       (launch:setup)))
-      ;; (print "host-port=" host-port)
       (if (not host-port)
 	  (begin
 	    (if host-port-in
@@ -356,7 +346,7 @@
 	  (let* ((iface      (car host-port))
 		 (port       (cadr host-port))
 		 (server-dat (http-transport:client-connect iface port))
-		 (login-res  (rmt:login-no-auto-client-setup server-dat)))
+		 (login-res  (rmt:login-no-auto-client-setup area-dat server-dat)))
 	    (if (and (list? login-res)
 		     (car login-res))
 		(begin

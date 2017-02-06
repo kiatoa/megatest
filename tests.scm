@@ -354,10 +354,10 @@
 	    result)))))
 
 ;; Do not rpc this one, do the underlying calls!!!
-(define (tests:test-set-status! run-id test-id state status comment dat #!key (work-area #f))
+(define (tests:test-set-status! area-dat run-id test-id state status comment dat #!key (work-area #f))
   (let* ((real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
-	 (testdat     (rmt:get-test-info-by-id run-id test-id))
+	 (testdat     (rmt:get-test-info-by-id area-dat run-id test-id))
 	 (test-name   (db:test-get-testname  testdat))
 	 (item-path   (db:test-get-item-path testdat))
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
@@ -368,7 +368,7 @@
 	 ;;  2. Add test for testconfig waiver propagation control here
 	 ;;
 	 (prev-test   (if (equal? status "FAIL")
-			  (rmt:get-previous-test-run-record run-id test-name item-path)
+			  (rmt:get-previous-test-run-record area-dat run-id test-name item-path)
 			  #f))
 	 (waived   (if prev-test
 		       (if prev-test ;; true if we found a previous test in this run series
@@ -393,14 +393,14 @@
     ;; update the primary record IF state AND status are defined
     (if (and state status)
 	(begin
-	  (rmt:set-state-status-and-roll-up-items run-id test-id item-path state real-status (if waived waived comment))
+	  (rmt:set-state-status-and-roll-up-items area-dat run-id test-id item-path state real-status (if waived waived comment))
 	  ;; (mt:process-triggers run-id test-id state real-status) ;; triggers are called in test-set-state-status
 	  ))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
     ;; (if (and test-id state status (equal? status "AUTO")) 
-    ;; 	(rmt:test-data-rollup run-id test-id status))
+    ;; 	(rmt:test-data-rollup area-dat run-id test-id status))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
@@ -435,29 +435,29 @@
 			   dcomment ",," ;; extra comma for status
 			   type     )))
 	    ;; This was run remote, don't think that makes sense. Perhaps not, but that is the easiest path for the moment.
-	    (rmt:csv->test-data run-id test-id
+	    (rmt:csv->test-data area-dat run-id test-id
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     ;;;;;; (if (not (equal? item-path ""))
-    ;;;;;;     (rmt:set-state-status-and-roll-up-items run-id test-name item-path state status #f) ;;;;;)
+    ;;;;;;     (rmt:set-state-status-and-roll-up-items area-dat run-id test-name item-path state status #f) ;;;;;)
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
 	    waived)
 	(let ((cmt  (if waived waived comment)))
-	  (rmt:general-call 'set-test-comment run-id cmt test-id)))))
+	  (rmt:general-call area-dat 'set-test-comment run-id cmt test-id)))))
 
-(define (tests:test-set-toplog! run-id test-name logf) 
-  (rmt:general-call 'tests:test-set-toplog run-id logf run-id test-name))
+(define (tests:test-set-toplog! area-dat run-id test-name logf) 
+  (rmt:general-call area-dat 'tests:test-set-toplog run-id logf run-id test-name))
 
-(define (tests:summarize-items run-id test-id test-name force)
+(define (tests:summarize-items area-dat run-id test-id test-name force)
   ;; if not force then only update the record if one of these is true:
   ;;   1. logf is "log/final.log
   ;;   2. logf is same as outputfilename
   (let* ((outputfilename (conc "megatest-rollup-" test-name ".html"))
 	 (orig-dir       (current-directory))
-	 (logf-info      (rmt:test-get-logfile-info run-id test-name))
+	 (logf-info      (rmt:test-get-logfile-info area-dat run-id test-name))
 	 (logf           (if logf-info (cadr logf-info) #f))
 	 (path           (if logf-info (car  logf-info) #f)))
     ;; This query finds the path and changes the directory to it for the test
@@ -478,14 +478,14 @@
 	    (if have-lock
 		(let ((script (configf:lookup *configdat* "testrollup" test-name)))
 		  (print "Obtained lock for " outputfilename)
-		  (rmt:set-state-status-and-roll-up-items run-id test-name "" #f #f #f)
+		  (rmt:set-state-status-and-roll-up-items area-dat run-id test-name "" #f #f #f)
 		  (if script
 		      (system (conc script " > " outputfilename " & "))
-		      (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename))
+		      (tests:generate-html-summary-for-iterated-test area-dat run-id test-id test-name outputfilename))
 		  (common:simple-file-release-lock lockf)
 		  (change-directory orig-dir)
 		  ;; NB// tests:test-set-toplog! is remote internal...
-		  (tests:test-set-toplog! run-id test-name outputfilename))
+		  (tests:test-set-toplog! area-dat run-id test-name outputfilename))
 		;; didn't get the lock, check to see if current update started later than this 
 		;; update, if so we can exit without doing any work
 		(if (> my-start-time (file-modification-time lockf))
@@ -495,12 +495,12 @@
 		      (thread-sleep! (+ 5 (random 5))) ;; delay between 5 and 10 seconds
 		      (loop (common:simple-file-lock lockf))))))))))
 
-(define (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename)
+(define (tests:generate-html-summary-for-iterated-test area-dat run-id test-id test-name outputfilename)
   (let ((counts              (make-hash-table))
 	(statecounts         (make-hash-table))
 	(outtxt              "")
 	(tot                 0)
-	(testdat             (rmt:test-get-records-for-index-file run-id test-name)))
+	(testdat             (rmt:test-get-records-for-index-file area-dat run-id test-name)))
     (with-output-to-file outputfilename
       (lambda ()
 	(set! outtxt (conc outtxt "<html><title>Summary: " test-name 
@@ -557,7 +557,7 @@
 	       "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
 	       outtxt "</table></body></html>")
 	;; (release-dot-lock outputfilename)
-	;;(rmt:update-run-stats 
+	;;(rmt:update-run-stats area-dat 
 	;; run-id
 	;; (hash-table-map
 	;;  state-status-counts
@@ -668,13 +668,13 @@ EOF
 	   (list (vector-ref run (+ 1 numkeys)))))
 
 
-(define (tests:get-rest-data runs header numkeys)
+(define (tests:get-rest-data area-dat runs header numkeys)
    (let ((resh (make-hash-table)))
    (for-each
      (lambda (run)
         (let* ((run-id (db:get-value-by-header run header "id"))
                (run-dir      (tests:run-record->test-path run numkeys))
-	       (test-data    (rmt:get-tests-for-run
+	       (test-data    (rmt:get-tests-for-run area-dat
 				   run-id
                                    "%"       ;; testnamepatt
 				   '()        ;; states
@@ -705,14 +705,14 @@ EOF
 
 ;; (tests:create-html-tree "test-index.html")
 ;;
-(define (tests:create-html-tree outf)
+(define (tests:create-html-tree area-dat outf)
    (let* ((lockfile  (conc outf ".lock"))
 	 (runs-to-process '())
          (linktree  (common:get-linktree))
           (area-name (common:get-testsuite-name))
-	  (keys      (rmt:get-keys))
+	  (keys      (rmt:get-keys area-dat))
 	  (numkeys   (length keys))
-         (total-runs  (rmt:get-num-runs "%"))
+         (total-runs  (rmt:get-num-runs area-dat "%"))
          (pg-size 10)   )
     (if (common:simple-file-lock lockfile)
         (begin
@@ -720,11 +720,11 @@ EOF
         (let loop ((page 0))
 	(let* ((oup       (open-output-file (or outf (conc linktree "/page" page ".html"))))
                (start (* page pg-size)) 
-	       (runsdat   (rmt:get-runs "%" pg-size start (map (lambda (x)(list x "%")) keys)))
+	       (runsdat   (rmt:get-runs area-dat "%" pg-size start (map (lambda (x)(list x "%")) keys)))
 	       (header    (vector-ref runsdat 0))
 	       (runs      (vector-ref runsdat 1))
                (ctr 0)
-               (test-runs-hash (tests:get-rest-data runs header numkeys))
+               (test-runs-hash (tests:get-rest-data area-dat runs header numkeys))
                (test-list (hash-table-keys test-runs-hash))
                (get-prev-links (lambda (page linktree )   
                             (let* ((link  (if (not (eq? page 0))
@@ -800,16 +800,16 @@ EOF
 
 
 
-(define (tests:create-html-tree-old outf)
+(define (tests:create-html-tree-old area-dat outf)
    (let* ((lockfile  (conc outf ".lock"))
 	 (runs-to-process '()))
     (if (common:simple-file-lock lockfile)
 	(let* ((linktree  (common:get-linktree))
 	       (oup       (open-output-file (or outf (conc linktree "/runs-index.html"))))
 	       (area-name (common:get-testsuite-name))
-	       (keys      (rmt:get-keys))
+	       (keys      (rmt:get-keys area-dat))
 	       (numkeys   (length keys))
-	       (runsdat   (rmt:get-runs "%" #f #f (map (lambda (x)(list x "%")) keys)))
+	       (runsdat   (rmt:get-runs area-dat "%" #f #f (map (lambda (x)(list x "%")) keys)))
 	       (header    (vector-ref runsdat 0))
 	       (runs      (vector-ref runsdat 1))
 	       (runtreedat (map (lambda (x)
@@ -848,7 +848,7 @@ EOF
 	     (let* ((test-subpath (tests:run-record->test-path run numkeys))
 		    (run-id       (db:get-value-by-header run header "id"))
                     (run-dir      (tests:run-record->test-path run numkeys))
-		    (test-dats    (rmt:get-tests-for-run
+		    (test-dats    (rmt:get-tests-for-run area-dat
 				   run-id
                                    "%/"       ;; testnamepatt
 				   '()        ;; states
@@ -907,9 +907,9 @@ EOF
                                                                      (if (and (not (file-exists? full-targ))
                                                                               (directory? full-targ)
                                                                               (file-write-access? full-targ))
-                                                                         (tests:summarize-test 
+                                                                         (tests:summarize-test area-dat
                                                                           run-id 
-                                                                          (rmt:get-test-id run-id test-name item-path)))
+                                                                          (rmt:get-test-id area-dat run-id test-name item-path)))
                                                                      (if (file-exists? full-targ)
                                                                          (s:a run-name 'href html-file)
                                                                          (begin
@@ -996,8 +996,8 @@ EOF
 
 ;; 
 ;;
-(define (tests:get-compressed-steps run-id test-id)
-  (let* ((steps-data  (rmt:get-steps-for-test run-id test-id))
+(define (tests:get-compressed-steps area-dat run-id test-id)
+  (let* ((steps-data  (rmt:get-steps-for-test area-dat run-id test-id))
 	 (comprsteps  (tests:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
     (map (lambda (x)
 	   ;; take advantage of the \n on time->string
@@ -1027,9 +1027,9 @@ EOF
 
 ;; summarize test in to a file test-summary.html in the test directory
 ;;
-(define (tests:summarize-test run-id test-id)
-  (let* ((test-dat  (rmt:get-test-info-by-id run-id test-id))
-	 (steps-dat (rmt:get-steps-for-test run-id test-id))
+(define (tests:summarize-test area-dat run-id test-id)
+  (let* ((test-dat  (rmt:get-test-info-by-id area-dat run-id test-id))
+	 (steps-dat (rmt:get-steps-for-test area-dat run-id test-id))
 	 (test-name (db:test-get-testname test-dat))
 	 (item-path (db:test-get-item-path test-dat))
 	 (full-name (db:test-make-full-name test-name item-path))
@@ -1037,7 +1037,7 @@ EOF
 	 (status    (db:test-get-status   test-dat))
 	 (color     (common:get-color-from-status status))
 	 (logf      (db:test-get-final_logf test-dat))
-	 (steps-dat (tests:get-compressed-steps run-id test-id)))
+	 (steps-dat (tests:get-compressed-steps area-dat run-id test-id)))
     ;; (dcommon:get-compressed-steps #f 1 30045)
     ;; (#("wasting_time" "23:36:13" "23:36:21" "0" "8.0s" "wasting_time.log"))
 
@@ -1079,13 +1079,13 @@ EOF
 	  
 ;; MUST BE CALLED local!
 ;;
-(define (tests:test-get-paths-matching keynames target fnamepatt #!key (res '()))
+(define (tests:test-get-paths-matching area-dat keynames target fnamepatt #!key (res '()))
   ;; BUG: Move the values derived from args to parameters and push to megatest.scm
   (let* ((testpatt   (or (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
 	 (statepatt  (or (args:get-arg "-state")   (args:get-arg ":state")    "%"))
 	 (statuspatt (or (args:get-arg "-status")  (args:get-arg ":status")   "%"))
 	 (runname    (or (args:get-arg "-runname") (args:get-arg ":runname")  "%"))
-	 (paths-from-db (rmt:test-get-paths-matching-keynames-target-new keynames target res
+	 (paths-from-db (rmt:test-get-paths-matching-keynames-target-new area-dat keynames target res
 					testpatt
 					statepatt
 					statuspatt
@@ -1351,7 +1351,7 @@ EOF
 
 ;; for each test:
 ;;   
-(define (tests:filter-non-runnable run-id testkeynames testrecordshash)
+(define (tests:filter-non-runnable area-dat run-id testkeynames testrecordshash)
   (let ((runnables '()))
     (for-each
      (lambda (testkeyname)
@@ -1361,8 +1361,8 @@ EOF
 	      (item-path   (tests:testqueue-get-item_path test-record))
 	      (waitons     (tests:testqueue-get-waitons   test-record))
 	      (keep-test   #t)
-	      (test-id     (rmt:get-test-id run-id test-name item-path))
-	      (tdat        (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
+	      (test-id     (rmt:get-test-id area-dat run-id test-name item-path))
+	      (tdat        (rmt:get-testinfo-state-status area-dat run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
@@ -1378,8 +1378,8 @@ EOF
 	       (if keep-test
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
-			       (let* ((parent-test-id (rmt:get-test-id run-id waiton ""))
-				      (wtdat          (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
+			       (let* ((parent-test-id (rmt:get-test-id area-dat run-id waiton ""))
+				      (wtdat          (rmt:get-testinfo-state-status area-dat run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 				 (if (or (and (equal? (db:test-get-state wtdat) "COMPLETED")
 					      (member (db:test-get-status wtdat) '("FAIL" "ABORT")))
 					 (member (db:test-get-status wtdat)  '("KILLED"))
@@ -1486,8 +1486,8 @@ EOF
 
 ;; teststep-set-status! used to be here
 
-(define (test-get-kill-request run-id test-id) ;; run-id test-name itemdat)
-  (let* ((testdat   (rmt:get-test-info-by-id run-id test-id)))
+(define (test-get-kill-request area-dat run-id test-id) ;; run-id test-name itemdat)
+  (let* ((testdat   (rmt:get-test-info-by-id area-dat run-id test-id)))
     (and testdat
 	 (equal? (test:get-state testdat) "KILLREQ"))))
 
@@ -1502,24 +1502,24 @@ EOF
 	res))
   0)
 
-(define (tests:update-central-meta-info run-id test-id cpuload diskfree minutes uname hostname)
-  (rmt:general-call 'update-test-rundat run-id test-id (current-seconds) (or cpuload -1)(or diskfree -1) -1 (or minutes -1))
+(define (tests:update-central-meta-info area-dat run-id test-id cpuload diskfree minutes uname hostname)
+  (rmt:general-call area-dat 'update-test-rundat run-id test-id (current-seconds) (or cpuload -1)(or diskfree -1) -1 (or minutes -1))
   (if (and cpuload diskfree)
-      (rmt:general-call 'update-cpuload-diskfree run-id cpuload diskfree test-id))
+      (rmt:general-call area-dat 'update-cpuload-diskfree run-id cpuload diskfree test-id))
   (if minutes 
-      (rmt:general-call 'update-run-duration run-id minutes test-id))
+      (rmt:general-call area-dat 'update-run-duration run-id minutes test-id))
   (if (and uname hostname)
-      (rmt:general-call 'update-uname-host run-id uname hostname test-id)))
+      (rmt:general-call area-dat 'update-uname-host run-id uname hostname test-id)))
   
 ;; This one is for running with no db access (i.e. via rmt: internally)
-(define (tests:set-full-meta-info db test-id run-id minutes work-area remtries)
+(define (tests:set-full-meta-info db area-dat test-id run-id minutes work-area remtries)
 ;; (define (tests:set-full-meta-info test-id run-id minutes work-area)
 ;;  (let ((remtries 10))
   (let* ((cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory)))
 	 (uname    (get-uname "-srvpio"))
 	 (hostname (get-host-name)))
-    (tests:update-central-meta-info run-id test-id cpuload diskfree minutes uname hostname)))
+    (tests:update-central-meta-info area-dat run-id test-id cpuload diskfree minutes uname hostname)))
     
 ;; (define (tests:set-partial-meta-info test-id run-id minutes work-area)
 (define (tests:set-partial-meta-info test-id run-id minutes work-area remtries)
@@ -1534,7 +1534,7 @@ EOF
 	   (debug:print-info 0 *default-log-port* "WARNING: failed to set meta info. Will try " remtries " more times")
 	   (set! remtries (- remtries 1))
 	   (thread-sleep! 10)
-	   (tests:set-full-meta-info db test-id run-id minutes work-area (- remtries 1)))
+	   (tests:set-full-meta-info db area-dat test-id run-id minutes work-area (- remtries 1)))
 	 (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
 	   (debug:print-error 0 *default-log-port* "tried for over a minute to update meta info and failed. Giving up")
 	   (debug:print 0 *default-log-port* "EXCEPTION: database probably overloaded or unreadable.")

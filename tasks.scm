@@ -509,8 +509,8 @@
 ;; 
 ;; do a remote call to get the task queue info but do the killing as self here.
 ;;
-(define (tasks:kill-runner target run-name testpatt)
-  (let ((records    (rmt:tasks-find-task-queue-records target run-name testpatt "running" "run-tests"))
+(define (tasks:kill-runner area-dat target run-name testpatt)
+  (let ((records    (rmt:tasks-find-task-queue-records area-dat target run-name testpatt "running" "run-tests"))
 	(hostpid-rx (regexp "\\s+(\\w+)\\s+(\\d+)$"))) ;; host pid is at end of param string
     (if (null? records)
 	(debug:print 0 *default-log-port* "No run launching processes found for " target " / " run-name " with testpatt " (or testpatt "* no testpatt specified! *"))

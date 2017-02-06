@@ -26,7 +26,7 @@
 (include "db_records.scm")
 (include "run_records.scm")
 
-(define (ezsteps:run-from testdat start-step-name run-one)
+(define (ezsteps:run-from area-dat testdat start-step-name run-one)
   (let* ((test-run-dir  ;; (filedb:get-path *fdb* 
 	  (db:test-get-rundir testdat)) ;; )
 	 (testconfig    (read-config (conc test-run-dir "/testconfig") #f #t environ-patt: "pre-launch-env-vars"))
@@ -83,7 +83,7 @@
 		  (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "-") " " stepcmd))
 		  
 		  (debug:print 4 *default-log-port* "script: " script)
-		  (rmt:teststep-set-status! run-id test-id stepname "start" "-" #f #f)
+		  (rmt:teststep-set-status! area-dat run-id test-id stepname "start" "-" #f #f)
 		  ;; now launch
 		  (let ((pid (process-run script)))
 		    (let processloop ((i 0))
@@ -100,9 +100,9 @@
 				  ))
 		    (let ((exinfo (vector-ref exit-info 2))
 			  (logfna (if logpro-used (conc stepname ".html") "")))
-		      (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
+		      (rmt:teststep-set-status! area-dat run-id test-id stepname "end" exinfo #f logfna))
 		    (if logpro-used
-			(rmt:test-set-log! test-id (conc stepname ".html")))
+			(rmt:test-set-log! area-dat test-id (conc stepname ".html")))
 		    ;; set the test final status
 		    (let* ((this-step-status (cond
 					      ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
@@ -124,14 +124,14 @@
 			((warn)
 			 (set! rollup-status 2)
 			 ;; NB// test-set-status! does rdb calls under the hood
-			 (tests:test-set-status! test-id "RUNNING" "WARN" 
+			 (tests:test-set-status! area-dat test-id "RUNNING" "WARN" 
 						 (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 						 #f))
 			((pass)
-			 (tests:test-set-status! test-id "RUNNING" "PASS" #f #f))
+			 (tests:test-set-status! area-dat test-id "RUNNING" "PASS" #f #f))
 			(else ;; 'fail
 			 (set! rollup-status 1) ;; force fail
-			 (tests:test-set-status! test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
+			 (tests:test-set-status! area-dat test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
 			 ))))
 		  (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 			   (not (null? tal)))
@@ -142,7 +142,7 @@
 	  ;; Once done with step/steps update the test record
 	  ;;
 	  (let* ((item-path (db:test-get-item-path testdat)) ;; (item-list->path itemdat))
-		 (testinfo  (rmt:get-testinfo-by-id run-id test-id))) ;; refresh the testdat, call it iteminfo in case need prev/curr
+		 (testinfo  (rmt:get-testinfo-by-id area-dat run-id test-id))) ;; refresh the testdat, call it iteminfo in case need prev/curr
 	    ;; Am I completed?
 	    (if (equal? (db:test-get-state testinfo) "RUNNING") ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		(let ((new-state  (if kill-job "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
@@ -160,7 +160,7 @@
 				    (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
 				   (else "FAIL")))) ;; (db:test-get-status testinfo)))
 		  (debug:print-info 2 *default-log-port* "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
-		  (tests:test-set-status! test-id 
+		  (tests:test-set-status! area-dat test-id 
 					  new-state
 					  new-status
 					  (args:get-arg "-m") #f)
@@ -169,7 +169,7 @@
 		      (cdb:set-state-status-and-roll-up-items *runremote* run-id test-name item-path new-status))))
 	    ;; for automated creation of the rollup html file this is a good place...
 	    (if (not (equal? item-path ""))
-		(tests:summarize-items #f run-id test-id test-name #f)) ;; don't force - just update if no
+		(tests:summarize-items area-dat #f run-id test-id test-name #f)) ;; don't force - just update if no
 	    )))
     (pop-directory)
     rollup-status))

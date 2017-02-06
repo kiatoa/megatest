@@ -69,9 +69,9 @@
 ;; lookup_server, need to remove *runremote* stuff
 ;;
 
-(define (client:setup-http areapath #!key (remaining-tries 100) (failed-connects 0))
+(define (client:setup-http area-dat areapath #!key (remaining-tries 100) (failed-connects 0))
   (debug:print-info 2 *default-log-port* "client:setup remaining-tries=" remaining-tries)
-  (server:start-and-wait areapath)
+  (server:start-and-wait area-dat areapath)
   (if (<= remaining-tries 0)
       (begin
 	(debug:print-error 0 *default-log-port* "failed to start or connect to server")
@@ -91,7 +91,7 @@
 		  (let* ((start-res (case *transport-type*
 				      ((http)(http-transport:client-connect host port))))
 			 (ping-res  (case *transport-type* 
-				      ((http)(rmt:login-no-auto-client-setup start-res)))))
+				      ((http)(rmt:login-no-auto-client-setup area-dat start-res)))))
 		    (if (and start-res
 			     ping-res)
 			(begin
@@ -110,6 +110,6 @@
 		    (server:kind-run areapath)
 		    (debug:print-info 0 *default-log-port* "client:setup, no server registered, remaining-tries=" remaining-tries)
 		    (thread-sleep! 1) ;; (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
-		    (server:start-and-wait areapath)
+		    (server:start-and-wait area-dat areapath)
 		    (client:setup-http areapath remaining-tries: (- remaining-tries 1)))))))))
 

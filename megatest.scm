@@ -685,8 +685,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-ping")
     (let* ((server-id     (string->number (args:get-arg "-ping"))) ;; extract run-id (i.e. no ":"
-	   (host:port     (args:get-arg "-ping")))
-      (server:ping (or server-id host:port) do-exit: #t)))
+	   (host:port     (args:get-arg "-ping"))
+	   (area-dat      (make-remote)))
+      (server:ping area-dat (or server-id host:port) do-exit: #t)))
 
 ;;======================================================================
 ;; Capture, save and manipulate environments
@@ -816,7 +817,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; cache the runconfigs in $MT_LINKTREE/$MT_TARGET/$MT_RUNNAME/.runconfig
 ;;
-(define (full-runconfigs-read)
+(define (full-runconfigs-read area-dat)
 ;; in the envprocessing branch the below code replaces the further below code
 ;;  (if (eq? *configstatus* 'fulldata)
 ;;      *runconfigdat*
@@ -832,7 +833,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (file-exists? cfgf)
 	     (file-write-access? cfgf))
 	(configf:read-alist cfgf)
-	(let* ((keys   (rmt:get-keys))
+	(let* ((keys   (rmt:get-keys area-dat))
 	       (target (common:args-get-target))
 	       (key-vals (if target (keys:target->keyval keys target) #f))
 	       (sections (if target (list "default" target) #f))
@@ -914,7 +915,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; since several actions can be specified on the command line the removal
 ;; is done first
-(define (operate-on action)
+(define (operate-on area-dat action)
   (let* ((runrec (runs:runrec-make-record))
 	 (target (common:args-get-target)))
     (cond
@@ -937,7 +938,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    ;; check for correct version, exit with message if not correct
 	    (common:exit-on-version-changed)
-	    (runs:operate-on  action
+	    (runs:operate-on  area-dat action
 			      target
 			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
 			      (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
@@ -950,23 +951,23 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (general-run-call 
      "-remove-runs"
      "remove runs"
-     (lambda (target runname keys keyvals)
-       (operate-on 'remove-runs))))
+     (lambda (area-dat target runname keys keyvals)
+       (operate-on area-dat 'remove-runs))))
 
 (if (args:get-arg "-set-state-status")
     (general-run-call 
      "-set-state-status"
      "set state and status"
-     (lambda (target runname keys keyvals)
-       (operate-on 'set-state-status))))
+     (lambda (area-dat target runname keys keyvals)
+       (operate-on area-dat 'set-state-status))))
 
 (if (or (args:get-arg "-set-run-status")
 	(args:get-arg "-get-run-status"))
     (general-run-call
      "-set-run-status"
      "set run status"
-     (lambda (target runname keys keyvals)
-       (let* ((runsdat  (rmt:get-runs-by-patt keys runname 
+     (lambda (area-dat target runname keys keyvals)
+       (let* ((runsdat  (rmt:get-runs-by-patt area-dat keys runname 
 					(common:args-get-target)
 					#f #f #f #f))
 	      (header   (vector-ref runsdat 0))
@@ -978,8 +979,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (let* ((row      (car (vector-ref runsdat 1)))
 		    (run-id   (db:get-value-by-header row header "id")))
 	       (if (args:get-arg "-set-run-status")
-		   (rmt:set-run-status run-id (args:get-arg "-set-run-status") msg: (args:get-arg "-m"))
-		   (print (rmt:get-run-status run-id))
+		   (rmt:set-run-status area-dat run-id (args:get-arg "-set-run-status") msg: (args:get-arg "-m"))
+		   (print (rmt:get-run-status area-dat run-id))
 		   )))))))
 
 ;;======================================================================
@@ -1021,14 +1022,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (runpatt     (args:get-arg "-list-runs"))
                (access-mode (db:get-access-mode))
 	       (testpatt    (common:args-get-testpatt #f))
+	       (area-dat    (make-remote))
 	       ;; (if (args:get-arg "-testpatt") 
 	       ;;  	        (args:get-arg "-testpatt") 
 	       ;;  	        "%"))
-	       (keys        (rmt:get-keys)) ;; (db:get-keys dbstruct))
+	       (keys        (rmt:get-keys area-dat)) ;; (db:get-keys dbstruct))
 	       ;; (runsdat  (db:get-runs dbstruct runpatt #f #f '()))
-	;; (runsdat     (rmt:get-runs-by-patt keys (or runpatt "%") (common:args-get-target) ;; (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
+	;; (runsdat     (rmt:get-runs-by-patt area-dat keys (or runpatt "%") (common:args-get-target) ;; (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
 	;; 		           	 #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
-	       (runsdat     (rmt:get-runs-by-patt keys (or runpatt "%") 
+	       (runsdat     (rmt:get-runs-by-patt area-dat keys (or runpatt "%") 
                                                   (common:args-get-target) #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
 	       (runstmp     (db:get-rows runsdat))
 	       (header      (db:get-header runsdat))
@@ -1355,7 +1357,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; 	 (launch:setup))
 ;;     (let* ((since-time (string->number (args:get-arg "-since")))
 ;; 	   (run-ids    (db:get-changed-run-ids since-time)))
-;;       ;; (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
+;;       ;; (rmt:get-tests-for-runs-mindata area-dat run-ids testpatt states status not-in)
 ;;       (print (sort run-ids <))
 ;;       (set! *didsomething* #t)))
       
@@ -1387,21 +1389,21 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (general-run-call 
      "-runall"
      "run all tests"
-     (lambda (target runname keys keyvals)
+     (lambda (area-dat target runname keys keyvals)
        (if (args:get-arg "-rerun-clean") ;; first set states/statuses correct
 	   (let ((states   (or (configf:lookup *configdat* "validvalues" "cleanrerun-states")
 			       "KILLREQ,KILLED,UNKNOWN,INCOMPLETE,STUCK,NOT_STARTED"))
 		 (statuses (or (configf:lookup *configdat* "validvalues" "cleanrerun-statuses")
 			       "FAIL,INCOMPLETE,ABORT,CHECK")))
 	     (hash-table-set! args:arg-hash "-preclean" #t)
-	     (runs:operate-on 'set-state-status
+	     (runs:operate-on area-dat 'set-state-status
 			      target
 			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
 			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
 			      state:  states
 			      ;; status: statuses
 			      new-state-status: "NOT_STARTED,n/a")
-	     (runs:operate-on 'set-state-status
+	     (runs:operate-on area-dat 'set-state-status
 			      target
 			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
 			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
@@ -1412,21 +1414,21 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        (if (args:get-arg "-rerun-all") ;; first set states/statuses correct
 	   (begin
 	     (hash-table-set! args:arg-hash "-preclean" #t)
-	     (runs:operate-on 'set-state-status
+	     (runs:operate-on area-dat 'set-state-status
 			      target
 			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
 			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
 			      state:  #f
 			      ;; status: statuses
 			      new-state-status: "NOT_STARTED,n/a")
-	     (runs:operate-on 'set-state-status
+	     (runs:operate-on area-dat 'set-state-status
 			      target
 			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
 			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
 			      ;; state:  states
 			      status: #f
 			      new-state-status: "NOT_STARTED,n/a")))
-       (runs:run-tests target
+       (runs:run-tests area-dat target
 		       runname
 		       #f ;; (common:args-get-testpatt #f)
 		       ;; (or (args:get-arg "-testpatt")
@@ -1451,28 +1453,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;    - if test run time > allowed run time then kill job
 ;;    - if cannot access db > allowed disconnect time then kill job
 
-;; == duplicated == (if (or (args:get-arg "-run")(args:get-arg "-runtests"))
-;; == duplicated ==   (general-run-call 
-;; == duplicated ==    "-runtests" 
-;; == duplicated ==    "run a test" 
-;; == duplicated ==    (lambda (target runname keys keyvals)
-;; == duplicated ==      ;;
-;; == duplicated ==      ;; May or may not implement it this way ...
-;; == duplicated ==      ;;
-;; == duplicated ==      ;; Insert this run into the tasks queue
-;; == duplicated ==      ;; (open-run-close tasks:add tasks:open-db 
-;; == duplicated ==      ;;    	     "runtests" 
-;; == duplicated ==      ;;    	     user
-;; == duplicated ==      ;;    	     target
-;; == duplicated ==      ;;    	     runname
-;; == duplicated ==      ;;    	     (args:get-arg "-runtests")
-;; == duplicated ==      ;;    	     #f))))
-;; == duplicated ==      (runs:run-tests target
-;; == duplicated == 		     runname
-;; == duplicated == 		     (common:args-get-testpatt #f) ;; (args:get-arg "-runtests")
-;; == duplicated == 		     user
-;; == duplicated == 		     args:arg-hash))))
-
 ;;======================================================================
 ;; Rollup into a run
 ;;======================================================================
@@ -1481,8 +1461,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (general-run-call 
      "-rollup" 
      "rollup tests" 
-     (lambda (target runname keys keyvals)
-       (runs:rollup-run keys
+     (lambda (area-dat target runname keys keyvals)
+       (runs:rollup-run area-dat keys
 			keyvals
 			(or (args:get-arg "-runname")(args:get-arg ":runname") )
 			user))))
@@ -1495,8 +1475,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (general-run-call 
      (if (args:get-arg "-lock") "-lock" "-unlock")
      "lock/unlock tests" 
-     (lambda (target runname keys keyvals)
-       (runs:handle-locking 
+     (lambda (area-dat target runname keys keyvals)
+       (runs:handle-locking
+	          area-dat
 		  target
 		  keys
 		  (or (args:get-arg "-runname")(args:get-arg ":runname") )
@@ -1523,7 +1504,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status"))
 	       (target    (args:get-arg "-target"))
-	       (toppath   (assoc/default 'toppath   cmdinfo)))
+	       (toppath   (assoc/default 'toppath   cmdinfo))
+	       (area-dat  (make-remote)))
 	  (change-directory toppath)
 	  (if (not target)
 	      (begin
@@ -1533,9 +1515,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 *default-log-port* "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
-	  (let* ((keys     (rmt:get-keys))
+	  (let* ((keys     (rmt:get-keys area-dat))
 		 ;; db:test-get-paths must not be run remote
-		 (paths    (tests:test-get-paths-matching keys target (args:get-arg "-test-files"))))
+		 (paths    (tests:test-get-paths-matching area-dat keys target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(if (file-exists? path)
@@ -1548,7 +1530,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (lambda (target runname keys keyvals)
 	   (let* ((db       #f)
 		  ;; DO NOT run remote
-		  (paths    (tests:test-get-paths-matching keys target (args:get-arg "-test-files"))))
+		  (paths    (tests:test-get-paths-matching area-dat keys target (args:get-arg "-test-files"))))
 	     (for-each (lambda (path)
 			 (print path))
 		       paths))))))
@@ -1562,8 +1544,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (general-run-call 
      "-archive"
      "Archive"
-     (lambda (target runname keys keyvals)
-       (operate-on 'archive))))
+     (lambda (area-dat target runname keys keyvals)
+       (operate-on area-dat 'archive))))
 
 ;;======================================================================
 ;; Extract a spreadsheet from the runs database
@@ -1634,7 +1616,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (test-id   (assoc/default 'test-id   cmdinfo))
 	     (itemdat   (assoc/default 'itemdat   cmdinfo))
 	     (work-area (assoc/default 'work-area cmdinfo))
-	     (db        #f))
+	     (db        #f)
+	     (area-dat  (make-remote)))
 	(change-directory testpath)
 	(if (not (launch:setup))
 	    (begin
@@ -1642,8 +1625,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (exit 1)))
 	(if (and state status)
 	    (let ((comment (launch:load-logpro-dat run-id test-id step)))
-	      ;; (rmt:test-set-log! run-id test-id (conc stepname ".html"))))
-	      (rmt:teststep-set-status! run-id test-id step state status (or comment msg) logfile))
+	      ;; (rmt:test-set-log! area-dat run-id test-id (conc stepname ".html"))))
+	      (rmt:teststep-set-status! area-dat run-id test-id step state status (or comment msg) logfile))
 	    (begin
 	      (debug:print-error 0 *default-log-port* "You must specify :state and :status with every call to -step")
 	      (exit 6))))))
@@ -1686,7 +1669,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (db        #f) ;; (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status"))
-	       (stepname  (args:get-arg "-step")))
+	       (stepname  (args:get-arg "-step"))
+	       (area-dat  (make-remote)))
 	  (if (not (launch:setup))
 	      (begin
 		(debug:print 0 *default-log-port* "Failed to setup, exiting")
@@ -1700,13 +1684,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (if (args:get-arg "-load-test-data")
 	      ;; has sub commands that are rdb:
 	      ;; DO NOT put this one into either rmt: or open-run-close
-	      (tdb:load-test-data run-id test-id))
+	      (tdb:load-test-data area-dat run-id test-id))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
-		(rmt:test-set-log! run-id test-id logfname)))
+		(rmt:test-set-log! area-dat run-id test-id logfname)))
 	  (if (args:get-arg "-set-toplog")
 	      ;; DO NOT run remote
-	      (tests:test-set-toplog! run-id test-name (args:get-arg "-set-toplog")))
+	      (tests:test-set-toplog! area-dat run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
 	      ;; DO NOT run remote
 	      (tests:summarize-items run-id test-id test-name #t)) ;; do force here
@@ -1734,7 +1718,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 						(cons cmd params) " ")
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
-		    (rmt:teststep-set-status! run-id test-id stepname "start" "n/a" (args:get-arg "-m") logfile)
+		    (rmt:teststep-set-status! area-dat run-id test-id stepname "start" "n/a" (args:get-arg "-m") logfile)
 		    ;; run the test step
 		    (debug:print-info 2 *default-log-port* "Running \"" fullcmd "\" in directory \"" startingdir)
 		    (change-directory startingdir)
@@ -1751,9 +1735,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
-			  (rmt:test-set-log! run-id test-id htmllogfile)))
+			  (rmt:test-set-log! area-dat run-id test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
-		      (rmt:teststep-set-status! run-id test-id stepname "end" exitstat msg logfile))
+		      (rmt:teststep-set-status! area-dat run-id test-id stepname "end" exitstat msg logfile))
 		    )))
 	  (if (or (args:get-arg "-test-status")
 		  (args:get-arg "-set-values"))
@@ -1780,7 +1764,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(let* ((msg    (args:get-arg "-m"))
 		       (numoth (length (hash-table-keys otherdata))))
 		  ;; Convert to rpc inside the tests:test-set-status! call, not here
-		  (tests:test-set-status! run-id test-id state newstatus msg otherdata work-area: work-area))))
+		  (tests:test-set-status! area-dat run-id test-id state newstatus msg otherdata work-area: work-area))))
 	  (if (sqlite3:database? db)(sqlite3:finalize! db))
 	  (set! *didsomething* #t))))
 
@@ -1790,13 +1774,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (or (args:get-arg "-showkeys")
         (args:get-arg "-show-keys"))
-    (let ((db #f)
-	  (keys #f))
+    (let ((db       #f)
+	  (keys     #f)
+	  (area-dat (make-remote)))
       (if (not (launch:setup))
 	  (begin
 	    (debug:print 0 *default-log-port* "Failed to setup, exiting")
 	    (exit 1)))
-      (set! keys (rmt:get-keys)) ;;  db))
+      (set! keys (rmt:get-keys area-dat)) ;;  db))
       (debug:print 1 *default-log-port* "Keys: " (string-intersperse keys ", "))
       (if (sqlite3:database? db)(sqlite3:finalize! db))
       (set! *didsomething* #t)))
@@ -1945,12 +1930,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (and (args:get-arg "-run-wait")
 	 (not (or (args:get-arg "-run")
 		  (args:get-arg "-runtests")))) ;; run-wait is built into runtests now
-    (begin
+    (let ((area-dat (make-remote)))
       (if (not (launch:setup))
 	  (begin
 	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
-      (operate-on 'run-wait)
+      (operate-on area-dat 'run-wait)
       (set! *didsomething* #t)))
 
 ;; ;; ;; redo me ;; Not converted to use dbstruct yet
@@ -2003,8 +1988,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-generate-html")
-    (let* ((toppath (launch:setup)))
-      (if (tests:create-html-tree #f)
+    (let* ((toppath (launch:setup))
+	   (area-dat (make-remote)))
+      (if (tests:create-html-tree area-dat #f)
           (debug:print-info 0 *default-log-port* "HTML output created in " toppath "/lt/page#.html")
           (debug:print 0 *default-log-port* "Failed to create HTML output in " toppath "/lt/runs-index.html"))
       (set! *didsomething* #t)))

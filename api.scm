@@ -281,14 +281,14 @@
   (set! *api-process-request-count* (+ *api-process-request-count* 1))
   (let* ((cmd     ($ 'cmd))
 	 (paramsj ($ 'params))
-	 (params  (db:string->obj paramsj transport: 'http)) ;; (rmt:json-str->dat paramsj))
+	 (params  (db:string->obj paramsj transport: 'http)) ;; (rmt:json-str->dat area-dat paramsj))
 	 (resdat  (api:execute-requests dbstruct (vector cmd params))) ;; #( flag result )
 	 (res     (vector-ref resdat 1)))
     (if (> *api-process-request-count* *max-api-process-requests*)
 	(set! *max-api-process-requests* *api-process-request-count*))
     (set! *api-process-request-count* (- *api-process-request-count* 1))
     ;; This can be here but needs controls to ensure it doesn't run more than every 4 seconds
-    ;; (rmt:dat->json-str
+    ;; (rmt:dat->json-str area-dat
     ;;  (if (or (string? res)
     ;;          (list?   res)
     ;;          (number? res)

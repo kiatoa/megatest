@@ -39,13 +39,13 @@
 ;;
 ;; start_server? 
 ;;
-(define (rpc-transport:launch run-id)
+(define (rpc-transport:launch area-dat run-id)
   (let* ((tdbdat (tasks:open-db)))
     (BB> "rpc-transport:launch fired for run-id="run-id)
     (set! *run-id*   run-id)
     (if (args:get-arg "-daemonize")
         (daemon:ize))
-    (if (server:check-if-running run-id)
+    (if (server:check-if-running area-dat run-id)
         (begin
           (debug:print 0 *default-log-port* "INFO: Server for run-id " run-id " already running")
           (exit 0)))

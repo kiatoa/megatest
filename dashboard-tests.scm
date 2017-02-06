@@ -158,9 +158,9 @@
 ;;======================================================================
 ;; Run info panel
 ;;======================================================================
-(define (run-info-panel db keydat testdat runname)
+(define (run-info-panel db area-dat keydat testdat runname)
   (let* ((run-id     (db:test-get-run_id testdat))
-	 (rundat     (rmt:get-run-info run-id))
+	 (rundat     (rmt:get-run-info area-dat run-id))
 	 (header     (db:get-header rundat))
 	 (event_time (db:get-value-by-header (db:get-rows rundat)
 					     (db:get-header rundat)
@@ -263,7 +263,7 @@
 ;;======================================================================
 ;; Set fields 
 ;;======================================================================
-(define (set-fields-panel dbstruct run-id test-id testdat #!key (db #f))
+(define (set-fields-panel area-dat run-id test-id testdat #!key (db #f))
   (let ((newcomment #f)
 	(newstatus  #f)
 	(newstate   #f)
@@ -273,10 +273,10 @@
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
 		(let ((txtbox (iup:textbox #:action (lambda (val a b)
-						      ;; (rmt:test-set-state-status-by-id run-id test-id #f #f b)
-						      (rmt:test-set-state-status run-id test-id #f #f b)
+						      ;; (rmt:test-set-state-status-by-id area-dat run-id test-id #f #f b)
+						      (rmt:test-set-state-status area-dat run-id test-id #f #f b)
 						      ;; IDEA: Just set a variable with the proc to call?
-						      ;; (rmt:test-set-state-status-by-id run-id test-id #f #f b)
+						      ;; (rmt:test-set-state-status-by-id area-dat run-id test-id #f #f b)
 						      (set! newcomment b))
 					   #:value (db:test-get-comment testdat)
 					   #:expand "HORIZONTAL")))
@@ -289,8 +289,8 @@
 				  (let ((btn (iup:button state
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    ;; (rmt:test-set-state-status-by-id run-id test-id state #f #f)
-								    (rmt:set-state-status-and-roll-up-items run-id test-id #f state #f #f) ;; test-name passed in as test-id is respected
+								    ;; (rmt:test-set-state-status-by-id area-dat run-id test-id state #f #f)
+								    (rmt:set-state-status-and-roll-up-items area-dat run-id test-id #f state #f #f) ;; test-name passed in as test-id is respected
 								    (db:test-set-state! testdat state)))))
 				    btn))
 				(map cadr *common:std-states*)))) ;; (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ"))))
@@ -323,8 +323,8 @@
 															(set! *dashboard-comment-share-slot* wtxtbox)))
 														  ))))
 									  (begin
-									    ;; (rmt:test-set-state-status-by-id run-id test-id #f status #f)
-									    (rmt:set-state-status-and-roll-up-items run-id test-id #f #f status #f) ;; test-name passed in as test-id is respected
+									    ;; (rmt:test-set-state-status-by-id area-dat run-id test-id #f status #f)
+									    (rmt:set-state-status-and-roll-up-items area-dat run-id test-id #f #f status #f) ;; test-name passed in as test-id is respected
 									    (db:test-set-status! testdat status))))))))
 				    btn))
 				(map cadr *common:std-statuses*)))) ;; (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
@@ -373,7 +373,7 @@
     ;;     		   (print "Refresh test data " stepname))
     )))
 
-(define (dashboard-tests:waiver run-id testdat ovrdval cmtcmd)
+(define (dashboard-tests:waiver area-dat run-id testdat ovrdval cmtcmd)
   (let* ((wpatt (configf:lookup *configdat* "setup" "waivercommentpatt"))
 	 (wregx (if (string? wpatt)(regexp wpatt) #f))
 	 (wmesg (iup:label (if wpatt (conc "Comment must match pattern " wpatt) "")))
@@ -405,8 +405,8 @@
 					   (if (or (not wpatt)
 						   (string-match wregx comment))
 					       (begin
-						 ;; (rmt:test-set-state-status-by-id run-id test-id #f "WAIVED" comment)
-						 (rmt:test-set-state-status-by run-id test-id #f "WAIVED" comment)
+						 ;; (rmt:test-set-state-status-by-id area-dat run-id test-id #f "WAIVED" comment)
+						 (rmt:test-set-state-status-by area-dat run-id test-id #f "WAIVED" comment)
 						 (db:test-set-status! testdat "WAIVED")
 						 (cmtcmd comment)
 						 (iup:destroy! dlog))))))
@@ -420,11 +420,11 @@
 ;;======================================================================
 ;;
 ;;======================================================================
-(define (dashboard-tests:examine-test run-id test-id) ;; run-id run-key origtest)
+(define (dashboard-tests:examine-test area-dat run-id test-id) ;; run-id run-key origtest)
   (let* ((db-path       (db:dbfile-path)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/db/" run-id ".db"))
 	 (dbstruct      #f) ;; NOT ACTUALLY USED (db:setup)) ;; (make-dbr:dbstruct path:  (db:dbfile-path #f) ;; (configf:lookup *configdat* "setup" "linktree") 
 			    ;;		   local: #t))
-	 (testdat        (rmt:get-test-info-by-id run-id test-id)) ;; (db:get-test-info-by-id dbstruct run-id test-id))
+	 (testdat        (rmt:get-test-info-by-id area-dat run-id test-id)) ;; (db:get-test-info-by-id dbstruct run-id test-id))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
 	 (last-update   0) ;; (current-seconds))
 	 (request-update #t))
@@ -434,12 +434,11 @@
 	  (exit 1))
 	(let* (;; (run-id        (if testdat (db:test-get-run_id testdat) #f))
 	       (test-registry (tests:get-all))
-	       (keydat        (if testdat (rmt:get-key-val-pairs run-id) #f))
-	       (rundat        (if testdat (rmt:get-run-info run-id) #f))
+	       (keydat        (if testdat (rmt:get-key-val-pairs area-dat run-id) #f))
+	       (rundat        (if testdat (rmt:get-run-info area-dat run-id) #f))
 	       (runname       (if testdat (db:get-value-by-header (db:get-rows rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
-	       ;; (tdb           (tdb:open-test-db-by-test-id-local dbstruct run-id test-id))
 	       ;; These next two are intentional bad values to ensure errors if they should not
 	       ;; get filled in properly.
 	       (logfile       "/this/dir/better/not/exist")
@@ -447,12 +446,12 @@
 				  (db:test-get-rundir testdat)
 				  logfile))
 	       ;; (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
-	       (teststeps     (if testdat (tests:get-compressed-steps run-id test-id) '()))
+	       (teststeps     (if testdat (tests:get-compressed-steps area-dat run-id test-id) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       ;; (tests:get-testconfig testdat testname 'return-procs))
 	       (testmeta      (if testdat 
-				  (let ((tm (rmt:testmeta-get-record testname)))
+				  (let ((tm (rmt:testmeta-get-record area-dat testname)))
 				    (if tm tm (make-db:testmeta)))
 				  (make-db:testmeta)))
 
@@ -474,7 +473,7 @@
 	 			 (make-hash-table))))
 	       (testconfig    (begin
 				;; (runs:set-megatest-env-vars run-id inrunname: runname testname: test-name itempath: item-path)
-				(runs:set-megatest-env-vars run-id inkeyvals: keydat inrunname: runname intarget: keystring testname: testname itempath: item-path) ;; these may be needed by the launching process
+				(runs:set-megatest-env-vars area-dat run-id inkeyvals: keydat inrunname: runname intarget: keystring testname: testname itempath: item-path) ;; these may be needed by the launching process
 				(handle-exceptions
 				 exn
 				 (tests:get-testconfig (db:test-get-testname testdat) (db:test-get-item-path testdat) test-registry #f)
@@ -518,12 +517,12 @@
 						    (handle-exceptions
 						     exn 
 						     (debug:print-info 0 *default-log-port* "test db access issue in examine test for run-id " run-id ", test-id " test-id ": " ((condition-property-accessor 'exn 'message) exn))
-						     (rmt:get-test-info-by-id run-id test-id )))))
+						     (rmt:get-test-info-by-id area-dat run-id test-id )))))
 			       ;; (print "INFO: need-update= " need-update " curr-mod-time = " curr-mod-time)
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (tests:get-compressed-steps run-id test-id))
+				 (set! teststeps    (tests:get-compressed-steps area-dat run-id test-id))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 				 (set! rundir       ;; (filedb:get-path *fdb* 
 				       (db:test-get-rundir testdat)) ;; )
@@ -760,7 +759,7 @@
 											      (db:test-data-get-units    x)
 											      (db:test-data-get-type     x)
 											      (db:test-data-get-comment  x)))
-										    (rmt:read-test-data run-id test-id "%")))
+										    (rmt:read-test-data area-dat run-id test-id "%")))
 									      "\n")))
 							       (if (not (equal? currval newval))
 								   (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))

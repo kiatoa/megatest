@@ -103,10 +103,10 @@
  	baddb)))
 
 ;; find and open the testdat.db file for an existing test
-(define (tdb:open-test-db-by-test-id test-id #!key (work-area #f))
+(define (tdb:open-test-db-by-test-id area-dat test-id #!key (work-area #f))
   (let* ((test-path (if work-area
 			work-area
-			(rmt:test-get-rundir-from-test-id test-id))))
+			(rmt:test-get-rundir-from-test-id area-dat test-id))))
     (debug:print 3 *default-log-port* "TEST PATH: " test-path)
     (open-test-db test-path)))
 
@@ -206,32 +206,32 @@
 ;; 	'())))
 
 ;; NOTE: Run this local with #f for db !!!
-(define (tdb:load-test-data run-id test-id)
+(define (tdb:load-test-data area-dat run-id test-id)
   (let loop ((lin (read-line)))
     (if (not (eof-object? lin))
 	(begin
 	  (debug:print 4 *default-log-port* lin)
           ;;(when lin ;; this when blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
-          (rmt:csv->test-data run-id test-id lin)
+          (rmt:csv->test-data area-dat run-id test-id lin)
           ;;)
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status too 
-  (rmt:test-data-rollup run-id test-id #f))
+  (rmt:test-data-rollup area-dat run-id test-id #f))
 
 ;; NOTE: Run this local with #f for db !!!
-(define (tdb:load-logpro-data run-id test-id)
+(define (tdb:load-logpro-data area-dat run-id test-id)
   (let loop ((lin (read-line)))
     (if (not (eof-object? lin))
 	(begin
 	  (debug:print 4 *default-log-port* lin)
           ;;(when lin  ;; this when blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
-          (rmt:csv->test-data run-id test-id lin)
+          (rmt:csv->test-data area-dat run-id test-id lin)
           ;;)
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status too 
-  (rmt:test-data-rollup run-id test-id #f))
+  (rmt:test-data-rollup area-dat run-id test-id #f))
 
 (define (tdb:get-prev-tol-for-test tdb test-id category variable)
   ;; Finish me?
@@ -393,9 +393,10 @@
 			     #f))
 		     (string<? (conc time-a)(conc time-b))))))))
 
-;; 
-(define (tdb:remote-update-testdat-meta-info run-id test-id work-area cpuload diskfree minutes)
-  (let ((tdb         (rmt:open-test-db-by-test-id run-id test-id work-area: work-area)))
+;; NOT USED
+;;
+(define (tdb:remote-update-testdat-meta-info area-dat run-id test-id work-area cpuload diskfree minutes)
+  (let ((tdb         (rmt:open-test-db-by-test-id area-dat run-id test-id work-area: work-area)))
     (if (sqlite3:database? tdb)
 	(begin
 	  (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"

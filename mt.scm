@@ -42,8 +42,8 @@
 ;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-rows runinfo))
 ;;  to extract info from the structure returned
 ;;
-(define (mt:get-runs-by-patt keys runnamepatt targpatt)
-  (let loop ((runsdat  (rmt:get-runs-by-patt keys runnamepatt targpatt 0 500 #f 0))
+(define (mt:get-runs-by-patt area-dat keys runnamepatt targpatt)
+  (let loop ((runsdat  (rmt:get-runs-by-patt area-dat keys runnamepatt targpatt 0 500 #f 0))
 	     (res      '())
 	     (offset   0)
 	     (limit    500))
@@ -55,7 +55,7 @@
       ;; (debug:print 0 *default-log-port* "header: " header " runslst: " runslst " have-more: " have-more)
       (if have-more 
 	  (let ((new-offset (+ offset limit))
-		(next-batch (rmt:get-runs-by-patt keys runnamepatt targpatt offset limit #f 0)))
+		(next-batch (rmt:get-runs-by-patt area-dat keys runnamepatt targpatt offset limit #f 0)))
 	    (debug:print-info 4 *default-log-port* "More than " limit " runs, have " (length full-list) " runs so far.")
 	    (debug:print-info 0 *default-log-port* "next-batch: " next-batch)
 	    (loop next-batch
@@ -68,8 +68,8 @@
 ;;  T E S T S
 ;;======================================================================
 
-(define (mt:get-tests-for-run run-id testpatt states status #!key (not-in #t) (sort-by 'event_time) (sort-order "ASC") (qryvals #f)(last-update #f))
-  (let loop ((testsdat (rmt:get-tests-for-run run-id testpatt states status 0 500 not-in sort-by sort-order qryvals last-update 'normal))
+(define (mt:get-tests-for-run area-dat run-id testpatt states status #!key (not-in #t) (sort-by 'event_time) (sort-order "ASC") (qryvals #f)(last-update #f))
+  (let loop ((testsdat (rmt:get-tests-for-run area-dat run-id testpatt states status 0 500 not-in sort-by sort-order qryvals last-update 'normal))
 	     (res      '())
 	     (offset   0)
 	     (limit    500))
@@ -78,13 +78,13 @@
       (if have-more 
 	  (let ((new-offset (+ offset limit)))
 	    (debug:print-info 4 *default-log-port* "More than " limit " tests, have " (length full-list) " tests so far.")
-	    (loop (rmt:get-tests-for-run run-id testpatt states status new-offset limit not-in sort-by sort-order qryvals last-update 'normal)
+	    (loop (rmt:get-tests-for-run area-dat run-id testpatt states status new-offset limit not-in sort-by sort-order qryvals last-update 'normal)
 		  full-list
 		  new-offset
 		  limit))
 	  full-list))))
 
-(define (mt:lazy-get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal))(itemmaps #f) )
+(define (mt:lazy-get-prereqs-not-met area-dat run-id waitons ref-item-path #!key (mode '(normal))(itemmaps #f) )
   (let* ((key    (list run-id waitons ref-item-path mode))
 	 (res    (hash-table-ref/default *pre-reqs-met-cache* key #f))
 	 (useres (let ((last-time (if (vector? res) (vector-ref res 0) #f)))
@@ -95,7 +95,7 @@
 	(let ((result (vector-ref res 1)))
 	  (debug:print 4 *default-log-port* "Using lazy value res: " result)
 	  result)
-	(let ((newres (rmt:get-prereqs-not-met run-id waitons ref-item-path mode: mode itemmaps: itemmaps)))
+	(let ((newres (rmt:get-prereqs-not-met area-dat run-id waitons ref-item-path mode: mode itemmaps: itemmaps)))
 	  (hash-table-set! *pre-reqs-met-cache* key (vector (current-seconds) newres))
 	  newres))))
 
@@ -133,7 +133,7 @@
 (define (mt:process-triggers dbstruct run-id test-id newstate newstatus)
   (let* ((test-dat      (db:get-test-info-by-id dbstruct run-id test-id)))
     (if test-dat
-	(let* ((test-rundir   ;; (rmt:sdb-qry 'getstr ;; (filedb:get-path *fdb*
+	(let* ((test-rundir   ;; (rmt:sdb-qry area-dat 'getstr ;; (filedb:get-path *fdb*
 		(db:test-get-rundir test-dat)) ;; ) ;; )
 	       (test-name     (db:test-get-testname test-dat))
 	       (tconfig       #f)
@@ -172,7 +172,7 @@
 ;;======================================================================
 
 ;; speed up for common cases with a little logic
-(define (mt:test-set-state-status-by-id run-id test-id newstate newstatus newcomment)
+(define (mt:test-set-state-status-by-id area-dat run-id test-id newstate newstatus newcomment)
   (if (not (and run-id test-id))
       (begin
 	(debug:print-error 0 *default-log-port* "bad data handed to mt:test-set-state-status-by-id, run-id=" run-id ", test-id=" test-id ", newstate=" newstate)
@@ -181,20 +181,20 @@
       (begin
 	;; cond
 	;; ((and newstate newstatus newcomment)
-	;;  (rmt:general-call 'state-status-msg run-id newstate newstatus newcomment test-id))
+	;;  (rmt:general-call area-dat 'state-status-msg run-id newstate newstatus newcomment test-id))
 	;; ((and newstate newstatus)
-	;;  (rmt:general-call 'state-status run-id newstate newstatus test-id))
+	;;  (rmt:general-call area-dat 'state-status run-id newstate newstatus test-id))
 	;; (else
-	;;  (if newstate   (rmt:general-call 'set-test-state   run-id newstate   test-id))
-	;;  (if newstatus  (rmt:general-call 'set-test-status  run-id newstatus  test-id))
-	;;  (if newcomment (rmt:general-call 'set-test-comment run-id newcomment test-id))))
-	(rmt:set-state-status-and-roll-up-items run-id test-id #f newstate newstatus newcomment)
+	;;  (if newstate   (rmt:general-call area-dat 'set-test-state   run-id newstate   test-id))
+	;;  (if newstatus  (rmt:general-call area-dat 'set-test-status  run-id newstatus  test-id))
+	;;  (if newcomment (rmt:general-call area-dat 'set-test-comment run-id newcomment test-id))))
+	(rmt:set-state-status-and-roll-up-items area-dat run-id test-id #f newstate newstatus newcomment)
 	;; (mt:process-triggers run-id test-id newstate newstatus)
 	#t)))
 
-(define (mt:test-set-state-status-by-testname run-id test-name item-path new-state new-status new-comment)
-  (let ((test-id (rmt:get-test-id run-id test-name item-path)))
-    (rmt:set-state-status-and-roll-up-items run-id test-name item-path new-state new-status new-comment)
+(define (mt:test-set-state-status-by-testname area-dat run-id test-name item-path new-state new-status new-comment)
+  (let ((test-id (rmt:get-test-id area-dat run-id test-name item-path)))
+    (rmt:set-state-status-and-roll-up-items area-dat run-id test-name item-path new-state new-status new-comment)
     ;; (mt:process-triggers run-id test-id new-state new-status)
     #t))
 	;;(mt:test-set-state-status-by-id run-id test-id new-state new-status new-comment)))

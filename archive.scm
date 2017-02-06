@@ -59,11 +59,11 @@
 ;; look for the best candidate archive area, else create new 
 ;; area
 ;;
-(define (archive:get-archive testname itempath dused)
+(define (archive:get-archive area-dat testname itempath dused)
   ;; look up in archive_allocations if there is a pre-used archive
   ;; with adequate diskspace
   ;;
-  (let* ((existing-blocks (rmt:archive-get-allocations testname itempath dused))
+  (let* ((existing-blocks (rmt:archive-get-allocations area-dat testname itempath dused))
 	 (candidate-disks (map (lambda (block)
 				 (list
 				  (vector-ref block 1)   ;; archive-area-name
@@ -74,21 +74,21 @@
 
 ;; allocate a new archive area
 ;;
-(define (archive:allocate-new-archive-block run-area-home testsuite-name dneeded)
+(define (archive:allocate-new-archive-block area-dat run-area-home testsuite-name dneeded)
   (let* ((adisks    (archive:get-archive-disks))
 	 (best-disk (common:get-disk-with-most-free-space adisks dneeded)))
     (if best-disk
 	(let* ((bdisk-name    (car best-disk))
 	       (bdisk-path    (cdr best-disk))
 	       (area-key      (substring (message-digest-string (md5-primitive) run-area-home) 0 5))
-	       (bdisk-id      (rmt:archive-register-disk bdisk-name bdisk-path (get-df bdisk-path)))
+	       (bdisk-id      (rmt:archive-register-disk area-dat bdisk-name bdisk-path (get-df bdisk-path)))
 	       (archive-name  (let ((sec (current-seconds)))
 				(conc (time->string (seconds->local-time sec) "%Y")
 				      "_q" (seconds->quarter sec) "/"
 				      testsuite-name "_" area-key)))
 	       (archive-path  (conc bdisk-path "/" archive-name))
-	       (block-id      (rmt:archive-register-block-name bdisk-id archive-path)))
-	  ;;   (allocation-id (rmt:archive-allocate-testsuite/area-to-block block-id testsuite-name area-key)))
+	       (block-id      (rmt:archive-register-block-name area-dat bdisk-id archive-path)))
+	  ;;   (allocation-id (rmt:archive-allocate-testsuite/area-to-block area-dat block-id testsuite-name area-key)))
 	  (if block-id ;; (and block-id allocation-id)
 	      (cons block-id archive-path)
 	      #f))
@@ -101,7 +101,7 @@
 ;; 3. gen index
 ;; 4. save
 ;;
-(define (archive:run-bup archive-command run-id run-name tests rp-mutex bup-mutex)
+(define (archive:run-bup area-dat archive-command run-id run-name tests rp-mutex bup-mutex)
   ;; move the getting of archive space down into the below block so that a single run can 
   ;; allocate as needed should a disk fill up
   ;;
@@ -131,10 +131,10 @@
 	      (test-name         (db:test-get-testname  test-dat))
 	      (test-id           (db:test-get-id        test-dat))
 	      (run-id            (db:test-get-run_id    test-dat))
-	      (target            (string-intersperse (map cadr (rmt:get-key-val-pairs run-id)) "/"))
+	      (target            (string-intersperse (map cadr (rmt:get-key-val-pairs area-dat run-id)) "/"))
 	      
 	      (toplevel/children (and (db:test-get-is-toplevel test-dat)
-				      (> (rmt:test-toplevel-num-items run-id test-name) 0)))
+				      (> (rmt:test-toplevel-num-items area-dat run-id test-name) 0)))
 	      (test-partial-path (conc target "/" run-name "/" (db:test-make-full-name test-name item-path)))
 	      ;; note the trailing slash to get the dir inspite of it being a link
 	      (test-path         (conc linktree "/" test-partial-path))
@@ -173,7 +173,7 @@
      (lambda (disk-group)
        (debug:print 0 *default-log-port* "Processing disk-group " disk-group)
        (let* ((test-paths (hash-table-ref disk-groups disk-group))
-	      ;; ((string-intersperse (map cadr (rmt:get-key-val-pairs 1)) "-")
+	      ;; ((string-intersperse (map cadr (rmt:get-key-val-pairs area-dat 1)) "-")
 	      (bup-init-params  (list "-d" archive-dir "init"))
 	      (bup-index-params (append (list "-d" archive-dir "index") test-paths))
 	      (bup-save-params  (append (list "-d" archive-dir "save" ;; (conc "--strip-path=" linktree)
@@ -202,14 +202,14 @@
 	  (lambda (test-dat)
 	    (let ((test-id           (db:test-get-id        test-dat))
 		  (run-id            (db:test-get-run_id    test-dat)))
-	      (rmt:test-set-archive-block-id run-id test-id archive-id)
+	      (rmt:test-set-archive-block-id area-dat run-id test-id archive-id)
 	      (if (member archive-command '("save-remove"))
-		  (runs:remove-test-directory test-dat 'archive-remove))))
+		  (runs:remove-test-directory area-dat test-dat 'archive-remove))))
 	  (hash-table-ref test-groups disk-group))))
      (hash-table-keys disk-groups))
     #t))
 
-(define (archive:bup-restore archive-command run-id run-name tests rp-mutex bup-mutex)  ;; move the getting of archive space down into the below block so that a single run can 
+(define (archive:bup-restore area-dat archive-command run-id run-name tests rp-mutex bup-mutex)  ;; move the getting of archive space down into the below block so that a single run can 
   ;; allocate as needed should a disk fill up
   ;;
   (let* ((bup-exe      (or (configf:lookup *configdat* "archive" "bup") "bup"))
@@ -225,11 +225,11 @@
 	      (test-name         (db:test-get-testname  test-dat))
 	      (test-id           (db:test-get-id        test-dat))
 	      (run-id            (db:test-get-run_id    test-dat))
-	      (keyvals           (rmt:get-key-val-pairs run-id))
+	      (keyvals           (rmt:get-key-val-pairs area-dat run-id))
 	      (target            (string-intersperse (map cadr keyvals) "/"))
 	      
 	      (toplevel/children (and (db:test-get-is-toplevel test-dat)
-				      (> (rmt:test-toplevel-num-items run-id test-name) 0)))
+				      (> (rmt:test-toplevel-num-items area-dat run-id test-name) 0)))
 	      (test-partial-path (conc target "/" run-name "/" (db:test-make-full-name test-name item-path)))
 	      ;; note the trailing slash to get the dir inspite of it being a link
 	      (test-path         (conc linktree "/" test-partial-path))
@@ -242,7 +242,7 @@
 	      (mutex-unlock! rp-mutex)
 	      (new-test-physical-path  (conc best-disk "/" test-partial-path))
 	      (archive-block-id        (db:test-get-archived test-dat))
-	      (archive-block-info      (rmt:test-get-archive-block-info archive-block-id))
+	      (archive-block-info      (rmt:test-get-archive-block-info area-dat archive-block-id))
 	      (archive-path            (if (vector? archive-block-info)
 					   (vector-ref archive-block-info 2) ;; look in db.scm for test-get-archive-block-info for the vector record info
 					   #f)) ;; no archive found?
@@ -274,7 +274,7 @@
 	       ;; bup -d /tmp/matt/adisk1/2015_q1/fullrun_e1a40/ restore -C /tmp/seeme fullrun-30/latest/ubuntu/nfs/none/w02.1.20.54_b/
 
 	       ;; DO BUP RESTORE
-	       (let* ((new-test-dat        (rmt:get-test-info-by-id run-id test-id))
+	       (let* ((new-test-dat        (rmt:get-test-info-by-id area-dat run-id test-id))
 		      (new-test-path       (if (vector? new-test-dat )
 					       (db:test-get-rundir new-test-dat)
 					       (begin

@@ -60,8 +60,8 @@
     
 ;; keynum => the field to use as the unique key (usually 0 but can be other field)
 ;;
-(define (synchash:client-get proc synckey keynum synchash run-id . params)
-  (let* ((data   (rmt:synchash-get run-id proc synckey keynum params))
+(define (synchash:client-get area-dat proc synckey keynum synchash run-id . params)
+  (let* ((data   (rmt:synchash-get area-dat run-id proc synckey keynum params))
 	 (newdat (car data))
 	 (removs (cadr data))
 	 (myhash (hash-table-ref/default synchash synckey #f)))

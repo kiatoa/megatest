@@ -61,7 +61,7 @@
 ;; return (conc status ": " comment) from the final section so that
 ;;   the comment can be set in the step record in launch.scm
 ;;
-(define (launch:load-logpro-dat run-id test-id stepname)
+(define (launch:load-logpro-dat area-dat run-id test-id stepname)
   (let ((cname (conc stepname ".dat")))
     (if (file-exists? cname)
 	(let* ((dat  (read-config cname #f #f))
@@ -71,7 +71,7 @@
 	       (status (configf:lookup dat "final" "exit-status"))
 	       (msg     (configf:lookup dat "final" "message")))
           (if csvt  ;; this if blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
-              (rmt:csv->test-data run-id test-id csvt)
+              (rmt:csv->test-data area-dat run-id test-id csvt)
 	      (debug:print 0 *default-log-port* "ERROR: no csvdat exists for run-id: " run-id " test-id: " test-id " stepname: " stepname ", check that logpro version is 1.15 or newer"))
 	  ;;  (BB> "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
 	  ;;  )
@@ -81,7 +81,7 @@
 	   (else #f)))
 	#f)))
 
-(define (launch:runstep ezstep run-id test-id exit-info m tal testconfig)
+(define (launch:runstep area-dat ezstep run-id test-id exit-info m tal testconfig)
   (let* ((stepname       (car ezstep))  ;; do stuff to run the step
 	 (stepinfo       (cadr ezstep))
 	 (stepparts      (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
@@ -118,7 +118,7 @@
     ;; (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "x") " " stepcmd))
     
     (debug:print 4 *default-log-port* "script: " script)
-    (rmt:teststep-set-status! run-id test-id stepname "start" "-" #f #f)
+    (rmt:teststep-set-status! area-dat run-id test-id stepname "start" "-" #f #f)
     ;; now launch the actual process
     (call-with-environment-variables 
      (list (cons "PATH" (conc (get-environment-variable "PATH") ":.")))
@@ -137,7 +137,7 @@
              (print))
            #:append)
 
-	 (rmt:test-set-top-process-pid run-id test-id pid)
+	 (rmt:test-set-top-process-pid area-dat run-id test-id pid)
 	 (let processloop ((i 0))
 	   (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
 		       (mutex-lock! m)
@@ -176,8 +176,8 @@
 	    ;; load the .dat file into the test_data table if it exists
 	    (if (file-exists? datfile)
 		(set! comment (launch:load-logpro-dat run-id test-id stepname)))
-	    (rmt:test-set-log! run-id test-id (conc stepname ".html"))))
-      (rmt:teststep-set-status! run-id test-id stepname "end" exinfo comment logfna))
+	    (rmt:test-set-log! area-dat run-id test-id (conc stepname ".html"))))
+      (rmt:teststep-set-status! area-dat run-id test-id stepname "end" exinfo comment logfna))
     ;; set the test final status
     (let* ((process-exit-status (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
 	   (this-step-status (cond
@@ -210,42 +210,42 @@
 	((warn)
 	 (launch:einf-rollup-status-set! exit-info 2) ;; (vector-set! exit-info 3 2) ;; rollup-status
 	 ;; NB// test-set-status! does rdb calls under the hood
-	 (tests:test-set-status! run-id test-id next-state "WARN" 
+	 (tests:test-set-status! area-dat run-id test-id next-state "WARN" 
 				 (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 				 #f))
 	((check)
 	 (launch:einf-rollup-status-set! exit-info 3) ;; (vector-set! exit-info 3 3) ;; rollup-status
 	 ;; NB// test-set-status! does rdb calls under the hood
-	 (tests:test-set-status! run-id test-id next-state "CHECK" 
+	 (tests:test-set-status! area-dat run-id test-id next-state "CHECK" 
 				 (if (eq? this-step-status 'check) "Logpro check found" #f)
 				 #f))
 	((waived)
 	 (launch:einf-rollup-status-set! exit-info 4) ;; (vector-set! exit-info 3 3) ;; rollup-status
 	 ;; NB// test-set-status! does rdb calls under the hood
-	 (tests:test-set-status! run-id test-id next-state "WAIVED" 
+	 (tests:test-set-status! area-dat run-id test-id next-state "WAIVED" 
 				 (if (eq? this-step-status 'check) "Logpro waived found" #f)
 				 #f))
 	((abort)
 	 (launch:einf-rollup-status-set! exit-info 5) ;; (vector-set! exit-info 3 4) ;; rollup-status
 	 ;; NB// test-set-status! does rdb calls under the hood
-	 (tests:test-set-status! run-id test-id next-state "ABORT" 
+	 (tests:test-set-status! area-dat run-id test-id next-state "ABORT" 
 				 (if (eq? this-step-status 'abort) "Logpro abort found" #f)
 				 #f))
 	((skip)
 	 (launch:einf-rollup-status-set! exit-info 6) ;; (vector-set! exit-info 3 4) ;; rollup-status
 	 ;; NB// test-set-status! does rdb calls under the hood
-	 (tests:test-set-status! run-id test-id next-state "SKIP" 
+	 (tests:test-set-status! area-dat run-id test-id next-state "SKIP" 
 				 (if (eq? this-step-status 'skip) "Logpro skip found" #f)
 				 #f))
 	((pass)
-	 (tests:test-set-status! run-id test-id next-state "PASS" #f #f))
+	 (tests:test-set-status! area-dat run-id test-id next-state "PASS" #f #f))
 	(else ;; 'fail
 	 (launch:einf-rollup-status-set! exit-info 1) ;; (vector-set! exit-info 3 1) ;; force fail, this used to be next-state but that doesn't make sense. should always be "COMPLETED" 
-	 (tests:test-set-status! run-id test-id "COMPLETED" "FAIL" (conc "Failed at step " stepname) #f)
+	 (tests:test-set-status! area-dat run-id test-id "COMPLETED" "FAIL" (conc "Failed at step " stepname) #f)
 	 )))
     logpro-used))
 
-(define (launch:manage-steps run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m)
+(define (launch:manage-steps area-dat run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m)
   ;; (let-values
   ;;  (((pid exit-status exit-code)
   ;;    (run-n-wait fullrunscript)))
@@ -256,13 +256,13 @@
 
   ;; (thread-sleep! 0.3)
   ;; (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
-  (rmt:set-state-status-and-roll-up-items run-id test-name item-path "RUNNING" #f #f) 
+  (rmt:set-state-status-and-roll-up-items area-dat run-id test-name item-path "RUNNING" #f #f) 
   ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
   ;; if there is a runscript do it first
   (if fullrunscript
       (let ((pid (process-run fullrunscript)))
-	(rmt:test-set-top-process-pid run-id test-id pid)
+	(rmt:test-set-top-process-pid area-dat run-id test-id pid)
 	(let loop ((i 0))
 	  (let-values
 	   (((pid-val exit-status exit-code) (process-wait pid #t)))
@@ -318,7 +318,7 @@
 			(debug:print 4 *default-log-port* "WARNING: step " (car ezstep) " failed. Stopping")))
 		  (debug:print 4 *default-log-port* "WARNING: a prior step failed, stopping at " ezstep)))))))
 
-(define (launch:monitor-job run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m work-area runtlim misc-flags)
+(define (launch:monitor-job area-dat run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m work-area runtlim misc-flags)
   (let* ((start-seconds (current-seconds))
 	 (calc-minutes  (lambda ()
 			  (inexact->exact 
@@ -329,7 +329,7 @@
 	 (kill-tries 0))
     ;; (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area)
     ;; (tests:set-full-meta-info test-id run-id (calc-minutes) work-area)
-    (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
+    (tests:set-full-meta-info #f area-dat test-id run-id (calc-minutes) work-area 10)
     (let loop ((minutes   (calc-minutes))
 	       (cpu-load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
 	       (disk-free (get-df (current-directory))))
@@ -343,7 +343,7 @@
 			     (if (> delta 200) ;; ignore changes under 200 Meg
 				 df
 				 #f))))
-	(set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
+	(set! kill-job? (or (test-get-kill-request area-dat run-id test-id) ;; run-id test-name itemdat))
 			    (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
 						(time-exceeded (> run-seconds runtlim)))
 					   (if time-exceeded
@@ -351,7 +351,7 @@
 						 (debug:print-info 0 *default-log-port* "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
 						 #t)
 					       #f)))))
-	(tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f)
+	(tests:update-central-meta-info area-dat run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f)
 	(if kill-job? 
 	    (begin
 	      (mutex-lock! m)
@@ -359,7 +359,7 @@
 	      ;;       section and the runit section? Or add a loop that tries three times with a 1/4 second
 	      ;;       between tries?
 	      (let* ((pid1 (launch:einf-pid exit-info)) ;; (vector-ref exit-info 0))
-		     (pid2 (rmt:test-get-top-process-pid run-id test-id))
+		     (pid2 (rmt:test-get-top-process-pid area-dat run-id test-id))
 		     (pids (delete-duplicates (filter number? (list pid1 pid2)))))
 		(if (not (null? pids))
 		    (begin
@@ -387,10 +387,10 @@
 			       (process:get-sub-pids pid))))
 		       ;;    (debug:print-info 0 *default-log-port* "not killing process " pid " as it is not alive"))))
 		       pids)
-		      (tests:test-set-status! run-id test-id "KILLED"  "KILLED" (args:get-arg "-m") #f))
+		      (tests:test-set-status! area-dat run-id test-id "KILLED"  "KILLED" (args:get-arg "-m") #f))
 		    (begin
 		      (debug:print-error 0 *default-log-port* "Nothing to kill, pid1=" pid1 ", pid2=" pid2)
-		      (tests:test-set-status! run-id test-id "KILLED"  "FAILED TO KILL" (args:get-arg "-m") #f)
+		      (tests:test-set-status! area-dat run-id test-id "KILLED"  "FAILED TO KILL" (args:get-arg "-m") #f)
 		      )))
 	      (mutex-unlock! m)
 	      ;; no point in sticking around. Exit now.
@@ -400,7 +400,7 @@
 	      (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
 	      (if (hash-table-ref/default misc-flags 'keep-going #f)  ;; keep originals for cpu-load and disk-free unless they change more than the allowed delta
 		  (loop (calc-minutes) (or new-cpu-load cpu-load) (or new-disk-free disk-free)))))))
-    (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f))) ;; NOTE: Checking twice for keep-going is intentional
+    (tests:update-central-meta-info area-dat run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f))) ;; NOTE: Checking twice for keep-going is intentional
 
 (define (launch:execute encoded-cmd)
   (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
@@ -440,7 +440,7 @@
                                                    (file-execute-access? fulln))
                                               fulln
                                               runscript))))) ;; assume it is on the path
-	       ) ;; (rollup-status 0)
+	       (area-dat (make-remote))) ;; (rollup-status 0)
 
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
@@ -460,7 +460,7 @@
 			   (set! *time-to-exit* #t)
 			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
 			   (let ((th1 (make-thread (lambda ()
-						     (rmt:test-set-state-status run-id test-id "INCOMPLETE" "KILLED" #f)
+						     (rmt:test-set-state-status area-dat run-id test-id "INCOMPLETE" "KILLED" #f)
 						     (print "Killed by signal " signum ". Exiting")
 						     (thread-sleep! 1)
 						     (exit 1))))
@@ -478,32 +478,31 @@
 	  ;; Do not run the test if it is REMOVING, RUNNING, KILLREQ or REMOTEHOSTSTART,
 	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
 	  ;;
-	  (let* ((test-info (rmt:get-test-info-by-id run-id test-id))
+	  (let* ((test-info (rmt:get-test-info-by-id area-dat run-id test-id))
 		 (test-host (db:test-get-host        test-info))
 		 (test-pid  (db:test-get-process_id  test-info)))
 	    (cond
 	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
 	      (debug:print 0 *default-log-port* "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
 	      ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
-	      (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
+	      (rmt:test-set-state-status area-dat run-id test-id "REMOTEHOSTSTART" "n/a" #f)
 	      ) ;; prime it for running
 	     ((member (db:test-get-state test-info) '("RUNNING" "REMOTEHOSTSTART"))
 	      (if (process:alive-on-host? test-host test-pid)
 		  (debug:print-error 0 *default-log-port* "test state is "  (db:test-get-state test-info) " and process " test-pid " is still running on host " test-host ", cannot proceed")
 		  ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
-		  (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
+		  (rmt:test-set-state-status area-dat run-id test-id "REMOTEHOSTSTART" "n/a" #f)
 		  ))
 	     ((not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
 	      ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
-	      (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
+	      (rmt:test-set-state-status area-dat run-id test-id "REMOTEHOSTSTART" "n/a" #f)
 	      )
 	     (else ;; (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ"))
 	      (debug:print-error 0 *default-log-port* "test state is " (db:test-get-state test-info) ", cannot proceed")
 	      (exit))))
 	  
 	  (debug:print 2 *default-log-port* "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
-	  (set! keys       (rmt:get-keys))
-	  ;; (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals) ;; these may be needed by the launching process
+	  (set! keys       (rmt:get-keys area-dat))
 	  ;; one of these is defunct/redundant ...
 	  (if (not (launch:setup force: #t))
 	      (begin
@@ -585,13 +584,13 @@
 	  
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
-	  (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals)
+	  (runs:set-megatest-env-vars area-dat run-id inkeys: keys inkeyvals: keyvals)
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
 	  ;; (tests:set-full-meta-info #f test-id run-id 0 work-area)
 	  ;; (tests:set-full-meta-info test-id run-id 0 work-area)
-	  (tests:set-full-meta-info #f test-id run-id 0 work-area 10)
+	  (tests:set-full-meta-info #f area-dat test-id run-id 0 work-area 10)
 
 	  ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
@@ -632,7 +631,7 @@
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   ;; only state and status needed - use lazy routine
-		   (testinfo  (rmt:get-testinfo-state-status run-id test-id)))
+		   (testinfo  (rmt:get-testinfo-state-status area-dat run-id test-id)))
 	      ;; Am I completed?
 	      (if (member (db:test-get-state testinfo) '("REMOTEHOSTSTART" "RUNNING")) ;; NOTE: It should *not* be REMOTEHOSTSTART but for reasons I don't yet understand it sometimes gets stuck in that state ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (let ((new-state  (if kill-job? "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
@@ -654,7 +653,7 @@
 				     ((eq? (launch:einf-rollup-status exit-info) 6) "SKIP")
 				     (else "FAIL")))) ;; (db:test-get-status testinfo)))
 		    (debug:print-info 1 *default-log-port* "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (launch:einf-exit-status exit-info) " and rollup-status of " (launch:einf-rollup-status exit-info))
-		    (tests:test-set-status! run-id 
+		    (tests:test-set-status! area-dat run-id 
 					    test-id 
 					    new-state
 					    new-status
@@ -664,9 +663,9 @@
 		    ))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
-		  (tests:summarize-items run-id test-id test-name #f))
-	      (tests:summarize-test run-id test-id)  ;; don't force - just update if no
-	      (rmt:update-run-stats run-id (rmt:get-raw-run-stats run-id)))
+		  (tests:summarize-items area-dat run-id test-id test-name #f))
+	      (tests:summarize-test area-dat run-id test-id)  ;; don't force - just update if no
+	      (rmt:update-run-stats area-dat run-id (rmt:get-raw-run-stats area-dat run-id)))
 	    (mutex-unlock! m)
 	    (debug:print 2 *default-log-port* "Output from running " fullrunscript ", pid " (launch:einf-pid exit-info) " in work area " 
 			 work-area ":\n====\n exit code " (launch:einf-exit-code exit-info) "\n" "====\n")
@@ -735,7 +734,7 @@
 	(mutex-unlock! *launch-setup-mutex*)
 	res)))
 
-(define (launch:setup-body #!key (force #f))
+(define (launch:setup-body area-dat #!key (force #f))
   (let* ((toppath  (or *toppath* (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
 	 (runname  (common:args-get-runname))
 	 (target   (common:args-get-target))
@@ -795,7 +794,7 @@
 		    (exit 1)))
 	      (setenv "MT_RUN_AREA_HOME" *toppath*)
 	      ;; the seed read is done, now read runconfigs, cache it then read megatest.config one more time and cache it
-	      (let* ((keys         (rmt:get-keys))
+	      (let* ((keys         (rmt:get-keys area-dat))
 		     (key-vals     (keys:target->keyval keys target))
 		     (linktree     (or (getenv "MT_LINKTREE")
 				       (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f)))
@@ -933,7 +932,7 @@
 
     ;; Update the rundir path in the test record for all, rundir=physical, shortdir=logical
     ;;                                                 rundir   shortdir
-    (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path run-id)
+    (rmt:general-call area-dat 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path run-id)
 
     (debug:print 2 *default-log-port* "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
@@ -993,21 +992,21 @@
     ;; tree is damaged or lost.
     ;; 
     (if (not (hash-table-ref/default *toptest-paths* testname #f))
-	(let* ((testinfo       (rmt:get-test-info-by-id run-id test-id)) ;;  run-id testname item-path))
+	(let* ((testinfo       (rmt:get-test-info-by-id area-dat run-id test-id)) ;;  run-id testname item-path))
 	       (curr-test-path (if testinfo ;; (filedb:get-path *fdb*
 							     ;; (db:get-path dbstruct
-				   ;; (rmt:sdb-qry 'getstr 
+				   ;; (rmt:sdb-qry area-dat 'getstr 
 				   (db:test-get-rundir testinfo) ;; ) ;; )
 				   #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?
-	  (rmt:general-call 'test-set-rundir-shortdir run-id lnkpath 
+	  (rmt:general-call area-dat 'test-set-rundir-shortdir run-id lnkpath 
 			    (if (file-exists? lnkpath)
 				;; (resolve-pathname lnkpath)
 				(common:nice-path lnkpath)
 				lnkpath)
 			    testname "" run-id)
-	  ;; (rmt:general-call 'test-set-rundir run-id lnkpath testname "") ;; toptest-path)
+	  ;; (rmt:general-call area-dat 'test-set-rundir run-id lnkpath testname "") ;; toptest-path)
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
 	      (begin
@@ -1137,7 +1136,7 @@
 	   (cmdparms   #f)
 	   (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
 	   (mt-bindir-path #f)
-	   (testinfo   (rmt:get-test-info-by-id run-id test-id))
+	   (testinfo   (rmt:get-test-info-by-id area-dat run-id test-id))
 	   (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	   (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 				(if (args:get-arg "-logging")(list "-logging") '()))))
@@ -1151,13 +1150,13 @@
 	       (not (member (db:test-get-rundir testinfo)(list "n/a" "/tmp/badname")))) ;; n/a is a placeholder and thus not a read dir
 	  (begin
 	    (debug:print-info 0 *default-log-port* "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
-	    (runs:remove-test-directory testinfo 'remove-data-only))) ;; remove data only, do not perturb the record
+	    (runs:remove-test-directory area-dat testinfo 'remove-data-only))) ;; remove data only, do not perturb the record
       
       ;; prevent overlapping actions - set to LAUNCHED as early as possible
       ;;
       ;; the following call handles waiver propogation. cannot yet condense into roll-up-pass-fail
-      (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
-      (rmt:set-state-status-and-roll-up-items run-id test-name item-path #f "LAUNCHED" #f)
+      (tests:test-set-status! area-dat run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
+      (rmt:set-state-status-and-roll-up-items area-dat run-id test-name item-path #f "LAUNCHED" #f)
       ;; (pp (hash-table->alist tconfig))
       (set! diskpath (get-best-disk *configdat* tconfig))
       (if diskpath
@@ -1194,7 +1193,7 @@
 					(list 'mt-bindir-path mt-bindir-path))))))))
       
       ;; clean out step records from previous run if they exist
-      ;; (rmt:delete-test-step-records run-id test-id)
+      ;; (rmt:delete-test-step-records area-dat run-id test-id)
       ;; if the dir does not exist we may have a itempath where individual variables are a path, launch anyway
       (if (file-exists? work-area)
 	  (change-directory work-area)) ;; so that log files from the launch process don't clutter the test dir
@@ -1271,7 +1270,7 @@
 
 ;; recover a test where the top controlling mtest may have died
 ;;
-(define (launch:recover-test run-id test-id)
+(define (launch:recover-test area-dat run-id test-id)
   ;; this function is called on the test run host via ssh
   ;;
   ;; 1. look at the process from pid
@@ -1281,7 +1280,7 @@
   ;; 2. if recovery is needed watch pid
   ;;    - when it exits take the exit code and do the needful
   ;;
-  (let* ((pid (rmt:test-get-top-process-id run-id test-id))
+  (let* ((pid (rmt:test-get-top-process-id area-dat run-id test-id))
 	 (psres (with-input-from-pipe
 		 (conc "ps -F -u " (current-user-name) " | grep -E '" pid " ' | grep -v 'grep -E " pid "'")
 		 (lambda ()

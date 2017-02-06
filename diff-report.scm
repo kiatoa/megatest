@@ -118,23 +118,23 @@
            res)
           res))))
 
-(define (diff:run-name->run-id run-name)
+(define (diff:run-name->run-id area-dat run-name)
   (if (number? run-name)
       run-name
-      (let* ((qry-res (rmt:get-runs run-name 1 0 '())))
+      (let* ((qry-res (rmt:get-runs area-dat run-name 1 0 '())))
         (if (eq? 2 (vector-length qry-res))
             (vector-ref (car (vector-ref qry-res 1)) 1)
             #f))))
 
-(define (diff:target+run-name->run-id target run-name)
-  (let* ((keys (rmt:get-keys))
+(define (diff:target+run-name->run-id area-dat target run-name)
+  (let* ((keys (rmt:get-keys area-dat))
          (target-parts (if target (string-split target "/") (map (lambda (x) "%") keys))))
     (if (not (eq? (length keys) (length keys)))
         (begin
           (print "Error: Target ("target") item count does not match fields count target tokens="target-parts" fields="keys)
           #f)
         (let* ((target-map (zip keys target-parts))
-               (qry-res (rmt:get-runs run-name 1 0 target-map)))
+               (qry-res (rmt:get-runs area-dat run-name 1 0 target-map)))
 
           (if (eq? 2 (vector-length qry-res))
               (let ((first-ent (vector-ref qry-res 1)))
@@ -143,7 +143,7 @@
                     #f))
               #f)))))
 
-(define (diff:run-id->tests-mindat run-id #!key (testpatt "%/%"))
+(define (diff:run-id->tests-mindat area-dat run-id #!key (testpatt "%/%"))
   (let* ((states '())
          (statuses '())
          (offset #f)
@@ -170,7 +170,7 @@
               (status    (vector-ref row 4)))
              (list test-name item-path (list id state status))))
      
-     (rmt:get-tests-for-run run-id
+     (rmt:get-tests-for-run area-dat run-id
                             testpatt states statuses
                             offset limit
                             not-in sort-by sort-order
@@ -262,9 +262,9 @@ ___  ___                 _            _
 </pre>")
 
 
-(define (diff:run-id->target+run-name+starttime run-id)
-  (let* ((target      (rmt:get-target run-id))
-         (runinfo     (rmt:get-run-info run-id)) ; vector of header (list) and result (vector)
+(define (diff:run-id->target+run-name+starttime area-dat run-id)
+  (let* ((target      (rmt:get-target area-dat run-id))
+         (runinfo     (rmt:get-run-info area-dat run-id)) ; vector of header (list) and result (vector)
          (info-hash   (alist->hash-table
                        (map (lambda (x) (cons (car x) (cadr x)))  ; make it a useful hash
                             (zip (vector-ref runinfo 0) (vector->list (vector-ref runinfo 1))))))

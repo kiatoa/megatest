@@ -143,7 +143,7 @@
 
 (defstruct remote
   (hh-dat            (common:get-homehost)) ;; homehost record ( addr . hhflag )
-  (server-url        (if *toppath* (server:check-if-running *toppath*))) ;; (server:check-if-running *toppath*) #f))
+  (server-url        #f)
   (last-server-check 0)  ;; last time we checked to see if the server was alive
   (conndat           #f)
   (transport         *transport-type*)
@@ -204,15 +204,15 @@
 
 ;; from metadat lookup MEGATEST_VERSION
 ;;
-(define (common:get-last-run-version) ;; RADT => How does this work in send-receive function??; assume it is the value saved in some DB
-  (rmt:get-var "MEGATEST_VERSION"))
+(define (common:get-last-run-version area-dat) ;; RADT => How does this work in send-receive function??; assume it is the value saved in some DB
+  (rmt:get-var area-dat "MEGATEST_VERSION"))
 
 (define (common:get-last-run-version-number)
   (string->number 
    (substring (common:get-last-run-version) 0 6)))
 
-(define (common:set-last-run-version)
-  (rmt:set-var "MEGATEST_VERSION" (common:version-signature)))
+(define (common:set-last-run-version area-dat)
+  (rmt:set-var area-dat "MEGATEST_VERSION" (common:version-signature)))
 
 (define (common:version-changed?)
   (not (equal? (common:get-last-run-version)
@@ -652,7 +652,7 @@
 	    (if (common:low-noise-print 30)
 		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" this-wd-num="this-wd-num)))))))
 
-(define (std-exit-procedure)
+(define (std-exit-procedure area-dat)
   (on-exit (lambda () 0))
   ;;(BB> "std-exit-procedure called; *time-to-exit*="*time-to-exit*)
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
@@ -662,7 +662,7 @@
 			 #t))))
     (debug:print-info 4 *default-log-port* "starting exit process, finalizing databases.")
     (if (and no-hurry (debug:debug-mode 18))
-	(rmt:print-db-stats))
+	(rmt:print-db-stats area-dat))
     (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
                               (if *dbstruct-db* (db:close-all *dbstruct-db*)) ;; one second allocated
 			      (if *task-db*    
@@ -836,9 +836,9 @@
 (define (common:args-get-status)
   (or (args:get-arg "-status")(args:get-arg ":status")))
 
-(define (common:args-get-testpatt rconf)
+(define (common:args-get-testpatt area-dat rconf)
   (let* ((tagexpr (args:get-arg "-tagexpr"))
-         (tags-testpatt (if tagexpr (string-join (runs:get-tests-matching-tags tagexpr) ",") #f))
+         (tags-testpatt (if tagexpr (string-join (runs:get-tests-matching-tags area-dat tagexpr) ",") #f))
          (testpatt-key  (if (args:get-arg "--modepatt") (args:get-arg "--modepatt") "TESTPATT"))
          (args-testpatt (or (args:get-arg "-testpatt") (args:get-arg "-runtests") "%"))
          (rtestpatt     (if rconf (runconfigs-get rconf testpatt-key) #f)))
@@ -1232,8 +1232,8 @@
 ;;
 ;; return list of
 ;;  ( reachable? cpuload update-time )
-(define (common:get-host-info hostname)
-  (let* ((loadinfo (rmt:get-latest-host-load hostname))
+(define (common:get-host-info hostname area-dat)
+  (let* ((loadinfo (rmt:get-latest-host-load area-dat hostname))
          (load (car loadinfo))
          (load-sample-time (cdr loadinfo))
          (load-sample-age (- (current-seconds) load-sample-time))

@@ -132,6 +132,7 @@ Misc
   updating
   uidat ;; needs to move to tabdat at some time
   hide-not-hide-tabs
+  (area-dat (make-remote))
   )
 
 (define (dboard:commondat-make)
@@ -324,7 +325,7 @@ Misc
     (dboard:setup-num-rows dat)
     dat))
 
-(define (dboard:setup-tabdat tabdat)
+(define (dboard:setup-tabdat tabdat area-dat)
   (dboard:tabdat-dbdir-set! tabdat (db:dbfile-path)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
   (dboard:tabdat-dbfpath-set! tabdat (db:dbfile-path))
   (dboard:tabdat-monitor-db-path-set! tabdat (conc (dboard:tabdat-dbdir tabdat) "/monitor.db"))
@@ -334,7 +335,7 @@ Misc
   
   (dboard:tabdat-keys-set! tabdat (db:dispatch-query (db:get-access-mode) rmt:get-keys db:get-keys))
   (dboard:tabdat-dbkeys-set! tabdat (append (dboard:tabdat-keys tabdat) (list "runname")))
-  (dboard:tabdat-tot-runs-set! tabdat (rmt:get-num-runs "%"))
+  (dboard:tabdat-tot-runs-set! tabdat (rmt:get-num-runs area-dat "%"))
   )
 
 ;; RADT => Matrix defstruct addition
@@ -632,15 +633,17 @@ Misc
 ;; create a virtual table of all the tests
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 ;;
-(define (update-rundat tabdat runnamepatt numruns testnamepatt keypatts)
+(define (update-rundat tabdat area-dat runnamepatt numruns testnamepatt keypatts)
   (let* ((access-mode      (dboard:tabdat-access-mode tabdat))
-         (keys             (db:dispatch-query access-mode rmt:get-keys db:get-keys))
+         (keys             ;; (db:dispatch-query access-mode rmt:get-keys db:get-keys))
+	  (rmt:get-keys area-dat))
 	 (last-runs-update (- (dboard:tabdat-last-runs-update tabdat) 2))
-         (allruns          (db:dispatch-query access-mode rmt:get-runs db:get-runs
-                                              runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
-         ;;(allruns-tree (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
-         (allruns-tree    (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt
-                                             keys "%" #f #f #f #f last-runs-update));;'("id" "runname")
+         (allruns          (rmt:get-runs area-dat runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
+	  ;; (db:dispatch-query access-mode rmt:get-runs db:get-runs
+	  ;;     runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
+         (allruns-tree    (rmt:get-runs-by-patt area-dat keys "%" #f #f #f #f))
+         ;; (allruns-tree    (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt
+         ;;                                     keys "%" #f #f #f #f last-runs-update));;'("id" "runname")
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns)) ;; RA => Filtered as per runpatt selected
          (runs-tree   (db:get-rows   allruns-tree)) ;; RA => Returns complete list of runs
@@ -671,7 +674,7 @@ Misc
 	  (let* ((run-id       (db:get-value-by-header run header "id"))
 		 (run-struct   (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f))
 		 (last-update  (if run-struct (dboard:rundat-last-update run-struct) 0))
-		 (key-vals     (rmt:get-key-vals run-id))
+		 (key-vals     (rmt:get-key-vals area-dat run-id))
 		 (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
 		 ;; GET RID OF dboard:get-tests-dat - it is superceded by dboard:get-tests-for-run-duplicate
 		 ;;  dboard:get-tests-for-run-duplicate - returns a hash table
@@ -713,15 +716,15 @@ Misc
 ;; create a virtual table of all the tests
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 ;;
-(define (dboard:update-rundat tabdat runnamepatt numruns testnamepatt keypatts)
+(define (dboard:update-rundat tabdat area-dat runnamepatt numruns testnamepatt keypatts)
   (let* ((access-mode      (dboard:tabdat-access-mode tabdat))
          (keys             (dboard:tabdat-keys tabdat)) ;; (db:dispatch-query access-mode rmt:get-keys db:get-keys)))
 	 (last-runs-update (- (dboard:tabdat-last-runs-update tabdat) 2))
          (allruns          (db:dispatch-query access-mode rmt:get-runs db:get-runs
                                               runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
-         ;;(allruns-tree (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
-         (allruns-tree    (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt
-                                             keys "%" #f #f #f #f 0)) ;; last-runs-update));;'("id" "runname")
+         (allruns-tree    (rmt:get-runs-by-patt area-dat keys "%" #f #f #f #f))
+         ;; (allruns-tree    (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt
+         ;;                                     keys "%" #f #f #f #f 0)) ;; last-runs-update));;'("id" "runname")
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns)) ;; RA => Filtered as per runpatt selected
          (runs-tree   (db:get-rows   allruns-tree)) ;; RA => Returns complete list of runs
@@ -750,7 +753,7 @@ Misc
 	  (let* ((run-id       (db:get-value-by-header run header "id"))
 		 (run-struct   (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f))
 		 ;; (last-update  (if run-struct (dboard:rundat-last-update run-struct) 0))
-		 (key-vals     (rmt:get-key-vals run-id))
+		 (key-vals     (rmt:get-key-vals area-dat run-id))
 		 (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
 		 ;; GET RID OF dboard:get-tests-dat - it is superceded by dboard:get-tests-for-run-duplicate
 		 ;;  dboard:get-tests-for-run-duplicate - returns a hash table
@@ -1133,7 +1136,7 @@ Misc
 (define (dashboard:update-target-selector tabdat #!key (action-proc #f))
   (let* ((runconf-targs (common:get-runconfig-targets))
 	 (key-lbs       (dboard:tabdat-key-listboxes tabdat))
-	 (db-target-dat (rmt:get-targets))
+	 (db-target-dat (rmt:get-targets area-dat))
 	 (header        (vector-ref db-target-dat 0))
 	 (db-targets    (vector-ref db-target-dat 1))
 	 (munge-target  (lambda (x)            ;; create a target vector from a string. Pad with na if needed.
@@ -1306,7 +1309,7 @@ Misc
 (define (dashboard:update-tree-selector tabdat #!key (action-proc #f))
   (let* ((tb            (dboard:tabdat-runs-tree tabdat))
 	 (runconf-targs (common:get-runconfig-targets))
-	 (db-target-dat (rmt:get-targets))
+	 (db-target-dat (rmt:get-targets area-dat))
          (runs-tree-ht  (dboard:tabdat-runs-tree-ht tabdat))
 	 (header        (vector-ref db-target-dat 0))
 	 (db-targets    (vector-ref db-target-dat 1))
@@ -1636,7 +1639,7 @@ Misc
 	(cadr res)
 	#f)))
 
-(define (dboard:update-tree tabdat runs-hash runs-header tb)
+(define (dboard:update-tree tabdat area-dat runs-hash runs-header tb)
   (let* ((access-mode   (dboard:tabdat-access-mode tabdat))
          (run-ids (sort (filter number? (hash-table-keys runs-hash))
 			(lambda (a b)
@@ -1647,8 +1650,9 @@ Misc
 			    (< time-a time-b)))))
          (changed      #f)
 	 (last-runs-update  (dboard:tabdat-last-runs-update tabdat))
-	 (runs-dat     (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt
-                                          (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update)))
+	 (runs-dat          (rmt:get-runs-by-patt area-dat (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update)))
+	  ;; (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt
+          ;;                                (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update)))
     (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
     (for-each (lambda (run-id)
 		(let* ((run-record (hash-table-ref/default runs-hash run-id #f))
@@ -1691,7 +1695,7 @@ Misc
 
 (define (dashboard:run-id->tests-mindat run-id tabdat runs-hash)
   (let* ((run          (hash-table-ref/default runs-hash run-id #f))
-         (key-vals     (rmt:get-key-vals run-id))
+         (key-vals     (rmt:get-key-vals area-dat run-id))
          (testnamepatt (or (dboard:tabdat-test-patts tabdat) "%/%"))
          (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
          (tests-dat    (dashboard:tests-ht->tests-dat tests-ht)) 
@@ -1716,11 +1720,12 @@ Misc
         #f)))
 
 
-(define (dashboard:get-runs-hash tabdat)
+(define (dashboard:get-runs-hash tabdat area-dat)
   (let* ((access-mode       (dboard:tabdat-access-mode tabdat))
          (last-runs-update  0);;(dboard:tabdat-last-runs-update tabdat))
-	 (runs-dat     (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt 
-                                          (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
+	 (runs-dat     (rmt:get-runs-by-patt area-dat (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
+		       ;; (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt 
+                       ;;                    (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
          (runs         (vector-ref runs-dat 1))
 	 (run-id       (dboard:tabdat-curr-run-id tabdat))
@@ -1735,10 +1740,10 @@ Misc
   ;; (if (dashboard:database-changed? commondat tabdat context-key: 'runs-summary-rundat)
   (dashboard:do-update-rundat tabdat) ;; )
   (dboard:runs-summary-control-panel-updater tabdat)
-  (let* ((last-runs-update  (dboard:tabdat-last-runs-update tabdat))
-	 (runs-dat     (db:dispatch-query (dboard:tabdat-access-mode tabdat)
-                                          rmt:get-runs-by-patt db:get-runs-by-patt
-                                          (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
+  (let* ((area-dat     (dboard:commondat-area-dat commondat))
+	 (last-runs-update  (dboard:tabdat-last-runs-update tabdat))
+	 (runs-dat     ;; (db:dispatch-query (dboard:tabdat-access-mode tabdat)
+	  (rmt:get-runs-by-patt area-dat (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
          (runs         (vector-ref runs-dat 1))
 	 (run-id       (dboard:tabdat-curr-run-id tabdat))
@@ -1962,7 +1967,7 @@ Misc
               (iup:attribute-set! this-button "BGCOLOR" nonsel-color))
           (loop (cdr buttons-left) (cdr modes-left))))))
 
-(define (dboard:runs-summary-xor-labels-updater tabdat)
+(define (dboard:runs-summary-xor-labels-updater tabdat area-dat)
   (let ((source-runname-label (dboard:tabdat-runs-summary-source-runname-label tabdat))
         (dest-runname-label (dboard:tabdat-runs-summary-dest-runname-label tabdat))
         (mode (dboard:tabdat-runs-summary-mode tabdat)))
@@ -1972,10 +1977,10 @@ Misc
          (let* ((curr-run-id          (dboard:tabdat-curr-run-id tabdat))
                 (prev-run-id          (dboard:tabdat-prev-run-id tabdat))
                 (curr-runname (if curr-run-id
-                                  (rmt:get-run-name-from-id curr-run-id)
+                                  (rmt:get-run-name-from-id area-dat curr-run-id)
                                   "None"))
                 (prev-runname (if prev-run-id
-                                  (rmt:get-run-name-from-id prev-run-id)
+                                  (rmt:get-run-name-from-id area-dat prev-run-id)
                                   "None")))
            (iup:attribute-set! source-runname-label "TITLE" (conc " SRC: "prev-runname"  "))
            (iup:attribute-set! dest-runname-label "TITLE" (conc "DEST: "curr-runname"  "))))
@@ -2037,6 +2042,7 @@ Misc
 ;; 
 (define (dashboard:runs-summary commondat tabdat #!key (tab-num #f))
   (let* ((update-mutex (dboard:commondat-update-mutex commondat))
+	 (area-dat     (dboard:commondat-area-dat commondat))
 	 (tb      (iup:treebox
 		   #:value 0
 		   #:name "Runs"
@@ -2083,19 +2089,19 @@ Misc
                                   (key      (conc lin ":" col))
                                   (test-id   (hash-table-ref/default cell-lookup key -1))
                                   (run-id   (dboard:tabdat-curr-run-id tabdat))
-                                  (run-info (rmt:get-run-info run-id))
-                                  (target   (rmt:get-target run-id))
+                                  (run-info (rmt:get-run-info area-dat run-id))
+                                  (target   (rmt:get-target area-dat run-id))
                                   (runname  (db:get-value-by-header (db:get-rows run-info)
                                                                     (db:get-header run-info) "runname"))
-                                  (test-name (db:test-get-testname (rmt:get-test-info-by-id run-id test-id)))
-                                  (testpatt  (let ((tlast (rmt:tasks-get-last target runname)))
+                                  (test-name (db:test-get-testname (rmt:get-test-info-by-id area-dat run-id test-id)))
+                                  (testpatt  (let ((tlast (rmt:tasks-get-last area-dat target runname)))
                                                 (if tlast
                                                     (let ((tpatt (tasks:task-get-testpatt tlast)))
                                                       (if (member tpatt '("0" 0)) ;; known bad historical value - remove in 2017
                                                           "%"
                                                           tpatt))
                                                     "%")))
-                                  (item-path (db:test-get-item-path (rmt:get-test-info-by-id run-id test-id)))
+                                  (item-path (db:test-get-item-path (rmt:get-test-info-by-id area-dat run-id test-id)))
                                   (item-test-path (conc test-name "/" (if (equal? item-path "")
 									"%" 
 									item-path)))
@@ -2336,7 +2342,7 @@ Misc
     (conc "Kill " item-test-path)
     #:action
     (lambda (obj)
-      ;; (rmt:test-set-state-status-by-id run-id test-id "KILLREQ" #f #f)
+      ;; (rmt:test-set-state-status-by-id area-dat run-id test-id "KILLREQ" #f #f)
       (common:run-a-command
        (conc "megatest -set-state-status KILLREQ,n/a -target " target
              " -runname " runname
@@ -2400,7 +2406,7 @@ Misc
       (conc "Kill " item-test-path)
       #:action
       (lambda (obj)
-        ;; (rmt:test-set-state-status-by-id run-id test-id "KILLREQ" #f #f)
+        ;; (rmt:test-set-state-status-by-id area-dat run-id test-id "KILLREQ" #f #f)
 	(common:run-a-command
 	 (conc "megatest -set-state-status KILLREQ,n/a -target " target
                " -runname " runname
@@ -2461,7 +2467,8 @@ Misc
 	 (i               0)
 	 (btn-height      (dboard:tabdat-runs-btn-height runs-dat))
 	 (btn-fontsz      (dboard:tabdat-runs-btn-fontsz runs-dat))
-	 (cell-width      (dboard:tabdat-runs-cell-width runs-dat)))
+	 (cell-width      (dboard:tabdat-runs-cell-width runs-dat))
+	 (area-dat        (dboard:commondat-area-dat commondat)))
     ;; controls (along bottom)
     ;; (set! controls (dboard:make-controls commondat runs-dat))
     
@@ -2556,19 +2563,19 @@ Misc
 					      (buttndat (hash-table-ref (dboard:tabdat-buttondat runs-dat) button-key))
 					      (test-id  (db:test-get-id (vector-ref buttndat 3)))
 					      (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
-					      (run-info (rmt:get-run-info run-id))
-					      (target   (rmt:get-target run-id))
+					      (run-info (rmt:get-run-info area-dat run-id))
+					      (target   (rmt:get-target area-dat run-id))
 					      (runname  (db:get-value-by-header (db:get-rows run-info)
 										(db:get-header run-info) "runname"))
-					      (test-name (db:test-get-testname (rmt:get-test-info-by-id run-id test-id)))
-					      (testpatt  (let ((tlast (rmt:tasks-get-last target runname)))
+					      (test-name (db:test-get-testname (rmt:get-test-info-by-id area-dat run-id test-id)))
+					      (testpatt  (let ((tlast (rmt:tasks-get-last area-dat target runname)))
 							   (if tlast
 							       (let ((tpatt (tasks:task-get-testpatt tlast)))
 								 (if (member tpatt '("0" 0)) ;; known bad historical value - remove in 2017
 								     "%"
 								     tpatt))
 							       "%")))
-                                              (item-path (db:test-get-item-path (rmt:get-test-info-by-id run-id test-id)))
+                                              (item-path (db:test-get-item-path (rmt:get-test-info-by-id area-dat run-id test-id)))
                                               (item-test-path (conc test-name "/" (if (equal? item-path "")
 									"%" 
 									item-path))))
@@ -2853,10 +2860,10 @@ Misc
 ;;
 (define (dashboard:run-times-tab-run-data-updater commondat tabdat tab-num)
   (let* ((access-mode      (dboard:tabdat-access-mode tabdat))
+	 (area-dat         (dboard:commondat-area-dat commondat))
          (last-runs-update (dboard:tabdat-last-runs-update tabdat))
-         (runs-dat      (db:dispatch-query access-mode
-                                           rmt:get-runs-by-patt db:get-runs-by-patt
-                                           (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
+         (runs-dat         ;;  (db:dispatch-query access-mode
+	  (rmt:get-runs-by-patt area-dat (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
 	 (runs-header   (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 	 (runs-hash     (let ((ht (make-hash-table)))
 			  (for-each (lambda (run)

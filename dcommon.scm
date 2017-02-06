@@ -87,7 +87,7 @@
 ;;    NOTE: Used in newdashboard
 ;;
 ;; Mode is 'full or 'incremental for full refresh or incremental refresh
-(define (dcommon:run-update keys data runname keypatts testpatt states statuses mode window-id)
+(define (dcommon:run-update area-dat keys data runname keypatts testpatt states statuses mode window-id)
   (let* (;; count and offset => #f so not used
 	 ;; the synchash calls modify the "data" hash
 	 (changed         #f)
@@ -98,9 +98,9 @@
 	 ;; test-ids to get and display are indexed on window-id in curr-test-ids hash
 	 (test-ids        (hash-table-values (dboard:tabdat-curr-test-ids data)))
 	 ;; run-id is #f in next line to send the query to server 0
- 	 (run-changes     (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data #f runname #f #f keypatts))
+ 	 (run-changes     (synchash:client-get area-dat 'db:get-runs get-runs-sig (length keypatts) data #f runname #f #f keypatts))
 	 (tests-detail-changes (if (not (null? test-ids))
-				   (synchash:client-get 'db:get-test-info-by-ids get-details-sig 0  data #f test-ids)
+				   (synchash:client-get area-dat 'db:get-test-info-by-ids get-details-sig 0  data #f test-ids)
 				   '()))
 
 	 ;; Now can calculate the run-ids
@@ -110,7 +110,7 @@
 	 (all-test-changes (let ((res (make-hash-table)))
 			     (for-each (lambda (run-id)
 					 (if (> run-id 0)
-					     (hash-table-set! res run-id (synchash:client-get 'db:get-tests-for-run-mindata get-tests-sig 0 data run-id 1 testpatt states statuses #f))))
+					     (hash-table-set! res run-id (synchash:client-get area-dat 'db:get-tests-for-run-mindata get-tests-sig 0 data run-id 1 testpatt states statuses #f))))
 				       run-ids)
 			     res))
 	 (runs-hash    (hash-table-ref/default data get-runs-sig #f))
@@ -428,8 +428,8 @@
            res)
           res))))
 
-(define (dcommon:examine-xterm run-id test-id)
-  (let* ((testdat (rmt:get-test-info-by-id run-id test-id)))
+(define (dcommon:examine-xterm area-dat run-id test-id)
+  (let* ((testdat (rmt:get-test-info-by-id area-dat run-id test-id)))
     (if (not testdat)
         (begin
           (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
@@ -541,12 +541,12 @@
 
     general-matrix))
 
-(define (dcommon:run-stats commondat tabdat #!key (tab-num #f))
+(define (dcommon:run-stats area-dat commondat tabdat #!key (tab-num #f))
   (let* ((stats-matrix (iup:matrix expand: "YES"))
 	 (changed      #f)
 	 (stats-updater (lambda ()
 			 (if (dashboard:database-changed? commondat tabdat context-key: 'run-stats)
-			     (let* ((run-stats    (rmt:get-run-stats))
+			     (let* ((run-stats    (rmt:get-run-stats area-dat))
 				    (indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
 				    (row-indices  (car indices))
 				    (col-indices  (cadr indices))
@@ -1094,7 +1094,7 @@
 	  (refresh-runs-list (lambda ()
 			       (if (dashboard:database-changed? commondat tabdat context-key: 'runname-selector-runs-list)
 				   (let* (;; (target        (dboard:tabdat-target-string tabdat))
-					  (runs-for-targ (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f 0))
+					  (runs-for-targ (rmt:get-runs-by-patt area-dat (dboard:tabdat-keys tabdat) "%" #f #f #f #f 0))
 					  (runs-header   (vector-ref runs-for-targ 0))
 					  (runs-dat      (vector-ref runs-for-targ 1))
 					  (run-names     (cons default-run-name 

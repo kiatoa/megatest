@@ -2278,9 +2278,9 @@
 ;; Get run-ids for runs with same target but different runnames and NOT run-id
 ;;
 (define (db:get-prev-run-ids dbstruct run-id)
-  (let* ((keyvals (rmt:get-key-val-pairs run-id))
+  (let* ((keyvals (db:get-key-val-pairs dbstruct run-id))
 	 (kvalues (map cadr keyvals))
-	 (keys    (rmt:get-keys))
+	 (keys    (db:get-keys dbstruct))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND ")))
     (let ((prev-run-ids '()))
       (if (null? keyvals)
