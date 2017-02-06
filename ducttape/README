@@ -1,0 +1,8 @@
+This directory holds the "ducttape" chicken scheme egg used by megatest.
+
+Run "make test" to ensure this egg works on your system.
+
+Run "make install" as your admin user with chicken on your $PATH to install this egg.
+
+
+
