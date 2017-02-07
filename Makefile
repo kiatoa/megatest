@@ -180,7 +180,7 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
 	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/viewscreen $(PREFIX)/bin/mt_xterm \
-	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun
+	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun $(PREFIX)/bin/newdashboard
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)

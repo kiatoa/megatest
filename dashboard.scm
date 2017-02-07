@@ -187,114 +187,114 @@ Misc
 		     tnum
 		     (cons updater curr-updaters))))
 
-;; data for each specific tab goes here
-;;
-(defstruct dboard:tabdat 
-  ;; runs
-  ((allruns         '())                 : list)        ;; list of dboard:rundat records
-  ((allruns-by-id    (make-hash-table))  : hash-table)  ;; hash of run-id -> dboard:rundat records
-  ((done-runs       '())                 : list)        ;; list of runs already drawn
-  ((not-done-runs   '())                 : list)        ;; list of runs not yet drawn
-  (header            #f)                                ;; header for decoding the run records
-  (keys              #f)                                ;; keys for this run (i.e. target components)
-  ((numruns          (string->number (or (args:get-arg "-cols") "10")))                 : number)      ;; 
-  ((tot-runs          0)                 : number)
-  ((last-data-update  0)                 : number)      ;; last time the data in allruns was updated
-  ((last-runs-update  0)                 : number)      ;; last time we pulled the runs info to update the tree
-  (runs-mutex         (make-mutex))                     ;; use to prevent parallel access to draw objects
-  ((run-update-times  (make-hash-table)) : hash-table)  ;; update times indexed by run-id
-  ((last-test-dat      (make-hash-table)) : hash-table)  ;; cache last tests dat by run-id
-  ((run-db-paths      (make-hash-table)) : hash-table)  ;; cache the paths to the run db files
-
-  ;; Runs view
-  ((buttondat         (make-hash-table)) : hash-table)  ;;     
-  ((item-test-names  '())                : list)        ;; list of itemized tests
-  ((run-keys          (make-hash-table)) : hash-table)
-  (runs-matrix        #f)                               ;; used in newdashboard
-  ((start-run-offset   0)                : number)      ;; left-right slider value
-  ((start-test-offset  0)                : number)      ;; up-down slider value
-  ((runs-btn-height    (or (configf:lookup *configdat* "dashboard" "btn-height") "x14")) : string)  ;; was 12
-  ((runs-btn-fontsz    (or (configf:lookup *configdat* "dashboard" "btn-fontsz") "10")) : string)   ;; was 8
-  ((runs-cell-width    (or (configf:lookup *configdat* "dashboard" "cell-width") "60")) : string)   ;; was 50
-  ((all-test-names     '())              : list)
-  
-  ;; Canvas and drawing data
-  (cnv                #f)
-  (cnv-obj            #f)
-  (drawing            #f)
-  ((run-start-row     0)                 : number)
-  ((max-row           0)                 : number)
-  ((running-layout    #f)                : boolean)
-  (originx            #f)
-  (originy            #f)
-  ((layout-update-ok  #t)                : boolean)
-  ((compact-layout    #t)                : boolean)
-
-  ;; Run times layout
-  ;; (graph-button-box #f) ;; RA => Think it is not referenced anywhere
-  (graph-matrix     #f)
-  ((graph-matrix-table (make-hash-table)) : hash-table) ;; graph-dats referenced thru graph name info
-  ((graph-cell-table (make-hash-table)) : hash-table) ;; graph-dats referenced thru matrix cell info
-  ((graph-matrix-row 1) : number)
-  ((graph-matrix-col 1) : number)
-
-  ;; Controls used to launch runs etc.
-  ((command          "")                 : string)      ;; for run control this is the command being built up
-  (command-tb        #f)	                        ;; widget for the type of command; run, remove-runs etc.
-  (test-patterns-textbox #f)                            ;; text box widget for editing a list of test patterns
-  (key-listboxes     #f)			         
-  (key-lbs           #f)			         
-  run-name                                              ;; from run name setting widget
-  states                                                ;; states for -state s1,s2 ...
-  statuses                                              ;; statuses for -status s1,s2 ...
-						         
-  ;; Selector variables				         
-  curr-run-id                                           ;; current row to display in Run summary view
-  prev-run-id                                           ;; previous runid selected before current runid was selected (used in xor-two-runs runs summary mode
-  curr-test-ids                                         ;; used only in dcommon:run-update which is used in newdashboard
-  ((filters-changed  #t)                  : boolean)    ;; to to indicate that the user changed filters for this tab
-  ((last-filter-str  "")                  : string)      ;; conc the target runname and testpatt for a signature of changed filters
-  ((hide-empty-runs  #f)                  : boolean)     
-  ((hide-not-hide    #t)                  : boolean)     ;; toggle for hide/not hide empty runs
-  (hide-not-hide-button #f)
-  ((searchpatts        (make-hash-table)) : hash-table)  ;;
-  ((state-ignore-hash  (make-hash-table)) : hash-table)  ;; hash of  STATE => #t/#f for display control
-  ((status-ignore-hash (make-hash-table)) : hash-table)  ;; hash of STATUS => #t/#f
-  (target              #f)
-  (test-patts          #f)
-
-  ;; db info to file the .db files for the area
-  (access-mode        (db:get-access-mode))             ;; use cached db or not
-  (dbdir               #f)
-  (dbfpath             #f)
-  (dbkeys              #f)
-  ((last-db-update     (make-hash-table)) : hash-table) ;; last db file timestamp
-  (monitor-db-path     #f)                              ;; where to find monitor.db
-  ro                                                    ;; is the database read-only?
-
-  ;; tests data
-  ((num-tests          10)               : number)      ;; total number of tests to show (used in the old runs display)
-
-  ;; runs tree
-  ((path-run-ids       (make-hash-table)) : hash-table) ;; path (target / runname) => id
-  (runs-tree           #f)
-  ((runs-tree-ht       (make-hash-table)) : hash-table) ;; track which targets added to tree (merge functionality with path-run-ids?)
-
-  ;; tab data
-  ((view-changed       #t)                : boolean)   
-  ((xadj               0)                 : number)     ;; x slider number (if using canvas)
-  ((yadj               0)                 : number)     ;; y slider number (if using canvas)
-  ;; runs-summary tab state
-  ((runs-summary-modes '((one-run . "Show One Run") (xor-two-runs . "XOR Two Runs") (xor-two-runs-hide-clean . "XOR; Hide Clean")) )   : list)
-  ((runs-summary-mode-buttons '())               : list)
-  ((runs-summary-mode  'one-run)            : symbol)
-  ((runs-summary-mode-change-callbacks '()) : list)
-  (runs-summary-source-runname-label #f)
-  (runs-summary-dest-runname-label #f)
-  ;; runs summary view
-  
-  tests-tree       ;; used in newdashboard
-  )
+;;   ;; data for each specific tab goes here
+;;   ;;
+;;   (defstruct dboard:tabdat 
+;;     ;; runs
+;;     ((allruns         '())                 : list)        ;; list of dboard:rundat records
+;;     ((allruns-by-id    (make-hash-table))  : hash-table)  ;; hash of run-id -> dboard:rundat records
+;;     ((done-runs       '())                 : list)        ;; list of runs already drawn
+;;     ((not-done-runs   '())                 : list)        ;; list of runs not yet drawn
+;;     (header            #f)                                ;; header for decoding the run records
+;;     (keys              #f)                                ;; keys for this run (i.e. target components)
+;;     ((numruns          (string->number (or (args:get-arg "-cols") "10")))                 : number)      ;; 
+;;     ((tot-runs          0)                 : number)
+;;     ((last-data-update  0)                 : number)      ;; last time the data in allruns was updated
+;;     ((last-runs-update  0)                 : number)      ;; last time we pulled the runs info to update the tree
+;;     (runs-mutex         (make-mutex))                     ;; use to prevent parallel access to draw objects
+;;     ((run-update-times  (make-hash-table)) : hash-table)  ;; update times indexed by run-id
+;;     ((last-test-dat      (make-hash-table)) : hash-table)  ;; cache last tests dat by run-id
+;;     ((run-db-paths      (make-hash-table)) : hash-table)  ;; cache the paths to the run db files
+;;   
+;;     ;; Runs view
+;;     ((buttondat         (make-hash-table)) : hash-table)  ;;     
+;;     ((item-test-names  '())                : list)        ;; list of itemized tests
+;;     ((run-keys          (make-hash-table)) : hash-table)
+;;     (runs-matrix        #f)                               ;; used in newdashboard
+;;     ((start-run-offset   0)                : number)      ;; left-right slider value
+;;     ((start-test-offset  0)                : number)      ;; up-down slider value
+;;     ((runs-btn-height    (or (configf:lookup *configdat* "dashboard" "btn-height") "x14")) : string)  ;; was 12
+;;     ((runs-btn-fontsz    (or (configf:lookup *configdat* "dashboard" "btn-fontsz") "10")) : string)   ;; was 8
+;;     ((runs-cell-width    (or (configf:lookup *configdat* "dashboard" "cell-width") "60")) : string)   ;; was 50
+;;     ((all-test-names     '())              : list)
+;;     
+;;     ;; Canvas and drawing data
+;;     (cnv                #f)
+;;     (cnv-obj            #f)
+;;     (drawing            #f)
+;;     ((run-start-row     0)                 : number)
+;;     ((max-row           0)                 : number)
+;;     ((running-layout    #f)                : boolean)
+;;     (originx            #f)
+;;     (originy            #f)
+;;     ((layout-update-ok  #t)                : boolean)
+;;     ((compact-layout    #t)                : boolean)
+;;   
+;;     ;; Run times layout
+;;     ;; (graph-button-box #f) ;; RA => Think it is not referenced anywhere
+;;     (graph-matrix     #f)
+;;     ((graph-matrix-table (make-hash-table)) : hash-table) ;; graph-dats referenced thru graph name info
+;;     ((graph-cell-table (make-hash-table)) : hash-table) ;; graph-dats referenced thru matrix cell info
+;;     ((graph-matrix-row 1) : number)
+;;     ((graph-matrix-col 1) : number)
+;;   
+;;     ;; Controls used to launch runs etc.
+;;     ((command          "")                 : string)      ;; for run control this is the command being built up
+;;     (command-tb        #f)	                        ;; widget for the type of command; run, remove-runs etc.
+;;     (test-patterns-textbox #f)                            ;; text box widget for editing a list of test patterns
+;;     (key-listboxes     #f)			         
+;;     (key-lbs           #f)			         
+;;     run-name                                              ;; from run name setting widget
+;;     states                                                ;; states for -state s1,s2 ...
+;;     statuses                                              ;; statuses for -status s1,s2 ...
+;;   						         
+;;     ;; Selector variables				         
+;;     curr-run-id                                           ;; current row to display in Run summary view
+;;     prev-run-id                                           ;; previous runid selected before current runid was selected (used in xor-two-runs runs summary mode
+;;     curr-test-ids                                         ;; used only in dcommon:run-update which is used in newdashboard
+;;     ((filters-changed  #t)                  : boolean)    ;; to to indicate that the user changed filters for this tab
+;;     ((last-filter-str  "")                  : string)      ;; conc the target runname and testpatt for a signature of changed filters
+;;     ((hide-empty-runs  #f)                  : boolean)     
+;;     ((hide-not-hide    #t)                  : boolean)     ;; toggle for hide/not hide empty runs
+;;     (hide-not-hide-button #f)
+;;     ((searchpatts        (make-hash-table)) : hash-table)  ;;
+;;     ((state-ignore-hash  (make-hash-table)) : hash-table)  ;; hash of  STATE => #t/#f for display control
+;;     ((status-ignore-hash (make-hash-table)) : hash-table)  ;; hash of STATUS => #t/#f
+;;     (target              #f)
+;;     (test-patts          #f)
+;;   
+;;     ;; db info to file the .db files for the area
+;;     (access-mode        (db:get-access-mode))             ;; use cached db or not
+;;     (dbdir               #f)
+;;     (dbfpath             #f)
+;;     (dbkeys              #f)
+;;     ((last-db-update     (make-hash-table)) : hash-table) ;; last db file timestamp
+;;     (monitor-db-path     #f)                              ;; where to find monitor.db
+;;     ro                                                    ;; is the database read-only?
+;;   
+;;     ;; tests data
+;;     ((num-tests          10)               : number)      ;; total number of tests to show (used in the old runs display)
+;;   
+;;     ;; runs tree
+;;     ((path-run-ids       (make-hash-table)) : hash-table) ;; path (target / runname) => id
+;;     (runs-tree           #f)
+;;     ((runs-tree-ht       (make-hash-table)) : hash-table) ;; track which targets added to tree (merge functionality with path-run-ids?)
+;;   
+;;     ;; tab data
+;;     ((view-changed       #t)                : boolean)   
+;;     ((xadj               0)                 : number)     ;; x slider number (if using canvas)
+;;     ((yadj               0)                 : number)     ;; y slider number (if using canvas)
+;;     ;; runs-summary tab state
+;;     ((runs-summary-modes '((one-run . "Show One Run") (xor-two-runs . "XOR Two Runs") (xor-two-runs-hide-clean . "XOR; Hide Clean")) )   : list)
+;;     ((runs-summary-mode-buttons '())               : list)
+;;     ((runs-summary-mode  'one-run)            : symbol)
+;;     ((runs-summary-mode-change-callbacks '()) : list)
+;;     (runs-summary-source-runname-label #f)
+;;     (runs-summary-dest-runname-label #f)
+;;     ;; runs summary view
+;;     
+;;     tests-tree       ;; used in newdashboard
+;;     )
 
 ;; register tabdat with BBpp
 ;; this is used by BBpp (Brandon's pretty printer) to convert dboard:tabdat into a composition of lists that pp will handle
