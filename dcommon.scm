@@ -150,7 +150,7 @@
 		  (set! changed (dcommon:modifiy-if-different (dboard:tabdat-runs-matrix data) cellname col-name changed))
 		  (hash-table-set! runid-to-col run-id (list colnum run-record))
 		  ;; Here we update the tests treebox and tree keys
-		  (tree:add-node (dboard:tabdat-tests-tree data) "Runs" (append key-vals (list run-name))
+		  (tree:add-node (dboard:tabdat-tests-tree data) "Areas" (append key-vals (list run-name))
 				 userdata: (conc "run-id: " run-id))
 		  (set! colnum (+ colnum 1))))
 	      run-ids)
@@ -199,10 +199,10 @@
 								     (list testname itempath))))
 				     (tb         (dboard:tabdat-tests-tree data)))
 				(print "INFONOTE: run-path: " run-path)
-				(tree:add-node (dboard:tabdat-tests-tree data) "Runs" 
+				(tree:add-node (dboard:tabdat-tests-tree data) "Areas" 
 					       test-path
 					       userdata: (conc "test-id: " test-id))
-				(let ((node-num (tree:find-node tb (cons "Runs" test-path)))
+				(let ((node-num (tree:find-node tb (cons "Areas" test-path)))
 				      (color    (car (gutils:get-color-for-state-status state status))))
 				  (debug:print 0 *default-log-port* "node-num: " node-num ", color: " color)
 

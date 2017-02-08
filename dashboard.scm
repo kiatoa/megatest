@@ -124,14 +124,14 @@ Misc
 ;; data common to all tabs goes here
 ;;
 (defstruct dboard:commondat
-  ((curr-tab-num 0) : number)
-  please-update  
-  tabdats
-  update-mutex
-  updaters 
-  updating
+  ((curr-tab-num    0) : number)
+  (please-update    #t)
+  (tabdats          (make-hash-table))
+  (update-mutex     (make-mutex))
+  (updaters         (make-hash-table))
+  (updating         #f)
   uidat ;; needs to move to tabdat at some time
-  hide-not-hide-tabs
+  (hide-not-hide-tabs #f)
   )
 
 (define (dboard:commondat-make)
@@ -217,6 +217,9 @@ Misc
   ((runs-btn-fontsz    (or (configf:lookup *configdat* "dashboard" "btn-fontsz") "10")) : string)   ;; was 8
   ((runs-cell-width    (or (configf:lookup *configdat* "dashboard" "cell-width") "60")) : string)   ;; was 50
   ((all-test-names     '())              : list)
+
+  ;; Runs summary information
+  ((area-name         #f)                : string)
   
   ;; Canvas and drawing data
   (cnv                #f)
@@ -706,7 +709,7 @@ Misc
 		      (loop run tal new-res newmaxtests) ;; not done getting data for this run
 		      (loop (car tal)(cdr tal) new-res newmaxtests)))))))
     (dboard:tabdat-filters-changed-set! tabdat #f)
-    (dboard:update-tree tabdat runs-hash header tb)))
+    (dboard:update-tree tabdat area-name runs-hash header tb)))
 
 ;; this calls dboard:get-tests-for-run-duplicate for each run
 ;;
@@ -715,6 +718,7 @@ Misc
 ;;
 (define (dboard:update-rundat tabdat runnamepatt numruns testnamepatt keypatts)
   (let* ((access-mode      (dboard:tabdat-access-mode tabdat))
+	 (area-name        "curr")
          (keys             (dboard:tabdat-keys tabdat)) ;; (db:dispatch-query access-mode rmt:get-keys db:get-keys)))
 	 (last-runs-update (- (dboard:tabdat-last-runs-update tabdat) 2))
          (allruns          (db:dispatch-query access-mode rmt:get-runs db:get-runs
@@ -791,7 +795,7 @@ Misc
 		      (loop run tal new-res newmaxtests) ;; not done getting data for this run
 		      (loop (car tal)(cdr tal) new-res newmaxtests)))))))
     (dboard:tabdat-filters-changed-set! tabdat #f)
-    (dboard:update-tree tabdat runs-hash header tb)))
+    (dboard:update-tree tabdat area-name runs-hash header tb)))
 
 (define *collapsed* (make-hash-table))
 
@@ -1327,7 +1331,7 @@ Misc
            ;; (let ((existing (tree:find-node tb target)))
            ;;   (if (not existing)
            (begin
-             (tree:add-node tb "Runs" target) ;; (append key-vals (list run-name))
+             (tree:add-node tb "Areas" target) ;; (append key-vals (list run-name))
              (hash-table-set! runs-tree-ht target #t))))
      all-targets)))
 
@@ -1404,7 +1408,7 @@ Misc
 	 (tb
           (iup:treebox
            #:value 0
-           #:name "Runs"
+           #:name "Areas"
            #:expand "YES"
            #:addexpanded "NO"
            #:size "10x"
@@ -1636,7 +1640,7 @@ Misc
 	(cadr res)
 	#f)))
 
-(define (dboard:update-tree tabdat runs-hash runs-header tb)
+(define (dboard:update-tree tabdat area-name runs-hash runs-header tb)
   (let* ((access-mode   (dboard:tabdat-access-mode tabdat))
          (run-ids (sort (filter number? (hash-table-keys runs-hash))
 			(lambda (a b)
@@ -1666,7 +1670,7 @@ Misc
                         ;;    		 (conc rownum ":" colnum) col-name)
                         ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
                         ;; Here we update the tests treebox and tree keys
-                        (tree:add-node tb "Runs" run-path) ;; (append key-vals (list run-name))
+                        (tree:add-node tb "Areas" (cons area-name run-path)) ;; (append key-vals (list run-name))
                         ;;                                             userdata: (conc "run-id: " run-id))))
                         (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
                         ;; (set! colnum (+ colnum 1))
@@ -1729,20 +1733,21 @@ Misc
 				     (hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
 				   runs) ht)))
     runs-hash))
-         
 
+
+;; Update the runs summary view with a single selected run using a tests<-->items matrix
+;;
 (define (dashboard:runs-summary-updater commondat tabdat tb cell-lookup run-matrix)
   ;; (if (dashboard:database-changed? commondat tabdat context-key: 'runs-summary-rundat)
   (dashboard:do-update-rundat tabdat) ;; )
   (dboard:runs-summary-control-panel-updater tabdat)
-  (let* ((last-runs-update  (dboard:tabdat-last-runs-update tabdat))
-	 (runs-dat     (db:dispatch-query (dboard:tabdat-access-mode tabdat)
-                                          rmt:get-runs-by-patt db:get-runs-by-patt
-                                          (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
-	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
-         (runs         (vector-ref runs-dat 1))
-	 (run-id       (dboard:tabdat-curr-run-id tabdat))
-         (runs-hash (dashboard:get-runs-hash tabdat))
+  (let* ((area-name         (dboard:tabdat-area-name tabdat))
+	 (last-runs-update  (dboard:tabdat-last-runs-update tabdat))
+	 (runs-dat          (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
+	 (runs-header       (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
+         (runs              (vector-ref runs-dat 1))
+	 (run-id            (dboard:tabdat-curr-run-id tabdat))
+         (runs-hash         (dashboard:get-runs-hash tabdat))
          ;; (runs-hash    (let ((ht (make-hash-table)))
 	 ;;        	 (for-each (lambda (run)
 	 ;;        		     (hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
@@ -1750,7 +1755,7 @@ Misc
 	 ;;        	 ht))
          )
     (if (dashboard:database-changed? commondat tabdat context-key: 'runs-summary-tree)
-        (dboard:update-tree tabdat runs-hash runs-header tb))
+        (dboard:update-tree tabdat area-name runs-hash runs-header tb))
     (if run-id
         (let* ((matrix-content
                 (case (dboard:tabdat-runs-summary-mode tabdat) 
@@ -2039,7 +2044,7 @@ Misc
   (let* ((update-mutex (dboard:commondat-update-mutex commondat))
 	 (tb      (iup:treebox
 		   #:value 0
-		   #:name "Runs"
+		   #:name "Areas"
 		   #:expand "YES"
 		   #:addexpanded "NO"
 		   #:selection-cb
@@ -2048,7 +2053,12 @@ Misc
 		      (lambda ()
 			;; (print "obj: " obj ", id: " id ", state: " state)
 			(let* ((run-path (tree:node->path obj id))
-			       (run-id   (tree-path->run-id tabdat (cdr run-path))))
+			       (path-len (length run-path))
+			       (area-name (if (> path-len 1)(cadr run-path) #f))
+			       (run-id    (if (> path-len 2)
+					      (tree-path->run-id tabdat (cddr run-path))
+					      #f)))
+			  (dboard:tabdat-area-name-set! tabdat area-name)
 			  (if (number? run-id)
 			      (begin
                                 (dboard:tabdat-prev-run-id-set!
@@ -2131,7 +2141,7 @@ Misc
                      (dboard:tabdat-view-changed tabdat))
                  (debug:catch-and-dump
                   (lambda () ;; check that run-matrix is initialized before calling the updater
-		    (if run-matrix 
+		    (if run-matrix
 			(dashboard:runs-summary-updater commondat tabdat tb cell-lookup run-matrix)))
                   "dashboard:runs-summary-updater")
                  )
@@ -2891,7 +2901,7 @@ Misc
 		 (begin
 		   (hash-table-set! (dboard:tabdat-run-keys tabdat) run-id run-path)
 		   ;; Here we update the tests treebox and tree keys
-		   (tree:add-node tb "Runs" run-path) ;; (append key-vals (list run-name))
+		   (tree:add-node tb "Areas" run-path) ;; (append key-vals (list run-name))
                    ;;				  userdata: (conc "run-id: " run-id))
 		   (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
 		   ;; (set! colnum (+ colnum 1))
@@ -3446,7 +3456,7 @@ Misc
 	     (file-write-access? mtdb-path))
 	(if (not (args:get-arg "-skip-version-check"))
             (common:exit-on-version-changed)))
-    (let* ((commondat       (dboard:commondat-make)))
+    (let* ((commondat       (make-dboard:commondat)))
       ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
       (cond 
        ((args:get-arg "-test") ;; run-id,test-id

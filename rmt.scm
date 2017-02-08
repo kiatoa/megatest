@@ -30,11 +30,16 @@
 ;;  S U P P O R T   F U N C T I O N S
 ;;======================================================================
 
+;; get the struct with all data on the remote area
+;;
+(define (rmt:get-remote area-dat)
+  (or area-dat *runremote*))
+
 ;; if a server is either running or in the process of starting call client:setup
 ;; else return #f to let the calling proc know that there is no server available
 ;;
 (define (rmt:get-connection-info areapath #!key (area-dat #f)) ;; TODO: push areapath down.
-  (let* ((runremote (or area-dat *runremote*))
+  (let* ((runremote (rmt:get-remote area-dat))
 	 (cinfo     (remote-conndat runremote))
         (run-id 0))
     (if cinfo

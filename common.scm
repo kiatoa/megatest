@@ -141,13 +141,16 @@
 (define *launch-setup-mutex* (make-mutex))     ;; need to be able to call launch:setup often so mutex it and re-call the real deal only if *toppath* not set
 (define *homehost-mutex*     (make-mutex))
 
+;; everything about a remote area including how to talk to its server
+;;
 (defstruct remote
   (hh-dat            (common:get-homehost)) ;; homehost record ( addr . hhflag )
   (server-url        (if *toppath* (server:check-if-running *toppath*))) ;; (server:check-if-running *toppath*) #f))
   (last-server-check 0)  ;; last time we checked to see if the server was alive
   (conndat           #f)
   (transport         *transport-type*)
-  (server-timeout    (or (server:get-timeout) 100))) ;; default to 100 seconds
+  (server-timeout    (or (server:get-timeout) 100)) ;; default to 100 seconds
+  (area-path         #f))
 
 ;; launching and hosts
 (defstruct host
