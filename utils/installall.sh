@@ -1,5 +1,8 @@
 #! /usr/bin/env bash
 
+# This file installs prerequisites for megatest (chicken, eggs, etc.)
+# Before running this script, set PREFIX environment variable
+# to chicken install target area.  /opt/chicken is a typical value
 # set -x
 
 # Copyright 2007-2014, Matthew Welland.
@@ -11,12 +14,15 @@
 #  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 #  PURPOSE.
 
+if [[ $OPTION=="" ]]; then
+    export OPTION=std
+fi
+
 echo You may need to do the following first:
 echo sudo apt-get install libreadline-dev
 echo sudo apt-get install libwebkitgtk-dev 
 echo sudo apt-get install libpangox-1.0-0 zlib1g-dev libfreetype6-dev cmake
-echo sudo apt-get install libssl-dev
-echo sudo apt-get install uuid-dev
+echo sudo apt-get install libssl-dev  uuid-dev
 echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
 echo
 echo Set OPTION to std, currently OPTION=$OPTION
@@ -59,7 +65,7 @@ CentOS_5.11-x86_64-std)
   IMVER=3.6.3
   ;; 
 esac
-			   
+
 echo KTYPE=$KTYPE			  
 echo CDVER=$CDVER
 echo IUPVER=$IUPVER
@@ -175,7 +181,20 @@ if ! [[ -e $PREFIX/bin/sqlite3 ]]; then
 	    fi
 	fi
 fi
+
+
+
 cd $BUILDHOME
+for egg in "sqlite3" sql-de-lite # nanomsg
+do
+	echo "Installing $egg"
+	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib -L$PREFIX/lib64"  $CHICKEN_INSTALL $PROX -keep-installed $egg
+	#CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib -L$PREFIX/lib64"  $CHICKEN_INSTALL $PROX $egg
+	if [ $? -ne 0 ]; then
+		echo "$egg failed to install"
+		exit 1
+	fi
+done
 
 # Some eggs are quoted since they are reserved to Bash
 # for f in matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5; do
@@ -193,7 +212,7 @@ for egg in matchable readline apropos base64 regex-literals format "regex-case" 
 	locale-timezone loops low-level-macros procedural-macros refdb rfc3339 scsh-process \
 	sexp-diff sha1 shell slice srfi-101 srfi-19 srfi-19-core srfi-19-date srfi-19-io \
 	srfi-19-period srfi-19-support srfi-19-time srfi-19-timezone srfi-29 srfi-37 srfi-78 syslog \
-	udp uuid uuid-lib zlib 
+	udp uuid uuid-lib zlib
 
 do
 	echo "Installing $egg"
@@ -209,16 +228,6 @@ if [[ -e `which mysql_config` ]]; then
   $CHICKEN_INSTALL $PROX -keep-installed mysql-client
 fi
 
-for egg in "sqlite3" sql-de-lite # nanomsg
-do
-	echo "Installing $egg"
-	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib -L$PREFIX/lib64"  $CHICKEN_INSTALL $PROX -keep-installed $egg
-	#CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib -L$PREFIX/lib64"  $CHICKEN_INSTALL $PROX $egg
-	if [ $? -ne 0 ]; then
-		echo "$egg failed to install"
-		exit 1
-	fi
-done
 cd $BUILDHOME
 cd `$PREFIX/bin/csi -p '(chicken-home)'`
 curl http://3e8.org/pub/chicken-doc/chicken-doc-repo.tgz | tar zx
