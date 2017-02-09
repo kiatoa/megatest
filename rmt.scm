@@ -33,8 +33,9 @@
 ;; if a server is either running or in the process of starting call client:setup
 ;; else return #f to let the calling proc know that there is no server available
 ;;
-(define (rmt:get-connection-info areapath) ;; TODO: push areapath down.
-  (let ((cinfo (remote-conndat *runremote*))
+(define (rmt:get-connection-info areapath #!key (area-dat #f)) ;; TODO: push areapath down.
+  (let* ((runremote (or area-dat *runremote*))
+	 (cinfo     (remote-conndat runremote))
         (run-id 0))
     (if cinfo
 	cinfo
@@ -46,54 +47,55 @@
 
 ;; RA => e.g. usage (rmt:send-receive 'get-var #f (list varname))
 ;;
-(define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
+(define (rmt:send-receive cmd rid params #!key (attemptnum 1)(area-dat #f)) ;; start attemptnum at 1 so the modulo below works as expected
 
   ;; do all the prep locked under the rmt-mutex
   (mutex-lock! *rmt-mutex*)
 
-  ;; 1. check if server is started IFF cmd is a write OR if we are not on the homehost, store in *runremote*
+  ;; 1. check if server is started IFF cmd is a write OR if we are not on the homehost, store in runremote
   ;; 2. check the age of the connections. refresh the connection if it is older than timeout-20 seconds.
   ;; 3. do the query, if on homehost use local access
   ;;
-  (let* ((start-time (current-seconds))) ;; snapshot time so all use cases get same value
+  (let* ((start-time (current-seconds)) ;; snapshot time so all use cases get same value
+	 (runremote  (or area-dat *runremote*)))
     (cond
      ;; give up if more than 15 attempts
      ((> attemptnum 15)
       (debug:print 0 *default-log-port* "ERROR: 15 tries to start/connect to server. Giving up.")
       (exit 1))
      ;; reset the connection if it has been unused too long
-     ((and *runremote*
-           (remote-conndat *runremote*)
-	   (let ((expire-time (+ (- start-time (remote-server-timeout *runremote*))(random 30)))) ;; add 30 seconds of noise so that not all running tests expire at the same time causing a storm of server starts
-	     (< (http-transport:server-dat-get-last-access (remote-conndat *runremote*)) expire-time)))
+     ((and runremote
+           (remote-conndat runremote)
+	   (let ((expire-time (+ (- start-time (remote-server-timeout runremote))(random 30)))) ;; add 30 seconds of noise so that not all running tests expire at the same time causing a storm of server starts
+	     (< (http-transport:server-dat-get-last-access (remote-conndat runremote)) expire-time)))
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  8")
-      (remote-conndat-set! *runremote* #f)
+      (remote-conndat-set! runremote #f)
       (mutex-unlock! *rmt-mutex*)
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; ensure we have a record for our connection for given area
-     ((not *runremote*)                     
+     ((not runremote)                     
       (set! *runremote* (make-remote))
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  1")
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; ensure we have a homehost record
-     ((not (pair? (remote-hh-dat *runremote*)))  ;; not on homehost
+     ((not (pair? (remote-hh-dat runremote)))  ;; not on homehost
       (thread-sleep! 0.1) ;; since we shouldn't get here, delay a little
-      (remote-hh-dat-set! *runremote* (common:get-homehost))
+      (remote-hh-dat-set! runremote (common:get-homehost))
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  2")
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; on homehost and this is a read
-     ((and (cdr (remote-hh-dat *runremote*))   ;; on homehost
+     ((and (cdr (remote-hh-dat runremote))   ;; on homehost
            (member cmd api:read-only-queries)) ;; this is a read
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  3")
       (rmt:open-qry-close-locally cmd 0 params))
 
      ;; on homehost and this is a write, we already have a server, but server has died
-     ((and (cdr (remote-hh-dat *runremote*))         ;; on homehost
+     ((and (cdr (remote-hh-dat runremote))         ;; on homehost
            (not (member cmd api:read-only-queries))  ;; this is a write
-           (remote-server-url *runremote*)           ;; have a server
+           (remote-server-url runremote)           ;; have a server
            (not (server:check-if-running *toppath*)))  ;; server has died.
       (set! *runremote* (make-remote))
       (mutex-unlock! *rmt-mutex*)
@@ -101,35 +103,35 @@
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
 
      ;; on homehost and this is a write, we already have a server
-     ((and (cdr (remote-hh-dat *runremote*))         ;; on homehost
+     ((and (cdr (remote-hh-dat runremote))         ;; on homehost
            (not (member cmd api:read-only-queries))  ;; this is a write
-           (remote-server-url *runremote*))          ;; have a server
+           (remote-server-url runremote))          ;; have a server
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  4")
       (rmt:open-qry-close-locally cmd 0 params))
 
      ;;  on homehost, no server contact made and this is a write, passively start a server 
-     ((and (cdr (remote-hh-dat *runremote*)) ; new
-           (not (remote-server-url *runremote*))
+     ((and (cdr (remote-hh-dat runremote)) ; new
+           (not (remote-server-url runremote))
 	   (not (member cmd api:read-only-queries)))
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5")
       (let ((server-url  (server:check-if-running *toppath*))) ;; (server:read-dotserver->url *toppath*))) ;; (server:check-if-running *toppath*))) ;; Do NOT want to run server:check-if-running - very expensive to do for every write call
 	(if server-url
-	    (remote-server-url-set! *runremote* server-url) ;; the string can be consumed by the client setup if needed
+	    (remote-server-url-set! runremote server-url) ;; the string can be consumed by the client setup if needed
 	    (server:kind-run *toppath*)))
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5.1")
       (rmt:open-qry-close-locally cmd 0 params))
 
-     ((and (not (cdr (remote-hh-dat *runremote*)))        ;; not on a homehost 
-           (not (remote-conndat *runremote*)))            ;; and no connection
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  6  hh-dat: " (remote-hh-dat *runremote*) " conndat: " (remote-conndat *runremote*))
+     ((and (not (cdr (remote-hh-dat runremote)))        ;; not on a homehost 
+           (not (remote-conndat runremote)))            ;; and no connection
+      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  6  hh-dat: " (remote-hh-dat runremote) " conndat: " (remote-conndat runremote))
       (mutex-unlock! *rmt-mutex*)
       (server:start-and-wait *toppath*)
-      (remote-conndat-set! *runremote* (rmt:get-connection-info *toppath*)) ;; calls client:setup which calls client:setup-http
+      (remote-conndat-set! runremote (rmt:get-connection-info *toppath*)) ;; calls client:setup which calls client:setup-http
       (rmt:send-receive cmd rid params attemptnum: attemptnum)) ;; TODO: add back-off timeout as
      ;; all set up if get this far, dispatch the query
-     ((cdr (remote-hh-dat *runremote*)) ;; we are on homehost
+     ((cdr (remote-hh-dat runremote)) ;; we are on homehost
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  7")
       (rmt:open-qry-close-locally cmd (if rid rid 0) params))
@@ -139,33 +141,33 @@
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9")
       (mutex-lock! *rmt-mutex*)
-      (let* ((conninfo (remote-conndat *runremote*))
-	     (dat      (case (remote-transport *runremote*)
+      (let* ((conninfo (remote-conndat runremote))
+	     (dat      (case (remote-transport runremote)
 			 ((http) (condition-case ;; handling here has caused a lot of problems. However it is needed to deal with attemtped communication to servers that have gone away
                                   (http-transport:client-api-send-receive 0 conninfo cmd params)
                                   ((commfail)(vector #f "communications fail"))
                                   ((exn)(vector #f "other fail" (print-call-chain)))))
 			 (else
-			  (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " not supported")
+			  (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport runremote) " not supported")
 			  (exit))))
 	     (success  (if (vector? dat) (vector-ref dat 0) #f))
 	     (res      (if (vector? dat) (vector-ref dat 1) #f)))
 	(if (vector? conninfo)(http-transport:server-dat-update-last-access conninfo)) ;; refresh access time
 	;; (mutex-unlock! *rmt-mutex*)
-        (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat " *runremote* = "*runremote*)
+        (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat " runremote = "runremote)
 	(if success
-	    (case (remote-transport *runremote*)
+	    (case (remote-transport runremote)
 	      ((http)
 	       (mutex-unlock! *rmt-mutex*)
 	       res)
 	      (else
-	       (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport *runremote*) " is unknown")
+	       (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport runremote) " is unknown")
 	       (mutex-unlock! *rmt-mutex*)
 	       (exit 1)))
 	    (begin
 	      (debug:print 0 *default-log-port* "WARNING: communication failed. Trying again, try num: " attemptnum)
-	      (remote-conndat-set!    *runremote* #f)
-	      (remote-server-url-set! *runremote* #f)
+	      (remote-conndat-set!    runremote #f)
+	      (remote-server-url-set! runremote #f)
               (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
 	      (mutex-unlock! *rmt-mutex*)
 	      (server:start-and-wait *toppath*)
