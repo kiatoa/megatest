@@ -40,7 +40,7 @@ ARCHSTR=$(shell lsb_release -sr)
 
 PNGFILES = $(shell cd docs/manual;ls *png)
 
-all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard 
+all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut
 
 mtest: $(OFILES) readline-fix.scm megatest.o
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
@@ -50,6 +50,9 @@ dboard : $(OFILES) $(GOFILES) dashboard.scm
 
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
 	csc $(CSCOPTS) $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
+
+mtut: $(OFILES) readline-fix.scm mtut.o
+	csc $(CSCOPTS) $(OFILES) mtut.scm -o mtut
 
 # install documentation to $(PREFIX)/docs
 # DOES NOT REBUILD DOCS
@@ -102,6 +105,13 @@ $(PREFIX)/bin/.$(ARCHSTR)/ndboard : ndboard
 $(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard utils/mk_wrapper
 	utils/mk_wrapper $(PREFIX) ndboard $(PREFIX)/bin/newdashboard
 	chmod a+x $(PREFIX)/bin/newdashboard
+
+$(PREFIX)/bin/.$(ARCHSTR)/mtut : mtut
+	$(INSTALL) mtut $(PREFIX)/bin/.$(ARCHSTR)/mtut
+
+$(PREFIX)/bin/mtutil : $(PREFIX)/bin/.$(ARCHSTR)/mtut utils/mk_wrapper
+	utils/mk_wrapper $(PREFIX) mtut $(PREFIX)/bin/mtutil
+	chmod a+x $(PREFIX)/bin/mtutil
 
 #$(PREFIX)/bin/.$(ARCHSTR)/mdboard : multi-dboard
 #	$(INSTALL) multi-dboard $(PREFIX)/bin/.$(ARCHSTR)/mdboard
@@ -180,7 +190,7 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
 	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/viewscreen $(PREFIX)/bin/mt_xterm \
-	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun
+	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun $(PREFIX)/bin/mtutil
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)
