@@ -776,13 +776,12 @@ EOF
                                                                       (run-id (db:get-value-by-header run header "id"))
                                                                       (result (hash-table-ref/default run-test run-id "n/a"))
                                                                       (status (if (string? result)
-                                                                                 (begin 
-                                                                                  ; (print "string" result)
-                                                                                     result)
-                                                                                 (begin 
-                                                                                   ;  (print "not string" result )
-                                                                                 (car result)))))
-                                                                       (s:td  status 'class status)))
+										result
+										(car result)))
+                                                                        (link (if (string? result)
+										result
+										(s:a (car result) 'href (cadr result)))))
+                                                                       (s:td  link 'class status)))
                                                                 runs))))
                                                         res))
                                                    item-keys)))
