@@ -354,8 +354,14 @@ CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL $PROX -D no-libra
 
 cd $BUILDHOME  
 
+# install ducttape
+cd ../ducttape
+$CHICKEN_INSTALL
+
+cd $BUILDHOME
 echo You may need to add $LD_LIBRARY_PATH to your LD_LIBRARY_PATH variable, a setup-chicken4x.sh 
 echo file can be found in the current directory which should work for setting up to run chicken4x
+
 
 echo Testing iup
 $PREFIX/bin/csi -b -eval '(use iup)(print "Success")'
