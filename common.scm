@@ -752,7 +752,7 @@
 ;; (map print (map car (hash-table->alist (read-config "runconfigs.config" #f #t))))
 (define (common:get-runconfig-targets #!key (configf #f))
   (let ((targs       (sort (map car (hash-table->alist
-				     (or configf
+				     (or configf ;; NOTE: There is no value in using runconfig:read here.
 					 (read-config (conc *toppath* "/runconfigs.config")
 						      #f #t)
 					 (make-hash-table))))
