@@ -97,16 +97,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 (argv)
 		 (list  "-run"  ;; run a specific test
 			"-target"
-			"-runname"
+			"-run-name"
 			"-state"
 			"-status"
-			"-testpatt"
-                        "-modepatt"
-                        "-tagexpr"
-			"-itempatt"
+			"-test-patt" ;; idea, enhance margs ("-test-patt" "-testpatt") => yields one value in "-test-patt"
+                        "-mode-patt"
+                        "-tag-expr"
+			"-item-patt"
 			;; misc
 			"-start-dir"
-			"-setvars"
+			"-set-vars"
 			"-debug" ;; for *verbosity* > 2
 			"-load"        ;; load and exectute a scheme file
 			"-log"
