@@ -273,9 +273,10 @@
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
 		(let ((txtbox (iup:textbox #:action (lambda (val a b)
-						      (rmt:test-set-state-status-by-id run-id test-id #f #f b)
+						      ;; (rmt:test-set-state-status-by-id run-id test-id #f #f b)
+						      (rmt:test-set-state-status run-id test-id #f #f b)
 						      ;; IDEA: Just set a variable with the proc to call?
-						      (rmt:test-set-state-status-by-id run-id test-id #f #f b)
+						      ;; (rmt:test-set-state-status-by-id run-id test-id #f #f b)
 						      (set! newcomment b))
 					   #:value (db:test-get-comment testdat)
 					   #:expand "HORIZONTAL")))
@@ -289,7 +290,7 @@
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
 								    ;; (rmt:test-set-state-status-by-id run-id test-id state #f #f)
-								    (rmt:roll-up-pass-fail-counts run-id test-id #f state #f #f) ;; test-name passed in as test-id is respected
+								    (rmt:set-state-status-and-roll-up-items run-id test-id #f state #f #f) ;; test-name passed in as test-id is respected
 								    (db:test-set-state! testdat state)))))
 				    btn))
 				(map cadr *common:std-states*)))) ;; (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ"))))
@@ -323,7 +324,7 @@
 														  ))))
 									  (begin
 									    ;; (rmt:test-set-state-status-by-id run-id test-id #f status #f)
-									    (rmt:roll-up-pass-fail-counts run-id test-id #f #f status #f) ;; test-name passed in as test-id is respected
+									    (rmt:set-state-status-and-roll-up-items run-id test-id #f #f status #f) ;; test-name passed in as test-id is respected
 									    (db:test-set-status! testdat status))))))))
 				    btn))
 				(map cadr *common:std-statuses*)))) ;; (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
@@ -404,7 +405,8 @@
 					   (if (or (not wpatt)
 						   (string-match wregx comment))
 					       (begin
-						 (rmt:test-set-state-status-by-id run-id test-id #f "WAIVED" comment)
+						 ;; (rmt:test-set-state-status-by-id run-id test-id #f "WAIVED" comment)
+						 (rmt:test-set-state-status-by run-id test-id #f "WAIVED" comment)
 						 (db:test-set-status! testdat "WAIVED")
 						 (cmtcmd comment)
 						 (iup:destroy! dlog))))))
@@ -475,7 +477,7 @@
 				(runs:set-megatest-env-vars run-id inkeyvals: keydat inrunname: runname intarget: keystring testname: testname itempath: item-path) ;; these may be needed by the launching process
 				(handle-exceptions
 				 exn
-				 (tests:get-testconfig (db:test-get-testname testdat) test-registry #f)
+				 (tests:get-testconfig (db:test-get-testname testdat) (db:test-get-item-path testdat) test-registry #f)
 				 (tests:get-testconfig (db:test-get-testname testdat) test-registry #t))))
 	       (viewlog    (lambda (x)
 			     (if (file-exists? logfile)

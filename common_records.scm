@@ -123,6 +123,7 @@
 	      )))))
 
 ;; Brandon's debug printer shortcut (indulge me :)
+(define *BB-process-starttime* (current-milliseconds))
 (define (BB> . in-args)
   (let* ((stack (get-call-chain))
          (location #f))
@@ -133,8 +134,55 @@
          (if (equal? this-func "BB>")
              (set! location this-loc))))
      stack)
-    (let ((dp-args (append (list 0 *default-log-port* location"   "  ) in-args)))
+    (let ((dp-args (append (list 0 *default-log-port* (conc location "@"(/ (- (current-milliseconds) *BB-process-starttime*) 1000)"   ")  ) in-args)))
       (apply debug:print dp-args))))
+
+(define *BBpp_custom_expanders_list* (make-hash-table))
+
+
+
+;; register hash tables with BBpp.
+(hash-table-set! *BBpp_custom_expanders_list* HASH_TABLE:
+                 (cons hash-table? hash-table->alist))
+
+;; test name converter
+(define (BBpp_custom_converter arg)
+  (let ((res #f))
+    (for-each
+     (lambda (custom-type-name)
+       (let* ((custom-type-info      (hash-table-ref *BBpp_custom_expanders_list* custom-type-name))
+              (custom-type-test      (car custom-type-info))
+              (custom-type-converter (cdr custom-type-info)))
+         (when (and (not res) (custom-type-test arg))
+           (set! res (custom-type-converter arg)))))
+     (hash-table-keys *BBpp_custom_expanders_list*))
+    (if res (BBpp_ res) arg)))
+
+(define (BBpp_ arg)
+  (cond
+   ;;((SOMESTRUCT? arg) (cons SOMESTRUCT: (SOMESTRUCT->alist arg)))
+   ;;((dboard:tabdat? arg) (cons dboard:tabdat: (dboard:tabdat->alist arg)))
+   ((hash-table? arg)
+    (let ((al (hash-table->alist arg)))
+      (BBpp_ (cons HASH_TABLE: al))))
+   ((null? arg) '())
+   ;;((list? arg) (cons (BBpp_ (car arg)) (BBpp_ (cdr arg))))
+   ((pair? arg) (cons (BBpp_ (car arg)) (BBpp_ (cdr arg))))
+   (else (BBpp_custom_converter arg))))
+
+;; Brandon's pretty printer.  It expands hashes and custom types in addition to regular pp
+(define (BBpp arg)
+  (pp (BBpp_ arg)))
+
+;(use define-macro)
+(define-syntax inspect
+  (syntax-rules ()
+    [(_ x)
+    ;; (with-output-to-port (current-error-port)
+       (printf "~a is: ~a\n" 'x (with-output-to-string (lambda () (BBpp x))))
+     ;;  )
+     ]
+    [(_ x y ...) (begin (inspect x) (inspect y ...))]))
 
 (define (debug:print-error n e . params)
   ;; normal print

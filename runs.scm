@@ -930,7 +930,7 @@
 		      (hash-table-set! test-registry hed 'removed)
 		      (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "TEN_STRIKES" #f)
 		      ;; I'm unclear on if this roll up is needed - it may be the root cause of the "all set to FAIL" bug.
-		      (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "FAIL" #f) ;; treat as FAIL
+		      (rmt:set-state-status-and-roll-up-items run-id test-name item-path #f "FAIL" #f) ;; treat as FAIL
 		      (list (if (null? tal)(car newtal)(car tal))
 			    tal
 			    reg
@@ -1675,6 +1675,7 @@
 		    ;; seek and kill in flight -runtests with % as testpatt here
 		    ;; (if (equal? testpatt "%")
 		    (tasks:kill-runner target run-name testpatt)
+		    
 		    ;; (debug:print 0 *default-log-port* "not attempting to kill any run launcher processes as testpatt is " testpatt))
 		    (debug:print 1 *default-log-port* "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((set-state-status)
@@ -1960,6 +1961,19 @@
 	       (print "Updating " test-name " " fld " to " val)
 	       (rmt:testmeta-update-field test-name fld val)))))
      '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9)("jobgroup" 10)))))
+
+;; find tests with matching tags, tagpatt is a string "tagpatt1,tagpatt2%, ..."
+;;
+(define (runs:get-tests-matching-tags tagpatt)
+  (let* ((tagdata (rmt:get-tests-tags))
+         (res     '())) ;; list of tests that match one or more tags
+    (for-each
+     (lambda (tag)
+       (if (patt-list-match tag tagpatt)
+           (set! res (append (hash-table-ref tagdata tag)))))
+     (hash-table-keys tagdata))
+    res))
+    
 
 ;; Update test_meta for all tests
 (define (runs:update-all-test_meta db)

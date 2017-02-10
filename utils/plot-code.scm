@@ -10,13 +10,15 @@
 (use regex srfi-69 srfi-13)
 
 (define targs #f) 
-(define files (cddddr (argv)))
+(define files (cdr (cddddr (argv))))
 
 (let ((targdat (cadddr (argv))))
   (if (equal? targdat "-")
       (set! targs files)
       (set! targs (string-split targdat ","))))
 
+(define function-patt (car (cdr (cdddr (argv)))))
+(define function-rx   (regexp function-patt))
 (define filedat-defns (make-hash-table))
 (define filedat-usages (make-hash-table))
 
@@ -34,6 +36,7 @@
 
 (print-err "Making graph for files: " (string-intersperse targs ", "))
 (print-err "Looking at files: " (string-intersperse files ", "))
+(print-err "Function regex: " function-patt)
 
 ;; Gather the functions
 ;;
@@ -48,12 +51,14 @@
 	       (if match 
 		   (let ((fnname (cadr match)))
 		     ;; (print "   " fnname)
-		     (set! all-fns (cons fnname all-fns))
-		     (hash-table-set! 
-		      filedat-defns 
-		      fname
-		      (cons fnname (hash-table-ref/default filedat-defns fname '())))
-		     ))
+		     (if (string-match function-rx fnname)
+			 (begin
+			   (set! all-fns (cons fnname all-fns)))
+			 (hash-table-set! 
+			  filedat-defns 
+			  fname
+			  (cons fnname (hash-table-ref/default filedat-defns fname '())))
+			 )))
 	       (loop (read-line))))))))
  files)
 

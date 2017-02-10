@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack)
 (require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -92,15 +92,17 @@
 (define *db-last-access*      (current-seconds)) ;; last db access, used in server
 (define *db-write-access*     #t)
 ;; db sync
-(define *db-last-write*       0)                 ;; used to record last touch of db
 (define *db-last-sync*        0)                 ;; last time the sync to megatest.db happened
 (define *db-sync-in-progress* #f)                ;; if there is a sync in progress do not try to start another
-(define *db-multi-sync-mutex* (make-mutex))      ;; protect access to *db-sync-in-progress*, *db-last-sync* and *db-last-write*
+(define *db-multi-sync-mutex* (make-mutex))      ;; protect access to *db-sync-in-progress*, *db-last-sync*
 ;; task db
 (define *task-db*             #f) ;; (vector db path-to-db)
 (define *db-access-allowed*   #t) ;; flag to allow access
 (define *db-access-mutex*     (make-mutex))
+(define *db-transaction-mutex* (make-mutex))
 (define *db-cache-path*       #f)
+(define *db-with-db-mutex*    (make-mutex))
+(define *db-api-call-time*    (make-hash-table)) ;; hash of command => (list of times)
 
 ;; SERVER
 (define *my-client-signature* #f)
@@ -117,6 +119,8 @@
 (define *home-host*         #f)
 (define *total-non-write-delay* 0)
 (define *heartbeat-mutex*   (make-mutex))
+(define *api-process-request-count* 0)
+(define *max-api-process-requests* 0)
 
 ;; client
 (define *rmt-mutex*         (make-mutex))     ;; remote access calls mutex 
@@ -136,6 +140,14 @@
 (define *run-info-cache*     (make-hash-table)) ;; run info is stable, no need to reget
 (define *launch-setup-mutex* (make-mutex))     ;; need to be able to call launch:setup often so mutex it and re-call the real deal only if *toppath* not set
 (define *homehost-mutex*     (make-mutex))
+
+(defstruct remote
+  (hh-dat            (common:get-homehost)) ;; homehost record ( addr . hhflag )
+  (server-url        (if *toppath* (server:check-if-running *toppath*))) ;; (server:check-if-running *toppath*) #f))
+  (last-server-check 0)  ;; last time we checked to see if the server was alive
+  (conndat           #f)
+  (transport         *transport-type*)
+  (server-timeout    (or (server:get-timeout) 100))) ;; default to 100 seconds
 
 ;; launching and hosts
 (defstruct host
@@ -232,15 +244,28 @@
   (if (not (directory-exists? "logs"))(create-directory "logs"))
   (directory-fold 
    (lambda (file rem)
-     (if (and (string-match "^.*.log" file)
-	      (> (file-size (conc "logs/" file)) 200000))
-	 (let ((gzfile (conc "logs/" file ".gz")))
-	   (if (file-exists? gzfile)
-	       (begin
-		 (debug:print-info 0 *default-log-port* "removing " gzfile)
-		 (delete-file gzfile)))
-	   (debug:print-info 0 *default-log-port* "compressing " file)
-	   (system (conc "gzip logs/" file)))))
+     (handle-exceptions
+      exn
+      (debug:print-info 0 *default-log-port* "failed to rotate log " file ", probably handled by another process.")
+      (let* ((fullname (conc "logs/" file))
+             (file-age (- (current-seconds)(file-modification-time fullname))))
+        (if (or (and (string-match "^.*.log" file)
+                     (> (file-size fullname) 200000))
+                (and (string-match "^server-.*.log" file)
+                     (> (- (current-seconds) (file-modification-time fullname))
+                        (* 8 60 60))))
+            (let ((gzfile (conc fullname ".gz")))
+              (if (file-exists? gzfile)
+                  (begin
+                    (debug:print-info 0 *default-log-port* "removing " gzfile)
+                    (delete-file gzfile)))
+              (debug:print-info 0 *default-log-port* "compressing " file)
+              (system (conc "gzip " fullname)))
+            (if (> file-age (* (string->number (or (configf:lookup *configdat* "setup" "log-expire-days") "30")) 24 3600))
+                (handle-exceptions
+                 exn
+                 #f
+                 (delete-file fullname)))))))
    '()
    "logs"))
 
@@ -533,11 +558,13 @@
 ;;======================================================================
 
 (define (common:run-sync?)
-  (let ((ohh (common:on-homehost?))
-	(srv (args:get-arg "-server")))
-    ;; (debug:print-info 0 *default-log-port* "common:run-sync? ohh=" ohh ", srv=" srv)
     (and (common:on-homehost?)
-	 (args:get-arg "-server"))))
+	 (args:get-arg "-server")))
+
+;;   (let ((ohh (common:on-homehost?))
+;; 	(srv (args:get-arg "-server")))
+;;     (and ohh srv)))
+    ;; (debug:print-info 0 *default-log-port* "common:run-sync? ohh=" ohh ", srv=" srv)
 
 ;;;; run-ids
 ;;    if #f use *db-local-sync* : or 'local-sync-flags
@@ -546,11 +573,16 @@
   (let ((start-time         (current-seconds))
 	(res                (db:multi-db-sync dbstruct 'new2old)))
     (let ((sync-time (- (current-seconds) start-time)))
-      (debug:print-info 3 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds")
+      (debug:print-info 3 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))
       (if (common:low-noise-print 30 "sync new to old")
-	  (debug:print-info 0 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds")))
+	  (debug:print-info 0 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))))
     res))
 
+
+
+
+(define *wdnum* 0)
+(define *wdnum*mutex (make-mutex))
 ;; currently the primary job of the watchdog is to run the sync back to megatest.db from the db in /tmp
 ;; if we are on the homehost and we are a server (by definition we are on the homehost if we are a server)
 ;;
@@ -558,21 +590,29 @@
   (thread-sleep! 0.05) ;; delay for startup
   (let ((legacy-sync (common:run-sync?))
 	(debug-mode  (debug:debug-mode 1))
-	(last-time   (current-seconds)))
-    (debug:print-info 0 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync)
-    (if legacy-sync
-	(let ((dbstruct (db:setup)))
+	(last-time   (current-seconds))
+        (this-wd-num     (begin (mutex-lock! *wdnum*mutex) (let ((x *wdnum*)) (set! *wdnum* (add1 *wdnum*)) (mutex-unlock! *wdnum*mutex) x))))
+    (debug:print-info 3 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id)" this-wd-num="this-wd-num)
+    (if (and legacy-sync (not *time-to-exit*))
+	(let* ((dbstruct (db:setup))
+	       (mtdb     (dbr:dbstruct-mtdb dbstruct))
+	       (mtpath   (db:dbdat-get-path mtdb)))
 	  (debug:print-info 0 *default-log-port* "Server running, periodic sync started.")
 	  (let loop ()
 	    ;; sync for filesystem local db writes
 	    ;;
 	    (mutex-lock! *db-multi-sync-mutex*)
-	    (let* ((need-sync        (>= *db-last-write* *db-last-sync*)) ;; no sync since last write
+	    (let* ((need-sync        (>= *db-last-access* *db-last-sync*)) ;; no sync since last write
 		   (sync-in-progress *db-sync-in-progress*)
-		   (should-sync      (> (- (current-seconds) *db-last-sync*) 5)) ;; sync every five seconds minimum
+		   (should-sync      (and (not *time-to-exit*)
+                                          (> (- (current-seconds) *db-last-sync*) 5))) ;; sync every five seconds minimum
+		   (start-time       (current-seconds))
+		   (mt-mod-time      (file-modification-time mtpath))
+		   (recently-synced  (> (- start-time mt-mod-time) 4))
 		   (will-sync        (and (or need-sync should-sync)
-					  (not sync-in-progress)))
-		   (start-time       (current-seconds)))
+					  (not sync-in-progress)
+					  (not recently-synced))))
+	      ;; (if recently-synced (debug:print-info 0 *default-log-port* "Skipping sync due to recently-synced flag=" recently-synced))
 	      ;; (debug:print-info 0 *default-log-port* "need-sync: " need-sync " sync-in-progress: " sync-in-progress " should-sync: " should-sync " will-sync: " will-sync)
 	      (if will-sync (set! *db-sync-in-progress* #t))
 	      (mutex-unlock! *db-multi-sync-mutex*)
@@ -601,16 +641,20 @@
 	    ;;
 	    (if (not *time-to-exit*)
 		(let delay-loop ((count 0))
+                  ;;(BB> "delay-loop top; count="count" pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
+                                                            
 		  (if (and (not *time-to-exit*)
 			   (< count 4)) ;; was 11, changing to 4. 
 		      (begin
 			(thread-sleep! 1)
 			(delay-loop (+ count 1))))
-		  (loop)))
+		  (if (not *time-to-exit*) (loop))))
 	    (if (common:low-noise-print 30)
-		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*)))))))
+		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" this-wd-num="this-wd-num)))))))
 
 (define (std-exit-procedure)
+  (on-exit (lambda () 0))
+  ;;(BB> "std-exit-procedure called; *time-to-exit*="*time-to-exit*)
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
 		       #f
 		       (begin
@@ -620,7 +664,7 @@
     (if (and no-hurry (debug:debug-mode 18))
 	(rmt:print-db-stats))
     (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
-			      (if *dbstruct-db* (db:close-all *dbstruct-db*)) ;; one second allocated
+                              (if *dbstruct-db* (db:close-all *dbstruct-db*)) ;; one second allocated
 			      (if *task-db*    
 				  (let ((db (cdr *task-db*)))
 				    (if (sqlite3:database? db)
@@ -629,23 +673,35 @@
 					  (sqlite3:finalize! db #t)
 					  ;; (vector-set! *task-db* 0 #f)
 					  (set! *task-db* #f)))))
-			      (close-output-port *default-log-port*)
+                              (if (and *runremote*
+                                       (remote-conndat *runremote*))
+                                  (begin
+                                    (http-client#close-all-connections!))) ;; for http-client
+                              (if (not (eq? *default-log-port* (current-error-port)))
+                                  (close-output-port *default-log-port*))
 			      (set! *default-log-port* (current-error-port))) "Cleanup db exit thread"))
 	  (th2 (make-thread (lambda ()
 			      (debug:print 4 *default-log-port* "Attempting clean exit. Please be patient and wait a few seconds...")
 			      (if no-hurry
-				  (thread-sleep! 5) ;; give the clean up few seconds to do it's stuff
-				  (thread-sleep! 2))
-			      (debug:print 4 *default-log-port* " ... done")
-			      )
+                                  (begin
+                                    (thread-sleep! 5)) ;; give the clean up few seconds to do it's stuff
+                                  (begin
+      				  (thread-sleep! 2)))
+      			      (debug:print 4 *default-log-port* " ... done")
+      			      )
 			    "clean exit")))
       (thread-start! th1)
       (thread-start! th2)
-      (thread-join! th1))))
+      (thread-join! th1)
+      )
+    )
+
+  0)
 
 (define (std-signal-handler signum)
   ;; (signal-mask! signum)
   (set! *time-to-exit* #t)
+  ;;(BB> "got signal "signum)
   (debug:print-error 0 *default-log-port* "Received signal " signum " exiting promptly")
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))
@@ -781,16 +837,20 @@
   (or (args:get-arg "-status")(args:get-arg ":status")))
 
 (define (common:args-get-testpatt rconf)
-  (let* ((rtestpatt     (if rconf (runconfigs-get rconf "TESTPATT") #f))
-	 (args-testpatt (or (args:get-arg "-testpatt")
-			    (args:get-arg "-runtests")
-			    "%"))
-	 (testpatt    (or (and (equal? args-testpatt "%")
-			       rtestpatt)
-			  args-testpatt)))
-    (if rtestpatt (debug:print-info 0 *default-log-port* "TESTPATT from runconfigs: " rtestpatt))
-    testpatt))
-
+  (let* ((tagexpr (args:get-arg "-tagexpr"))
+         (tags-testpatt (if tagexpr (string-join (runs:get-tests-matching-tags tagexpr) ",") #f))
+         (testpatt-key  (if (args:get-arg "--modepatt") (args:get-arg "--modepatt") "TESTPATT"))
+         (args-testpatt (or (args:get-arg "-testpatt") (args:get-arg "-runtests") "%"))
+         (rtestpatt     (if rconf (runconfigs-get rconf testpatt-key) #f)))
+    (cond
+     (tags-testpatt
+      (debug:print-info 0 *default-log-port* "-tagexpr "tagexpr" selects testpatt "tags-testpatt)
+      tags-testpatt)
+     ((and (equal? args-testpatt "%") rtestpatt)
+      (debug:print-info 0 *default-log-port* "testpatt defined in "testpatt-key" from runconfigs: " rtestpatt)
+      rtestpatt)
+     (else args-testpatt))))
+     
 (define (common:get-linktree)
   (or (getenv "MT_LINKTREE")
       (if *configdat*
@@ -924,6 +984,16 @@
 	    (car lst)
 	    lst)))
 
+;; get min or max, use > for max and < for min, this works around the limits on apply
+;;
+(define (common:sum lst)
+  (if (null? lst)
+      0
+      (fold (lambda (a b)
+	      (+ a b))
+	    (car lst)
+	    lst)))
+
 ;; path list to hash-table tree
 ;;   ((a b c)(a b d)(e b c)) => ((a (b (d) (c))) (e (b (c))))
 ;;
@@ -1036,6 +1106,20 @@
    0
    (file-modification-time fpath)))
 
+;; find timestamp of newest file associated with a sqlite db file
+(define (common:lazy-sqlite-db-modification-time fpath)
+  (let* ((glob-list (handle-exceptions
+                    exn
+                    '("/no/such/file")
+                    (glob (conc fpath "*"))))
+         (file-list (if (eq? 0 (length glob-list))
+                        '("/no/such/file")
+                        glob-list)))
+  (apply max
+   (map
+    common:lazy-modification-time 
+    file-list))))
+
 ;; return a nice clean pathname made absolute
 (define (common:nice-path dir)
   (let ((match (string-match "^(~[^\\/]*)(\\/.*|)$" dir)))
@@ -1086,7 +1170,8 @@
 	(lambda ()(list (read)(read)(read))))))
 
 ;; get normalized cpu load by reading from /proc/loadavg and /proc/cpuinfo return all three values and the number of real cpus and the number of threads
-;; returns list (normalized-proc-load normalized-core-load 1m 5m 15m ncores nthreads)
+;; returns alist '((adj-cpu-load . normalized-proc-load) ... etc.
+;;  keys: adj-proc-load, adj-core-load, 1m-load, 5m-load, 15m-load
 ;;
 (define (common:get-normalized-cpu-load remote-host)
   (let ((data (if remote-host
@@ -1145,47 +1230,85 @@
 
 ;; ideally put all this info into the db, no need to preserve it across moving homehost
 ;;
-(define (common:get-least-loaded-host hosts-raw)
+;; return list of
+;;  ( reachable? cpuload update-time )
+(define (common:get-host-info hostname)
+  (let* ((loadinfo (rmt:get-latest-host-load hostname))
+         (load (car loadinfo))
+         (load-sample-time (cdr loadinfo))
+         (load-sample-age (- (current-seconds) load-sample-time))
+         (loadinfo-timeout-seconds 20)
+         (host-last-update-timeout-seconds 10)
+         (host-rec (hash-table-ref/default *host-loads* hostname #f))
+         )
+    (cond
+     ((< load-sample-age loadinfo-timeout-seconds)
+      (list #t
+            load-sample-time
+            load))
+     ((and host-rec
+           (< (current-seconds) (+ (host-last-update host-rec) host-last-update-timeout-seconds)))
+      (list #t
+            (host-last-update host-rec)
+            (host-last-cpuload host-rec )))
+     ((common:unix-ping hostname)
+      (list #t
+            (current-seconds)
+            (alist-ref 'adj-core-load (common:get-normalized-cpu-load hostname))))
+     (else
+      (list #f 0 -1)))))
+    
+(define (common:update-host-loads-table hosts-raw)
   (let* ((hosts (filter (lambda (x)
                           (string-match (regexp "^\\S+$") x))
                         hosts-raw)))
-    (if (null? hosts)
-        #f
-        ;;
-        ;; stategy:
-        ;;    sort by last-used and normalized-load
-        ;;    if last-updated > 15 seconds then re-update
-        ;;    take the host with the lowest load with the lowest last-used (i.e. not used for longest time)
-        ;;
-        (let ((best-host #f)
-              (curr-time (current-seconds)))
-          (for-each
-           (lambda (hostname)
-             (let* ((rec       (let ((h (hash-table-ref/default *host-loads* hostname #f)))
-                                 (if h
-                                     h
-                                     (let ((h (make-host)))
-                                       (hash-table-set! *host-loads* hostname h)
-                                       h))))
-                    ;; if host hasn't been pinged in 15 sec update it's data
-                    (ping-good (if (< (- curr-time (host-last-update rec)) 15)
-                                   (host-reachable rec)
-                                   (or (host-reachable rec)
-                                       (begin
-                                         (host-reachable-set! rec (common:unix-ping hostname))
-                                         (host-last-update-set! rec curr-time)
-                                         (host-last-cpuload-set! rec (common:get-normalized-cpu-load hostname))
-                                         (host-reachable rec))))))
-               (cond
-                ((not best-host)
-                 (set! best-host hostname))
-                ((and ping-good
-                      (< (alist-ref 'adj-core-load (host-last-cpuload rec))
-                         (alist-ref 'adj-core-load
-                                    (host-last-cpuload (hash-table-ref *host-loads* best-host)))))
-                 (set! best-host hostname)))))
-           hosts)
-          best-host))))
+    (for-each
+     (lambda (hostname)
+       (let* ((rec       (let ((h (hash-table-ref/default *host-loads* hostname #f)))
+                          (if h
+                              h
+                              (let ((h (make-host)))
+                                (hash-table-set! *host-loads* hostname h)
+                                h))))
+              (host-info         (common:get-host-info hostname))
+              (is-reachable      (car host-info))
+              (last-reached-time (cadr host-info))
+              (load              (caddr host-info)))
+         (host-reachable-set!    rec is-reachable)
+         (host-last-update-set!  rec last-reached-time)
+         (host-last-cpuload-set! rec load)))
+     hosts)))
+
+(define (common:get-least-loaded-host hosts-raw)
+  (let* ((hosts (filter (lambda (x)
+                          (string-match (regexp "^\\S+$") x))
+                        hosts-raw))
+         (best-host #f)
+         (best-load 99999)
+         (curr-time (current-seconds)))
+    (common:update-host-loads-table hosts)
+    (for-each
+     (lambda (hostname)
+       (let* ((rec
+               (let ((h (hash-table-ref/default *host-loads* hostname #f)))
+                 (if h
+                     h
+                     (let ((h (make-host)))
+                       (hash-table-set! *host-loads* hostname h)
+                       h))))
+              (reachable (host-reachable rec))
+              (load      (host-last-cpuload   rec)))
+         (cond
+          ((not reachable) #f)
+          ((< (+ load (/ (random 250) 1000))         ;; add a random factor to keep from getting in a rut
+              (+ best-load (/ (random 250) 1000))  )
+           (set! best-load load)
+           (set! best-host hostname)))))
+     hosts)
+    best-host))
+
+
+
 
 (define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
   (let* ((loadavg (common:get-cpu-load remote-host))

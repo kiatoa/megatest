@@ -12,7 +12,7 @@ SRCFILES = common.scm items.scm launch.scm \
    client.scm synchash.scm daemon.scm mt.scm \
    ezsteps.scm lock-queue.scm sdb.scm \
    rmt.scm api.scm tdb.scm rpc-transport.scm \
-   portlogger.scm archive.scm env.scm
+   portlogger.scm archive.scm env.scm diff-report.scm
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
@@ -166,6 +166,11 @@ deploytarg/nbfind : utils/nbfind
 	$(INSTALL) $< $@
 	chmod a+x $@
 
+$(PREFIX)/bin/mtest-reaper: helpers/mtest-reaper.scm helpers/ducttape-lib.scm helpers/inteldate.scm helpers/mimetypes.scm
+	make -C helpers $@ PREFIX=$(PREFIX) INSTALL=$(INSTALL) ARCHSTR=$(ARCHSTR)
+
+mtest-reaper: $(PREFIX)/bin/mtest-reaper
+
 # install dashboard as dboard so wrapper script can be called dashboard
 $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 	utils/mk_wrapper $(PREFIX) dboard $(PREFIX)/bin/dashboard
@@ -179,6 +184,7 @@ install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bi
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)
+	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)/lib
 
 test: tests/tests.scm
 	cd tests;csi -I .. -b -n tests.scm
@@ -284,3 +290,4 @@ altdb.scm :
 
 portlogger-example : portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
 	csc $(CSCOPTS) portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
+

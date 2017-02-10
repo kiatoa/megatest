@@ -45,6 +45,7 @@
 (declare (uses api))
 (declare (uses tasks)) ;; only used for debugging.
 (declare (uses env))
+(declare (uses diff-report))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -69,6 +70,7 @@ Megatest, documentation at http://www.kiatoa.com/fossils/megatest
 
 Usage: megatest [options]
   -h                      : this help
+  -manual                 : show the Megatest user manual
   -version                : print megatest version (currently " megatest-version ")
 
 Launching and managing runs
@@ -95,6 +97,8 @@ Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs e
   -runname                : required, name for this particular test run
   -state                  : Applies to runs, tests or steps depending on context
   -status                 : Applies to runs, tests or steps depending on context
+  --modepatt key          : load testpatt from <key> in runconfigs instead of default TESTPATT if -testpatt and -tagexpr are not specified
+  -tagexpr tag1,tag2%,..  : select tests with tags matching expression
 
 Test helpers (for use inside tests)
   -step stepname
@@ -174,6 +178,14 @@ Utilities
                             cmd: keep-html, restore, save, save-remove
   -generate-html          : create a simple html tree for browsing your runs
 
+Diff report
+  -diff-rep               : generate diff report (must include -src-target, -src-runname, -target, -runname
+                                                  and either -diff-email or -diff-html)
+  -src-target <target>
+  -src-runname <target>
+  -diff-email <emails>    : comma separated list of email addresses to send diff report
+  -diff-html  <rep.html>  : path to html file to generate
+
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
   -pathmod path           : insert path, i.e. path/runame/itempath/logfile.html
@@ -211,7 +223,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			":status"
 			"-status"
 			"-list-runs"
-			"-testpatt" 
+			"-testpatt"
+                        "--modepatt"
+                        "-tagexpr"
 			"-itempatt"
 			"-setlog"
 			"-set-toplog"
@@ -264,6 +278,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-sort"
 			"-target-db"
 			"-source-db"
+
+                        "-src-target"
+                        "-src-runname"
+                        "-diff-email"
+                        "-diff-html"
 			)
  		 (list  "-h" "-help" "--help"
 			"-manual"
@@ -323,7 +342,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
-		       )
+
+                        "-diff-rep"
+                        )
 		 args:arg-hash
 		 0))
 
@@ -347,11 +368,30 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (define *watchdog* (make-thread common:watchdog "Watchdog thread"))
 
-(thread-start! *watchdog*)
+(if (not (args:get-arg "-server"))
+    (thread-start! *watchdog*)) ;; if starting a server; wait till we get to running state before kicking off watchdog
 
-(if (args:get-arg "-log")
-    (let ((oup (open-output-file (args:get-arg "-log"))))
-      (debug:print-info 0 *default-log-port* "Sending log output to " (args:get-arg "-log"))
+;; bracket open-output-file with code to make leading directory if it does not exist and handle exceptions
+(define (open-logfile logpath)
+  (condition-case
+   (let* ((log-dir (or (pathname-directory logpath) ".")))
+     (if (not (directory-exists? log-dir))
+         (system (conc "mkdir -p " log-dir)))
+     (open-output-file logpath))
+   (exn ()
+        (debug:print-error 0 *default-log-port* "Could not open log file for write: "logpath)
+        (define *didsomething* #t)  
+        (exit 1))))
+
+    
+(if (or (args:get-arg "-log")(args:get-arg "-server")) ;; redirect the log always when a server
+    (let* ((tl   (or (args:get-arg "-log")(launch:setup)))   ;; run launch:setup if -server
+	   (logf (or (args:get-arg "-log") ;; use -log unless we are a server, then craft a logfile name
+		     (conc tl "/logs/server-" (current-process-id) "-" (get-host-name) ".log")))
+	   (oup  (open-logfile logf)))
+      (if (not (args:get-arg "-log"))
+	  (hash-table-set! args:arg-hash "-log" logf)) ;; fake out future queries of -log
+      (debug:print-info 0 *default-log-port* "Sending log output to " logf)
       (set! *default-log-port* oup)))
 
 (if (or (args:get-arg "-h")
@@ -694,46 +734,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;   we start the server if not running else start the client thread
 ;;======================================================================
 
+;; Server? Start up here.
+;;
 (if (args:get-arg "-server")
-
-    ;; Server? Start up here.
-    ;;
     (let ((tl        (launch:setup))
-	;; (run-id    (and (args:get-arg "-run-id")
-	;; 		  (string->number (args:get-arg "-run-id"))))
           (transport-type (string->symbol (or (args:get-arg "-transport") "http"))))
-      ;; (if run-id
-      ;;   (begin
       (server:launch 0 transport-type)
       (set! *didsomething* #t)))
-;;     ;; (debug:print-error 0 *default-log-port* "server requires run-id be specified with -run-id")))
-;; 
-;;     ;; Not a server? This section will decide how to communicate
-;;     ;;
-;;     ;;  Setup client for all expect listed here
-;;     (if (null? (lset-intersection 
-;; 		equal?
-;; 		(hash-table-keys args:arg-hash)
-;; 		'("-list-servers"
-;; 		  "-stop-server"
-;;                   "-kill-server"
-;; 		  "-show-cmdinfo"
-;; 		  "-list-runs"
-;; 		  "-ping")))
-;; 	(if (launch:setup)
-;; 	    (let ((run-id    (and (args:get-arg "-run-id")
-;; 				  (string->number (args:get-arg "-run-id")))))
-;; 	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
-;; 	      ;; if not list or kill then start a client (if appropriate)
-;; 	      (if (or (args-defined? "-h" "-version" "-create-megatest-area" "-create-test")
-;; 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
-;; 		  (debug:print-info 1 *default-log-port* "Server connection not needed")
-;; 		  (begin
-;; 		    ;; (if run-id 
-;; 		    ;;     (client:launch run-id) 
-;; 		    ;;     (client:launch 0)      ;; without run-id we'll start a server for "0"
-;; 		    #t
-;; 		    ))))))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server")
@@ -1853,9 +1860,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
-      ;; now can find our db
-      ;; keep this one local
-      (open-run-close runs:update-all-test_meta #f)
+      (runs:update-all-test_meta #f)
       (set! *didsomething* #t)))
 
 ;;======================================================================
@@ -1864,6 +1869,26 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; fakeout readline
 (include "readline-fix.scm")
+
+
+(when (args:get-arg "-diff-rep")
+  (when (and
+         (not (args:get-arg "-diff-html"))
+         (not (args:get-arg "-diff-email")))
+    (debug:print 0 *default-log-port* "Must specify -diff-html or -diff-email with -diff-rep")
+    (set! *didsomething* 1)
+    (exit 1))
+  
+  (let* ((toppath (launch:setup)))
+    (do-diff-report
+     (args:get-arg "-src-target")
+     (args:get-arg "-src-runname")
+     (args:get-arg "-target")
+     (args:get-arg "-runname")
+     (args:get-arg "-diff-html")
+     (args:get-arg "-diff-email"))
+    (set! *didsomething* #t)
+    (exit 0)))
 
 (if (or (getenv "MT_RUNSCRIPT")
 	(args:get-arg "-repl")
@@ -1980,7 +2005,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-generate-html")
     (let* ((toppath (launch:setup)))
       (if (tests:create-html-tree #f)
-          (debug:print-info 0 *default-log-port* "HTML output created in " toppath "/lt/runs-index.html")
+          (debug:print-info 0 *default-log-port* "HTML output created in " toppath "/lt/page#.html")
           (debug:print 0 *default-log-port* "Failed to create HTML output in " toppath "/lt/runs-index.html"))
       (set! *didsomething* #t)))
 
@@ -1988,13 +2013,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Exit and clean up
 ;;======================================================================
 
-(if *runremote* (close-all-connections!)) ;; for http-client
-
 (if (not *didsomething*)
     (debug:print 0 *default-log-port* help))
+;;(BB> "thread-join! watchdog")
+
+;; join the watchdog thread if it has been thread-start!ed  (it may not have been started in the case of a server that never enters running state)
+;;   (symbols returned by thread-state: created ready running blocked suspended sleeping terminated dead)
+(if (thread? *watchdog*)
+    (case (thread-state *watchdog*)
+      ((ready running blocked sleeping terminated dead)
+       (thread-join! *watchdog*))))
 
 (set! *time-to-exit* #t)
-(thread-join! *watchdog*)
 
 (if (not (eq? *globalexitstatus* 0))
     (if (or (args:get-arg "-run")(args:get-arg "-runtests")(args:get-arg "-runall"))

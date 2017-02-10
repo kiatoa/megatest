@@ -66,14 +66,15 @@
     (if (file-exists? cname)
 	(let* ((dat  (read-config cname #f #f))
 	       (csvr (db:logpro-dat->csv dat stepname))
-	       (csvt (let-values (( (fmt-cell fmt-record fmt-csv) (make-format ",")))
-				 (fmt-csv (map list->csv-record csvr))))
+	       (csvt (let-values (((fmt-cell fmt-record fmt-csv) (make-format ",")))
+		       (fmt-csv (map list->csv-record csvr))))
 	       (status (configf:lookup dat "final" "exit-status"))
 	       (msg     (configf:lookup dat "final" "message")))
-          ;;(if csvt  ;; this if blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
+          (if csvt  ;; this if blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
               (rmt:csv->test-data run-id test-id csvt)
-            ;;  (BB> "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
-            ;;  )
+	      (debug:print 0 *default-log-port* "ERROR: no csvdat exists for run-id: " run-id " test-id: " test-id " stepname: " stepname ", check that logpro version is 1.15 or newer"))
+	  ;;  (BB> "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
+	  ;;  )
 	  (cond
 	   ((equal? status "PASS") "PASS") ;; skip the message part if status is pass
 	   (status (conc (configf:lookup dat "final" "exit-status") ": " (if msg msg "no message")))
@@ -124,6 +125,18 @@
      (lambda () ;; (process-run "/bin/bash" "-c" "exec ls -l /tmp/foobar > /tmp/delme-more.log 2>&1")
        (let* ((cmd (conc stepcmd " > " stepname ".log 2>&1")) ;; >outfile 2>&1 
 	      (pid (process-run "/bin/bash" (list "-c" cmd))))
+
+         (with-output-to-file "Makefile.ezsteps"
+           (lambda ()
+             (print stepname ".log :")
+             (print "\t" cmd)
+             (if (file-exists? (conc stepname ".logpro"))
+                 (print "\tlogpro " stepname ".logpro " stepname ".html < " stepname ".log"))
+             (print)
+             (print stepname " : " stepname ".log")
+             (print))
+           #:append)
+
 	 (rmt:test-set-top-process-pid run-id test-id pid)
 	 (let processloop ((i 0))
 	   (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
@@ -243,7 +256,7 @@
 
   ;; (thread-sleep! 0.3)
   ;; (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
-  (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "RUNNING" #f) 
+  (rmt:set-state-status-and-roll-up-items run-id test-name item-path "RUNNING" #f #f) 
   ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
   ;; if there is a runscript do it first
@@ -270,7 +283,7 @@
       (let* ((testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
 	      ;; NOTE: it is tempting to turn off force-create of testconfig but dynamic
 	      ;;       ezstep names need a full re-eval here.
-	      (tests:get-testconfig test-name tconfigreg #t force-create: #t)) ;; 'return-procs)))
+	      (tests:get-testconfig test-name item-path tconfigreg #t force-create: #t)) ;; 'return-procs)))
 	     (ezstepslst (if (hash-table? testconfig)
 			     (hash-table-ref/default testconfig "ezsteps" '())
 			     #f)))
@@ -318,11 +331,11 @@
     ;; (tests:set-full-meta-info test-id run-id (calc-minutes) work-area)
     (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
     (let loop ((minutes   (calc-minutes))
-	       (cpu-load  (get-cpu-load))
+	       (cpu-load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
 	       (disk-free (get-df (current-directory))))
-      (let ((new-cpu-load (let* ((load  (get-cpu-load))
+      (let ((new-cpu-load (let* ((load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
 				 (delta (abs (- load cpu-load))))
-			    (if (> delta 0.6) ;; don't bother updating with small changes
+			    (if (> delta 0.1) ;; don't bother updating with small changes
 				load
 				#f)))
 	    (new-disk-free (let* ((df    (get-df (current-directory)))
@@ -447,7 +460,7 @@
 			   (set! *time-to-exit* #t)
 			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
 			   (let ((th1 (make-thread (lambda ()
-						     (tests:test-force-state-status! run-id test-id "INCOMPLETE" "KILLED")
+						     (rmt:test-set-state-status run-id test-id "INCOMPLETE" "KILLED" #f)
 						     (print "Killed by signal " signum ". Exiting")
 						     (thread-sleep! 1)
 						     (exit 1))))
@@ -471,13 +484,19 @@
 	    (cond
 	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
 	      (debug:print 0 *default-log-port* "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
-	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")) ;; prime it for running
+	      ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
+	      (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
+	      ) ;; prime it for running
 	     ((member (db:test-get-state test-info) '("RUNNING" "REMOTEHOSTSTART"))
 	      (if (process:alive-on-host? test-host test-pid)
 		  (debug:print-error 0 *default-log-port* "test state is "  (db:test-get-state test-info) " and process " test-pid " is still running on host " test-host ", cannot proceed")
-		  (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")))
+		  ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
+		  (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
+		  ))
 	     ((not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
-	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a"))
+	      ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
+	      (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
+	      )
 	     (else ;; (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ"))
 	      (debug:print-error 0 *default-log-port* "test state is " (db:test-get-state test-info) ", cannot proceed")
 	      (exit))))
@@ -641,7 +660,7 @@
 					    new-status
 					    (args:get-arg "-m") #f)
 		    ;; need to update the top test record if PASS or FAIL and this is a subtest
-		    ;; NO NEED TO CALL roll-up-pass-fail-counts HERE, THIS IS DONE IN roll-up-pass-fail-counts called by tests:test-set-status!
+		    ;; NO NEED TO CALL set-state-status-and-roll-up-items HERE, THIS IS DONE IN set-state-status-and-roll-up-items called by tests:test-set-status!
 		    ))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
@@ -848,7 +867,10 @@
 	  (setenv "MT_RUN_AREA_HOME" *toppath*)
 	  (setenv "MT_TESTSUITE_NAME" (common:get-testsuite-name)))
 	(begin
-	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")))
+	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")
+          ;;(exit 1)
+          #f
+          ))
     *toppath*))
 
 (define (get-best-disk confdat testconfig)
@@ -863,7 +885,7 @@
 	      (begin
 		(if (common:low-noise-print 20 "No valid disks or no disk with enough space")
 		    (debug:print-error 0 *default-log-port* "No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists and has enough space!\n    You can change minspace in the [setup] section of megatest.config. Current setting is: " minspace))
-		(exit 1)))))))
+		(exit 1))))))) ;; TODO - move the exit to the calling location and return #f
 
 ;; Desired directory structure:
 ;;
@@ -1055,6 +1077,7 @@
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
+  (mutex-lock! *launch-setup-mutex*) ;; setting variables and processing the testconfig is NOT thread-safe, reuse the launch-setup mutex
   (let* ((item-path       (item-list->path itemdat)))
     (let loop ((delta        (- (current-seconds) *last-launch*))
 	       (launch-delay (string->number (or (configf:lookup *configdat* "setup" "launch-delay") "5"))))
@@ -1063,18 +1086,22 @@
 	    (debug:print-info 0 *default-log-port* "Delaying launch of " test-name " for " (- launch-delay delta) " seconds")
 	    (thread-sleep! (- launch-delay delta))
 	    (loop (- (current-seconds) *last-launch*) launch-delay))))
-    (set! *last-launch* (current-seconds))
     (change-directory *toppath*)
     (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute", *maybe* - the longer they are set the longer each launch takes (must be non-overlapping with the vars)
-     (list
-      (list "MT_RUN_AREA_HOME" *toppath*)
-      (list "MT_TEST_NAME" test-name)
-      (list "MT_RUNNAME"   runname)
-      (list "MT_ITEMPATH"  item-path)
-      ))
-    (let* ((tregistry       (tests:get-all))
-	   (tconfig         (or (tests:get-testconfig test-name tregistry #t force-create: #t)
-				test-conf)) ;; force re-read now that all vars are set
+     (append
+      (list
+       (list "MT_RUN_AREA_HOME" *toppath*)
+       (list "MT_TEST_NAME" test-name)
+       (list "MT_RUNNAME"   runname)
+       (list "MT_ITEMPATH"  item-path)
+       )
+      itemdat))
+    (let* ((tregistry       (tests:get-all)) ;; third param (below) is system-allowed
+           ;; for tconfig, why do we allow fallback to test-conf?
+	   (tconfig         (or (tests:get-testconfig test-name item-path tregistry #t force-create: #t)
+				(begin
+                                  (debug:print 0 *default-log-port* "WARNING: falling back to pre-calculated testconfig. This is likely not desired.")
+                                  test-conf))) ;; force re-read now that all vars are set
 	   (useshell        (let ((ush (config-lookup *configdat* "jobtools"     "useshell")))
 			      (if ush 
 				  (if (equal? ush "no") ;; must use "no" to NOT use shell
@@ -1103,8 +1130,8 @@
 				      ((dashboard) "megatest")
 				      (else exe)))))
 	   (launcher        (common:get-launcher *configdat* test-name item-path)) ;; (config-lookup *configdat* "jobtools"     "launcher"))
-	   (test-sig   (conc (common:get-testsuite-name) ":" test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
-	   (work-area  #f)
+	   (test-sig        (conc (common:get-testsuite-name) ":" test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
+	   (work-area       #f)
 	   (toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
 	   (diskpath   #f)
 	   (cmdparms   #f)
@@ -1114,7 +1141,6 @@
 	   (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	   (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 				(if (args:get-arg "-logging")(list "-logging") '()))))
-      
       ;; (if hosts (set! hosts (string-split hosts)))
       ;; set the megatest to be called on the remote host
       (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))
@@ -1131,7 +1157,8 @@
       ;;
       ;; the following call handles waiver propogation. cannot yet condense into roll-up-pass-fail
       (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
-      (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "LAUNCHED" #f)
+      (rmt:set-state-status-and-roll-up-items run-id test-name item-path #f "LAUNCHED" #f)
+      ;; (pp (hash-table->alist tconfig))
       (set! diskpath (get-best-disk *configdat* tconfig))
       (if diskpath
 	  (let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
@@ -1186,6 +1213,7 @@
       (debug:print 1 *default-log-port* "Launching " work-area)
       ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
       (debug:print 4 *default-log-port* "fullcmd: " fullcmd)
+      (set! *last-launch* (current-seconds)) ;; all that junk above takes time, set this as late as possible.
       (let* ((commonprevvals (alist->env-vars
 			      (hash-table-ref/default *configdat* "env-override" '())))
 	     (miscprevvals   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
@@ -1208,11 +1236,12 @@
 					(let ((cmdstr (string-intersperse fullcmd " ")))
 					  (if launchwait
 					      cmdstr
-					      (conc cmdstr " >> mt_launch.log 2>&1")))
+					      (conc cmdstr " >> mt_launch.log 2>&1 &")))
 					(car fullcmd))
 				    (if useshell
 					'()
 					(cdr fullcmd)))))
+        (mutex-unlock! *launch-setup-mutex*) ;; yes, really should mutex all the way to here. Need to put this entire process into a fork.
 	(if (not launchwait) ;; give the OS a little time to allow the process to start
 	    (thread-sleep! 0.01))
 	(with-output-to-file "mt_launch.log"

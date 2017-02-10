@@ -143,7 +143,7 @@
 ;; returns waitons waitors tconfigdat
 ;;
 (define (tests:get-waitons test-name all-tests-registry)
-   (let* ((config  (tests:get-testconfig test-name all-tests-registry 'return-procs)))
+   (let* ((config  (tests:get-testconfig test-name #f all-tests-registry 'return-procs)))
      (let ((instr (if config 
 		      (config-lookup config "requirements" "waiton")
 		      (begin ;; No config means this is a non-existant test
@@ -293,7 +293,7 @@
 ;;
 (define (tests:check-waiver-eligibility testdat prev-testdat)
   (let* ((test-registry (make-hash-table))
-	 (testconfig  (tests:get-testconfig (db:test-get-testname testdat) test-registry #f))
+	 (testconfig  (tests:get-testconfig (db:test-get-testname testdat) (db:test-get-item-path testdat) test-registry #f))
 	 (test-rundir ;; (sdb:qry 'passstr 
 	  (db:test-get-rundir testdat)) ;; )
 	 (prev-rundir ;; (sdb:qry 'passstr 
@@ -353,11 +353,6 @@
 	    (pop-directory)
 	    result)))))
 
-(define (tests:test-force-state-status! run-id test-id state status)
-  (rmt:test-set-status-state run-id test-id status state #f)
-  ;; (rmt:roll-up-pass-fail-counts run-id test-name item
-  (mt:process-triggers run-id test-id state status))
-
 ;; Do not rpc this one, do the underlying calls!!!
 (define (tests:test-set-status! run-id test-id state status comment dat #!key (work-area #f))
   (let* ((real-status status)
@@ -398,8 +393,8 @@
     ;; update the primary record IF state AND status are defined
     (if (and state status)
 	(begin
-	  (rmt:test-set-status-state run-id test-id real-status state (if waived waived comment))
-	  ;; (mt:process-triggers run-id test-id state real-status) ;; triggers are called in test-set-status-state
+	  (rmt:set-state-status-and-roll-up-items run-id test-id item-path state real-status (if waived waived comment))
+	  ;; (mt:process-triggers run-id test-id state real-status) ;; triggers are called in test-set-state-status
 	  ))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
@@ -444,8 +439,8 @@
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
-    (if (not (equal? item-path ""))
-	(rmt:roll-up-pass-fail-counts run-id test-name item-path state status #f))
+    ;;;;;; (if (not (equal? item-path ""))
+    ;;;;;;     (rmt:set-state-status-and-roll-up-items run-id test-name item-path state status #f) ;;;;;)
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
@@ -483,8 +478,7 @@
 	    (if have-lock
 		(let ((script (configf:lookup *configdat* "testrollup" test-name)))
 		  (print "Obtained lock for " outputfilename)
-		  (rmt:roll-up-pass-fail-counts run-id test-name "" #f #f #f)
-		  ;; (rmt:test-set-status-state run-id test-name #f #f #f) ;; (rmt:top-test-set-per-pf-counts run-id test-name)
+		  (rmt:set-state-status-and-roll-up-items run-id test-name "" #f #f #f)
 		  (if script
 		      (system (conc script " > " outputfilename " & "))
 		      (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename))
@@ -577,9 +571,37 @@
 ul.LinkedList { display: block; }
 /* ul.LinkedList ul { display: none; } */
 .HandCursorStyle { cursor: pointer; cursor: hand; }  /* For IE */
+th {background-color: #8c8c8c;}
+td.test {background-color: #d9dbdd;}
+td.PASS {background-color: #347533;}
+td.FAIL {background-color: #cc2812;}
+
   </style>
+  <script src=/nfs/site/disks/ch_ciaf_disk023/fdk_gwa_disk003/pjhatwal/fdk/docs/qa-env-team/jquery-3.1.0.slim.min.js></script>
+
 
   <script type="text/JavaScript">
+
+    function filtersome() {
+  $("tr").show();
+  $(".test").filter(
+    function() {
+      var names = $('#testname').val().split(',');
+      var good=1;
+      for (var i=0, len=names.length; i<len; i++) {
+        var uname=names[i];
+        console.log("Trying to check for " + uname); 
+        if($(this).text().indexOf(uname) != -1) {
+          good= 0;
+          console.log("Found "+uname);
+        }
+      }
+      return good; 
+    }
+  ).parent().hide();
+//  $(".sum").show();
+}
+  
     // Add this to the onload event of the BODY element
     function addEvents() {
       activateTree(document.getElementById("LinkedList1"));
@@ -645,10 +667,141 @@ EOF
    (append (take (vector->list run) numkeys)
 	   (list (vector-ref run (+ 1 numkeys)))))
 
+
+(define (tests:get-rest-data runs header numkeys)
+   (let ((resh (make-hash-table)))
+   (for-each
+     (lambda (run)
+        (let* ((run-id (db:get-value-by-header run header "id"))
+               (run-dir      (tests:run-record->test-path run numkeys))
+	       (test-data    (rmt:get-tests-for-run
+				   run-id
+                                   "%"       ;; testnamepatt
+				   '()        ;; states
+				   '()        ;; statuses
+				   #f         ;; offset
+				   #f         ;; num-to-get
+				   #f         ;; hide/not-hide
+				   #f         ;; sort-by
+				   #f         ;; sort-order
+				   #f         ;; 'shortlist                           ;; qrytype
+                                   0         ;; last update
+				   #f)))
+            
+            (map (lambda (test)
+                 (let* ((test-name (vector-ref test 2))
+                        (test-html-path (conc (vector-ref test 10) "/" (vector-ref test 13)))
+                        (test-item (conc test-name ":" (vector-ref test 11)))
+                        (test-status (vector-ref test 4)))
+                         
+                (if (not (hash-table-ref/default resh test-name  #f))
+                      (hash-table-set! resh test-name   (make-hash-table)))
+                (if (not (hash-table-ref/default (hash-table-ref/default resh test-name  #f)  test-item  #f))
+                       (hash-table-set! (hash-table-ref/default resh test-name  #f) test-item   (make-hash-table))) 
+               (hash-table-set!  (hash-table-ref/default (hash-table-ref/default resh test-name  #f) test-item #f) run-id (list test-status test-html-path)))) 
+        test-data)))
+      runs)
+   resh))
+
 ;; (tests:create-html-tree "test-index.html")
 ;;
 (define (tests:create-html-tree outf)
-  (let* ((lockfile  (conc outf ".lock"))
+   (let* ((lockfile  (conc outf ".lock"))
+	 (runs-to-process '())
+         (linktree  (common:get-linktree))
+          (area-name (common:get-testsuite-name))
+	  (keys      (rmt:get-keys))
+	  (numkeys   (length keys))
+         (total-runs  (rmt:get-num-runs "%"))
+         (pg-size 10)   )
+    (if (common:simple-file-lock lockfile)
+        (begin
+         (print total-runs)    
+        (let loop ((page 0))
+	(let* ((oup       (open-output-file (or outf (conc linktree "/page" page ".html"))))
+               (start (* page pg-size)) 
+	       (runsdat   (rmt:get-runs "%" pg-size start (map (lambda (x)(list x "%")) keys)))
+	       (header    (vector-ref runsdat 0))
+	       (runs      (vector-ref runsdat 1))
+               (ctr 0)
+               (test-runs-hash (tests:get-rest-data runs header numkeys))
+               (test-list (hash-table-keys test-runs-hash))
+               (get-prev-links (lambda (page linktree )   
+                            (let* ((link  (if (not (eq? page 0))
+                                            (s:a "&lt;&lt;prev" 'href (conc  linktree "/page" (- page 1) ".html"))
+                                            (s:a "" 'href (conc  linktree "/page"  page ".html")))))
+                               link)))
+                (get-next-links (lambda (page linktree total-runs)   
+                            (let* ((link  (if (> total-runs (+ 1 (* page pg-size)))
+                                            (s:a "next&gt;&gt;" 'href (conc  linktree "/page"  (+ page 1) ".html"))
+                                             (s:a "" 'href (conc  linktree "/page" page  ".html")))))
+                               link))))
+	  (s:output-new
+	   oup
+	   (s:html tests:css-jscript-block
+		   (s:title "Summary for " area-name)
+		   (s:body 'onload "addEvents();"
+                          (get-prev-links page linktree)
+                          (get-next-links page linktree total-runs)
+                           
+			   (s:h1 "Summary for " area-name)
+                           (s:h3 "Filter" )
+                           (s:input 'type "text"  'name "testname" 'id "testname" 'length "30" 'onkeyup "filtersome()")
+  
+			   ;; top list
+			   (s:table 'id "LinkedList1" 'border "1"
+                            (map (lambda (key)
+				 (let* ((res (s:tr 'class "something" 
+				  (s:th key )
+                                   (map (lambda (run)
+                                   (s:th  (vector-ref run ctr)))
+                                  runs))))
+                             (set! ctr (+ ctr 1))
+                               res))
+                               keys)
+                               (s:tr
+				 (s:th "Run Name")
+                                  (map (lambda (run)
+                                   (s:th  (vector-ref run 3)))
+                                  runs))
+                              
+                               (map (lambda (test-name)
+                                 (let* ((item-hash (hash-table-ref/default test-runs-hash test-name  #f))
+                                         (item-keys (sort (hash-table-keys item-hash) string<=?))) 
+                                          (map (lambda (item-name)  
+  		                             (let* ((res (s:tr  'class item-name
+				                         (s:td  item-name 'class "test" )
+                                                           (map (lambda (run)
+                                                               (let* ((run-test (hash-table-ref/default item-hash item-name  #f))
+                                                                      (run-id (db:get-value-by-header run header "id"))
+                                                                      (result (hash-table-ref/default run-test run-id "n/a"))
+                                                                      (status (if (string? result)
+                                                                                 (begin 
+                                                                                  ; (print "string" result)
+                                                                                     result)
+                                                                                 (begin 
+                                                                                   ;  (print "not string" result )
+                                                                                 (car result)))))
+                                                                       (s:td  status 'class status)))
+                                                                runs))))
+                                                        res))
+                                                   item-keys)))
+                               test-list)))))
+          (close-output-port oup)
+         ; (set! page (+ 1 page))
+          (if (> total-runs (* (+ 1 page) pg-size))
+           (loop (+ 1  page)))))
+	  (common:simple-file-release-lock lockfile))
+	            
+	#f)))
+
+
+
+
+
+
+(define (tests:create-html-tree-old outf)
+   (let* ((lockfile  (conc outf ".lock"))
 	 (runs-to-process '()))
     (if (common:simple-file-lock lockfile)
 	(let* ((linktree  (common:get-linktree))
@@ -689,6 +842,7 @@ EOF
                                                                 (conc run-name " (Not able to create summary at " targ-path ")")))))))))))
           (close-output-port oup)
 	  (common:simple-file-release-lock lockfile)
+               
 	  (for-each
 	   (lambda (run)
 	     (let* ((test-subpath (tests:run-record->test-path run numkeys))
@@ -766,6 +920,11 @@ EOF
            runs)
           #t)
 	#f)))
+
+
+
+
+
 
 
 ;; CHECK - WAS THIS ADDED OR REMOVED? MANUAL MERGE WITH API STUFF!!!
@@ -981,7 +1140,7 @@ EOF
 ;; else read the testconfig file
 ;;   if have path to test directory save the config as .testconfig and return it
 ;;
-(define (tests:get-testconfig test-name test-registry system-allowed #!key (force-create #f))
+(define (tests:get-testconfig test-name item-path test-registry system-allowed #!key (force-create #f))
   (let* ((cache-path   (tests:get-test-path-from-environment))
 	 (cache-file   (and cache-path (conc cache-path "/.testconfig")))
 	 (cache-exists (and cache-file
@@ -993,10 +1152,13 @@ EOF
 			    exn
 			    #f ;; any issues, just give up with the cached version and re-read
 			    (configf:read-alist cache-file))
-			   #f)))
+			   #f))
+         (test-full-name (if (and item-path (not (string-null? item-path)))
+                             (conc test-name "/" item-path)
+                             test-name)))
     (if cached-dat
 	cached-dat
-	(let ((dat (hash-table-ref/default *testconfigs* test-name #f)))
+	(let ((dat (hash-table-ref/default *testconfigs* test-full-name #f)))
 	  (if (and  dat ;; have a locally cached version
 		    (hash-table-ref/default dat "have fulldata" #f)) ;; marked as good data?
 	      dat
@@ -1014,7 +1176,7 @@ EOF
 								      #f))
 				       #f)))
 		(if (and tcfg cache-file) (hash-table-set! tcfg "have fulldata" #t)) ;; mark this as fully read data
-		(if tcfg (hash-table-set! *testconfigs* test-name tcfg))
+		(if tcfg (hash-table-set! *testconfigs* test-full-name tcfg))
 		(if (and testexists
 			 cache-file
 			 (file-write-access? cache-path))
@@ -1242,7 +1404,8 @@ EOF
       (let loop ((hed (car test-names))
 		 (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	(debug:print-info 4 *default-log-port* "hed=" hed " at top of loop")
-	(let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs))
+        ;; don't know item-path at this time, let the testconfig get the top level testconfig
+	(let* ((config  (tests:get-testconfig hed #f all-tests-registry 'return-procs))
 	       (waitons (let ((instr (if config 
 					 (config-lookup config "requirements" "waiton")
 					 (begin ;; No config means this is a non-existant test
