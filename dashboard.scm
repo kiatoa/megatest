@@ -1372,7 +1372,13 @@ Misc
 	     (iup:vbox
 	      ;; Command to run, placed over the top of the canvas
 	      (dcommon:command-action-selector commondat tabdat tab-num: tab-num)
-	      (dboard:runs-tree-browser commondat tabdat)
+	      (let ((targ-control (iup:tabs
+				   (dboard:runs-tree-browser commondat tabdat)
+				   (let ((dat (dashboard:update-target-selector tabdat)))
+				     (apply iup:hbox (cadr dat))))))
+		(iup:attribute-set! targ-control "TABTITLE0" "Tree")
+		(iup:attribute-set! targ-control "TABTITLE1" "Sel")
+		targ-control)
 	      (dcommon:command-runname-selector commondat tabdat tab-num: tab-num)
 	      (dcommon:command-testname-selector commondat tabdat update-keyvals))
 	     ;;  key-listboxes))
@@ -2029,8 +2035,6 @@ Misc
       (dboard:runs-summary-control-panel-updater tabdat)
       res
       )))
-
-
 
 ;;======================================================================
 ;; R U N
