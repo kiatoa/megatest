@@ -775,7 +775,7 @@
 	     (first-rundat  (let ((toppath (if toppath 
 					       toppath
 					       (car first-pass))))
-			      (read-config ;; (conc toppath "/runconfigs.config")
+			      (read-config ;; (conc toppath "/runconfigs.config") ;; this should be converted to runconfig:read but it is non-trivial, leaving it for now.
 			       (conc (if (string? toppath)
 					 toppath
 					 (get-environment-variable "MT_RUN_AREA_HOME"))
@@ -808,7 +808,7 @@
 				     (for-each (lambda (kt)
 						 (setenv (car kt) (cadr kt)))
 					       key-vals)
-				     (read-config (conc toppath "/runconfigs.config") *runconfigdat* #t 
+				     (read-config (conc toppath "/runconfigs.config") *runconfigdat* #t ;; consider using runconfig:read some day ...
 						  sections: sections))))
 		(if cancreate (configf:write-alist runconfigdat rccachef))
 		(set! *runconfigdat* runconfigdat)
@@ -826,7 +826,7 @@
 			pathenvvar: "MT_RUN_AREA_HOME")))
 	(if cfgdat
 	    (let* ((toppath  (or (get-environment-variable "MT_RUN_AREA_HOME")(cadr cfgdat)))
-		   (rdat     (read-config (conc toppath
+		   (rdat     (read-config (conc toppath  ;; convert this to use runconfig:read!
 						"/runconfigs.config") *runconfigdat* #t sections: sections)))
 	      (set! *configinfo*   cfgdat)
 	      (set! *configdat*    (car cfgdat))
