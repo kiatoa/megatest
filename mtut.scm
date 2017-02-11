@@ -57,32 +57,38 @@ mtutil, part of the Megatest tool suite, documentation at http://www.kiatoa.com/
   version " megatest-version "
   license GPL, Copyright Matt Welland 2006-2017
 
-Usage: mtutil [options]
+Usage: mtutil action [options]
   -h                       : this help
   -manual                  : show the Megatest user manual
   -version                 : print megatest version (currently " megatest-version ")
 
-Launching and managing runs
-  -action run|remove|rerun : register action for processing
-   Actions: setss (set state/status), archive, kill (stop tests or runs)
+Actions include:
+   run                     : initial runs
+   remove                  : remove runs
+   rerun                   : register action for processing
+   set-ss                  : set state/status
+   archive                 : compress and move test data to archive disk
+   kill                    : stop tests or entire runs
 
 Selectors 
-  -target key1/key2/...   : run for key1, key2, etc.
-  -testpatt p1/p2,p3/...  : % is wildcard
-  -runname                : required, name for this particular test run
-  -state                  : Applies to runs, tests or steps depending on context
-  -status                 : Applies to runs, tests or steps depending on context
-  -modepatt key           : load testpatt from <key> in runconfigs instead of default TESTPATT if -testpatt and -tagexpr are not specified
-  -tagexpr tag1,tag2%,..  : select tests with tags matching expression
+  -action-mode immediate|queued : apply this action after other actions or immediately
+  -area areapatt1,area2... : apply this action only to the specified areas
+  -target key1/key2/...    : run for key1, key2, etc.
+  -test-patt p1/p2,p3/...  : % is wildcard
+  -run-name                : required, name for this particular test run
+  -state-status c/p,c/f    : Specify a list of state and status patterns
+  -mode-patt key           : load testpatt from <key> in runconfigs instead of default TESTPATT
+                             if -testpatt and -tagexpr are not specified
+  -tag-expr tag1,tag2%,..  : select tests with tags matching expression
 
 Misc 
-  -start-dir path         : switch to this directory before running mtutil
-  -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
+  -start-dir path          : switch to this directory before running mtutil
+  -set-vars V1=1,V2=2      : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
-  -log logfile            : send stdout and stderr to logfile
-  -repl                   : start a repl (useful for extending megatest)
-  -load file.scm          : load and run file.scm
-  -debug N|N,M,O...       : enable debug 0-N or N and M and O ...
+  -log logfile             : send stdout and stderr to logfile
+  -repl                    : start a repl (useful for extending megatest)
+  -load file.scm           : load and run file.scm
+  -debug N|N,M,O...        : enable debug messages 0-N or N and M and O ...
 
 Examples:
 
