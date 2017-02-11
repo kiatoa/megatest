@@ -51,7 +51,7 @@ dboard : $(OFILES) $(GOFILES) dashboard.scm
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
 	csc $(CSCOPTS) $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
 
-mtut: $(OFILES) readline-fix.scm mtut.o
+mtut: $(OFILES) mtut.scm
 	csc $(CSCOPTS) $(OFILES) mtut.scm -o mtut
 
 # install documentation to $(PREFIX)/docs
