@@ -80,6 +80,7 @@ Selectors
   -mode-patt key           : load testpatt from <key> in runconfigs instead of default TESTPATT
                              if -testpatt and -tagexpr are not specified
   -tag-expr tag1,tag2%,..  : select tests with tags matching expression
+  -new state/status        : specify new state/status for set-ss
 
 Misc 
   -start-dir path          : switch to this directory before running mtutil
@@ -98,34 +99,46 @@ mtutil -area mytests -action run -target v1.63/aa3e -modepatt MYPATT -tagexpr qu
 Called as " (string-intersperse (argv) " ") "
 Version " megatest-version ", built from " megatest-fossil-hash ))
 
-;; process args
-(define remargs (args:get-args 
-		 (argv)
-		 (list  "-run"  ;; run a specific test
-			"-target"
-			"-run-name"
-			"-state"
-			"-status"
-			"-test-patt" ;; idea, enhance margs ("-test-patt" "-testpatt") => yields one value in "-test-patt"
-                        "-mode-patt"
-                        "-tag-expr"
-			"-item-patt"
-			;; misc
-			"-start-dir"
-			"-set-vars"
-			"-debug" ;; for *verbosity* > 2
-			"-load"        ;; load and exectute a scheme file
-			"-log"
-			)
- 		 (list  "-h" "-help" "--help"
-			"-manual"
-			"-version"
-			;; misc
-			"-repl"
+;; args and pkt key specs
+;;
+(define *arg-keys*
+  '(("-run"        . r)
+    ("-target"     . t)
+    ("-run-name"   . n)
+    ("-state"      . e)
+    ("-status"     . u)
+    ("-test-patt"  . p)  ;; idea, enhance margs ("-test-patt" "-testpatt") => yields one value in "-test-patt"
+    ("-mode-patt"  . o)
+    ("-tag-expr"   . x)
+    ("-item-patt"  . i)
+    ;; misc
+    ("-start-dir"  . #f)
+    ("-set-vars"   . v)
+    ("-debug"      . #f)  ;; for *verbosity* > 2
+    ("-load"       . #f)  ;; load and exectute a scheme file
+    ("-log"        . #f)
+    ))
+(define *switch-keys*
+  '(("-h"          . #f)
+    ("-help"       . #f)
+    ("--help"      . #f)
+    ("-manual"     . #f)
+    ("-version"    . #f)
+    ;; misc
+    ("-repl"       . #f)))
 
-                        )
+;; process args
+(define *action* (if (> (length (argv)) 1)
+		     (cadr (argv))
+		     #f))
+(define remargs (args:get-args 
+		 (if *action* (cdr (argv)) (argv)) ;; args:get-args dumps first in argv list (the program name)
+		 (map car *arg-keys*)
+		 (map car *switch-keys*)
 		 args:arg-hash
 		 0))
+
+(print "*action*: " *action*)
 
 ;; Add args that use remargs here
 ;;
@@ -138,4 +151,38 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      ))
     (debug:print-error 0 *default-log-port* "Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
+;;======================================================================
+;; Runs
+;;======================================================================
 
+;; collect, translate, collate and assemble a pkt from the command-line
+;;
+(define (command-line->pkt args args-hash)
+  (let* ((args-data (hash-table->alist args:arg-hash))
+	 (alldat    (apply append (list 'a *action*)
+			   (map (lambda (x)
+				  (list (car x)(cdr x)))
+				(filter cdr args-data)))))
+    (print  "Alldat: " alldat
+	    " args-data: " args-data)
+    (add-z-card
+     (apply construct-sdat alldat))))
+
+(let-values (((uuid pkt)
+	      (command-line->pkt #f args:arg-hash)))
+  (print pkt))
+
+(if (or (args:get-arg "-repl")
+	(args:get-arg "-load"))
+    (begin
+      (import extras) ;; might not be needed
+      ;; (import csi)
+      (import readline)
+      (import apropos)
+      ;; (import (prefix sqlite3 sqlite3:)) ;; doesn't work ...
+      
+      (install-history-file (get-environment-variable "HOME") ".mtutil_history") ;;  [homedir] [filename] [nlines])
+      (current-input-port (make-readline-port "mtutil> "))
+      (if (args:get-arg "-repl")
+	  (repl)
+	  (load (args:get-arg "-load")))))
