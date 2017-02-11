@@ -44,11 +44,32 @@ B d e f
 -------------------------
 
 Then the config file would effectively appear to contain an items section
-exactly like the output from the script. This is extremely useful when
-dynamically creating items, itemstables and other config structures. You can
-see the expansion of the call by looking in the cached files (look in your
-linktree for megatest.config and runconfigs.config cache files and in your
-test run areas for the expanded and cached testconfig).
+exactly like the output from the script. This is useful when dynamically
+creating items, itemstables and other config structures. You can see the
+expansion of the call by looking in the cached files (look in your linktree
+for megatest.config and runconfigs.config cache files and in your test run
+areas for the expanded and cached testconfig).
+
+Wildcards and regexes in Targets
+
+-------------------------
+[a/2/b]
+VAR1 VAL1
+
+[a/%/b]
+VAR1 VAL2
+-------------------------
+
+Will result in:
+
+-------------------------
+[a/2/b]
+VAR1 VAL2
+-------------------------
+
+Can use either wildcard of "%" or a regular expression:
+
+[/abc.*def/]
 
 Disk Space Checks
 ^^^^^^^^^^^^^^^^^
