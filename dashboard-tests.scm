@@ -465,7 +465,7 @@
 	       (item-path  (db:test-get-item-path testdat))
 	       ;; this next block was added to fix a bug where variables were
                ;; needed. Revisit this.
-	       (runconfig  (let ((runconfigf (conc  *toppath* "/runconfigs.config")))
+	       (runconfig  (let ((runconfigf (conc  *toppath* "/runconfigs.config"))) ;; no rush but it would be good to convert this call to use runconfig:read
 	 		     (if (file-exists? runconfigf)
 	 			 (handle-exceptions
                                    exn

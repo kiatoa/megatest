@@ -10,6 +10,11 @@
 
 (include "common_records.scm")
 
+(define (runconfig:read fname target environ-patt)
+  (let ((ht (make-hash-table)))
+    (hash-table-set! ht target '())
+    (read-config fname ht #t environ-patt: environ-patt sections: (if target (list "default" target) #f))))
+
 ;; NB// to process a runconfig ensure to use environ-patt with target!
 ;;
 (define (setup-env-defaults fname run-id already-seen keyvals #!key (environ-patt #f)(change-env #t))
@@ -23,7 +28,7 @@
 			    "nothing matches this I hope"))))
 	 ;; Why was system disallowed in the reading of the runconfigs file?
 	 ;; NOTE: Should be setting env vars based on (target|default)
-	 (confdat (read-config fname #f #t environ-patt: environ-patt sections: (list "default" thekey)))
+	 (confdat   (runconfig:read fname thekey environ-patt))
 	 (whatfound (make-hash-table))
 	 (finaldat  (make-hash-table))
 	 (sections (list "default" thekey)))
