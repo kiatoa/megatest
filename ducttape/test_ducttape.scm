@@ -9,22 +9,22 @@
 ;(trace keyword-skim)
 ;(trace re-match?)
 (define (reset-ducttape)
-  (unsetenv "ducttape_DEBUG_LEVEL")
+  (unsetenv "DUCTTAPE_DEBUG_LEVEL")
   (ducttape-debug-level #f)
 
-  (unsetenv "ducttape_DEBUG_PATTERN")
+  (unsetenv "DUCTTAPE_DEBUG_PATTERN")
   (ducttape-debug-regex-filter ".")
 
-  (unsetenv "ducttape_LOG_FILE")
+  (unsetenv "DUCTTAPE_LOG_FILE")
   (ducttape-log-file #f)
 
-  (unsetenv "ducttape_SILENT_MODE")
+  (unsetenv "DUCTTAPE_SILENT_MODE")
   (ducttape-silent-mode #f)
 
-  (unsetenv "ducttape_QUIET_MODE")
+  (unsetenv "DUCTTAPE_QUIET_MODE")
   (ducttape-quiet-mode #f)
 
-  (unsetenv "ducttape_COLOR_MODE")
+  (unsetenv "DUCTTAPE_COLOR_MODE")
   (ducttape-color-mode #f)
 )
 
@@ -32,7 +32,7 @@
   (reset-ducttape)
 
   (command-line-arguments cmdline-list)
-  (process-command-line)
+  (ducttape-process-command-line)
 )
 
 
@@ -114,6 +114,8 @@
          (delete-file tmpfile))
 
      )))
+
+
 
 (define (test-systemstuff)
   (test-group
@@ -337,7 +339,15 @@
   ) ; end main()
 
 (main)
-(sendmail "brandon.j.barclay@intel.com" "6hello subject"  "test body")
+(sendmail "brandon.j.barclay@intel.com" "6hello subject"  "test body" )
+
+;(let* ((image-file "/nfs/site/home/bjbarcla/megatest-logo.png")
+;       (cid "mtlogo")
+;       (image-alist (list (cons image-file cid)))
+;       (body  (conc "Hello world<br /><img cid:"cid" alt=\"test image\"><br>bye!")))
+
+;  (sendmail "brandon.j.barclay@intel.com" "7hello subject"  body use_html: #t images-with-content-id-alist: image-alist)
+;  (print "sent image mail"))
 ;(sendmail "bjbarcla" "2hello subject html"  "test body<h1>hello</h1><i>italics</i>" use_html: #t)
 ;(sendmail "bb" "4hello attach subject html"  "<h2>hmm</h2>" use_html: #t attach-files-list: '( "/Users/bb/Downloads/wdmycloud-manual-4779-705103.pdf" ) )
 

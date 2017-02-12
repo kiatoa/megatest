@@ -52,9 +52,9 @@
 
 (define (client:setup areapath #!key (remaining-tries 100) (failed-connects 0))
   (case (server:get-transport)
-    ((rpc) (rpc-transport:client-setup run-id remaining-tries: remaining-tries failed-connects: failed-connects)) ;;(client:setup-rpc run-id))
+    ((rpc) (rpc-transport:client-setup remaining-tries: remaining-tries failed-connects: failed-connects)) ;;(client:setup-rpc run-id))
     ((http)(client:setup-http areapath remaining-tries: remaining-tries failed-connects: failed-connects))
-    (else  (rpc-transport:client-setup run-id remaining-tries: remaining-tries failed-connects: failed-connects)))) ;; (client:setup-rpc run-id))))
+    (else  (rpc-transport:client-setup remaining-tries: remaining-tries failed-connects: failed-connects)))) ;; (client:setup-rpc run-id))))
 
 ;; Do all the connection work, look up the transport type and set up the
 ;; connection if required.
@@ -69,7 +69,7 @@
 ;; lookup_server, need to remove *runremote* stuff
 ;;
 
-(define (client:setup-http areapath #!key (remaining-tries 100) (failed-connects 0))
+(define (client:setup-http areapath #!key (remaining-tries 100) (failed-connects 0)(area-dat #f))
   (debug:print-info 2 *default-log-port* "client:setup remaining-tries=" remaining-tries)
   (server:start-and-wait areapath)
   (if (<= remaining-tries 0)
@@ -80,13 +80,16 @@
       ;; Alternatively here, we can get the list of candidate servers and work our way
       ;; through them searching for a good one.
       ;;
-      (let* ((server-dat (server:get-first-best areapath)))
+      (let* ((server-dat (server:get-first-best areapath))
+	     (runremote  (or area-dat *runremote*)))
 	(if (not server-dat) ;; no server found
 	    (client:setup-http areapath remaining-tries: (- remaining-tries 1))
 	    (let ((host  (cadr  server-dat))
 		  (port  (caddr server-dat)))
 	      (debug:print-info 4 *default-log-port* "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
-	      (if (not *runremote*)(set! *runremote* (make-remote)))
+	      (if (and (not area-dat)
+		       (not *runremote*))
+		  (set! *runremote* (make-remote)))
 	      (if (and host port)
 		  (let* ((start-res (case *transport-type*
 				      ((http)(http-transport:client-connect host port))))
@@ -95,14 +98,14 @@
 		    (if (and start-res
 			     ping-res)
 			(begin
-			  (remote-conndat-set! *runremote* start-res) ;; (hash-table-set! *runremote* run-id start-res)
+			  (remote-conndat-set! runremote start-res) ;; (hash-table-set! runremote run-id start-res)
 			  (debug:print-info 2 *default-log-port* "connected to " (http-transport:server-dat-make-url start-res))
 			  start-res)
 			(begin    ;; login failed but have a server record, clean out the record and try again
 			  (debug:print-info 0 *default-log-port* "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
 			  (case *transport-type* 
-			    ((http)(http-transport:close-connections run-id)))
-			  (remote-conndat-set! *runremote* #f)  ;; (hash-table-delete! *runremote* run-id)
+			    ((http)(http-transport:close-connections)))
+			  (remote-conndat-set! runremote #f)  ;; (hash-table-delete! runremote run-id)
 			  (thread-sleep! 1)
 			  (client:setup-http areapath remaining-tries: (- remaining-tries 1))
 			  )))
