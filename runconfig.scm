@@ -82,4 +82,66 @@
 						    (conc "|" targ ")")
 						    ")")))
 	(debug:print 0 *default-log-port* "WARNING: You do not have a run config file: " runconfigf))))
- 
+
+;; given (a (b c) d) return ((a b d)(a c d))
+;; NOTE: this feels like it has been done before - perhaps with items handling?
+;;
+(define (runconfig:combinations inlst)
+  (let loop ((hed (car inlst))
+	     (tal (cdr inlst))
+	     (res '()))
+    ;; (print "res: " res " hed: " hed)
+    (if (list? hed)
+	(let ((newres (if (null? res) ;; first time through convert incoming items to list of items
+			  (map list hed)
+			  (apply append
+				 (map (lambda (r)  ;; iterate over items in res
+					(map (lambda (h) ;; iterate over items in hed
+					       (append r (list h)))
+					     hed))
+				      res)))))
+	  ;; (print "newres1: " newres)
+	  (if (null? tal)
+	      newres
+	      (loop (car tal)(cdr tal) newres)))
+	(let ((newres (if (null? res)
+			  (list (list hed))
+			  (map (lambda (r)
+				 (append r (list hed)))
+			       res))))
+	  ;; (print "newres2: " newres)
+	  (if (null? tal)
+	      newres
+	      (loop (car tal)(cdr tal) newres))))))
+
+;; multi-part expand
+;; Given a/b,c,d/e,f return a/b/e a/b/f a/c/e a/c/f a/d/e a/d/f
+;;
+(define (runconfig:expand target)
+  (let* ((parts (map (lambda (x)
+		       (string-split x ","))
+		     (string-split target "/"))))
+    (map (lambda (x)
+	   (string-intersperse x "/"))
+	 (runconfig:combinations parts))))
+
+;; multi-target expansion
+;; a/b/c/x,y,z a/b/d/x,y => a/b/c/x a/b/c/y a/b/c/z a/b/d/x a/b/d/y
+;; 
+(define (runconfig:expand-target target-strs)
+  (delete-duplicates
+   (apply append (map runconfig:expand (string-split target-strs " ")))))
+
+#|
+  (if (null? target-strs)
+      '()
+      (let loop ((hed (car target-strs))
+		 (tal (cdr target-strs))
+		 (res '()))
+	;; first break all parts into individual target patterns
+	(if (string-index hed " ") ;; this is a multi-target target
+	    (let ((newres (append (string-split hed " ") res)))
+	      (runconfig:expand-target newres))
+	    (if (string-index hed ",") ;; this is a multi-target where one or more parts are comma separated
+		  
+|#

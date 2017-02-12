@@ -71,7 +71,9 @@ Actions include:
    set-ss                  : set state/status
    archive                 : compress and move test data to archive disk
    kill                    : stop tests or entire runs
-   process                 : master area only, process pkts, manage run jobs
+   import                  : master area only, import pkts
+   process                 : process imported pkts, manage run jobs
+   rungen                  : look at input sense list in [rungen] and generate run pkts
 
 Selectors 
   -immediate               : apply this action immediately, default is to queue up actions
@@ -79,10 +81,11 @@ Selectors
   -target key1/key2/...    : run for key1, key2, etc.
   -test-patt p1/p2,p3/...  : % is wildcard
   -run-name                : required, name for this particular test run
+  -contour contourname     : run all targets for contourname, requires -run-name, -target
   -state-status c/p,c/f    : Specify a list of state and status patterns
+  -tag-expr tag1,tag2%,..  : select tests with tags matching expression
   -mode-patt key           : load testpatt from <key> in runconfigs instead of default TESTPATT
                              if -testpatt and -tagexpr are not specified
-  -tag-expr tag1,tag2%,..  : select tests with tags matching expression
   -new state/status        : specify new state/status for set-ss
 
 Misc 
@@ -111,6 +114,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ("-run-name"   . n)
     ("-state"      . e)
     ("-status"     . s)
+    ("-contour"    . c)
     ("-test-patt"  . p)  ;; idea, enhance margs ("-test-patt" "-testpatt") => yields one value in "-test-patt"
     ("-mode-patt"  . o)
     ("-tag-expr"   . x)
@@ -131,7 +135,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ;; misc
     ("-repl"       . #f)
     ("-immediate"  . I)
-    ("-process"    . #f) ;; read any new actions, process actions as needed, archive action pkts when appropriate
     ))
 
 ;; a action
@@ -170,29 +173,36 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (define (load-pkts-to-db mtconf)
-  (let* ((pktsdir (configf:lookup mtconf "setup"  "pktsdir"))
-	 (toppath (configf:lookup mtconf "dyndat" "toppath"))
-	 (pdbpath (or (configf:lookup mtconf "setup"  "pdbpath") pktsdir)))
-    (if (not (and pktsdir toppath pdbpath))
+  (let* ((pktsdirs (configf:lookup mtconf "setup"  "pktsdirs"))
+	 (pktsdir  (if pktsdirs (car (string-split pktsdirs " ")) #f))
+	 (toppath  (configf:lookup mtconf "dyndat" "toppath"))
+	 (pdbpath  (or (configf:lookup mtconf "setup"  "pdbpath") pktsdir)))
+    (if (not (and  pktsdir toppath pdbpath))
 	(begin
 	  (print "ERROR: settings are missing in your megatest.config for area management.")
 	  (print "  you need to have pktsdir in the [setup] section."))
 	(let* ((pdb  (open-queue-db pdbpath "pkts.db"
-				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));")))
-	       (pkts (glob (conc pktsdir "/*.pkt"))))
+				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))))
 	  (for-each
-	   (lambda (pkt)
-	     (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
-		    (exists  (lookup-by-uuid pdb uuid #f)))
-	       (if (not exists)
-		   (let ((pktdat (string-intersperse
-				  (with-input-from-file pkt read-lines)
-				  "\n")))
-		     (add-to-queue pdb pktdat uuid 'cmd #f 0)
-		     (print "Added " uuid " to queue"))
-		   (print "pkt: " uuid " exists, skipping...")
-		   )))
-	   pkts)
+	   (lambda (pktsdir) ;; look at all
+	     (if (and (file-exists? pktsdir)
+		      (directory? pktsdir)
+		      (file-read-access? pktsdir))
+		 (let ((pkts (glob (conc pktsdir "/*.pkt"))))
+		   (for-each
+		    (lambda (pkt)
+		      (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
+			     (exists  (lookup-by-uuid pdb uuid #f)))
+			(if (not exists)
+			    (let ((pktdat (string-intersperse
+					   (with-input-from-file pkt read-lines)
+					   "\n")))
+			      (add-to-queue pdb pktdat uuid 'cmd #f 0)
+			      (print "Added " uuid " to queue"))
+			    (print "pkt: " uuid " exists, skipping...")
+			    )))
+		    pkts))))
+	   (string-split pktsdirs))
 	  (dbi:close pdb)))))
 
 ;;======================================================================
@@ -244,7 +254,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ((run remove rerun set-ss archive kill)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
 	      (mtconf    (car mtconfdat))
-	      (pktsdir   (configf:lookup mtconf "setup" "pktsdir"))
+	      (pktsdirs  (configf:lookup mtconf "setup" "pktsdirs"))
+	      (pktsdir   (if pktsdirs (car (string-split pktsdirs " ")) #f))
 	      (adjargs   (hash-table-copy args:arg-hash)))
 	 ;; (for-each
 	 ;;  (lambda (key)
@@ -259,10 +270,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 (lambda ()
 		   (print pkt)))
 	       (print "ERROR: cannot process commands without a pkts directory")))))
-      ((process)
+      ((process import rungen)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
 	      (mtconf    (car mtconfdat)))
-	 (load-pkts-to-db mtconf)))))
+	 (case (string->symbol *action*)
+	   ((import)(load-pkts-to-db mtconf)))))))
 
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
