@@ -749,21 +749,6 @@
 	res)
       #t))
 
-;; (map print (map car (hash-table->alist (read-config "runconfigs.config" #f #t))))
-(define (common:get-runconfig-targets #!key (configf #f))
-  (let ((targs       (sort (map car (hash-table->alist
-				     (or configf ;; NOTE: There is no value in using runconfig:read here.
-					 (read-config (conc *toppath* "/runconfigs.config")
-						      #f #t)
-					 (make-hash-table))))
-			   string<?))
-	(target-patt (args:get-arg "-target")))
-    (if target-patt
-	(filter (lambda (x)
-		  (patt-list-match x target-patt))
-		targs)
-	targs)))
-
 ;; '(print (string-intersperse (map cadr (hash-table-ref/default (read-config "megatest.config" \#f \#t) "disks" '"'"'("none" ""))) "\n"))'
 (define (common:get-disks #!key (configf #f))
   (hash-table-ref/default 
@@ -822,7 +807,24 @@
 ;;                    R U N N A M E    A N D   T E S T P A T T
 ;;======================================================================
 
+;; (map print (map car (hash-table->alist (read-config "runconfigs.config" #f #t))))
+;;
+(define (common:get-runconfig-targets #!key (configf #f))
+  (let ((targs       (sort (map car (hash-table->alist
+				     (or configf ;; NOTE: There is no value in using runconfig:read here.
+					 (read-config (conc *toppath* "/runconfigs.config")
+						      #f #t)
+					 (make-hash-table))))
+			   string<?))
+	(target-patt (args:get-arg "-target")))
+    (if target-patt
+	(filter (lambda (x)
+		  (patt-list-match x target-patt))
+		targs)
+	targs)))
+
 ;; Lookup a value in runconfigs based on -reqtarg or -target
+;; 
 (define (runconfigs-get config var)
   (let ((targ (common:args-get-target))) ;; (or (args:get-arg "-reqtarg")(args:get-arg "-target")(getenv "MT_TARGET"))))
     (if targ
