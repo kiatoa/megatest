@@ -178,7 +178,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (print "ERROR: settings are missing in your megatest.config for area management.")
 	  (print "  you need to have pktsdir in the [setup] section."))
 	(let* ((pdb  (open-queue-db pdbpath "pkts.db"
-				    schema: "CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))
+				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));")))
 	       (pkts (glob (conc pktsdir "/*.pkt"))))
 	  (for-each
 	   (lambda (pkt)
