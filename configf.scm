@@ -44,6 +44,12 @@
 			       (list key val metadata)
 			       (list key val))))))
 
+(define (configf:section-var-set! cfgdat section-name var value #!key (metadata #f))
+  (hash-table-set! cfgdat section-name
+		   (config:assoc-safe-add
+		    (hash-table-ref/default cfgdat section-name '())
+		    var value metadata: metadata)))
+
 (define (config:eval-string-in-environment str)
   (handle-exceptions
    exn
