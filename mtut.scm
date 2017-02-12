@@ -137,9 +137,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ("-immediate"  . I)
     ))
 
+;; Card types:
+;;
 ;; a action
 ;; u username (Unix)
 ;; D timestamp
+;; T card type
 
 ;; process args
 (define *action* (if (> (length (argv)) 1)
@@ -169,10 +172,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (debug:print-error 0 *default-log-port* "Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
 ;;======================================================================
-;; Process pkts
+;; pkts
 ;;======================================================================
 
-(define (load-pkts-to-db mtconf)
+(define (with-queue-db mtconf proc)
   (let* ((pktsdirs (configf:lookup mtconf "setup"  "pktsdirs"))
 	 (pktsdir  (if pktsdirs (car (string-split pktsdirs " ")) #f))
 	 (toppath  (configf:lookup mtconf "dyndat" "toppath"))
@@ -183,27 +186,35 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (print "  you need to have pktsdir in the [setup] section."))
 	(let* ((pdb  (open-queue-db pdbpath "pkts.db"
 				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))))
-	  (for-each
-	   (lambda (pktsdir) ;; look at all
-	     (if (and (file-exists? pktsdir)
-		      (directory? pktsdir)
-		      (file-read-access? pktsdir))
-		 (let ((pkts (glob (conc pktsdir "/*.pkt"))))
-		   (for-each
-		    (lambda (pkt)
-		      (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
-			     (exists  (lookup-by-uuid pdb uuid #f)))
-			(if (not exists)
-			    (let ((pktdat (string-intersperse
-					   (with-input-from-file pkt read-lines)
-					   "\n")))
-			      (add-to-queue pdb pktdat uuid 'cmd #f 0)
-			      (print "Added " uuid " to queue"))
-			    (print "pkt: " uuid " exists, skipping...")
-			    )))
-		    pkts))))
-	   (string-split pktsdirs))
+	  (proc pktsdirs pktsdir pdb)
 	  (dbi:close pdb)))))
+
+(define (load-pkts-to-db mtconf)
+  (with-queue-db
+   mtconf
+   (lambda (pktsdirs pktsdir pdb)
+     (for-each
+      (lambda (pktsdir) ;; look at all
+	(if (and (file-exists? pktsdir)
+		 (directory? pktsdir)
+		 (file-read-access? pktsdir))
+	    (let ((pkts (glob (conc pktsdir "/*.pkt"))))
+	      (for-each
+	       (lambda (pkt)
+		 (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
+			(exists  (lookup-by-uuid pdb uuid #f)))
+		   (if (not exists)
+		       (let* ((pktdat (string-intersperse
+				       (with-input-from-file pkt read-lines)
+				       "\n"))
+			      (apkt   (convert-pkt->alist pktdat))
+			      (ptype  (alist-ref 'T apkt)))
+			 (add-to-queue pdb pktdat uuid (or ptype 'cmd) #f 0)
+			 (print "Added " uuid " of type " ptype " to queue"))
+		       (print "pkt: " uuid " exists, skipping...")
+		       )))
+	       pkts))))
+      (string-split pktsdirs)))))
 
 ;;======================================================================
 ;; Runs
@@ -272,9 +283,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (print "ERROR: cannot process commands without a pkts directory")))))
       ((process import rungen)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
-	      (mtconf    (car mtconfdat)))
+	      (mtconf    (car mtconfdat))
+	      (toppath   (configf:lookup mtconf "dyndat" "toppath")))
 	 (case (string->symbol *action*)
-	   ((import)(load-pkts-to-db mtconf)))))))
+	   ((import)(load-pkts-to-db mtconf)) ;; import pkts
+	   ((rungen)
+	    (with-queue-db
+	     mtconf
+	     (lambda (pktsdirs pktdir pdb)
+	       (let ((rgconf   (find-and-read-config (conc toppath "/rungen.config")))
+		     (areas    (configf:get-section mtconf "areas"))
+		     (contours (configf:get-section mtconf "contours"))
+		     (runstats (find-pkts pdb '(runstat) '())))
+		 (print "runstats: " runstats)))))
+	   )))))
 
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
