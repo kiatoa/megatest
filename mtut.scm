@@ -14,11 +14,13 @@
 (define (toplevel-command . a) #f)
 
 (use srfi-1 posix srfi-69 readline ;;  regex regex-case srfi-69 apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
-     srfi-18 extras format pkts) ;;  zmq extras)
+     srfi-18 extras format pkts regex
+     (prefix dbi dbi:)) ;;  zmq extras)
 
 (declare (uses common))
 (declare (uses megatest-version))
 (declare (uses margs))
+(declare (uses configf))
 ;; (declare (uses runs))
 ;; (declare (uses launch))
 ;; (declare (uses server))
@@ -69,9 +71,10 @@ Actions include:
    set-ss                  : set state/status
    archive                 : compress and move test data to archive disk
    kill                    : stop tests or entire runs
+   process                 : master area only, process pkts, manage run jobs
 
 Selectors 
-  -action-mode immediate|queued : apply this action after other actions or immediately
+  -immediate               : apply this action immediately, default is to queue up actions
   -area areapatt1,area2... : apply this action only to the specified areas
   -target key1/key2/...    : run for key1, key2, etc.
   -test-patt p1/p2,p3/...  : % is wildcard
@@ -103,10 +106,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (define *arg-keys*
   '(("-run"        . r)
+    ("-area"       . G) ;; maps to group
     ("-target"     . t)
     ("-run-name"   . n)
     ("-state"      . e)
-    ("-status"     . u)
+    ("-status"     . s)
     ("-test-patt"  . p)  ;; idea, enhance margs ("-test-patt" "-testpatt") => yields one value in "-test-patt"
     ("-mode-patt"  . o)
     ("-tag-expr"   . x)
@@ -125,7 +129,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ("-manual"     . #f)
     ("-version"    . #f)
     ;; misc
-    ("-repl"       . #f)))
+    ("-repl"       . #f)
+    ("-immediate"  . I)
+    ("-process"    . #f) ;; read any new actions, process actions as needed, archive action pkts when appropriate
+    ))
+
+;; a action
+;; u username (Unix)
+;; D timestamp
 
 ;; process args
 (define *action* (if (> (length (argv)) 1)
@@ -138,7 +149,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 args:arg-hash
 		 0))
 
-(print "*action*: " *action*)
+;; (print "*action*: " *action*)
+;; (let-values (((uuid pkt)
+;; 	      (command-line->pkt #f args:arg-hash)))
+;;   (print pkt))
 
 ;; Add args that use remargs here
 ;;
@@ -152,6 +166,36 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (debug:print-error 0 *default-log-port* "Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
 ;;======================================================================
+;; Process pkts
+;;======================================================================
+
+(define (load-pkts-to-db mtconf)
+  (let* ((pktsdir (configf:lookup mtconf "setup"  "pktsdir"))
+	 (toppath (configf:lookup mtconf "dyndat" "toppath"))
+	 (pdbpath (or (configf:lookup mtconf "setup"  "pdbpath") pktsdir)))
+    (if (not (and pktsdir toppath pdbpath))
+	(begin
+	  (print "ERROR: settings are missing in your megatest.config for area management.")
+	  (print "  you need to have pktsdir in the [setup] section."))
+	(let* ((pdb  (open-queue-db pdbpath "pkts.db"
+				    schema: "CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))
+	       (pkts (glob (conc pktsdir "/*.pkt"))))
+	  (for-each
+	   (lambda (pkt)
+	     (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
+		    (exists  (lookup-by-uuid pdb uuid #f)))
+	       (if (not exists)
+		   (let ((pktdat (string-intersperse
+				  (with-input-from-file pkt read-lines)
+				  "\n")))
+		     (add-to-queue pdb pktdat uuid 'cmd #f 0)
+		     (print "Added " uuid " to queue"))
+		   (print "pkt: " uuid " exists, skipping...")
+		   )))
+	   pkts)
+	  (dbi:close pdb)))))
+
+;;======================================================================
 ;; Runs
 ;;======================================================================
 
@@ -159,18 +203,66 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (define (command-line->pkt args args-hash)
   (let* ((args-data (hash-table->alist args:arg-hash))
-	 (alldat    (apply append (list 'a *action*)
+	 (alldat    (apply append (list 'a *action*
+					'U (current-user-name))
 			   (map (lambda (x)
-				  (list (car x)(cdr x)))
+				  (let* ((param (car x))
+					 (value (cdr x))
+					 (pmeta (assoc param *arg-keys*))
+					 (smeta (assoc param *switch-keys*))
+					 (meta  (if (or pmeta smeta)
+						    (cdr (or pmeta smeta))
+						    #f)))
+				    (if (or pmeta smeta)
+					(list meta value)
+					'())))
 				(filter cdr args-data)))))
     (print  "Alldat: " alldat
 	    " args-data: " args-data)
     (add-z-card
      (apply construct-sdat alldat))))
 
-(let-values (((uuid pkt)
-	      (command-line->pkt #f args:arg-hash)))
-  (print pkt))
+(define (simple-setup start-dir-in)
+  (let* ((start-dir (or start-dir-in "."))
+	 (mtconfig  (or (args:get-arg "-config") "megatest.config"))
+	 (mtconfdat (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect
+		     mtconfig
+		     ;; environ-patt: "env-override"
+		     given-toppath: start-dir
+		     ;; pathenvvar: "MT_RUN_AREA_HOME"
+		     ))
+	 (mtconf    (if mtconfdat (car mtconfdat) #f)))
+    ;; we set some dynamic data in a section called "dyndata"
+    (if mtconf
+	(begin
+	  (configf:section-var-set! mtconf "dyndat" "toppath" start-dir)))
+    (print "TOPPATH: " (configf:lookup mtconf "dyndat" "toppath"))
+    mtconfdat))
+
+(if *action*
+    (case (string->symbol *action*)
+      ((run remove rerun set-ss archive kill)
+       (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
+	      (mtconf    (car mtconfdat))
+	      (pktsdir   (configf:lookup mtconf "setup" "pktsdir"))
+	      (adjargs   (hash-table-copy args:arg-hash)))
+	 ;; (for-each
+	 ;;  (lambda (key)
+	 ;;    (if (not (member key *legal-params*))
+	 ;; 	(hash-table-delete! adjargs key))) ;; we need to delete any params intended for mtutil
+	 ;;  (hash-table-keys adjargs))
+	 (let-values (((uuid pkt)
+		       (command-line->pkt #f adjargs)))
+	   (if pktsdir
+	       (with-output-to-file
+		   (conc pktsdir "/" uuid ".pkt")
+		 (lambda ()
+		   (print pkt)))
+	       (print "ERROR: cannot process commands without a pkts directory")))))
+      ((process)
+       (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
+	      (mtconf    (car mtconfdat)))
+	 (load-pkts-to-db mtconf)))))
 
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
