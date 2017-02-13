@@ -125,7 +125,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ("-tag-expr"   . x)
     ("-item-patt"  . i)
     ;; misc
-    ("-start-dir"  . #f)
+    ("-start-dir"  . S)
     ("-set-vars"   . v)
     ("-debug"      . #f)  ;; for *verbosity* > 2
     ("-load"       . #f)  ;; load and exectute a scheme file
@@ -149,6 +149,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      res))
 	#f
 	(or inlst *arg-keys*)))
+
+;; given a mtutil param, return the old megatest equivalent
+;;
+(define (param-translate param)
+  (or (alist-ref (string->symbol param)
+		 '((-tag-expr  . "-tagexpr")
+		   (-mode-patt . "--modepatt")
+		   (-run-name  . "-runname")
+		   (-test-patt . "-testpatt")))
+      param))
 
 ;; Card types:
 ;;
@@ -293,11 +303,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
    (lambda (pktsdirs pktsdir pdb)
      (let* ((rgconfdat (find-and-read-config (conc toppath "/rungen.config")))
 	    (rgconf    (car rgconfdat))
-	    (areas     (configf:get-section mtconf "areas"))
+	    (areas     (map car (configf:get-section mtconf "areas")))
 	    (contours  (configf:get-section mtconf "contours"))
-	    (runstats  (find-pkts pdb '(runstart) '()))
 	    (torun     (make-hash-table)) ;; target => ( ... info ... )
 	    (rgentargs (hash-table-keys rgconf))) ;; these are the targets registered for automatically triggering
+       
        (for-each
 	(lambda (runkey)
 	  (let* ((keydats (configf:get-section rgconf runkey)))
@@ -314,7 +324,23 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (mode-tag  (string-split (or (configf:lookup mtconf "contours" contour) "") "/"))
 		      (mode-patt (if (eq? (length mode-tag) 2)(cadr mode-tag) #f))
 		      (tag-expr  (if (null? mode-tag) #f (car mode-tag)))
+		      (runstarts (find-pkts pdb '(runstart) `((o . ,contour)
+							      (t . ,runkey))))
+		      (rspkts    (map (lambda (x)
+					(alist-ref 'pkta x))
+				      runstarts))
+		      (starttimes (map string->number (map (lambda (x)
+							     (alist-ref 'D x))
+							   rspkts)))
 		      )
+
+		 ;; (print "rspkts: " rspkts " starttimes: " starttimes)
+		 
+		 ;; look in runstarts for matching runs by target and contour
+		 ;; get the timestamp for when that run started and pass it
+		 ;; to the rule logic here where "ruletype" will be applied
+		 ;; if it comes back "changed" then proceed to register the runs
+		 
 		 ;; run the ruletype here
 		 ;; if already marked to run (#t) don't unmark it.
 		 (if (not (configf:lookup torun runkey contour))
@@ -322,34 +348,34 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					       (list valparts)))
 		 (print "key: " key " val: " val)
 		 ;; now create a run request packet
-		 (for-each
-		  (lambda (area)
-		    (let ((area-path (configf:lookup mtconf "areas" area)))
-		      (let-values (((uuid pkt)
-				    (command-line->pkt
-				     "run"
-				     (append 
-				      `(("-target"     . ,runkey)
-					("-run-name"   . ,runname)
-					("-start-dir"  . ,area-path))
-				      (if mode-patt
-					  `(("-mode-patt"  . ,mode-patt))
-					  '())
-				      (if tag-expr
-					  `(("-tag-expr"   . ,tag-expr))
-					  '())
-				      (if (not (or mode-patt tag-expr))
-					  `(("-item-patt"  . "%"))
-					  '())))))
-			(with-output-to-file
-			    (conc pktsdir "/" uuid ".pkt")
-			  (lambda ()
-			    (print pkt))))))
-		  areas))) ;; for each area
+		 (if (null? starttimes) ;; primitive, have a previous run? skip for now!
+		     (for-each
+		      (lambda (area)
+			(let ((area-path (configf:lookup mtconf "areas" area)))
+			  (print "area: " area " path: " area-path)
+			  (let-values (((uuid pkt)
+					(command-line->pkt
+					 "run"
+					 (append 
+					  `(("-target"     . ,runkey)
+					    ("-run-name"   . ,runname)
+					    ("-start-dir"  . ,area-path))
+					  (if mode-patt
+					      `(("-mode-patt"  . ,mode-patt))
+					      '())
+					  (if tag-expr
+					      `(("-tag-expr"   . ,tag-expr))
+					      '())
+					  (if (not (or mode-patt tag-expr))
+					      `(("-item-patt"  . "%"))
+					      '())))))
+			    (with-output-to-file
+				(conc pktsdir "/" uuid ".pkt")
+			      (lambda ()
+				(print pkt))))))
+		      areas)))) ;; for each area
 	     keydats)))
-	(hash-table-keys rgconf)) ;; for each runkey
-       ;; now we have a hash of alists with targets (runkeys), how to calc runname etc.
-       (print "runstats: " runstats " rgentargs: " rgentargs)))))
+	(hash-table-keys rgconf)))))) ;; for each runkey
 
 (define (pkt->cmdline pkta)
   (fold (lambda (a res)
@@ -358,11 +384,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 (par (lookup-param-by-key key)))
 	    ;; (print "key: " key " val: " val " par: " par)
 	    (if par
-		(conc res " " par " " val)
+		(conc res " " (param-translate par) " " val)
 		res)))
-	""
+	"megatest -run"
 	pkta))
-	    
+
+(define (write-pkt pktsdir uuid pkt)
+  (if pktsdir
+      (with-output-to-file
+	  (conc pktsdir "/" uuid ".pkt")
+	(lambda ()
+	  (print pkt)))
+      (print "ERROR: cannot process commands without a pkts directory")))
+
 ;; collect all needed data and create run pkts for contours with changed inputs
 ;;
 (define (dispatch-commands mtconf toppath)
@@ -379,8 +413,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        (for-each
 	(lambda (pktdat)
 	  (let* ((pkta    (alist-ref 'pkta pktdat))
-		 (cmdline (pkt->cmdline pkta)))
-	    (print cmdline)))
+		 (cmdline (pkt->cmdline pkta))
+		 (uuid    (alist-ref 'Z pkta))
+		 (logf    (conc "logs/" uuid "-run.log")))
+	    (system (conc "NBFAKE_LOG=" logf " nbfake " cmdline))
+	    (mark-processed pdb (list (alist-ref 'id pktdat)))
+	    (let-values (((ack-uuid ack-pkt)
+			  (add-z-card
+			   (construct-sdat 'P uuid
+					   'T "runstart"
+					   'c (alist-ref 'o pkta) ;; THIS IS WRONG! SHOULD BE 'c
+					   't (alist-ref 't pkta)))))
+	      (write-pkt pktsdir ack-uuid ack-pkt))))
 	pkts)))))
 
 (define (get-pkts-dir mtconf)
@@ -403,12 +447,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 ;;  (hash-table-keys adjargs))
 	 (let-values (((uuid pkt)
 		       (command-line->pkt *action* adjargs)))
-	   (if pktsdir
-	       (with-output-to-file
-		   (conc pktsdir "/" uuid ".pkt")
-		 (lambda ()
-		   (print pkt)))
-	       (print "ERROR: cannot process commands without a pkts directory")))))
+	   (write-pkt pktsdir uuid pkt))))
       ((dispatch import rungen)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
 	      (mtconf    (car mtconfdat))
