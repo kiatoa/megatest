@@ -64,15 +64,17 @@ Usage: mtutil action [options]
   -manual                  : show the Megatest user manual
   -version                 : print megatest version (currently " megatest-version ")
 
-Actions include:
-   run                     : initial runs
+Actions:
+   run                     : initiate runs
    remove                  : remove runs
    rerun                   : register action for processing
    set-ss                  : set state/status
    archive                 : compress and move test data to archive disk
    kill                    : stop tests or entire runs
-   import                  : master area only, import pkts
-   process                 : process imported pkts, manage run jobs
+
+Contour actions:
+   import                  : import pkts
+   dispatch                : dispatch queued run jobs from imported pkts
    rungen                  : look at input sense list in [rungen] and generate run pkts
 
 Selectors 
@@ -100,7 +102,10 @@ Misc
 Examples:
 
 # Start a megatest run in the area \"mytests\"
-mtutil -area mytests -action run -target v1.63/aa3e -modepatt MYPATT -tagexpr quick
+mtutil -area mytests -action run -target v1.63/aa3e -mode-patt MYPATT -tag-expr quick
+
+# Start a contour
+mtutil run -contour quick -target v1.63/aa3e 
 
 Called as " (string-intersperse (argv) " ") "
 Version " megatest-version ", built from " megatest-fossil-hash ))
@@ -137,6 +142,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ("-immediate"  . I)
     ))
 
+(define (lookup-param-by-key key #!key (inlst #f))
+  (fold (lambda (a res)
+	  (if (eq? (cdr a) key)
+	      (car a)
+	      res))
+	#f
+	(or inlst *arg-keys*)))
+
 ;; Card types:
 ;;
 ;; a action
@@ -155,6 +168,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 args:arg-hash
 		 0))
 
+(if (or (member *action* '("-h" "-help" "help" "--help"))
+	(args:any-defined? "-h" "-help" "--help"))
+    (begin
+      (print help)
+      (exit 1)))
+
 ;; (print "*action*: " *action*)
 ;; (let-values (((uuid pkt)
 ;; 	      (command-line->pkt #f args:arg-hash)))
@@ -167,8 +186,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (args:get-arg "-runstep")
 	       (args:get-arg "-envcap")
 	       (args:get-arg "-envdelta")
-	       )
-	      ))
+	       )))
     (debug:print-error 0 *default-log-port* "Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
 ;;======================================================================
@@ -220,11 +238,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Runs
 ;;======================================================================
 
+;; make a runname
+;;
+(define (make-runname valparts)
+  "ww07.1a")
+
 ;; collect, translate, collate and assemble a pkt from the command-line
 ;;
-(define (command-line->pkt args args-hash)
-  (let* ((args-data (hash-table->alist args:arg-hash))
-	 (alldat    (apply append (list 'a *action*
+(define (command-line->pkt action args-alist)
+  (let* ((args-data (if args-alist
+			args-alist
+			(hash-table->alist args:arg-hash)))
+	 (alldat    (apply append (list 'a action
 					'U (current-user-name))
 			   (map (lambda (x)
 				  (let* ((param (car x))
@@ -260,6 +285,109 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (print "TOPPATH: " (configf:lookup mtconf "dyndat" "toppath"))
     mtconfdat))
 
+;; collect all needed data and create run pkts for contours with changed inputs
+;;
+(define (generate-run-pkts mtconf toppath)
+  (with-queue-db
+   mtconf
+   (lambda (pktsdirs pktsdir pdb)
+     (let* ((rgconfdat (find-and-read-config (conc toppath "/rungen.config")))
+	    (rgconf    (car rgconfdat))
+	    (areas     (configf:get-section mtconf "areas"))
+	    (contours  (configf:get-section mtconf "contours"))
+	    (runstats  (find-pkts pdb '(runstart) '()))
+	    (torun     (make-hash-table)) ;; target => ( ... info ... )
+	    (rgentargs (hash-table-keys rgconf))) ;; these are the targets registered for automatically triggering
+       (for-each
+	(lambda (runkey)
+	  (let* ((keydats (configf:get-section rgconf runkey)))
+	    (for-each
+	     (lambda (sense) ;; these are the sense rules
+	       (let* ((key       (car sense))
+		      (val       (cadr sense))
+		      (keyparts  (string-split key ":"))
+		      (contour   (car keyparts))
+		      (ruletype  (let ((res (cdr keyparts)))
+				   (if (null? res) #f (cadr keyparts))))
+		      (valparts  (string-split val)) ;; runname-rule params
+		      (runname   (make-runname #f))
+		      (mode-tag  (string-split (or (configf:lookup mtconf "contours" contour) "") "/"))
+		      (mode-patt (if (eq? (length mode-tag) 2)(cadr mode-tag) #f))
+		      (tag-expr  (if (null? mode-tag) #f (car mode-tag)))
+		      )
+		 ;; run the ruletype here
+		 ;; if already marked to run (#t) don't unmark it.
+		 (if (not (configf:lookup torun runkey contour))
+		     (configf:section-var-set! torun runkey contour
+					       (list valparts)))
+		 (print "key: " key " val: " val)
+		 ;; now create a run request packet
+		 (for-each
+		  (lambda (area)
+		    (let ((area-path (configf:lookup mtconf "areas" area)))
+		      (let-values (((uuid pkt)
+				    (command-line->pkt
+				     "run"
+				     (append 
+				      `(("-target"     . ,runkey)
+					("-run-name"   . ,runname)
+					("-start-dir"  . ,area-path))
+				      (if mode-patt
+					  `(("-mode-patt"  . ,mode-patt))
+					  '())
+				      (if tag-expr
+					  `(("-tag-expr"   . ,tag-expr))
+					  '())
+				      (if (not (or mode-patt tag-expr))
+					  `(("-item-patt"  . "%"))
+					  '())))))
+			(with-output-to-file
+			    (conc pktsdir "/" uuid ".pkt")
+			  (lambda ()
+			    (print pkt))))))
+		  areas))) ;; for each area
+	     keydats)))
+	(hash-table-keys rgconf)) ;; for each runkey
+       ;; now we have a hash of alists with targets (runkeys), how to calc runname etc.
+       (print "runstats: " runstats " rgentargs: " rgentargs)))))
+
+(define (pkt->cmdline pkta)
+  (fold (lambda (a res)
+	  (let* ((key (car a)) ;; get the key name
+		 (val (cdr a))
+		 (par (lookup-param-by-key key)))
+	    ;; (print "key: " key " val: " val " par: " par)
+	    (if par
+		(conc res " " par " " val)
+		res)))
+	""
+	pkta))
+	    
+;; collect all needed data and create run pkts for contours with changed inputs
+;;
+(define (dispatch-commands mtconf toppath)
+  (with-queue-db
+   mtconf
+   (lambda (pktsdirs pktsdir pdb)
+     (let* ((rgconfdat (find-and-read-config (conc toppath "/rungen.config")))
+	    (rgconf    (car rgconfdat))
+	    (areas     (configf:get-section mtconf "areas"))
+	    (contours  (configf:get-section mtconf "contours"))
+	    (pkts      (find-pkts pdb '(cmd) '()))
+	    (torun     (make-hash-table)) ;; target => ( ... info ... )
+	    (rgentargs (hash-table-keys rgconf))) ;; these are the targets registered for automatically triggering
+       (for-each
+	(lambda (pktdat)
+	  (let* ((pkta    (alist-ref 'pkta pktdat))
+		 (cmdline (pkt->cmdline pkta)))
+	    (print cmdline)))
+	pkts)))))
+
+(define (get-pkts-dir mtconf)
+  (let ((pktsdirs  (configf:lookup mtconf "setup" "pktsdirs"))
+	(pktsdir   (if pktsdirs (car (string-split pktsdirs " ")) #f)))
+    pktsdir))
+
 (if *action*
     (case (string->symbol *action*)
       ((run remove rerun set-ss archive kill)
@@ -274,29 +402,21 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 ;; 	(hash-table-delete! adjargs key))) ;; we need to delete any params intended for mtutil
 	 ;;  (hash-table-keys adjargs))
 	 (let-values (((uuid pkt)
-		       (command-line->pkt #f adjargs)))
+		       (command-line->pkt *action* adjargs)))
 	   (if pktsdir
 	       (with-output-to-file
 		   (conc pktsdir "/" uuid ".pkt")
 		 (lambda ()
 		   (print pkt)))
 	       (print "ERROR: cannot process commands without a pkts directory")))))
-      ((process import rungen)
+      ((dispatch import rungen)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
 	      (mtconf    (car mtconfdat))
 	      (toppath   (configf:lookup mtconf "dyndat" "toppath")))
 	 (case (string->symbol *action*)
-	   ((import)(load-pkts-to-db mtconf)) ;; import pkts
-	   ((rungen)
-	    (with-queue-db
-	     mtconf
-	     (lambda (pktsdirs pktdir pdb)
-	       (let ((rgconf   (find-and-read-config (conc toppath "/rungen.config")))
-		     (areas    (configf:get-section mtconf "areas"))
-		     (contours (configf:get-section mtconf "contours"))
-		     (runstats (find-pkts pdb '(runstat) '())))
-		 (print "runstats: " runstats)))))
-	   )))))
+	   ((import)   (load-pkts-to-db mtconf)) ;; import pkts
+	   ((rungen)   (generate-run-pkts mtconf toppath))
+	   ((dispatch) (dispatch-commands mtconf toppath)))))))
 
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
