@@ -30,6 +30,15 @@
       (print "Usage: " (car (argv)) " ... "))
   (exit 0))
 
+ ;; one-of args defined
+(define (args:any-defined? . param)
+  (let ((res #f))
+    (for-each 
+     (lambda (arg)
+       (if (args:get-arg arg)(set! res #t)))
+     param)
+    res))
+
 ;; args: 
 (define (args:get-args args params switches arg-hash num-needed)
   (let* ((numargs (length args))

@@ -714,15 +714,6 @@
 ;; M I S C   U T I L S
 ;;======================================================================
 
-;; one-of args defined
-(define (args-defined? . param)
-  (let ((res #f))
-    (for-each 
-     (lambda (arg)
-       (if (args:get-arg arg)(set! res #t)))
-     param)
-    res))
-
 ;; convert stuff to a number if possible
 (define (any->number val)
   (cond 
