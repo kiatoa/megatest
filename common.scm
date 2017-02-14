@@ -592,7 +592,7 @@
 	(debug-mode  (debug:debug-mode 1))
 	(last-time   (current-seconds))
         (this-wd-num     (begin (mutex-lock! *wdnum*mutex) (let ((x *wdnum*)) (set! *wdnum* (add1 *wdnum*)) (mutex-unlock! *wdnum*mutex) x))))
-    (debug:print-info 0 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id)" this-wd-num="this-wd-num)
+    (debug:print-info 3 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id)" this-wd-num="this-wd-num)
     (if (and legacy-sync (not *time-to-exit*))
 	(let* ((dbstruct (db:setup))
 	       (mtdb     (dbr:dbstruct-mtdb dbstruct))
@@ -752,7 +752,7 @@
 ;; (map print (map car (hash-table->alist (read-config "runconfigs.config" #f #t))))
 (define (common:get-runconfig-targets #!key (configf #f))
   (let ((targs       (sort (map car (hash-table->alist
-				     (or configf
+				     (or configf ;; NOTE: There is no value in using runconfig:read here.
 					 (read-config (conc *toppath* "/runconfigs.config")
 						      #f #t)
 					 (make-hash-table))))

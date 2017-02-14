@@ -179,6 +179,31 @@
 	   allow-system) ;; account for sections and return allow-system as it might be a symbol such as return-strings
       allow-system))
     
+;; given a config hash and a section name, apply that section to all matching sections (using wildcard % or regex if /..../)
+;; remove the section when done so that there is no downstream clobbering
+;;
+(define (configf:apply-wildcards ht section-name)
+  (if (hash-table-exists? ht section-name)
+      (let ((vars (hash-table-ref ht section-name))
+            (rx   (regexp (if (string-contains section-name "%")
+                              (string-substitute section-name "%" ".*")
+                              section-name))))
+        (for-each
+         (lambda (section)
+           (if (and section-name
+                    section 
+                    (not (string=? section-name section))
+                    (string-match rx section))
+               (for-each
+                (lambda (bundle)
+                  (let ((key  (car bundle))
+                        (val  (cadr bundle))
+                        (meta (if (> (length bundle) 2)(caddr bundle) #f)))
+                    (hash-table-set! ht section (config:assoc-safe-add (hash-table-ref ht section) key val metadata: meta))))
+                vars)))
+         (hash-table-keys ht))))
+  ht)
+
 ;; read a config file, returns hash table of alists
 
 ;; read a config file, returns hash table of alists
@@ -187,8 +212,9 @@
 ;; in the environment on the fly
 ;; sections: #f => get all, else list of sections to gather
 ;; post-section-procs alist of section-pattern => proc, where: (proc section-name next-section-name ht curr-path)
+;; apply-wildcards: #t/#f - apply vars from targets with % wildcards to all matching sections
 ;;
-(define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f)(settings (make-hash-table))(keep-filenames #f)(post-section-procs '()))
+(define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f)(settings (make-hash-table))(keep-filenames #f)(post-section-procs '())(apply-wildcards #t))
   (debug:print-info 5 *default-log-port* "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections " pwd: " (current-directory))
   (debug:print 9 *default-log-port* "START: " path)
   (if (and (not (port? path))
@@ -203,7 +229,14 @@
 	    (res        (if (not ht)(make-hash-table) ht))
 	    (metapath   (if (or (debug:debug-mode 9)
 				keep-filenames)
-			    path #f)))
+			    path #f))
+            (process-wildcards  (lambda (res curr-section-name)
+                                  (if (and apply-wildcards
+                                           (or (string-contains curr-section-name "%")   ;; wildcard
+                                               (string-match "/.*/" curr-section-name))) ;; regex
+                                      (begin
+                                        (configf:apply-wildcards res curr-section-name)
+                                        (hash-table-delete! res curr-section-name))))))  ;; NOTE: if the section is a wild card it will be REMOVED from res 
 	(let loop ((inl               (configf:read-line inp res (calc-allow-system allow-system curr-section sections) settings)) ;; (read-line inp))
 		   (curr-section-name (if curr-section curr-section "default"))
 		   (var-flag #f);; turn on for key-var-pr and cont-ln-rx, turn off elsewhere
@@ -211,6 +244,8 @@
 	  (debug:print-info 8 *default-log-port* "curr-section-name: " curr-section-name " var-flag: " var-flag "\n   inl: \"" inl "\"")
 	  (if (eof-object? inl) 
 	      (begin
+                ;; process last section for wildcards
+                (process-wildcards res curr-section-name)
 		(if (string? path) ;; we received a path, not a port, thus we are responsible for closing it.
 		    (close-input-port inp))
 		(hash-table-delete! res "") ;; we are using "" as a dumping ground and must remove it before returning the ht
@@ -267,6 +302,9 @@
 							     (if (string-match patt curr-section-name)
 								 (proc curr-section-name section-name res path))))
 							 post-section-procs)
+                                                        ;; after gathering the vars for a section and if apply-wildcards is true and if there is a wildcard in the section name process wildcards
+                                                        ;; NOTE: we are processing the curr-section-name, NOT section-name.
+                                                        (process-wildcards res curr-section-name)
 							(loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings)
 							      ;; if we have the sections list then force all settings into "" and delete it later?
 							      (if (or (not sections) 
