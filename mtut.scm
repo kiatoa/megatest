@@ -281,8 +281,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					(list meta value)
 					'())))
 				(filter cdr args-data)))))
-    (print  "Alldat: " alldat
-	    " args-data: " args-data)
+;; (print  "Alldat: " alldat
+;;         " args-data: " args-data)
     (add-z-card
      (apply construct-sdat alldat))))
 
