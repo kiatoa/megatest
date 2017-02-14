@@ -213,7 +213,7 @@ Misc
   (runs-matrix        #f)                               ;; used in newdashboard
   ((start-run-offset   0)                : number)      ;; left-right slider value
   ((start-test-offset  0)                : number)      ;; up-down slider value
-  ((runs-btn-height    (or (configf:lookup *configdat* "dashboard" "btn-height") "x14")) : string)  ;; was 12
+  ((runs-btn-height    (or (configf:lookup *configdat* "dashboard" "btn-height") "x16")) : string)  ;; was 12
   ((runs-btn-fontsz    (or (configf:lookup *configdat* "dashboard" "btn-fontsz") "10")) : string)   ;; was 8
   ((runs-cell-width    (or (configf:lookup *configdat* "dashboard" "cell-width") "60")) : string)   ;; was 50
   ((all-test-names     '())              : list)
@@ -1505,7 +1505,7 @@ Misc
 		       #:expand "YES"
 		       #:scrollbar "YES"
 		       #:posx "0.5"
-		       #:posy "0.5"
+		       ;;#:posy "0.5"
 		       #:action (make-canvas-action
 				  (lambda (c xadj yadj)
 				    (debug:catch-and-dump
@@ -3082,7 +3082,7 @@ Misc
                                                                  (newmax (if (> val max) val max))
                                                                  (newres (cons val res)))
                                                             (if (null? tal)
-                                                                (values (reverse res) newmin newmax)
+                                                                (values (reverse res) (- newmin 2) (+ newmax 2))
                                                                 (loop (car tal)(cdr tal) newres newmin newmax)))))))
                   (if (not (hash-table-exists? graph-matrix-table fieldn))
                       (begin
