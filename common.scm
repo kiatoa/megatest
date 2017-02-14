@@ -9,7 +9,8 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
+     matchable)
 (require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -792,7 +793,29 @@
 	      (if (null? tal)
 		  #f
 		  (loop (car tal)(cdr tal))))))))
-  
+
+;; return the youngest timestamp . filename
+;;
+(define (common:get-youngest glob-list)
+  (let ((all-files (apply append
+			  (map (lambda (patt)
+				 (handle-exceptions
+				     exn
+				     '()
+				   (glob patt)))
+			       glob-list))))
+    (fold (lambda (fname res)
+	    (let ((last-mod (car res))
+		  (curmod   (handle-exceptions
+				exn
+				0
+			      (file-modification-time fname))))
+	      (if (> curmod last-mod)
+		  (list curmod fname)
+		  res)))
+	  '(0 "n/a")
+	  all-files)))
+
 ;;======================================================================
 ;; T A R G E T S  ,   S T A T E ,   S T A T U S ,   
 ;;                    R U N N A M E    A N D   T E S T P A T T
