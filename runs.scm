@@ -1978,7 +1978,7 @@
     (for-each
      (lambda (tag)
        (if (patt-list-match tag tagpatt)
-           (set! res (append (hash-table-ref tagdata tag)))))
+           (set! res (append (hash-table-ref tagdata tag) res))))
      (hash-table-keys tagdata))
     res))
     
