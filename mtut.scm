@@ -126,6 +126,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ("-item-patt"  . i)
     ;; misc
     ("-start-dir"  . S)
+    ("-msg"        . M)
     ("-set-vars"   . v)
     ("-debug"      . #f)  ;; for *verbosity* > 2
     ("-load"       . #f)  ;; load and exectute a scheme file
@@ -157,7 +158,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 '((-tag-expr  . "-tagexpr")
 		   (-mode-patt . "--modepatt")
 		   (-run-name  . "-runname")
-		   (-test-patt . "-testpatt")))
+		   (-test-patt . "-testpatt")
+		   (-msg       . "-m")))
       param))
 
 ;; Card types:
@@ -295,6 +297,32 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (print "TOPPATH: " (configf:lookup mtconf "dyndat" "toppath"))
     mtconfdat))
 
+;; make a run request pkt from basic data
+;;
+(define (create-run-pkt mtconf area runkey runname mode-patt tag-expr pktsdir reason)
+  (let ((area-path (configf:lookup mtconf "areas" area)))
+    (let-values (((uuid pkt)
+		  (command-line->pkt
+		   "run"
+		   (append 
+		    `(("-target"     . ,runkey)
+		      ("-run-name"   . ,runname)
+		      ("-start-dir"  . ,area-path)
+		      ("-msg"        . ,reason))
+		    (if mode-patt
+			`(("-mode-patt"  . ,mode-patt))
+			'())
+		    (if tag-expr
+			`(("-tag-expr"   . ,tag-expr))
+			'())
+		    (if (not (or mode-patt tag-expr))
+			`(("-item-patt"  . "%"))
+			'())))))
+      (with-output-to-file
+	  (conc pktsdir "/" uuid ".pkt")
+	(lambda ()
+	  (print pkt))))))
+
 ;; collect all needed data and create run pkts for contours with changed inputs
 ;;
 (define (generate-run-pkts mtconf toppath)
@@ -310,72 +338,75 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        
        (for-each
 	(lambda (runkey)
-	  (let* ((keydats (configf:get-section rgconf runkey)))
+	  (let* ((keydats   (configf:get-section rgconf runkey)))
 	    (for-each
 	     (lambda (sense) ;; these are the sense rules
-	       (let* ((key       (car sense))
-		      (val       (cadr sense))
-		      (keyparts  (string-split key ":"))
-		      (contour   (car keyparts))
-		      (ruletype  (let ((res (cdr keyparts)))
-				   (if (null? res) #f (cadr keyparts))))
-		      (valparts  (string-split val)) ;; runname-rule params
-		      (runname   (make-runname #f))
-		      (mode-tag  (string-split (or (configf:lookup mtconf "contours" contour) "") "/"))
-		      (mode-patt (if (eq? (length mode-tag) 2)(cadr mode-tag) #f))
-		      (tag-expr  (if (null? mode-tag) #f (car mode-tag)))
-		      (runstarts (find-pkts pdb '(runstart) `((o . ,contour)
-							      (t . ,runkey))))
-		      (rspkts    (map (lambda (x)
-					(alist-ref 'pkta x))
-				      runstarts))
-		      (starttimes (map string->number (map (lambda (x)
-							     (alist-ref 'D x))
-							   rspkts)))
+	       (let* ((key        (car sense))
+		      (val        (cadr sense))
+		      (keyparts   (string-split key ":"))
+		      (contour    (car keyparts))
+		      (ruletype   (let ((res (cdr keyparts)))
+				    (if (null? res) #f (cadr keyparts))))
+		      (valparts   (string-split val)) ;; runname-rule params
+		      (runname    (make-runname #f))
+		      (runstarts  (find-pkts pdb '(runstart) `((o . ,contour)
+							       (t . ,runkey))))
+		      (rspkts     (map (lambda (x)
+					 (alist-ref 'pkta x))
+				       runstarts))
+		      (starttimes ;; sort by age (youngest first) and delete duplicates by target
+		       (delete-duplicates
+			(sort 
+			 (map (lambda (x)
+				`(,(alist-ref 't x) . ,(string->number (alist-ref 'D x))))
+			      rspkts)
+			 (lambda (a b)(> (cdr a)(cdr b))))      ;; sort descending
+			(lambda (a b)(equal? (car a)(car b))))) ;; remove duplicates by target
 		      )
-
-		 ;; (print "rspkts: " rspkts " starttimes: " starttimes)
-		 
 		 ;; look in runstarts for matching runs by target and contour
 		 ;; get the timestamp for when that run started and pass it
 		 ;; to the rule logic here where "ruletype" will be applied
 		 ;; if it comes back "changed" then proceed to register the runs
-		 
-		 ;; run the ruletype here
-		 ;; if already marked to run (#t) don't unmark it.
-		 (if (not (configf:lookup torun runkey contour))
-		     (configf:section-var-set! torun runkey contour
-					       (list valparts)))
-		 (print "key: " key " val: " val)
-		 ;; now create a run request packet
-		 (if (null? starttimes) ;; primitive, have a previous run? skip for now!
-		     (for-each
-		      (lambda (area)
-			(let ((area-path (configf:lookup mtconf "areas" area)))
-			  (print "area: " area " path: " area-path)
-			  (let-values (((uuid pkt)
-					(command-line->pkt
-					 "run"
-					 (append 
-					  `(("-target"     . ,runkey)
-					    ("-run-name"   . ,runname)
-					    ("-start-dir"  . ,area-path))
-					  (if mode-patt
-					      `(("-mode-patt"  . ,mode-patt))
-					      '())
-					  (if tag-expr
-					      `(("-tag-expr"   . ,tag-expr))
-					      '())
-					  (if (not (or mode-patt tag-expr))
-					      `(("-item-patt"  . "%"))
-					      '())))))
-			    (with-output-to-file
-				(conc pktsdir "/" uuid ".pkt")
-			      (lambda ()
-				(print pkt))))))
-		      areas)))) ;; for each area
+
+		 (case (string->symbol ruletype)
+		   ((file)
+		    (let* ((file-globs  (cdr valparts))
+			   (youngestdat (common:get-youngest file-globs))
+			   (youngestmod (car youngestdat)))
+		      ;; (print "youngestmod: " youngestmod " starttimes: " starttimes)
+		      (if (null? starttimes) ;; this target has never been run
+			  (configf:section-var-set! torun contour runkey `("file:neverrun" ,runname))
+			  (for-each
+			   (lambda (starttime) ;; look at the time the last run was kicked off for this contour
+			     (if (> youngestmod (cdr starttime))
+				 (begin
+				   (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
+				   (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (cadr youngestdat)) ,runname)))))
+			   starttimes))
+		      )))))
 	     keydats)))
-	(hash-table-keys rgconf)))))) ;; for each runkey
+	(hash-table-keys rgconf))
+       
+       ;; now have torun populated
+       (for-each
+	(lambda (contour)
+	  (let* ((mode-tag  (string-split (or (configf:lookup mtconf "contours" contour) "") "/"))
+		 (mode-patt (if (eq? (length mode-tag) 2)(cadr mode-tag) #f))
+		 (tag-expr  (if (null? mode-tag) #f (car mode-tag))))
+	    (for-each
+	     (lambda (runkeydat)
+	       (let* ((runkey (car runkeydat))
+		      (info   (cadr runkeydat)))
+		 (for-each
+		  (lambda (area)
+		    (let ((runname (cadr info))
+			  (reason  (car  info)))
+		      (print "runkey: " runkey " contour: " contour " info: " info " area: " area  " tag-expr: " tag-expr " mode-patt: " mode-patt)
+		      (create-run-pkt mtconf area runkey runname mode-patt tag-expr pktsdir reason)))
+		  areas)))
+	     (configf:get-section torun contour))))
+	(hash-table-keys torun))))))
+
 
 (define (pkt->cmdline pkta)
   (fold (lambda (a res)
