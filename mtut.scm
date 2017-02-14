@@ -252,8 +252,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; make a runname
 ;;
-(define (make-runname valparts)
-  "ww07.1a")
+(define (make-runname pre post)
+ (time->string
+  (seconds->local-time (current-seconds)) "%Yw%V.%w-%H%M"))
 
 ;; collect, translate, collate and assemble a pkt from the command-line
 ;;
@@ -348,7 +349,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (ruletype   (let ((res (cdr keyparts)))
 				    (if (null? res) #f (cadr keyparts))))
 		      (valparts   (string-split val)) ;; runname-rule params
-		      (runname    (make-runname #f))
+		      (runname    (make-runname "" ""))
 		      (runstarts  (find-pkts pdb '(runstart) `((o . ,contour)
 							       (t . ,runkey))))
 		      (rspkts     (map (lambda (x)
@@ -391,8 +392,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        (for-each
 	(lambda (contour)
 	  (let* ((mode-tag  (string-split (or (configf:lookup mtconf "contours" contour) "") "/"))
-		 (mode-patt (if (eq? (length mode-tag) 2)(cadr mode-tag) #f))
-		 (tag-expr  (if (null? mode-tag) #f (car mode-tag))))
+		 (tag-expr  (if (eq? (length mode-tag) 2)(cadr mode-tag) #f))
+		 (mode-patt (if (null? mode-tag) #f (car mode-tag))))
 	    (for-each
 	     (lambda (runkeydat)
 	       (let* ((runkey (car runkeydat))
