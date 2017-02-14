@@ -201,7 +201,7 @@
 (define (runs:run-tests target runname test-patts user flags #!key (run-count 1)) ;; test-names
   (let* ((keys               (keys:config-get-fields *configdat*))
 	 (keyvals            (keys:target->keyval keys target))
-	 (run-id             (rmt:register-run keyvals runname "new" "n/a" user))  ;;  test-name)))
+	 (run-id             (rmt:register-run keyvals runname "new" "n/a" user (args:get-arg "-contour")))  ;;  test-name)))
 	 ;; (deferred          '()) ;; delay running these since they have a waiton clause
 	 (runconfigf         (conc  *toppath* "/runconfigs.config"))
 	 (test-records       (make-hash-table))
@@ -1053,7 +1053,7 @@
   ;;
   ;; (rmt:find-and-mark-incomplete)
 
-  (let* ((run-info              (rmt:get-run-info run-id))
+  (let* ((run-info             (rmt:get-run-info run-id))
 	(tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
 	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
 	(test-registry         (make-hash-table))
@@ -1999,7 +1999,7 @@
   (debug:print 4 *default-log-port* "runs:rollup-run, keys: " keys " -runname " runname " user: " user)
   (let* ((db              #f)
 	 ;; register run operates on the main db
-	 (new-run-id      (rmt:register-run keyvals runname "new" "n/a" user))
+	 (new-run-id      (rmt:register-run keyvals runname "new" "n/a" user (args:get-arg "-contour")))
 	 (prev-tests      (rmt:get-matching-previous-test-run-records new-run-id "%" "%"))
 	 (curr-tests      (mt:get-tests-for-run new-run-id "%/%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
