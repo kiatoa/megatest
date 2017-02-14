@@ -42,12 +42,22 @@
 (define *dashboard-comment-share-slot* #f)
 
 (define (dtests:get-pre-command #!key (default-override #f))
-  (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "pre-command")))
-    (or cfg-ovrd default-override "viewscreen "))) ;; "xterm -geometry 180x20 -e \"")))
+  (let* ((orig-pre-command "export CMD='")
+         (viewscreen-pre-command  "viewscreen ")
+         (use-viewscreen (configf:lookup *configdat* "dashboard" "use-viewscreen"))
+         (default-pre-command (if use-viewscreen viewscreen-pre-command orig-pre-command))
+         (cfg-ovrd (configf:lookup *configdat* "dashboard" "pre-command")))
+    (or cfg-ovrd default-override default-pre-command))) ;; "xterm -geometry 180x20 -e \""))
 
+  
 (define (dtests:get-post-command #!key (default-override #f))
-  (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "post-command")))
-    (or cfg-ovrd default-override ""))) ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+  (let* ((orig-post-command (conc "';xterm -geometry 180x20 -e \"(echo; echo -n START:;date +ww%U.%w-$H:%M:%S;echo;echo $CMD;echo;$CMD)|&"
+                                 "tee -a runlog-`date +ww%U.%w-%H:%M`.log;echo Press any key to continue;bash -c 'read -n 1 -s'\" &"))
+         (viewscreen-post-command  "")
+         (use-viewscreen (configf:lookup *configdat* "dashboard" "use-viewscreen"))
+         (default-post-command (if use-viewscreen viewscreen-post-command orig-post-command))
+         (cfg-ovrd (configf:lookup *configdat* "dashboard" "post-command")))
+    (or cfg-ovrd default-override default-post-command))) ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
 
 
 (define (test-info-panel testdat store-label widgets)
