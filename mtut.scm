@@ -113,8 +113,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; args and pkt key specs
 ;;
 (define *arg-keys*
-  '(("-run"        . r)
-    ("-area"       . G) ;; maps to group
+  '(("-area"       . G) ;; maps to group
     ("-target"     . t)
     ("-run-name"   . n)
     ("-state"      . e)
@@ -200,6 +199,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (args:get-arg "-envdelta")
 	       )))
     (debug:print-error 0 *default-log-port* "Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
+
+(if (or (args:any? "-h" "help" "-help" "--help")
+	(member *action* '("-h" "-help" "--help" "help")))
+    (begin
+      (print help)
+      (exit 1)))
 
 ;;======================================================================
 ;; pkts
@@ -297,6 +302,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (configf:section-var-set! mtconf "dyndat" "toppath" start-dir)))
     (print "TOPPATH: " (configf:lookup mtconf "dyndat" "toppath"))
     mtconfdat))
+
+
+;; NEED TIMESTAMP ON PKTS for efficient loading of packets into db.
+
 
 ;; make a run request pkt from basic data
 ;;

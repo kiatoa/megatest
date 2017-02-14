@@ -143,6 +143,7 @@ Queries
 
 Misc 
   -start-dir path         : switch to this directory before running megatest
+  -contour cname          : add a level of hierarcy to the linktree and run paths
   -rebuild-db             : bring the database schema up to date
   -cleanup-db             : remove any orphan records, vacuum the db
   -import-megatest.db     : migrate a database from v1.55 series to v1.60 series
@@ -245,6 +246,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			":units"
 			;; misc
 			"-start-dir"
+			"-contour"
 			"-server"
 			"-stop-server"
 			"-transport"
