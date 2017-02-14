@@ -17,6 +17,10 @@
       (hash-table-ref/default args:arg-hash arg #f)
       (hash-table-ref/default args:arg-hash arg (car default))))
 
+(define (args:any? . args)
+  (not (null? (filter (lambda (x) x)
+		      (map args:get-arg args)))))
+
 (define (args:get-arg-from ht arg . default)
   (if (null? default)
       (hash-table-ref/default ht arg #f)
