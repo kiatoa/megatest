@@ -32,7 +32,7 @@
 
 (include "common_records.scm")
 (include "db_records.scm")
-
+(require-library stml)
 (define (http-transport:make-server-url hostport)
   (if (not hostport)
       #f
@@ -103,8 +103,16 @@
 						  headers: '((content-type text/plain))))
 				  ((equal? (uri-path (request-uri (current-request))) 
 					   '(/ "hey"))
-				   (send-response body: "hey there!\n"
+				   (send-response body: "hey there!\n" 
 						  headers: '((content-type text/plain))))
+                                  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ "jquery3.1.0.js"))
+				   (send-response body: (http-transport:show-jquery) 
+						  headers: '((content-type application/javascript))))
+                                  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ "dashboard"))
+				   (send-response body: (http-transport:html-dboard $) 
+						  headers: '((content-type text/HTML)))) 
 				  (else (continue))))))))
     (http-transport:try-start-server ipaddrstr start-port)))
 
@@ -522,9 +530,30 @@
      (thread-start! th1)
      (thread-join! th2))))
 
+;;===============================================
+;; Java script
+;;===============================================
+(define (http-transport:show-jquery)
+  (let* ((data  (tests:readlines "/nfs/site/disks/ch_ciaf_disk023/fdk_gwa_disk003/pjhatwal/fdk/docs/qa-env-team/jquery-3.1.0.slim.min.js")))
+(string-join data "\n")))
+
 ;;======================================================================
 ;; web pages
 ;;======================================================================
+
+(define (http-transport:html-dboard $)
+  (let* ((page ($ 'page))
+         (oup       (open-output-string)) 
+         (bdy "--------------------------")
+
+         (ret  (tests:dynamic-dboard page)))
+  ;(display ret oup)
+    (s:output-new  oup  ret)
+   (close-output-port oup)
+
+  (set! bdy   (get-output-string oup))
+    ;(debug:print-info 0 *default-log-port* "val: " bdy)
+  (conc "<h1>Dashboard</h1>" bdy "<br/> <br/> "  )))
 
 (define (http-transport:main-page)
   (let ((linkpath (root-path)))

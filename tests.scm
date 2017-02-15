@@ -575,9 +575,7 @@ th {background-color: #8c8c8c;}
 td.test {background-color: #d9dbdd;}
 td.PASS {background-color: #347533;}
 td.FAIL {background-color: #cc2812;}
-
-  </style>
-  <script src=/nfs/site/disks/ch_ciaf_disk023/fdk_gwa_disk003/pjhatwal/fdk/docs/qa-env-team/jquery-3.1.0.slim.min.js></script>
+</style>
 
 
   <script type="text/JavaScript">
@@ -663,6 +661,24 @@ td.FAIL {background-color: #cc2812;}
 EOF
 )
 
+(define tests:css-jscript-block-dynamic 
+#<<EOF
+           <script src= ./jquery3.1.0.js></script> 
+EOF
+)
+(define tests:css-jscript-block-static 
+#<<EOF
+           <script src=/nfs/site/disks/ch_ciaf_disk023/fdk_gwa_disk003/pjhatwal/fdk/docs/qa-env-team/jquery-3.1.0.slim.min.js></script> 
+EOF
+)
+
+
+(define (tests:css-jscript-block-cond dynamic) 
+      (if (equal? dynamic  #t)
+       tests:css-jscript-block-dynamic
+       tests:css-jscript-block-static))
+
+       
 (define (tests:run-record->test-path run numkeys)
    (append (take (vector->list run) numkeys)
 	   (list (vector-ref run (+ 1 numkeys)))))
@@ -703,42 +719,20 @@ EOF
       runs)
    resh))
 
-;; (tests:create-html-tree "test-index.html")
+
+;; tests:genrate dashboard body 
 ;;
-(define (tests:create-html-tree outf)
-   (let* ((lockfile  (conc outf ".lock"))
-	 (runs-to-process '())
-         (linktree  (common:get-linktree))
-          (area-name (common:get-testsuite-name))
-	  (keys      (rmt:get-keys))
-	  (numkeys   (length keys))
-         (total-runs  (rmt:get-num-runs "%"))
-         (pg-size 10)   )
-    (if (common:simple-file-lock lockfile)
-        (begin
-         (print total-runs)    
-        (let loop ((page 0))
-	(let* ((oup       (open-output-file (or outf (conc linktree "/page" page ".html"))))
-               (start (* page pg-size)) 
+
+(define (tests:dashboard-body page pg-size keys numkeys  total-runs linktree area-name get-prev-links get-next-links flag)
+  (let* ((start (* page pg-size)) 
 	       (runsdat   (rmt:get-runs "%" pg-size start (map (lambda (x)(list x "%")) keys)))
 	       (header    (vector-ref runsdat 0))
 	       (runs      (vector-ref runsdat 1))
                (ctr 0)
                (test-runs-hash (tests:get-rest-data runs header numkeys))
                (test-list (hash-table-keys test-runs-hash))
-               (get-prev-links (lambda (page linktree )   
-                            (let* ((link  (if (not (eq? page 0))
-                                            (s:a "&lt;&lt;prev" 'href (conc  linktree "/page" (- page 1) ".html"))
-                                            (s:a "" 'href (conc  linktree "/page"  page ".html")))))
-                               link)))
-                (get-next-links (lambda (page linktree total-runs)   
-                            (let* ((link  (if (> total-runs (+ 1 (* page pg-size)))
-                                            (s:a "next&gt;&gt;" 'href (conc  linktree "/page"  (+ page 1) ".html"))
-                                             (s:a "" 'href (conc  linktree "/page" page  ".html")))))
-                               link))))
-	  (s:output-new
-	   oup
-	   (s:html tests:css-jscript-block
+               ) 
+  (s:html tests:css-jscript-block (tests:css-jscript-block-cond flag)
 		   (s:title "Summary for " area-name)
 		   (s:body 'onload "addEvents();"
                           (get-prev-links page linktree)
@@ -747,7 +741,6 @@ EOF
 			   (s:h1 "Summary for " area-name)
                            (s:h3 "Filter" )
                            (s:input 'type "text"  'name "testname" 'id "testname" 'length "30" 'onkeyup "filtersome()")
-  
 			   ;; top list
 			   (s:table 'id "LinkedList1" 'border "1"
                             (map (lambda (key)
@@ -785,7 +778,38 @@ EOF
                                                                 runs))))
                                                         res))
                                                    item-keys)))
-                               test-list)))))
+                               test-list)))))) 
+
+;; (tests:create-html-tree "test-index.html")
+;;
+(define (tests:create-html-tree outf)
+   (let* ((lockfile  (conc outf ".lock"))
+	 (runs-to-process '())
+         (linktree  (common:get-linktree))
+          (area-name (common:get-testsuite-name))
+	  (keys      (rmt:get-keys))
+	  (numkeys   (length keys))
+         (total-runs  (rmt:get-num-runs "%"))
+         (pg-size 10))
+    (if (common:simple-file-lock lockfile)
+        (begin
+         ;(print total-runs)    
+        (let loop ((page 0))
+	(let* ((oup       (open-output-file (or outf (conc linktree "/page" page ".html"))))
+               (get-prev-links (lambda (page linktree )   
+                            (let* ((link  (if (not (eq? page 0))
+                                   (s:a "&lt;&lt;prev" 'href (conc  linktree "/page" (- page 1) ".html"))
+                                   (s:a "" 'href (conc  linktree "/page"  page ".html")))))
+                               link)))
+               (get-next-links (lambda (page linktree total-runs)   
+                            (let* ((link  (if (> total-runs (+ 10 (* page pg-size)))
+                                   (s:a "next&gt;&gt;" 'href (conc  linktree "/page"  (+ page 1) ".html"))
+                                   (s:a "" 'href (conc  linktree "/page" page  ".html")))))
+                               link))) )
+          ;(print (tests:dashboard-body page pg-size keys numkeys total-runs linktree area-name))
+	  (s:output-new
+	   oup
+	   (tests:dashboard-body page pg-size keys numkeys total-runs linktree area-name get-prev-links get-next-links #f))
           (close-output-port oup)
          ; (set! page (+ 1 page))
           (if (> total-runs (* (+ 1 page) pg-size))
@@ -795,7 +819,47 @@ EOF
 	#f)))
 
 
+(define (tests:readlines filename)
+  (call-with-input-file filename
+    (lambda (p)
+      (let loop ((line (read-line p))
+                 (result '()))
+        (if (eof-object? line)
+            (reverse result)
+            (loop (read-line p) (cons line result)))))))
 
+
+
+(define (tests:dynamic-dboard page)
+;(define (tests:create-html-tree o)
+ (let* (
+;(page "1")
+          (linktree  (common:get-linktree))
+         (area-name (common:get-testsuite-name))
+	 (keys      (rmt:get-keys))
+	 (numkeys   (length keys))
+         (total-runs  (rmt:get-num-runs "%"))
+         (pg-size 10)
+         (pg (if (equal? page #f)
+                 0
+                 (- (string->number page) 1)))
+          (get-prev-links  (lambda (pg linktree)
+                           (debug:print-info 0 *default-log-port* "val: " (- 1 pg))
+                          (let* ((link  (if (not (eq? pg 0))
+                               (s:a  "&lt;&lt;prev " 'href (conc  "dashboard?page="  pg  ))
+                               (s:a "" 'href (conc  "dashboard?page=" pg)))))
+                               link)))
+          (get-next-links   (lambda (pg linktree total-runs)  
+                            (debug:print-info 0 *default-log-port* "val: " pg)
+                             (debug:print-info 0 *default-log-port* "val: " total-runs " size" pg-size)
+ 
+                            (let* ((link  (if (> total-runs (+ 10 (* pg pg-size)))
+                              (s:a  "next&gt;&gt; "  'href (conc  "dashboard?page="  (+ pg 2)  ))
+                             (s:a "" 'href (conc  "dashboard?page=" pg  )))))
+                             link)))
+         (html-body (tests:dashboard-body pg pg-size keys numkeys total-runs linktree area-name get-prev-links get-next-links #t)))
+         ;(print (tests:dashboard-body page pg-size keys numkeys total-runs linktree area-name))
+html-body))
 
 
 
