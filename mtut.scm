@@ -76,6 +76,7 @@ Contour actions:
    import                  : import pkts
    dispatch                : dispatch queued run jobs from imported pkts
    rungen                  : look at input sense list in [rungen] and generate run pkts
+   process                 : runs import, rungen and dispatch 
 
 Selectors 
   -immediate               : apply this action immediately, default is to queue up actions
@@ -380,7 +381,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 ;; if it comes back "changed" then proceed to register the runs
 
 		 (case (string->symbol ruletype)
-		   ((file)
+		   ((file file-or) ;; one or more files must be newer than the reference
 		    (let* ((file-globs  (cdr valparts))
 			   (youngestdat (common:get-youngest file-globs))
 			   (youngestmod (car youngestdat)))
@@ -394,7 +395,25 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				   (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
 				   (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (cadr youngestdat)) ,runname)))))
 			   starttimes))
-		      )))))
+		      ))
+		   ((file-and) ;; all files must be newer than the reference
+		    (let* ((file-globs  (cdr valparts))
+			   (youngestdat (common:get-youngest file-globs))
+			   (youngestmod (car youngestdat))
+			   (success     #t)) ;; any cases of not true, set flag to #f for AND
+		      ;; (print "youngestmod: " youngestmod " starttimes: " starttimes)
+		      (if (null? starttimes) ;; this target has never been run
+			  (configf:section-var-set! torun contour runkey `("file:neverrun" ,runname))
+			  (for-each
+			   (lambda (starttime) ;; look at the time the last run was kicked off for this contour
+			     (if (< youngestmod (cdr starttime))
+				 (set! success #f)))
+			   starttimes))
+		      (if success
+			  (begin
+			    (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
+			    (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (cadr youngestdat)) ,runname))))))
+		   )))
 	     keydats)))
 	(hash-table-keys rgconf))
        
