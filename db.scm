@@ -437,7 +437,7 @@
 		   '("id"  #f))
 	     (map (lambda (k)(list k #f))
 		  (append keys
-			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count"))))
+			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count" "contour"))))
      (list "test_meta"
 	   '("id"             #f)
 	   '("testname"       #f)
