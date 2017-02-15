@@ -221,7 +221,6 @@
 ;; apply-wildcards: #t/#f - apply vars from targets with % wildcards to all matching sections
 ;;
 (define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f)(settings (make-hash-table))(keep-filenames #f)(post-section-procs '())(apply-wildcards #t))
-  (debug:print-info 5 *default-log-port* "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections " pwd: " (current-directory))
   (debug:print 9 *default-log-port* "START: " path)
   (if (and (not (port? path))
 	   (not (file-exists? path))) ;; for case where we are handed a port

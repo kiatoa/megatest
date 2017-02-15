@@ -341,7 +341,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   (with-queue-db
    mtconf
    (lambda (pktsdirs pktsdir pdb)
-     (let* ((rgconfdat (find-and-read-config (conc toppath "/rungen.config")))
+     (let* ((rgconfdat (find-and-read-config (conc toppath "/runconfigs.config")))
 	    (rgconf    (car rgconfdat))
 	    (areas     (map car (configf:get-section mtconf "areas")))
 	    (contours  (configf:get-section mtconf "contours"))
