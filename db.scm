@@ -2635,7 +2635,8 @@
    (lambda (db)
      (sqlite3:first-result
       db
-      "SELECT count(id) FROM tests WHERE state in ('LAUNCHED','NOT_STARTED','REMOTEHOSTSTART','RUNNING','KILLREQ');"))))
+      "SELECT count(id) FROM tests WHERE state in ('LAUNCHED','NOT_STARTED','REMOTEHOSTSTART','RUNNING','KILLREQ') AND run_id=?;")
+     run-id)))
 
 ;; map run-id, testname item-path to test-id
 (define (db:get-test-id dbstruct run-id testname item-path)
@@ -2716,7 +2717,7 @@
   (db:with-db dbstruct run-id #t 
 	      (lambda (db)
 		(let* ((qmarks (string-intersperse (make-list (length db:test-record-fields) "?") ","))
-		       (qrystr (conc "INSERT OR REPLACE INTO tests (" db:test-record-qry-selector ") VALUES (" qmarks ");"))
+		       (qrystr (conc "INSERT OR REPLACE INTO tests (" db:test-record-qry-selector ") VALUES (" qmarks ") WHERE run_id=?;"))
 		       (qry    (sqlite3:prepare db qrystr)))
 		  (debug:print 0 *default-log-port* "INFO: migrating test records for run with id " run-id)
 		  (sqlite3:with-transaction
@@ -2725,7 +2726,7 @@
 		     (for-each 
 		      (lambda (rec)
 			;; (debug:print 0 *default-log-port* "INFO: Inserting values: " (string-intersperse (map conc (vector->list rec)) ",") "\n")
-			(apply sqlite3:execute qry (vector->list rec)))
+			(apply sqlite3:execute qry (append (vector->list rec)(list run-id))))
 		      testrecs)))
 		  (sqlite3:finalize! qry)))))
 
@@ -3624,8 +3625,9 @@
 	(lambda (id itempath state status run_duration logf comment)
 	  (set! res (cons (vector id itempath state status run_duration logf comment) res)))
 	db
-	"SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE testname=? AND item_path != '';"
-	test-name)
+	"SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE testname=? AND item_path != '' AND run_id=?;" ;; BUG! WHY NO run_id?
+	test-name
+	run-id)
        res))))
 
 ;;======================================================================
