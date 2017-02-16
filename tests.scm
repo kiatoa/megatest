@@ -33,6 +33,8 @@
 (include "db_records.scm")
 (include "run_records.scm")
 (include "test_records.scm")
+(include "js-path.scm")
+
 
 ;; Call this one to do all the work and get a standardized list of tests
 ;;   gets paths from configs and finds valid tests 
@@ -666,12 +668,12 @@ EOF
            <script src= ./jquery3.1.0.js></script> 
 EOF
 )
-(define tests:css-jscript-block-static 
-#<<EOF
-           <script src=/nfs/site/disks/ch_ciaf_disk023/fdk_gwa_disk003/pjhatwal/fdk/docs/qa-env-team/jquery-3.1.0.slim.min.js></script> 
-EOF
-)
 
+(define  (test:js-block javascript-lib)
+   (conc  "<script src=" javascript-lib "></script>" ))
+
+
+(define tests:css-jscript-block-static (test:js-block *java-script-lib*))
 
 (define (tests:css-jscript-block-cond dynamic) 
       (if (equal? dynamic  #t)
@@ -718,7 +720,6 @@ EOF
         test-data)))
       runs)
    resh))
-
 
 ;; tests:genrate dashboard body 
 ;;
@@ -773,7 +774,9 @@ EOF
 										(car result)))
                                                                         (link (if (string? result)
 										result
-										(s:a (car result) 'href (cadr result)))))
+                                                                                (if (equal? flag #t) 
+                                                                                (s:a (car result) 'href (conc "./test_log?runid=" run-id "&testname="  item-name ))
+										(s:a (car result) 'href (cadr result))))))
                                                                        (s:td  link 'class status)))
                                                                 runs))))
                                                         res))
@@ -828,6 +831,37 @@ EOF
             (reverse result)
             (loop (read-line p) (cons line result)))))))
 
+(define (tests:get-test-log run-id test-name item-name)
+  (let* ((test-data    (rmt:get-tests-for-run
+				   (string->number run-id)
+                                    test-name      ;; testnamepatt
+				   '()        ;; states
+				   '()        ;; statuses
+				   #f         ;; offset
+				   #f         ;; num-to-get
+				   #f         ;; hide/not-hide
+				   #f         ;; sort-by
+				   #f         ;; sort-order
+				   #f         ;; 'shortlist                           ;; qrytype
+                                   0         ;; last update
+				   #f))
+         (path "")
+         (found 0))
+    (debug:print-info 0 *default-log-port* "found: " found )
+
+   (let loop ((hed (car test-data))
+		 (tal (cdr test-data)))
+          (debug:print-info 0 *default-log-port* "item: " (vector-ref hed 11) (vector-ref hed 10) "/" (vector-ref hed 13))
+
+	(if (equal? (vector-ref hed 11) item-name)
+            (begin
+              (set! found 1) 
+	      (set! path (conc (vector-ref hed 10) "/" (vector-ref hed 13)))))
+	    (if (and (not (null? tal)) (equal? found 0))
+		(loop (car tal)(cdr tal))))
+   (if (equal? path "")
+     "<H2>Data not found</H2>"
+     (string-join (tests:readlines path) "\n"))))
 
 
 (define (tests:dynamic-dboard page)

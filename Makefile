@@ -59,6 +59,10 @@ $(PREFIX)/share/docs/megatest_manual.html : docs/manual/megatest_manual.html
 	$(INSTALL) docs/manual/megatest_manual.html $(PREFIX)/share/docs/megatest_manual.html
 	for png in $(PNGFILES);do $(INSTALL) docs/manual/$$png $(PREFIX)/share/docs/$$png;done
 
+js : java-script-lib/jquery-3.1.0.slim.min.js
+	mkdir -p $(PREFIX)/share/js
+	cp java-script-lib/jquery-3.1.0.slim.min.js $(PREFIX)/share/js/jquery-3.1.0.slim.min.js
+
 #multi-dboard : multi-dboard.scm $(OFILES) $(GOFILES)
 #	csc $(CSCOPTS) $(OFILES) $(GOFILES) multi-dboard.scm -o multi-dboard
 
@@ -180,7 +184,8 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
 	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/viewscreen $(PREFIX)/bin/mt_xterm \
-	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun
+	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun \
+	  js 
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)

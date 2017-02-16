@@ -10,6 +10,7 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
+
 (use  srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest posix-extras) ;; sqlite3
 ;; (import (prefix sqlite3 sqlite3:))
 
@@ -32,6 +33,8 @@
 
 (include "common_records.scm")
 (include "db_records.scm")
+(include "js-path.scm")
+
 (require-library stml)
 (define (http-transport:make-server-url hostport)
   (if (not hostport)
@@ -109,6 +112,10 @@
 					   '(/ "jquery3.1.0.js"))
 				   (send-response body: (http-transport:show-jquery) 
 						  headers: '((content-type application/javascript))))
+                                  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ "test_log"))
+				   (send-response body: (http-transport:html-test-log $) 
+						  headers: '((content-type text/HTML))))    
                                   ((equal? (uri-path (request-uri (current-request))) 
 					   '(/ "dashboard"))
 				   (send-response body: (http-transport:html-dboard $) 
@@ -534,12 +541,27 @@
 ;; Java script
 ;;===============================================
 (define (http-transport:show-jquery)
-  (let* ((data  (tests:readlines "/nfs/site/disks/ch_ciaf_disk023/fdk_gwa_disk003/pjhatwal/fdk/docs/qa-env-team/jquery-3.1.0.slim.min.js")))
+  (let* ((data  (tests:readlines *java-script-lib*)))
 (string-join data "\n")))
+
+
 
 ;;======================================================================
 ;; web pages
 ;;======================================================================
+
+(define (http-transport:html-test-log $)
+   (let* ((run-id ($ 'runid))
+         (test-item ($ 'testname))
+         (parts (string-split test-item ":"))
+         (test-name (car parts))
+             
+         (item-name (if (equal? (length parts) 1)
+             ""
+             (cadr parts))))
+  ;(print $) 
+(tests:get-test-log run-id test-name item-name)))
+
 
 (define (http-transport:html-dboard $)
   (let* ((page ($ 'page))
@@ -547,13 +569,11 @@
          (bdy "--------------------------")
 
          (ret  (tests:dynamic-dboard page)))
-  ;(display ret oup)
     (s:output-new  oup  ret)
    (close-output-port oup)
 
   (set! bdy   (get-output-string oup))
-    ;(debug:print-info 0 *default-log-port* "val: " bdy)
-  (conc "<h1>Dashboard</h1>" bdy "<br/> <br/> "  )))
+     (conc "<h1>Dashboard</h1>" bdy "<br/> <br/> "  )))
 
 (define (http-transport:main-page)
   (let ((linkpath (root-path)))
