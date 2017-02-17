@@ -294,7 +294,7 @@
 	      (begin
 		(debug:print 0 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data from " (db:dbdat-get-path mtdb))
 		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb))
-	      (debug:print 0 *default-log-port* " db, " (db:dbdat-get-path tmpdb) " already exists, not propogating data from " (db:dbdat-get-path mtdb)))
+	      (debug:print 4 *default-log-port* " db, " (db:dbdat-get-path tmpdb) " already exists, not propogating data from " (db:dbdat-get-path mtdb)))
 	  ;; (db:multi-db-sync dbstruct 'old2new))  ;; migrate data from megatest.db automatically
           tmpdb))))
 
@@ -2523,11 +2523,13 @@
 
 ;; ;; speed up for common cases with a little logic
 ;; ;; NB// Ultimately this will be deprecated in deference to mt:test-set-state-status-by-id
+;;
+;;      NOTE: run-id is not used
 ;; ;;
 (define (db:test-set-state-status dbstruct run-id test-id newstate newstatus newcomment)
   (db:with-db
    dbstruct
-   run-id
+   ;; run-id
    #t
    (lambda (db)
      (cond
@@ -2779,11 +2781,12 @@
 	 (db:prep-megatest.db-adj-test-ids (db:dbdat-get-db mtdb) run-id testrecs)))
      run-ids)))
 
-;; Get test data using test_id
+;; Get test data using test_id, run-id is not used
+;; 
 (define (db:get-test-info-by-id dbstruct run-id test-id)
   (db:with-db
    dbstruct
-   run-id
+   #f ;; run-id
    #f
    (lambda (db)
      (let ((res #f))
@@ -3339,7 +3342,8 @@
              WHERE testname=? AND item_path='' AND run_id=?;") ;; DONE  ;; BROKEN!!! NEEDS run-id
 	'(top-test-set-running  "UPDATE tests SET state='RUNNING' WHERE testname=? AND item_path='' AND run_id=?;") ;; DONE   ;; BROKEN!!! NEEDS run-id
 
-
+	;; NOT USED
+	;;
 	;; Might be the following top-test-set-per-pf-counts query could be better based off of something like this:
 	;;
 	;; select state,status,count(state) from tests where run_id=59 AND testname='runfirst' group by state,status;
