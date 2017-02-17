@@ -50,6 +50,7 @@
   (refndb      #f)
   (homehost    #f) ;; not used yet
   (on-homehost #f) ;; not used yet
+  (read-only   #f)
   )                ;; goal is to converge on one struct for an area but for now it is too confusing
   
 
@@ -283,7 +284,8 @@
                (refndb       (db:open-megatest-db path: dbpath name: "megatest_ref.db"))
                (write-access (file-write-access? dbpath)))
           (if (and dbexists (not write-access))
-              (set! *db-write-access* #f))
+              (dbr:dbstruct-readonly-set! dbstruct #t)
+              (begin (set! *db-write-access* #f)))
           (dbr:dbstruct-mtdb-set!   dbstruct mtdb)
           (dbr:dbstruct-dbstack-set! dbstruct (make-stack))
           (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb) ;; olddb is already a (cons db path)
@@ -563,6 +565,21 @@
      (debug:print-error 0 *default-log-port* "db:sync-tables called with fromdb not a database " fromdb) -3)
     ((not (sqlite3:database? (db:dbdat-get-db todb)))
      (debug:print-error 0 *default-log-port* "db:sync-tables called with todb not a database " todb) -4)
+
+    ((not (file-write-access? (cadr todb)))
+     (debug:print-error 0 *default-log-port* "db:sync-tables called with todb not a read-only database " todb) -5)
+    ((not (null? (let ((readonly-slave-dbs
+                        (filter
+                         (lambda (dbdat)
+                           (not (file-write-access? (cadr todb))))
+                         
+                         slave-dbs)))
+                   (for-each
+                    (lambda (bad-dbdat)
+                      (debug:print-error
+                       0 *default-log-port* "db:sync-tables called with todb not a read-only database " bad-dbdat))
+                    readonly-slave-dbs)
+                   readonly-slave-dbs))) -6)
     (else
      (let ((stmts       (make-hash-table)) ;; table-field => stmt
 	   (all-stmts   '())              ;; ( ( stmt1 value1 ) ( stml2 value2 ))
@@ -813,11 +830,10 @@
 ;;  'killservers  - kills all servers
 ;;  'dejunk       - removes junk records
 ;;  'adj-testids  - move test-ids into correct ranges
-;;  'old2new      - sync megatest.db records to .db/{main,1,2 ...}.db
-;;  'new2old      - sync .db/{main,1,2,3 ...}.db to megatest.db
+;;  'old2new      - sync megatest.db to /tmp/.../megatest.db and /tmp/.../megatest_ref.db
+;;  'new2old      - sync /tmp/.../megatest.db to megatest.db and /tmp/.../megatest_ref.db (and update data_synced)
 ;;  'closeall     - close all opened dbs
 ;;  'schema       - attempt to apply schema changes
-;;
 ;;  run-ids: '(1 2 3 ...) or #f (for all)
 ;;
 (define (db:multi-db-sync dbstruct . options)
@@ -860,7 +876,9 @@
 	;;
 	(if (member 'old2new options)
 	    ;; (begin
-	    (db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb tmpdb refndb))
+            (set! data-synced
+                  (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb tmpdb refndb)
+                     data-synced)))
 			      ;; (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
 ;; 	      (for-each 
 ;; 	       (lambda (run-id)
@@ -879,6 +897,7 @@
 	    (set! data-synced
 		  (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb refndb mtdb)
 		      data-synced)))
+
 
 
         (if (member 'fixschema options)
