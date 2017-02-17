@@ -44,7 +44,7 @@
 ;; I propose this record evolves into the area record
 ;;
 (defstruct dbr:dbstruct 
-  ;; (tmpdb       #f)
+  (tmpdb       #f)
   (dbstack     #f) ;; stack for tmp db handles, do not initialize with a stack
   (mtdb        #f)
   (refndb      #f)
@@ -272,7 +272,7 @@
 
 ;; This routine creates the db if not already present. It is only called if the db is not already opened
 ;;
-(define (db:open-db dbstruct #!key (areapath #f))
+(define (db:open-db dbstruct #!key (areapath #f)) ;; TODO: actually use areapath
   (let ((tmpdb-stack (dbr:dbstruct-dbstack dbstruct))) ;; RA => Returns the first reference in dbstruct
     (if (stack? tmpdb-stack)
 	(db:get-db tmpdb-stack) ;; get previously opened db (will create new db handle if all in the stack are already used
@@ -284,10 +284,11 @@
                (refndb       (db:open-megatest-db path: dbpath name: "megatest_ref.db"))
                (write-access (file-write-access? dbpath)))
           (if (and dbexists (not write-access))
-              (dbr:dbstruct-readonly-set! dbstruct #t)
-              (begin (set! *db-write-access* #f)))
+              (begin (set! *db-write-access* #f)
+                     (dbr:dbstruct-readonly-set! dbstruct #t)))
           (dbr:dbstruct-mtdb-set!   dbstruct mtdb)
-          (dbr:dbstruct-dbstack-set! dbstruct (make-stack))
+          (dbr:dbstruct-tmpdb-set!  dbstruct tmpdb)
+          (dbr:dbstruct-dbstack-set! dbstruct (make-stack)) ;; BB: why a stack?  Why would the number of db's be indeterminate?  Is this a legacy of 1.db 2.db .. ?
           (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb) ;; olddb is already a (cons db path)
           (dbr:dbstruct-refndb-set! dbstruct refndb)
           ;;	    (mutex-unlock! *rundb-mutex*)
@@ -305,7 +306,7 @@
 ;; called in http-transport and replicated in rmt.scm for *local* access. 
 ;;
 (define (db:setup #!key (areapath #f))
-  (or *dbstruct-db*
+  (or *dbstruct-db* ;; TODO: when multiple areas are supported, this optimization will be a hazard
       (if (common:on-homehost?)
 	  (let* ((dbstruct (make-dbr:dbstruct)))
 	    (db:open-db dbstruct areapath: areapath)
