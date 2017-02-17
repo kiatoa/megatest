@@ -12,7 +12,7 @@
 
 (define (runconfig:read fname target environ-patt)
   (let ((ht (make-hash-table)))
-    (hash-table-set! ht target '())
+    (if target (hash-table-set! ht target '()))
     (read-config fname ht #t environ-patt: environ-patt sections: (if target (list "default" target) #f))))
 
 ;; NB// to process a runconfig ensure to use environ-patt with target!
