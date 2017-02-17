@@ -57,12 +57,31 @@
   ;; 3. do the query, if on homehost use local access
   ;;
   (let* ((start-time (current-seconds)) ;; snapshot time so all use cases get same value
+         (areapath *toppath*);; TODO - resolve from dbstruct to be compatible with multiple areas
+         (readonly-mode (file-write-access? (conc *toppath* "/megatest.db")  )) ;; TODO: use dbstruct or runremote to figure this out in future
 	 (runremote  (or area-dat *runremote*)))
     (cond
      ;; give up if more than 15 attempts
      ((> attemptnum 15)
       (debug:print 0 *default-log-port* "ERROR: 15 tries to start/connect to server. Giving up.")
       (exit 1))
+
+     ;; readonly mode, read request-  handle it - case 20
+     ((and readonly-mode
+           (member cmd api:read-only-queries)) 
+      (mutex-unlock! *rmt-mutex*)
+      (debug:print-info 12 *default-log-port* "rmt:send-receive, case 20")
+      (rmt:open-qry-close-locally cmd 0 params)
+      )
+
+     ;; readonly mode, write request.  Do nothing, return #f
+     (readonly-mode
+      (mutex-unlock! *rmt-mutex*)
+      (debug:print-info 12 *default-log-port* "rmt:send-receive, case 21")
+      (debug:print 0 *default-log-port* "WARNING: write transaction requested on a readonly area.  cmd="cmd" params="params)
+      #f
+      )
+
      ;; reset the connection if it has been unused too long
      ((and runremote
            (remote-conndat runremote)
