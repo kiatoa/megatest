@@ -586,7 +586,36 @@
 ;; currently the primary job of the watchdog is to run the sync back to megatest.db from the db in /tmp
 ;; if we are on the homehost and we are a server (by definition we are on the homehost if we are a server)
 ;;
-(define (common:watchdog)
+
+
+(define (common:readonly-watchdog dbstruct)
+  (thread-sleep! 0.05) ;; delay for startup
+
+  ;; sync megatest.db to /tmp/.../megatst.db
+  (let ((sync-cool-off-duration   3)
+        (golden-mtdb     (dbr:dbstruct-mtdb dbstruct))
+        (golden-mtpath   (db:dbdat-get-path mtdb))
+        (tmp-mtdb        (dbr:dbstruct-tmpdb dbstruct))
+        (tmp-mtpath      (db:dbdat-get-path mtdb)))
+    (debug:print-info 0 *default-log-port* "Read-only periodic sync thread started.")
+    (let loop ((last-sync-time 0))
+      (let* ((duration-since-last-sync (- (current-seconds) last-sync-time)))
+        (if (and (not *time-to-exit*)
+                 (< duration-since-last-sync sync-cool-off-duration))
+            (thread-sleep! (- sync-cool-off-duration duration-since-last-sync)))
+        (if (not *time-to-exit*)
+            (let ((golden-mtdb-mtime (file-modification-time golden-mtpath))
+                  (tmp-mtdb-mtime    (file-modification-time tmp-mtpath)))
+              (if (> golden-mtdb-mtime tmp-mtdb-mtime)
+                  (let ((res (db:multi-db-sync dbstruct 'old2new)))
+                    (debug:print-info 0 *default-log-port* "rosync called, " res " records transferred."))
+                  (loop (current-seconds)))
+              #t))))
+    (debug:print-info 0 *default-log-port* "Exiting readonly-watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" mtpath="golden-mtpath)))
+
+
+        
+(define (common:writable-watchdog dbstruct)
   (thread-sleep! 0.05) ;; delay for startup
   (let ((legacy-sync (common:run-sync?))
 	(debug-mode  (debug:debug-mode 1))
@@ -594,7 +623,7 @@
         (this-wd-num     (begin (mutex-lock! *wdnum*mutex) (let ((x *wdnum*)) (set! *wdnum* (add1 *wdnum*)) (mutex-unlock! *wdnum*mutex) x))))
     (debug:print-info 3 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id)" this-wd-num="this-wd-num)
     (if (and legacy-sync (not *time-to-exit*))
-	(let* ((dbstruct (db:setup))
+	(let* (;;(dbstruct (db:setup))
 	       (mtdb     (dbr:dbstruct-mtdb dbstruct))
 	       (mtpath   (db:dbdat-get-path mtdb)))
 	  (debug:print-info 0 *default-log-port* "Server running, periodic sync started.")
@@ -651,6 +680,14 @@
 		  (if (not *time-to-exit*) (loop))))
 	    (if (common:low-noise-print 30)
 		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" this-wd-num="this-wd-num)))))))
+
+;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
+(define (common:watchdog)
+  (let ((dbstruct (db:setup)))
+    (if (dbstruct-readonly dbstruct)
+        (common:readonly-watchdog dbstruct)
+        (common:writable-watchdog dbstruct))))
+
 
 (define (std-exit-procedure)
   (on-exit (lambda () 0))

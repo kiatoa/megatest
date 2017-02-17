@@ -366,6 +366,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; The watchdog is to keep an eye on things like db sync etc.
 ;;
+
+;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
 (define *watchdog* (make-thread common:watchdog "Watchdog thread"))
 
 (if (not (args:get-arg "-server"))
@@ -2021,6 +2023,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; join the watchdog thread if it has been thread-start!ed  (it may not have been started in the case of a server that never enters running state)
 ;;   (symbols returned by thread-state: created ready running blocked suspended sleeping terminated dead)
+;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
 (if (thread? *watchdog*)
     (case (thread-state *watchdog*)
       ((ready running blocked sleeping terminated dead)
