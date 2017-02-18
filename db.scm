@@ -306,15 +306,21 @@
 ;; called in http-transport and replicated in rmt.scm for *local* access. 
 ;;
 (define (db:setup #!key (areapath #f))
-  (or *dbstruct-db* ;; TODO: when multiple areas are supported, this optimization will be a hazard
-      (if (common:on-homehost?)
-	  (let* ((dbstruct (make-dbr:dbstruct)))
-	    (db:open-db dbstruct areapath: areapath)
-	    (set! *dbstruct-db* dbstruct)
-	    dbstruct)
-	  (begin
-	    (debug:print 0 *default-log-port* "ERROR: attempt to open database when not on homehost. Exiting. Homehost: " (common:get-homehost))
-	    (exit 1)))))
+  (cond
+   (*dbstruct-db* *dbstruct-db*);; TODO: when multiple areas are supported, this optimization will be a hazard
+   ((not (file-write-access? (or areapath *toppath*)))
+    (let* ((dbstruct (make-dbr:dbstruct)))
+      (db:open-db dbstruct areapath: areapath)
+      (set! *dbstruct-db* dbstruct)
+      dbstruct))
+   ((common:on-homehost?)
+    (let* ((dbstruct (make-dbr:dbstruct)))
+      (db:open-db dbstruct areapath: areapath)
+      (set! *dbstruct-db* dbstruct)
+      dbstruct))
+   (else
+    (debug:print 0 *default-log-port* "ERROR: attempt to open database when not on homehost. Exiting. Homehost: " (common:get-homehost))
+    (exit 1))))
 
 ;; Open the classic megatest.db file (defaults to open in toppath)
 ;;
