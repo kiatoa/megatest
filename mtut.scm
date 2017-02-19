@@ -21,29 +21,7 @@
 (declare (uses megatest-version))
 (declare (uses margs))
 (declare (uses configf))
-;; (declare (uses runs))
-;; (declare (uses launch))
-;; (declare (uses server))
-;; (declare (uses client))
-;; (declare (uses tests))
-;; (declare (uses genexample))
-;; (declare (uses daemon))
-;; (declare (uses db))
-;; ;; (declare (uses dcommon))
-;; 
-;; (declare (uses tdb))
-;; (declare (uses mt))
-;; (declare (uses api))
-;; (declare (uses tasks)) ;; only used for debugging.
-;; (declare (uses env))
-;; (declare (uses diff-report))
-;; 
-;; (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
-;; (include "common_records.scm")
-;; (include "key_records.scm")
-;; (include "db_records.scm")
-;; (include "run_records.scm")
 (include "megatest-fossil-hash.scm")
 
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.mtutilrc")))
@@ -53,6 +31,10 @@
 ;; Disabled help items
 ;;  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
 ;;                            from prior runs with same keys
+;; Contour actions
+;;    import                  : import pkts
+;;    dispatch                : dispatch queued run jobs from imported pkts
+;;    rungen                  : look at input sense list in [rungen] and generate run pkts
 
 (define help (conc "
 mtutil, part of the Megatest tool suite, documentation at http://www.kiatoa.com/fossils/megatest
@@ -73,9 +55,6 @@ Actions:
    kill                    : stop tests or entire runs
 
 Contour actions:
-   import                  : import pkts
-   dispatch                : dispatch queued run jobs from imported pkts
-   rungen                  : look at input sense list in [rungen] and generate run pkts
    process                 : runs import, rungen and dispatch 
 
 Selectors 
@@ -381,6 +360,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 ;; if it comes back "changed" then proceed to register the runs
 
 		 (case (string->symbol ruletype)
+		   ((scheduled)
+		    (if (not (eq? (length valparts) 6))
+			(print "ERROR: bad sense spec \"" (string-intersperse sense " ") "\"")
+			(let* ((run-name (car valparts))
+			       (crontab  (string-intersperse (cdr valparts)))
+			       (last-run (if (null? starttimes) ;; never run
+					     0
+					     (apply max (map cdr starttimes))))
+			       (need-run (common:cron-event crontab #f last-run)))
+			  (print "last-run: " last-run " need-run: " need-run)
+			  (if need-run
+			      (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (string-intersperse (cdr valparts) "-")) ,runname))))))
 		   ((file file-or) ;; one or more files must be newer than the reference
 		    (let* ((file-globs  (cdr valparts))
 			   (youngestdat (common:get-youngest file-globs))
@@ -464,7 +455,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   (with-queue-db
    mtconf
    (lambda (pktsdirs pktsdir pdb)
-     (let* ((rgconfdat (find-and-read-config (conc toppath "/rungen.config")))
+     (let* ((rgconfdat (find-and-read-config (conc toppath "/runconfigs.config")))
 	    (rgconf    (car rgconfdat))
 	    (areas     (configf:get-section mtconf "areas"))
 	    (contours  (configf:get-section mtconf "contours"))
