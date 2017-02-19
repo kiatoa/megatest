@@ -1690,8 +1690,48 @@
 	(apply values result)
 	(values 0 day 1 0 'd))))
 	    
-	  
-
+;; given a cron string and the last time event was processed return #t to run or #f to not run
+;;
+;;  min    hour   dayofmonth month  dayofweek
+;; 0-59    0-23   1-31       1-12   0-6          ### NOTE: dayofweek does not include 7
+;;
+;;  #t => yes, run the job
+;;  #f => no, do not run the job
+;;
+(define (common:cron-event cron-str ref-seconds last-done) ;; ref-seconds = #f is NOW. 
+  (let ((cron-items     (map string->number (string-split cron-str)))
+	(ref-time       (seconds->local-time (or ref-seconds (current-seconds))))
+	(last-done-time (seconds->local-time last-done)))
+    (print "cron-items: " cron-items "(length cron-items): " (length cron-items))
+    (if (not (eq? (length cron-items) 5)) ;; don't even try to figure out junk strings
+	#f
+	(match-let (((      min  hour  dayofmonth  month     dayofweek)
+		     cron-items)
+		    ;; 0     1    2        3         4    5      6
+		    ((rsec rmin rhour rdayofmonth rmonth ryr rdayofweek r7 r8 r9)
+		     (vector->list ref-time))
+		    ((csec cmin chour cdayofmonth cmonth cyr cdayofweek c7 c8 c9)
+		     (vector->list last-done-time)))
+	  (let ((have-match (and (or (not dayofweek)
+				     (eq? dayofweek rdayofweek)) ;; either any dayofweek or they are same
+				 (or (not month)
+				     (eq? month (+ rmonth 1))) ;; posix time month is 0-11
+				 (or (not dayofmonth)
+				     (eq? dayofmonth rdayofmonth))))
+		(hour-match (or (not hour)
+				(eq? hour rhour)))
+		(min-match  (or (not min)
+				(eq? min rmin))))
+	    ;; now inject non-"*" times into the ref-time
+	    (vector-set! ref-time 0 0)    ;; set seconds to zero
+	    (if min  (vector-set! ref-time 1 min))
+	    (if hour (vector-set! ref-time 2 hour))
+	    (let* ((ref-transition-seconds (local-time->seconds ref-time))
+		   (done-since             (> last-done ref-transition-seconds)))
+	      ;; (print "have-match: " have-match " hour-match: " hour-match " min-match: " min-match " ref-transition-seconds - last-done: " (- ref-transition-seconds last-done) " done-since: " done-since)
+	      (and have-match
+		   (not done-since))))))))
+  
 ;;======================================================================
 ;; C O L O R S
 ;;======================================================================
