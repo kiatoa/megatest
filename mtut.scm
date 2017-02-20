@@ -243,12 +243,17 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; collect, translate, collate and assemble a pkt from the command-line
 ;;
-(define (command-line->pkt action args-alist)
-  (let* ((args-data (if args-alist
+(define (command-line->pkt action args-alist sched-in)
+  (let* ((sched     (cond
+		     ((vector? sched-in)(local-time->seconds sched-in)) ;; we recieved a time
+		     ((number? sched-in) sched-in)
+		     (else     (current-seconds))))
+	 (args-data (if args-alist
 			args-alist
 			(hash-table->alist args:arg-hash)))
 	 (alldat    (apply append (list 'a action
-					'U (current-user-name))
+					'U (current-user-name)
+					'D sched)
 			   (map (lambda (x)
 				  (let* ((param (car x))
 					 (value (cdr x))
@@ -289,7 +294,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; make a run request pkt from basic data
 ;;
-(define (create-run-pkt mtconf area runkey runname mode-patt tag-expr pktsdir reason contour)
+(define (create-run-pkt mtconf area runkey runname mode-patt tag-expr pktsdir reason contour sched) 
   (let ((area-path (configf:lookup mtconf "areas" area)))
     (let-values (((uuid pkt)
 		  (command-line->pkt
@@ -308,7 +313,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			'())
 		    (if (not (or mode-patt tag-expr))
 			`(("-item-patt"  . "%"))
-			'())))))
+			'()))
+		   sched)))
       (with-output-to-file
 	  (conc pktsdir "/" uuid ".pkt")
 	(lambda ()
@@ -368,10 +374,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			       (last-run (if (null? starttimes) ;; never run
 					     0
 					     (apply max (map cdr starttimes))))
-			       (need-run (common:cron-event crontab #f last-run)))
+			       (need-run (common:cron-event crontab #f last-run))
+			       (runname  (if need-run (conc "sched" (time->string (seconds->local-time (current-seconds)) "%M%H%d")))))
 			  (print "last-run: " last-run " need-run: " need-run)
 			  (if need-run
-			      (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (string-intersperse (cdr valparts) "-")) ,runname))))))
+			      (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (string-intersperse (cdr valparts) "-")) ,runname ,need-run))))))
 		   ((file file-or) ;; one or more files must be newer than the reference
 		    (let* ((file-globs  (cdr valparts))
 			   (youngestdat (common:get-youngest file-globs))
@@ -384,7 +391,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			     (if (> youngestmod (cdr starttime))
 				 (begin
 				   (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
-				   (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (cadr youngestdat)) ,runname)))))
+				   (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (cadr youngestdat)) ,runname #f)))))
 			   starttimes))
 		      ))
 		   ((file-and) ;; all files must be newer than the reference
@@ -394,7 +401,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			   (success     #t)) ;; any cases of not true, set flag to #f for AND
 		      ;; (print "youngestmod: " youngestmod " starttimes: " starttimes)
 		      (if (null? starttimes) ;; this target has never been run
-			  (configf:section-var-set! torun contour runkey `("file:neverrun" ,runname))
+			  (configf:section-var-set! torun contour runkey `("file:neverrun" ,runname #f))
 			  (for-each
 			   (lambda (starttime) ;; look at the time the last run was kicked off for this contour
 			     (if (< youngestmod (cdr starttime))
@@ -403,12 +410,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (if success
 			  (begin
 			    (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
-			    (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (cadr youngestdat)) ,runname))))))
+			    (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (cadr youngestdat)) ,runname #f))))))
 		   )))
 	     keydats)))
 	(hash-table-keys rgconf))
        
-       ;; now have torun populated
+       ;; now have to run populated
        (for-each
 	(lambda (contour)
 	  (let* ((mode-tag  (string-split (or (configf:lookup mtconf "contours" contour) "") "/"))
@@ -420,10 +427,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (info   (cadr runkeydat)))
 		 (for-each
 		  (lambda (area)
-		    (let ((runname (cadr info))
-			  (reason  (car  info)))
-		      (print "runkey: " runkey " contour: " contour " info: " info " area: " area  " tag-expr: " tag-expr " mode-patt: " mode-patt)
-		      (create-run-pkt mtconf area runkey runname mode-patt tag-expr pktsdir reason contour)))
+		    (if (< (length info) 3)
+			(print "ERROR: bad info data for " contour ", " runkey ", " area)
+			(let ((runname (cadr info))
+			      (reason  (car  info))
+			      (sched   (caddr info)))
+			  (print "runkey: " runkey " contour: " contour " info: " info " area: " area  " tag-expr: " tag-expr " mode-patt: " mode-patt)
+			  (create-run-pkt mtconf area runkey runname mode-patt tag-expr pktsdir reason contour sched))))
 		  areas)))
 	     (configf:get-section torun contour))))
 	(hash-table-keys torun))))))
