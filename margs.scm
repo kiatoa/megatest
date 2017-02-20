@@ -17,6 +17,10 @@
       (hash-table-ref/default args:arg-hash arg #f)
       (hash-table-ref/default args:arg-hash arg (car default))))
 
+(define (args:any? . args)
+  (not (null? (filter (lambda (x) x)
+		      (map args:get-arg args)))))
+
 (define (args:get-arg-from ht arg . default)
   (if (null? default)
       (hash-table-ref/default ht arg #f)
@@ -29,6 +33,15 @@
       (print help)
       (print "Usage: " (car (argv)) " ... "))
   (exit 0))
+
+ ;; one-of args defined
+(define (args:any-defined? . param)
+  (let ((res #f))
+    (for-each 
+     (lambda (arg)
+       (if (args:get-arg arg)(set! res #t)))
+     param)
+    res))
 
 ;; args: 
 (define (args:get-args args params switches arg-hash num-needed)

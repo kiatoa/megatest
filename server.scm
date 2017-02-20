@@ -185,7 +185,10 @@
 	      (let loop ((hed  (car server-logs))
 			 (tal  (cdr server-logs))
 			 (res '()))
-		(let* ((mod-time  (file-modification-time hed))
+		(let* ((mod-time  (handle-exceptions
+                                   exn
+                                   0
+                                   (file-modification-time hed))) ;; default to *very* old so log gets ignored if deleted
 		       (down-time (- (current-seconds) mod-time))
 		       (serv-dat  (if (or (< num-serv-logs 10)
 				  	  (< down-time day-seconds))
@@ -396,7 +399,7 @@
 	     (string->number tmo))
 	(* 60 60 (string->number tmo))
 	;; (* 3 24 60 60) ;; default to three days
-	(* 60 1)         ;; default to one minute
+	(* 60 60 1)         ;; default to one hour
 	;; (* 60 60 25)      ;; default to 25 hours
 	)))
 

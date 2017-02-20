@@ -9,7 +9,8 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
+     matchable)
 (require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -714,15 +715,6 @@
 ;; M I S C   U T I L S
 ;;======================================================================
 
-;; one-of args defined
-(define (args-defined? . param)
-  (let ((res #f))
-    (for-each 
-     (lambda (arg)
-       (if (args:get-arg arg)(set! res #t)))
-     param)
-    res))
-
 ;; convert stuff to a number if possible
 (define (any->number val)
   (cond 
@@ -748,21 +740,6 @@
 	 (string-split patts ","))
 	res)
       #t))
-
-;; (map print (map car (hash-table->alist (read-config "runconfigs.config" #f #t))))
-(define (common:get-runconfig-targets #!key (configf #f))
-  (let ((targs       (sort (map car (hash-table->alist
-				     (or configf ;; NOTE: There is no value in using runconfig:read here.
-					 (read-config (conc *toppath* "/runconfigs.config")
-						      #f #t)
-					 (make-hash-table))))
-			   string<?))
-	(target-patt (args:get-arg "-target")))
-    (if target-patt
-	(filter (lambda (x)
-		  (patt-list-match x target-patt))
-		targs)
-	targs)))
 
 ;; '(print (string-intersperse (map cadr (hash-table-ref/default (read-config "megatest.config" \#f \#t) "disks" '"'"'("none" ""))) "\n"))'
 (define (common:get-disks #!key (configf #f))
@@ -816,13 +793,52 @@
 	      (if (null? tal)
 		  #f
 		  (loop (car tal)(cdr tal))))))))
-  
+
+;; return the youngest timestamp . filename
+;;
+(define (common:get-youngest glob-list)
+  (let ((all-files (apply append
+			  (map (lambda (patt)
+				 (handle-exceptions
+				     exn
+				     '()
+				   (glob patt)))
+			       glob-list))))
+    (fold (lambda (fname res)
+	    (let ((last-mod (car res))
+		  (curmod   (handle-exceptions
+				exn
+				0
+			      (file-modification-time fname))))
+	      (if (> curmod last-mod)
+		  (list curmod fname)
+		  res)))
+	  '(0 "n/a")
+	  all-files)))
+
 ;;======================================================================
 ;; T A R G E T S  ,   S T A T E ,   S T A T U S ,   
 ;;                    R U N N A M E    A N D   T E S T P A T T
 ;;======================================================================
 
+;; (map print (map car (hash-table->alist (read-config "runconfigs.config" #f #t))))
+;;
+(define (common:get-runconfig-targets #!key (configf #f))
+  (let ((targs       (sort (map car (hash-table->alist
+				     (or configf ;; NOTE: There is no value in using runconfig:read here.
+					 (read-config (conc *toppath* "/runconfigs.config")
+						      #f #t)
+					 (make-hash-table))))
+			   string<?))
+	(target-patt (args:get-arg "-target")))
+    (if target-patt
+	(filter (lambda (x)
+		  (patt-list-match x target-patt))
+		targs)
+	targs)))
+
 ;; Lookup a value in runconfigs based on -reqtarg or -target
+;; 
 (define (runconfigs-get config var)
   (let ((targ (common:args-get-target))) ;; (or (args:get-arg "-reqtarg")(args:get-arg "-target")(getenv "MT_TARGET"))))
     (if targ
@@ -837,15 +853,15 @@
   (or (args:get-arg "-status")(args:get-arg ":status")))
 
 (define (common:args-get-testpatt rconf)
-  (let* ((tagexpr (args:get-arg "-tagexpr"))
-         (tags-testpatt (if tagexpr (string-join (runs:get-tests-matching-tags tagexpr) ",") #f))
+  (let* (;; (tagexpr       (args:get-arg "-tagexpr"))
+         ;; (tags-testpatt (if tagexpr (string-join (runs:get-tests-matching-tags tagexpr) ",") #f))
          (testpatt-key  (if (args:get-arg "--modepatt") (args:get-arg "--modepatt") "TESTPATT"))
          (args-testpatt (or (args:get-arg "-testpatt") (args:get-arg "-runtests") "%"))
          (rtestpatt     (if rconf (runconfigs-get rconf testpatt-key) #f)))
     (cond
-     (tags-testpatt
-      (debug:print-info 0 *default-log-port* "-tagexpr "tagexpr" selects testpatt "tags-testpatt)
-      tags-testpatt)
+     ;; (tags-testpatt
+     ;;  (debug:print-info 0 *default-log-port* "-tagexpr "tagexpr" selects testpatt "tags-testpatt)
+     ;;  tags-testpatt)
      ((and (equal? args-testpatt "%") rtestpatt)
       (debug:print-info 0 *default-log-port* "testpatt defined in "testpatt-key" from runconfigs: " rtestpatt)
       rtestpatt)
@@ -1674,7 +1690,91 @@
 	(apply values result)
 	(values 0 day 1 0 'd))))
 	    
-	  
+;; given a cron string and the last time event was processed return #t to run or #f to not run
+;;
+;;  min    hour   dayofmonth month  dayofweek
+;; 0-59    0-23   1-31       1-12   0-6          ### NOTE: dayofweek does not include 7
+;;
+;;  #t => yes, run the job
+;;  #f => no, do not run the job
+;;
+(define (common:cron-event cron-str now-seconds-in last-done) ;; ref-seconds = #f is NOW. 
+  (let* ((cron-items     (map string->number (string-split cron-str)))
+	 (now-seconds    (or now-seconds-in (current-seconds)))
+	 (now-time       (seconds->local-time now-seconds))
+	 (last-done-time (seconds->local-time last-done))
+	 (all-times      (make-hash-table)))
+    (print "cron-items: " cron-items "(length cron-items): " (length cron-items))
+    (if (not (eq? (length cron-items) 5)) ;; don't even try to figure out junk strings
+	#f
+	(match-let (((     cmin chour cdayofmonth cmonth    cdayofweek)
+		     cron-items)
+		    ;; 0     1    2        3         4    5      6
+		    ((nsec nmin nhour ndayofmonth nmonth nyr ndayofweek n7 n8 n9)
+		     (vector->list now-time))
+		    ((lsec lmin lhour ldayofmonth lmonth lyr ldayofweek l7 l8 l9)
+		     (vector->list last-done-time)))
+	  ;; create all possible time slots
+	  ;; remove invalid slots due to (for example) day of week
+	  ;; get the start and end entries for the ref-seconds (current) time
+	  ;; if last-done > ref-seconds => this is an ERROR!
+	  ;; does the last-done time fall in the legit region?
+	  ;;    yes => #f  do not run again this command
+	  ;;    no  => #t  ok to run the command
+	  (for-each ;; month
+	   (lambda (month)
+	     (for-each ;; dayofmonth
+	      (lambda (dom)
+		(for-each
+		 (lambda (hr) ;; hour
+		   (for-each
+		    (lambda (minute) ;; minute
+		      (let ((copy-now (apply vector (vector->list now-time))))
+			(vector-set! copy-now 0 0) ;; force seconds to zero
+			(vector-set! copy-now 1 minute)
+			(vector-set! copy-now 2 hr)
+			(vector-set! copy-now 3 dom)  ;; dom is already corrected for zero referenced
+			(vector-set! copy-now 4 month)
+			(let* ((copy-now-secs (local-time->seconds copy-now))
+			       (new-copy      (seconds->local-time copy-now-secs))) ;; remake the time vector
+			  (if (or (not cdayofweek)
+				  (equal? (vector-ref new-copy 6)
+					  cdayofweek)) ;; if the day is specified and a match OR if the day is NOT specified
+			      (if (or (not cdayofmonth)
+				      (equal? (vector-ref new-copy 3)
+					      (+ 1 cdayofmonth))) ;; if the month is specified and a match OR if the month is NOT specified
+				  (hash-table-set! all-times copy-now-secs new-copy))))))
+		    (if cmin
+			`(,cmin)  ;; if given cmin, have to use it
+			(list (- nmin 1) nmin (+ nmin 1))))) ;; minute
+		 (if chour
+		     `(,chour)
+		     (list (- nhour 1) nhour (+ nhour 1))))) ;; hour
+	      (if cdayofmonth
+		  `(,cdayofmonth)
+		  (list (- ndayofmonth 1) ndayofmonth (+ ndayofmonth 1)))))
+	   (if cmonth
+	       `(,cmonth)
+	       (list (- nmonth 1) nmonth (+ nmonth 1))))
+	  (let ((before #f)
+		(is-in  #f))
+	    (for-each
+	     (lambda (moment)
+	       (if (and before
+			(<= before now-seconds)
+			(>= moment now-seconds))
+		   (begin
+		     (print)
+		     (print "Before: " (time->string (seconds->local-time before)))
+		     (print "Now:    " (time->string (seconds->local-time now-seconds)))
+		     (print "After:  " (time->string (seconds->local-time moment)))
+		     (print "Last:   " (time->string (seconds->local-time last-done)))
+		     (if (<  last-done before)
+			 (set! is-in before))
+		     ))
+	       (set! before moment))
+	     (sort (hash-table-keys all-times) <))
+	    is-in)))))
 
 ;;======================================================================
 ;; C O L O R S

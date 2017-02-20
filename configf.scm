@@ -44,6 +44,12 @@
 			       (list key val metadata)
 			       (list key val))))))
 
+(define (configf:section-var-set! cfgdat section-name var value #!key (metadata #f))
+  (hash-table-set! cfgdat section-name
+		   (config:assoc-safe-add
+		    (hash-table-ref/default cfgdat section-name '())
+		    var value metadata: metadata)))
+
 (define (config:eval-string-in-environment str)
   (handle-exceptions
    exn
@@ -184,23 +190,27 @@
 ;;
 (define (configf:apply-wildcards ht section-name)
   (if (hash-table-exists? ht section-name)
-      (let ((vars (hash-table-ref ht section-name))
-            (rx   (regexp (if (string-contains section-name "%")
-                              (string-substitute section-name "%" ".*")
-                              section-name))))
+      (let* ((vars  (hash-table-ref ht section-name))
+	     (rxstr (if (string-contains section-name "%")
+			(string-substitute (regexp "%") ".*" section-name)
+			(string-substitute (regexp "^/(.*)/$") "\\1" section-name)))
+	     (rx    (regexp rxstr)))
+	;; (print "\nsection-name: " section-name " rxstr: " rxstr)
         (for-each
          (lambda (section)
-           (if (and section-name
-                    section 
-                    (not (string=? section-name section))
-                    (string-match rx section))
-               (for-each
-                (lambda (bundle)
-                  (let ((key  (car bundle))
-                        (val  (cadr bundle))
-                        (meta (if (> (length bundle) 2)(caddr bundle) #f)))
-                    (hash-table-set! ht section (config:assoc-safe-add (hash-table-ref ht section) key val metadata: meta))))
-                vars)))
+	   (if section
+	       (let ((same-section (string=? section-name section))
+		     (rx-match     (string-match rx section)))
+		 ;; (print "section: " section " vars: " vars " same-section: " same-section " rx-match: " rx-match)
+		 (if (and (not same-section) rx-match)
+		     (for-each
+		      (lambda (bundle)
+			;; (print "bundle: " bundle)
+			(let ((key  (car bundle))
+			      (val  (cadr bundle))
+			      (meta (if (> (length bundle) 2)(caddr bundle) #f)))
+			  (hash-table-set! ht section (config:assoc-safe-add (hash-table-ref ht section) key val metadata: meta))))
+		      vars)))))
          (hash-table-keys ht))))
   ht)
 
@@ -214,8 +224,9 @@
 ;; post-section-procs alist of section-pattern => proc, where: (proc section-name next-section-name ht curr-path)
 ;; apply-wildcards: #t/#f - apply vars from targets with % wildcards to all matching sections
 ;;
-(define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f)(settings (make-hash-table))(keep-filenames #f)(post-section-procs '())(apply-wildcards #t))
-  (debug:print-info 5 *default-log-port* "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections " pwd: " (current-directory))
+(define (read-config path ht allow-system #!key (environ-patt #f)            (curr-section #f)
+		     (sections #f)              (settings (make-hash-table)) (keep-filenames #f)
+		     (post-section-procs '())   (apply-wildcards #t))
   (debug:print 9 *default-log-port* "START: " path)
   (if (and (not (port? path))
 	   (not (file-exists? path))) ;; for case where we are handed a port
@@ -248,7 +259,12 @@
                 (process-wildcards res curr-section-name)
 		(if (string? path) ;; we received a path, not a port, thus we are responsible for closing it.
 		    (close-input-port inp))
-		(hash-table-delete! res "") ;; we are using "" as a dumping ground and must remove it before returning the ht
+		(if (list? sections) ;; delete all sections except given when sections is provided
+		    (for-each
+		     (lambda (section)
+		       (if (not (member section sections))
+			   (hash-table-delete! res section))) ;; we are using "" as a dumping ground and must remove it before returning the ht
+		     (hash-table-keys res)))
 		(debug:print 9 *default-log-port* "END: " path)
 		res)
 	      (regex-case 
@@ -307,9 +323,10 @@
                                                         (process-wildcards res curr-section-name)
 							(loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings)
 							      ;; if we have the sections list then force all settings into "" and delete it later?
-							      (if (or (not sections) 
-								      (member section-name sections))
-								  section-name "") ;; stick everything into ""
+							      ;; (if (or (not sections) 
+							      ;;	      (member section-name sections))
+							      ;;	  section-name "") ;; stick everything into "". NOPE: We need new strategy. Put stuff in correct sections and then delete all sections later.
+							      section-name
 							      #f #f)))
 	       (configf:key-sys-pr ( x key cmd      ) (if (calc-allow-system allow-system curr-section-name sections)
 							  (let ((alist    (hash-table-ref/default res curr-section-name '()))

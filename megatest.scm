@@ -1,4 +1,4 @@
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2017, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -143,6 +143,7 @@ Queries
 
 Misc 
   -start-dir path         : switch to this directory before running megatest
+  -contour cname          : add a level of hierarcy to the linktree and run paths
   -rebuild-db             : bring the database schema up to date
   -cleanup-db             : remove any orphan records, vacuum the db
   -import-megatest.db     : migrate a database from v1.55 series to v1.60 series
@@ -245,6 +246,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			":units"
 			;; misc
 			"-start-dir"
+			"-contour"
 			"-server"
 			"-stop-server"
 			"-transport"
@@ -801,7 +803,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-list-targets")
     (if (launch:setup)
         (let ((targets (common:get-runconfig-targets)))
-          (debug:print 1 *default-log-port* "Found "(length targets) " targets")
+          ;; (debug:print 1 *default-log-port* "Found "(length targets) " targets")
           (case (string->symbol (or (args:get-arg "-dumpmode") "alist"))
             ((alist)
              (for-each (lambda (x)

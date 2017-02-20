@@ -294,7 +294,7 @@
 	      (begin
 		(debug:print 0 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data from " (db:dbdat-get-path mtdb))
 		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb))
-	      (debug:print 0 *default-log-port* " db, " (db:dbdat-get-path tmpdb) " already exists, not propogating data from " (db:dbdat-get-path mtdb)))
+	      (debug:print 4 *default-log-port* " db, " (db:dbdat-get-path tmpdb) " already exists, not propogating data from " (db:dbdat-get-path mtdb)))
 	  ;; (db:multi-db-sync dbstruct 'old2new))  ;; migrate data from megatest.db automatically
           tmpdb))))
 
@@ -437,7 +437,7 @@
 		   '("id"  #f))
 	     (map (lambda (k)(list k #f))
 		  (append keys
-			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count"))))
+			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count" "contour"))))
      (list "test_meta"
 	   '("id"             #f)
 	   '("testname"       #f)
@@ -710,14 +710,19 @@
   ;;
   ;; remove all these some time after september 2016 (added in v1.6031
   ;;
-  (handle-exceptions
-   exn
-   (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
-       (debug:print 0 *default-log-port* "Column last_update already added to runs table")
-       (db:general-sqlite-error-dump exn "alter table runs ..." #f "none"))
-   (sqlite3:execute
-    maindb
-    "ALTER TABLE runs ADD COLUMN last_update INTEGER DEFAULT 0"))
+  (for-each
+   (lambda (column type default)
+     (handle-exceptions
+	 exn
+	 (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
+	     (debug:print 0 *default-log-port* "Column " column " already added to runs table")
+	     (db:general-sqlite-error-dump exn "alter table runs ..." #f "none"))
+       (sqlite3:execute
+	maindb
+	(conc "ALTER TABLE runs ADD COLUMN " column " " type " DEFAULT " default))))
+   (list "last_update" "contour")
+   (list "INTEGER"     "TEXT"   )
+   (list "0"           "''"   ))
   ;; these schema changes don't need exception handling
   (sqlite3:execute
    maindb
@@ -881,7 +886,7 @@
 		      data-synced)))
 
 
-        (if (member 'fixschema options)
+        (if (member 'schema options)
             (begin
               (db:patch-schema-maindb (db:dbdat-get-db mtdb))
               (db:patch-schema-maindb (db:dbdat-get-db tmpdb))
@@ -1029,6 +1034,7 @@
 			    "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, \n			 " 
 			    fieldstr (if havekeys "," "") "
 			 runname    TEXT DEFAULT 'norun',
+                         contour    TEXT DEFAULT '',
 			 state      TEXT DEFAULT '',
 			 status     TEXT DEFAULT '',
 			 owner      TEXT DEFAULT '',
@@ -1818,13 +1824,14 @@
 ;; register a test run with the db, this accesses the main.db and does NOT
 ;; use server api
 ;;
-(define (db:register-run dbstruct keyvals runname state status user)
+(define (db:register-run dbstruct keyvals runname state status user contour-in)
   (let* ((keys      (map car keyvals))
-	 (keystr    (keys->keystr keys))	 
+	 (keystr    (keys->keystr keys))
+	 (contour   (or contour-in ""))  ;; empty string to force no hierarcy and be backwards compatible.
 	 (comma     (if (> (length keys) 0) "," ""))
 	 (andstr    (if (> (length keys) 0) " AND " ""))
 	 (valslots  (keys->valslots keys)) ;; ?,?,? ...
-	 (allvals   (append (list runname state status user) (map cadr keyvals)))
+	 (allvals   (append (list runname state status user contour) (map cadr keyvals)))
 	 (qryvals   (append (list runname) (map cadr keyvals)))
 	 (key=?str  (string-intersperse (map (lambda (k)(conc k "=?")) keys) " AND ")))
     (debug:print 3 *default-log-port* "keys: " keys " allvals: " allvals " keyvals: " keyvals " key=?str is " key=?str)
@@ -1834,7 +1841,7 @@
 	 dbstruct #f #f
 	 (lambda (db)
 	   (let ((res #f))
-	     (apply sqlite3:execute db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time" comma keystr ") VALUES (?,?,?,?,strftime('%s','now')" comma valslots ");")
+	     (apply sqlite3:execute db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time,contour" comma keystr ") VALUES (?,?,?,?,strftime('%s','now'),?" comma valslots ");")
 		    allvals)
 	     (apply sqlite3:for-each-row 
 		    (lambda (id)
@@ -2516,11 +2523,14 @@
 
 ;; ;; speed up for common cases with a little logic
 ;; ;; NB// Ultimately this will be deprecated in deference to mt:test-set-state-status-by-id
+;;
+;;      NOTE: run-id is not used
 ;; ;;
 (define (db:test-set-state-status dbstruct run-id test-id newstate newstatus newcomment)
   (db:with-db
    dbstruct
-   run-id
+   ;; run-id
+   #f
    #t
    (lambda (db)
      (cond
@@ -2772,11 +2782,12 @@
 	 (db:prep-megatest.db-adj-test-ids (db:dbdat-get-db mtdb) run-id testrecs)))
      run-ids)))
 
-;; Get test data using test_id
+;; Get test data using test_id, run-id is not used
+;; 
 (define (db:get-test-info-by-id dbstruct run-id test-id)
   (db:with-db
    dbstruct
-   run-id
+   #f ;; run-id
    #f
    (lambda (db)
      (let ((res #f))
@@ -3332,7 +3343,8 @@
              WHERE testname=? AND item_path='' AND run_id=?;") ;; DONE  ;; BROKEN!!! NEEDS run-id
 	'(top-test-set-running  "UPDATE tests SET state='RUNNING' WHERE testname=? AND item_path='' AND run_id=?;") ;; DONE   ;; BROKEN!!! NEEDS run-id
 
-
+	;; NOT USED
+	;;
 	;; Might be the following top-test-set-per-pf-counts query could be better based off of something like this:
 	;;
 	;; select state,status,count(state) from tests where run_id=59 AND testname='runfirst' group by state,status;

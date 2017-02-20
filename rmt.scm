@@ -565,8 +565,8 @@
   (rmt:send-receive 'get-num-runs #f (list runpatt)))
 
 ;; Use the special run-id == #f scenario here since there is no run yet
-(define (rmt:register-run keyvals runname state status user)
-  (rmt:send-receive 'register-run #f (list keyvals runname state status user)))
+(define (rmt:register-run keyvals runname state status user contour)
+  (rmt:send-receive 'register-run #f (list keyvals runname state status user contour)))
     
 (define (rmt:get-run-name-from-id run-id)
   (rmt:send-receive 'get-run-name-from-id run-id (list run-id)))
