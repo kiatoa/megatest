@@ -1698,40 +1698,84 @@
 ;;  #t => yes, run the job
 ;;  #f => no, do not run the job
 ;;
-(define (common:cron-event cron-str ref-seconds last-done) ;; ref-seconds = #f is NOW. 
-  (let ((cron-items     (map string->number (string-split cron-str)))
-	(ref-time       (seconds->local-time (or ref-seconds (current-seconds))))
-	(last-done-time (seconds->local-time last-done)))
+(define (common:cron-event cron-str now-seconds-in last-done) ;; ref-seconds = #f is NOW. 
+  (let* ((cron-items     (map string->number (string-split cron-str)))
+	 (now-seconds    (or now-seconds-in (current-seconds)))
+	 (now-time       (seconds->local-time now-seconds))
+	 (last-done-time (seconds->local-time last-done))
+	 (all-times      (make-hash-table)))
     (print "cron-items: " cron-items "(length cron-items): " (length cron-items))
     (if (not (eq? (length cron-items) 5)) ;; don't even try to figure out junk strings
 	#f
-	(match-let (((      min  hour  dayofmonth  month     dayofweek)
+	(match-let (((     cmin chour cdayofmonth cmonth    cdayofweek)
 		     cron-items)
 		    ;; 0     1    2        3         4    5      6
-		    ((rsec rmin rhour rdayofmonth rmonth ryr rdayofweek r7 r8 r9)
-		     (vector->list ref-time))
-		    ((csec cmin chour cdayofmonth cmonth cyr cdayofweek c7 c8 c9)
+		    ((nsec nmin nhour ndayofmonth nmonth nyr ndayofweek n7 n8 n9)
+		     (vector->list now-time))
+		    ((lsec lmin lhour ldayofmonth lmonth lyr ldayofweek l7 l8 l9)
 		     (vector->list last-done-time)))
-	  (let ((have-match (and (or (not dayofweek)
-				     (eq? dayofweek rdayofweek)) ;; either any dayofweek or they are same
-				 (or (not month)
-				     (eq? month (+ rmonth 1))) ;; posix time month is 0-11
-				 (or (not dayofmonth)
-				     (eq? dayofmonth rdayofmonth))))
-		(hour-match (or (not hour)
-				(eq? hour rhour)))
-		(min-match  (or (not min)
-				(eq? min rmin))))
-	    ;; now inject non-"*" times into the ref-time
-	    (vector-set! ref-time 0 0)    ;; set seconds to zero
-	    (if min  (vector-set! ref-time 1 min))
-	    (if hour (vector-set! ref-time 2 hour))
-	    (let* ((ref-transition-seconds (local-time->seconds ref-time))
-		   (done-since             (> last-done ref-transition-seconds)))
-	      ;; (print "have-match: " have-match " hour-match: " hour-match " min-match: " min-match " ref-transition-seconds - last-done: " (- ref-transition-seconds last-done) " done-since: " done-since)
-	      (and have-match
-		   (not done-since))))))))
-  
+	  ;; create all possible time slots
+	  ;; remove invalid slots due to (for example) day of week
+	  ;; get the start and end entries for the ref-seconds (current) time
+	  ;; if last-done > ref-seconds => this is an ERROR!
+	  ;; does the last-done time fall in the legit region?
+	  ;;    yes => #f  do not run again this command
+	  ;;    no  => #t  ok to run the command
+	  (for-each ;; month
+	   (lambda (month)
+	     (for-each ;; dayofmonth
+	      (lambda (dom)
+		(for-each
+		 (lambda (hr) ;; hour
+		   (for-each
+		    (lambda (minute) ;; minute
+		      (let ((copy-now (apply vector (vector->list now-time))))
+			(vector-set! copy-now 0 0) ;; force seconds to zero
+			(vector-set! copy-now 1 minute)
+			(vector-set! copy-now 2 hr)
+			(vector-set! copy-now 3 dom)  ;; dom is already corrected for zero referenced
+			(vector-set! copy-now 4 month)
+			(let* ((copy-now-secs (local-time->seconds copy-now))
+			       (new-copy      (seconds->local-time copy-now-secs))) ;; remake the time vector
+			  (if (or (not cdayofweek)
+				  (equal? (vector-ref new-copy 6)
+					  cdayofweek)) ;; if the day is specified and a match OR if the day is NOT specified
+			      (if (or (not cdayofmonth)
+				      (equal? (vector-ref new-copy 3)
+					      (+ 1 cdayofmonth))) ;; if the month is specified and a match OR if the month is NOT specified
+				  (hash-table-set! all-times copy-now-secs new-copy))))))
+		    (if cmin
+			`(,cmin)  ;; if given cmin, have to use it
+			(list (- nmin 1) nmin (+ nmin 1))))) ;; minute
+		 (if chour
+		     `(,chour)
+		     (list (- nhour 1) nhour (+ nhour 1))))) ;; hour
+	      (if cdayofmonth
+		  `(,cdayofmonth)
+		  (list (- ndayofmonth 1) ndayofmonth (+ ndayofmonth 1)))))
+	   (if cmonth
+	       `(,cmonth)
+	       (list (- nmonth 1) nmonth (+ nmonth 1))))
+	  (let ((before #f)
+		(is-in  #f))
+	    (for-each
+	     (lambda (moment)
+	       (if (and before
+			(<= before now-seconds)
+			(>= moment now-seconds))
+		   (begin
+		     (print)
+		     (print "Before: " (time->string (seconds->local-time before)))
+		     (print "Now:    " (time->string (seconds->local-time now-seconds)))
+		     (print "After:  " (time->string (seconds->local-time moment)))
+		     (print "Last:   " (time->string (seconds->local-time last-done)))
+		     (if (<  last-done before)
+			 (set! is-in before))
+		     ))
+	       (set! before moment))
+	     (sort (hash-table-keys all-times) <))
+	    is-in)))))
+
 ;;======================================================================
 ;; C O L O R S
 ;;======================================================================
