@@ -427,6 +427,7 @@
 	       (runname   (assoc/default 'runname   cmdinfo))
 	       (megatest  (assoc/default 'megatest  cmdinfo))
 	       (runtlim   (assoc/default 'runtlim   cmdinfo))
+	       (contour   (assoc/default 'contour   cmdinfo))
 	       (item-path (item-list->path itemdat))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 	       (keys      #f)
@@ -442,6 +443,8 @@
                                               runscript))))) ;; assume it is on the path
 	       ) ;; (rollup-status 0)
 
+	  (if contour (setenv "MT_CONTOUR" contour))
+	  
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
 	    (if (or (file-exists? top-path)
@@ -740,9 +743,10 @@
 	 (runname  (common:args-get-runname))
 	 (target   (common:args-get-target))
 	 (linktree (common:get-linktree))
+	 (contour  (args:get-arg "-contour"))
 	 (sections (if target (list "default" target) #f)) ;; for runconfigs
 	 (mtconfig (or (args:get-arg "-config") "megatest.config")) ;; allow overriding megatest.config 
-	 (rundir   (if (and runname target linktree)(conc linktree "/" target "/" runname) #f))
+	 (rundir   (if (and runname target linktree)(conc linktree (if contour (conc "/" contour) "") "/" target "/" runname) #f))
 	 (mtcachef (and rundir (conc rundir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	 (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	 (cancreate (and rundir (file-exists? rundir)(file-write-access? rundir)))
@@ -909,6 +913,7 @@
 			(db:get-value-by-header (db:get-rows run-info)
 						(db:get-header run-info)
 						"runname")))
+	 (contour   (args:get-arg "-contour"))
 	 ;; convert back to db: from rdb: - this is always run at server end
 	 (target   (string-intersperse (map cadr keyvals) "/"))
 
@@ -919,14 +924,14 @@
 	 (test-base    (conc testtop-base (if not-iterated "" "/") item-path))
 
 	 ;; nb// if itempath is not "" then it is prefixed with "/"
-	 (toptest-path (conc disk-path "/" testtop-base))
-	 (test-path    (conc disk-path "/" test-base))
+	 (toptest-path (conc disk-path (if contour (conc "/" contour) "") "/" testtop-base))
+	 (test-path    (conc disk-path (if contour (conc "/" contour) "") "/" test-base))
 
 	 ;; ensure this exists first as links to subtests must be created there
 	 (linktree  (let ((rd (config-lookup *configdat* "setup" "linktree")))
 		      (if rd rd (conc *toppath* "/runs"))))
 
-	 (lnkbase   (conc linktree "/" target "/" runname))
+	 (lnkbase   (conc linktree (if contour (conc "/" contour) "") "/" target "/" runname))
 	 (lnkpath   (conc lnkbase "/" testname))
 	 (lnkpathf  (conc lnkpath (if not-iterated "" "/") item-path))
 	 (lnktarget (conc lnkpath "/" item-path)))
@@ -1078,7 +1083,8 @@
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
   (mutex-lock! *launch-setup-mutex*) ;; setting variables and processing the testconfig is NOT thread-safe, reuse the launch-setup mutex
-  (let* ((item-path       (item-list->path itemdat)))
+  (let* ((item-path       (item-list->path itemdat))
+	 (contour         (args:get-arg "-contour")))
     (let loop ((delta        (- (current-seconds) *last-launch*))
 	       (launch-delay (string->number (or (configf:lookup *configdat* "setup" "launch-delay") "5"))))
       (if (> launch-delay delta)
@@ -1094,6 +1100,7 @@
        (list "MT_TEST_NAME" test-name)
        (list "MT_RUNNAME"   runname)
        (list "MT_ITEMPATH"  item-path)
+       (list "MT_CONTOUR"   contour)
        )
       itemdat))
     (let* ((tregistry       (tests:get-all)) ;; third param (below) is system-allowed
@@ -1187,6 +1194,7 @@
 					(list 'megatest  remote-megatest)
 					(list 'ezsteps   ezsteps) 
 					(list 'target    mt_target)
+					(list 'contour   contour)
 					(list 'runtlim   (if run-time-limit (common:hms-string->seconds run-time-limit) #f))
 					(list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
 					(list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))

@@ -201,7 +201,7 @@
 (define (runs:run-tests target runname test-patts user flags #!key (run-count 1)) ;; test-names
   (let* ((keys               (keys:config-get-fields *configdat*))
 	 (keyvals            (keys:target->keyval keys target))
-	 (run-id             (rmt:register-run keyvals runname "new" "n/a" user))  ;;  test-name)))
+	 (run-id             (rmt:register-run keyvals runname "new" "n/a" user (args:get-arg "-contour")))  ;;  test-name)))
 	 ;; (deferred          '()) ;; delay running these since they have a waiton clause
 	 (runconfigf         (conc  *toppath* "/runconfigs.config"))
 	 (test-records       (make-hash-table))
@@ -213,7 +213,8 @@
 	 (task-key           (conc (hash-table->alist flags) " " (get-host-name) " " (current-process-id)))
 	 (tdbdat             (tasks:open-db))
 	 (config-reruns      (let ((x (configf:lookup *configdat* "setup" "reruns")))
-			       (if x (string->number x) #f))))
+			       (if x (string->number x) #f)))
+	 (allowed-tests      #f))
 
     ;; per user request. If less than 100Meg space on dbdir partition, bail out with error
     ;; this will reduce issues in database corruption
@@ -255,6 +256,8 @@
 
     (if (not test-patts) ;; first time in - adjust testpatt
 	(set! test-patts (common:args-get-testpatt runconf)))
+    (if (args:get-arg "-tagexpr")
+	(set! allowed-tests (string-join (runs:get-tests-matching-tags (args:get-arg "-tagexpr")) ","))) ;; tests will be ANDed with this list
 
     ;; register this run in monitor.db
     (rmt:tasks-add "run-tests" user target runname test-patts task-key) ;; params)
@@ -263,7 +266,12 @@
     ;; Now generate all the tests lists
     (set! all-tests-registry (tests:get-all))   ;; hash of testname => path-to-test
     (set! all-test-names     (hash-table-keys all-tests-registry))
-    (set! test-names         (tests:filter-test-names all-test-names test-patts))
+    ;; filter first for allowed-tests (from -tagexpr) then for test-patts.
+    (set! test-names         (tests:filter-test-names
+			      (if allowed-tests
+				  (tests:filter-test-names all-test-names allowed-tests)
+				  all-test-names)
+			      test-patts))
 
     ;; I think seeding required-tests with all test-names makes sense but lack analysis to back that up.
 
@@ -1045,7 +1053,7 @@
   ;;
   ;; (rmt:find-and-mark-incomplete)
 
-  (let* ((run-info              (rmt:get-run-info run-id))
+  (let* ((run-info             (rmt:get-run-info run-id))
 	(tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
 	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
 	(test-registry         (make-hash-table))
@@ -1970,7 +1978,7 @@
     (for-each
      (lambda (tag)
        (if (patt-list-match tag tagpatt)
-           (set! res (append (hash-table-ref tagdata tag)))))
+           (set! res (append (hash-table-ref tagdata tag) res))))
      (hash-table-keys tagdata))
     res))
     
@@ -1991,7 +1999,7 @@
   (debug:print 4 *default-log-port* "runs:rollup-run, keys: " keys " -runname " runname " user: " user)
   (let* ((db              #f)
 	 ;; register run operates on the main db
-	 (new-run-id      (rmt:register-run keyvals runname "new" "n/a" user))
+	 (new-run-id      (rmt:register-run keyvals runname "new" "n/a" user (args:get-arg "-contour")))
 	 (prev-tests      (rmt:get-matching-previous-test-run-records new-run-id "%" "%"))
 	 (curr-tests      (mt:get-tests-for-run new-run-id "%/%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
