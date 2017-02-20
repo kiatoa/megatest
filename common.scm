@@ -1704,7 +1704,7 @@
 	 (now-time       (seconds->local-time now-seconds))
 	 (last-done-time (seconds->local-time last-done))
 	 (all-times      (make-hash-table)))
-    (print "cron-items: " cron-items "(length cron-items): " (length cron-items))
+    ;; (print "cron-items: " cron-items "(length cron-items): " (length cron-items))
     (if (not (eq? (length cron-items) 5)) ;; don't even try to figure out junk strings
 	#f
 	(match-let (((     cmin chour cdayofmonth cmonth    cdayofweek)
