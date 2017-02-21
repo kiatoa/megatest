@@ -58,8 +58,10 @@
   ;;
   (let* ((start-time (current-seconds)) ;; snapshot time so all use cases get same value
          (areapath *toppath*);; TODO - resolve from dbstruct to be compatible with multiple areas
-         (readonly-mode (file-write-access? (conc *toppath* "/megatest.db")  )) ;; TODO: use dbstruct or runremote to figure this out in future
+         (dbfile (conc *toppath* "/megatest.db"))
+         (readonly-mode (not (file-write-access? dbfile))) ;; TODO: use dbstruct or runremote to figure this out in future
 	 (runremote  (or area-dat *runremote*)))
+    ;;(print "BB> readonly-mode is "readonly-mode" dbfile is "dbfile)
     (cond
      ;; give up if more than 15 attempts
      ((> attemptnum 15)
