@@ -684,7 +684,7 @@
 ;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
 (define (common:watchdog)
   (let ((dbstruct (db:setup)))
-    (if (dbstruct-readonly dbstruct)
+    (if (dbr:dbstruct-read-only dbstruct)
         (common:readonly-watchdog dbstruct)
         (common:writable-watchdog dbstruct))))
 

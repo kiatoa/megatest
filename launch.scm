@@ -723,7 +723,7 @@
 ;;           *runconfigdat* (runconfigs.config info)
 ;;           *configstatus* (status of the read data)
 ;;
-(define (launch:setup #!key (force #f))
+(define (launch:setup #!key (force #f) (areapath #f))
   (mutex-lock! *launch-setup-mutex*)
   (if (and *toppath*
 	   (eq? *configstatus* 'fulldata)) ;; got it all
@@ -731,12 +731,12 @@
 	(debug:print 0 *default-log-port* "NOTE: skipping launch:setup-body call since we have fulldata")
 	(mutex-unlock! *launch-setup-mutex*)
 	*toppath*)
-      (let ((res (launch:setup-body force: force)))
+      (let ((res (launch:setup-body force: force areapath: areapath)))
 	(mutex-unlock! *launch-setup-mutex*)
 	res)))
 
-(define (launch:setup-body #!key (force #f))
-  (let* ((toppath  (or *toppath* (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
+(define (launch:setup-body #!key (force #f) (areapath #f))
+  (let* ((toppath  (or *toppath* areapath (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
 	 (runname  (common:args-get-runname))
 	 (target   (common:args-get-target))
 	 (linktree (common:get-linktree))

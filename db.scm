@@ -306,10 +306,12 @@
 ;; called in http-transport and replicated in rmt.scm for *local* access. 
 ;;
 (define (db:setup #!key (areapath #f))
+  ;;
   (cond
    (*dbstruct-db* *dbstruct-db*);; TODO: when multiple areas are supported, this optimization will be a hazard
    (else ;;(common:on-homehost?)
     (let* ((dbstruct (make-dbr:dbstruct)))
+      (launch:setup areapath: areapath)
       (db:open-db dbstruct areapath: areapath)
       (set! *dbstruct-db* dbstruct)
       dbstruct))))
