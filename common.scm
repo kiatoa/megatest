@@ -274,27 +274,41 @@
 (define (common:exit-on-version-changed)
   (if (common:version-changed?)
       (if (common:on-homehost?)
-	  (let ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config"))
-		(dbstruct (db:setup)))
+	  (let* ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config"))
+                (dbfile (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.db"))
+                (read-only (not (file-write-access? dbfile)))
+                (dbstruct (db:setup)))
 	    (debug:print 0 *default-log-port*
 			 "WARNING: Version mismatch!\n"
 			 "   expected: " (common:version-signature) "\n"
 			 "   got:      " (common:get-last-run-version))
-	    (if (and (file-exists? mtconf)
-		     (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
-		(begin
-		  (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
-		  (handle-exceptions
-		   exn
-		   (begin
-		     (debug:print 0 *default-log-port* "Failed to switch versions.")
-		     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-		     (print-call-chain (current-error-port))
-		     (exit 1))
-		   (common:cleanup-db dbstruct)))
-		(begin
-		  (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
-		  (exit 1))))
+            (cond
+             ((and (file-exists? mtconf) (file-exists? dbfile) (not read-only)
+                   (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
+              (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
+              (handle-exceptions
+               exn
+               (begin
+                 (debug:print 0 *default-log-port* "Failed to switch versions.")
+                 (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+                 (print-call-chain (current-error-port))
+                 (exit 1))
+               (common:cleanup-db dbstruct)))
+             ((not (file-exists? mtconf))
+              (debug:print 0 *default-log-port* "   megatest.config does not exist in this area.  Cannot proceed with megatest version migration.")
+              (exit 1))
+             ((not (file-exists? dbfile))
+              (debug:print 0 *default-log-port* "   megatest.db does not exist in this area.  Cannot proceed with megatest version migration.")
+              (exit 1))
+             ((not (eq? (current-user-id)(file-owner mtconf)))
+              (debug:print 0 *default-log-port* "   You do not own megatest.db in this area.  Cannot proceed with megatest version migration.")
+              (exit 1))
+             (read-only
+              (debug:print 0 *default-log-port* "   You have read-only access to this area.  Cannot proceed with megatest version migration.")
+              (exit 1))
+             (else
+              (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
+              (exit 1))))
 	  (begin
 	    (debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
 	    (exit 1)))))
