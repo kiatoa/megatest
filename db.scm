@@ -311,7 +311,7 @@
    (*dbstruct-db* *dbstruct-db*);; TODO: when multiple areas are supported, this optimization will be a hazard
    (else ;;(common:on-homehost?)
     (let* ((dbstruct (make-dbr:dbstruct)))
-      (launch:setup areapath: areapath)
+      (when (not *toppath*) (launch:setup areapath: areapath))
       (db:open-db dbstruct areapath: areapath)
       (set! *dbstruct-db* dbstruct)
       dbstruct))))
