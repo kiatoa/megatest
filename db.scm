@@ -563,20 +563,24 @@
      0)
    ;; this is the work to be done
    (cond
-    ((not fromdb) (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with fromdb missing") -1)
-    ((not todb)   (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with todb missing") -2)
+    ((not fromdb) (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with fromdb missing")
+     -1)
+    ((not todb)   (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with todb missing")
+     -2)
     ((not (sqlite3:database? (db:dbdat-get-db fromdb)))
-     (debug:print-error 0 *default-log-port* "db:sync-tables called with fromdb not a database " fromdb) -3)
+     (debug:print-error 0 *default-log-port* "db:sync-tables called with fromdb not a database " fromdb)
+     -3)
     ((not (sqlite3:database? (db:dbdat-get-db todb)))
-     (debug:print-error 0 *default-log-port* "db:sync-tables called with todb not a database " todb) -4)
+     (debug:print-error 0 *default-log-port* "db:sync-tables called with todb not a database " todb)
+     -4)
 
-    ((not (file-write-access? (cadr todb)))
-     (debug:print-error 0 *default-log-port* "db:sync-tables called with todb not a read-only database " todb) -5)
+    ((not (file-write-access? (db:dbdat-get-path todb)))
+     (debug:print-error 0 *default-log-port* "db:sync-tables called with todb not a read-only database " todb)
+     -5)
     ((not (null? (let ((readonly-slave-dbs
                         (filter
                          (lambda (dbdat)
-                           (not (file-write-access? (cadr todb))))
-                         
+                           (not (file-write-access? (db:dbdat-get-path todb))))
                          slave-dbs)))
                    (for-each
                     (lambda (bad-dbdat)

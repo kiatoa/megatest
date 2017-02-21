@@ -283,6 +283,7 @@
 			 "   expected: " (common:version-signature) "\n"
 			 "   got:      " (common:get-last-run-version))
             (cond
+             ((get-environment-variable "MT_SKIP_DB_MIGRATE") #t)
              ((and (file-exists? mtconf) (file-exists? dbfile) (not read-only)
                    (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
               (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
