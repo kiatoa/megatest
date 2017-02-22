@@ -704,14 +704,15 @@
   (BB> "common:watchdog entered.")
 
  (let ((dbstruct (db:setup)))
-     (cond
-      ((dbr:dbstruct-read-only dbstruct)
-       (BB> "loading read-only watchdog")
-       (common:readonly-watchdog dbstruct))
-      (else
-         (BB> "loading writable-watchdog.")
-         (common:writable-watchdog dbstruct))))
-     (BB> "watchdog done.");;)
+   (BB> "after db:setup with dbstruct="dbstruct)
+   (cond
+    ((dbr:dbstruct-read-only dbstruct)
+     (BB> "loading read-only watchdog")
+     (common:readonly-watchdog dbstruct))
+    (else
+     (BB> "loading writable-watchdog.")
+     (common:writable-watchdog dbstruct))))
+ (BB> "watchdog done.");;)
  )
 
 

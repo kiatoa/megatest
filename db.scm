@@ -287,18 +287,21 @@
                (write-access (file-write-access? mtdbpath)))
           ;;(BB> "db:open-db>> mtdbpath="mtdbpath" mtdbexists="mtdbexists" and write-access="write-access)
           (if (and dbexists (not write-access))
-              (begin (set! *db-write-access* #f)
-                     (dbr:dbstruct-read-only-set! dbstruct #t)))
+              (begin
+                (set! *db-write-access* #f)
+                (dbr:dbstruct-read-only-set! dbstruct #t)))
           (dbr:dbstruct-mtdb-set!   dbstruct mtdb)
           (dbr:dbstruct-tmpdb-set!  dbstruct tmpdb)
           (dbr:dbstruct-dbstack-set! dbstruct (make-stack)) ;; BB: why a stack?  Why would the number of db's be indeterminate?  Is this a legacy of 1.db 2.db .. ?
           (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb) ;; olddb is already a (cons db path)
           (dbr:dbstruct-refndb-set! dbstruct refndb)
           ;;	    (mutex-unlock! *rundb-mutex*)
-          (if (not dbfexists)
+          (if #t ;;(not dbfexists)
 	      (begin
 		(debug:print 0 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data from " (db:dbdat-get-path mtdb))
-		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb))
+		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb)
+                (BB> "db:sync-all-tables-list done.")
+                )
 	      (debug:print 0 *default-log-port* " db, " (db:dbdat-get-path tmpdb) " already exists, not propogating data from " (db:dbdat-get-path mtdb)))
 	  ;; (db:multi-db-sync dbstruct 'old2new))  ;; migrate data from megatest.db automatically
           tmpdb))))
@@ -309,14 +312,18 @@
 ;;
 (define (db:setup #!key (areapath #f))
   ;;
+
   (cond
    (*dbstruct-db* *dbstruct-db*);; TODO: when multiple areas are supported, this optimization will be a hazard
    (else ;;(common:on-homehost?)
+    (BB> "db:setup entered (first time, not cached.)")
     (let* ((dbstruct (make-dbr:dbstruct)))
       (when (not *toppath*)
         (BB> "in db:setup, *toppath* not set; calling launch:setup")
         (launch:setup areapath: areapath))
+      (BB> "Begin db:open-db")
       (db:open-db dbstruct areapath: areapath)
+      (BB> "Done db:open-db")
       (set! *dbstruct-db* dbstruct)
       ;;(BB> "new dbstruct = "(dbr:dbstruct->alist dbstruct))
       dbstruct))))
@@ -336,6 +343,7 @@
 					      (db:initialize-main-db db)
 					      (db:initialize-run-id-db db))))
 	 (write-access (file-write-access? dbpath)))
+    (BB> "db:open-megatest-db "dbpath)
     (if (and dbexists (not write-access))
 	(set! *db-write-access* #f))
     (cons db dbpath)))
@@ -624,7 +632,7 @@
 		 (fromdat    '())
 		 (fromdats   '())
 		 (totrecords 0)
-		 (batch-len  (string->number (or (configf:lookup *configdat* "sync" "batchsize") "10")))
+		 (batch-len  (string->number (or (configf:lookup *configdat* "sync" "batchsize") "100")))
 		 (todat      (make-hash-table))
 		 (count      0))
 
