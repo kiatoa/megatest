@@ -605,7 +605,7 @@
 
 (define (common:readonly-watchdog dbstruct)
   (thread-sleep! 0.05) ;; delay for startup
-  (BB> "common:readonly-watchdog entered.")
+  (debug:print-info 13 *default-log-port* "common:readonly-watchdog entered.")
   ;; sync megatest.db to /tmp/.../megatst.db
   (let* ((sync-cool-off-duration   3)
         (golden-mtdb     (dbr:dbstruct-mtdb dbstruct))
@@ -614,9 +614,9 @@
         (tmp-mtpath      (db:dbdat-get-path tmp-mtdb)))
     (debug:print-info 0 *default-log-port* "Read-only periodic sync thread started.")
     (let loop ((last-sync-time 0))
-      (BB> "loop top tmp-mtpath="tmp-mtpath" golden-mtpath="golden-mtpath)
+      (debug:print-info 13 *default-log-port* "loop top tmp-mtpath="tmp-mtpath" golden-mtpath="golden-mtpath)
       (let* ((duration-since-last-sync (- (current-seconds) last-sync-time)))
-        (BB> "duration-since-last-sync="duration-since-last-sync)
+        (debug:print-info 13 *default-log-port* "duration-since-last-sync="duration-since-last-sync)
         (if (and (not *time-to-exit*)
                  (< duration-since-last-sync sync-cool-off-duration))
             (thread-sleep! (- sync-cool-off-duration duration-since-last-sync)))
@@ -654,10 +654,11 @@
                                           (> (- (current-seconds) *db-last-sync*) 5))) ;; sync every five seconds minimum
 		   (start-time       (current-seconds))
 		   (mt-mod-time      (file-modification-time mtpath))
-		   (recently-synced  (> (- start-time mt-mod-time) 4))
+		   (recently-synced  (< (- start-time mt-mod-time) 4))
 		   (will-sync        (and (or need-sync should-sync)
 					  (not sync-in-progress)
 					  (not recently-synced))))
+              (debug:print-info 13 *default-log-port* "WD writable-watchdog top of loop.  need-sync="need-sync" sync-in-progress="sync-in-progress" should-sync="should-sync" start-time="start-time" mt-mod-time="mt-mod-time" recently-synced="recently-synced" will-sync="will-sync)
 	      ;; (if recently-synced (debug:print-info 0 *default-log-port* "Skipping sync due to recently-synced flag=" recently-synced))
 	      ;; (debug:print-info 0 *default-log-port* "need-sync: " need-sync " sync-in-progress: " sync-in-progress " should-sync: " should-sync " will-sync: " will-sync)
 	      (if will-sync (set! *db-sync-in-progress* #t))
@@ -687,7 +688,7 @@
 	    ;;
 	    (if (not *time-to-exit*)
 		(let delay-loop ((count 0))
-                  ;;(BB> "delay-loop top; count="count" pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
+                  ;;(debug:print-info 13 *default-log-port* "delay-loop top; count="count" pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
                                                             
 		  (if (and (not *time-to-exit*)
 			   (< count 4)) ;; was 11, changing to 4. 
@@ -701,24 +702,24 @@
 ;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
 (define (common:watchdog)
   ;;#t)
-  (BB> "common:watchdog entered.")
+  (debug:print-info 13 *default-log-port* "common:watchdog entered.")
 
  (let ((dbstruct (db:setup)))
-   (BB> "after db:setup with dbstruct="dbstruct)
+   (debug:print-info 13 *default-log-port* "after db:setup with dbstruct="dbstruct)
    (cond
     ((dbr:dbstruct-read-only dbstruct)
-     (BB> "loading read-only watchdog")
+     (debug:print-info 13 *default-log-port* "loading read-only watchdog")
      (common:readonly-watchdog dbstruct))
     (else
-     (BB> "loading writable-watchdog.")
+     (debug:print-info 13 *default-log-port* "loading writable-watchdog.")
      (common:writable-watchdog dbstruct))))
- (BB> "watchdog done.");;)
+ (debug:print-info 13 *default-log-port* "watchdog done.");;)
  )
 
 
 (define (std-exit-procedure)
   (on-exit (lambda () 0))
-  ;;(BB> "std-exit-procedure called; *time-to-exit*="*time-to-exit*)
+  ;;(debug:print-info 13 *default-log-port* "std-exit-procedure called; *time-to-exit*="*time-to-exit*)
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
 		       #f
 		       (begin
@@ -765,7 +766,7 @@
 (define (std-signal-handler signum)
   ;; (signal-mask! signum)
   (set! *time-to-exit* #t)
-  ;;(BB> "got signal "signum)
+  ;;(debug:print-info 13 *default-log-port* "got signal "signum)
   (debug:print-error 0 *default-log-port* "Received signal " signum " exiting promptly")
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))

@@ -2019,7 +2019,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (not *didsomething*)
     (debug:print 0 *default-log-port* help))
-;;(BB> "thread-join! watchdog")
+;;(debug:print-info 13 *default-log-port* "thread-join! watchdog")
 
 ;; join the watchdog thread if it has been thread-start!ed  (it may not have been started in the case of a server that never enters running state)
 ;;   (symbols returned by thread-state: created ready running blocked suspended sleeping terminated dead)
