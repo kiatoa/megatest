@@ -285,7 +285,7 @@
                (mtdbexists   (file-exists? mtdbpath))
                (refndb       (db:open-megatest-db path: dbpath name: "megatest_ref.db"))
                (write-access (file-write-access? mtdbpath)))
-          (BB> "db:open-db>> mtdbpath="mtdbpath" mtdbexists="mtdbexists" and write-access="write-access)
+          ;;(BB> "db:open-db>> mtdbpath="mtdbpath" mtdbexists="mtdbexists" and write-access="write-access)
           (if (and dbexists (not write-access))
               (begin (set! *db-write-access* #f)
                      (dbr:dbstruct-read-only-set! dbstruct #t)))
@@ -317,7 +317,7 @@
       (when (not *toppath*) (launch:setup areapath: areapath))
       (db:open-db dbstruct areapath: areapath)
       (set! *dbstruct-db* dbstruct)
-      (BB> "new dbstruct = "(dbr:dbstruct->alist dbstruct))
+      ;;(BB> "new dbstruct = "(dbr:dbstruct->alist dbstruct))
       dbstruct))))
    ;; (else
    ;;  (debug:print 0 *default-log-port* "ERROR: attempt to open database when not on homehost. Exiting. Homehost: " (common:get-homehost))
