@@ -204,6 +204,8 @@
 	 (run-id             (rmt:register-run keyvals runname "new" "n/a" user))  ;;  test-name)))
 	 ;; (deferred          '()) ;; delay running these since they have a waiton clause
 	 (runconfigf         (conc  *toppath* "/runconfigs.config"))
+         (dbfile             (conc  *toppath* "/megatest.db"))
+         (readonly-mode      (not (file-write-access? dbfile)))
 	 (test-records       (make-hash-table))
 	 ;; need to process runconfigs before generating these lists
 	 (all-tests-registry #f)  ;; (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
@@ -215,10 +217,15 @@
 	 (config-reruns      (let ((x (configf:lookup *configdat* "setup" "reruns")))
 			       (if x (string->number x) #f))))
 
+    ;; check if readonly
+    (when readonly-mode
+      (debug:print-error 0 *default-log-port* "megatest.db is readonly.  Cannot proceed.")
+      (exit 1))
+
     ;; per user request. If less than 100Meg space on dbdir partition, bail out with error
     ;; this will reduce issues in database corruption
     (common:check-db-dir-and-exit-if-insufficient)
-    
+
     ;; override the number of reruns from the configs
     (if (and config-reruns
 	     (> run-count config-reruns))
@@ -1326,7 +1333,7 @@
     (thread-sleep! 5) ;; I think there is a race condition here. Let states/statuses settle
     (let wait-loop ((num-running      (rmt:get-count-tests-running-for-run-id run-id))
 		    (prev-num-running 0))
-      ;; (BB> "num-running=" num-running ", prev-num-running=" prev-num-running)
+      ;; (debug:print-info 13 *default-log-port* "num-running=" num-running ", prev-num-running=" prev-num-running)
       (if (and (or (args:get-arg "-run-wait")
 		   (equal? (configf:lookup *configdat* "setup" "run-wait") "yes"))
 	       (> num-running 0))
@@ -1641,6 +1648,16 @@
 	 (state-status (if (string? new-state-status) (string-split new-state-status ",") '(#f #f)))
 	 (rp-mutex     (make-mutex))
 	 (bup-mutex    (make-mutex)))
+
+    (let* ((write-access-actions '(remove-runs set-state-status archive run-wait))
+           (dbfile             (conc  *toppath* "/megatest.db"))
+           (readonly-mode      (not (file-write-access? dbfile))))
+      (when (and readonly-mode
+                 (member action write-access-actions))
+        (debug:print-error 0 *default-log-port* "megatest.db is readonly.  Cannot proceed with action ["action"] in which write-access isrequired .")
+        (exit 1)))
+
+    
     (debug:print-info 4 *default-log-port* "runs:operate-on => Header: " header " action: " action " new-state-status: " new-state-status)
     (if (> 2 (length state-status))
 	(begin
@@ -1894,6 +1911,8 @@
 	    (begin 
 	      (debug:print 0 *default-log-port* "Failed to setup, exiting")
 	      (exit 1)))
+
+        
 	(set! keys (keys:config-get-fields *configdat*))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")

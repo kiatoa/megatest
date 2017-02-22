@@ -44,12 +44,13 @@
 ;; I propose this record evolves into the area record
 ;;
 (defstruct dbr:dbstruct 
-  ;; (tmpdb       #f)
+  (tmpdb       #f)
   (dbstack     #f) ;; stack for tmp db handles, do not initialize with a stack
   (mtdb        #f)
   (refndb      #f)
   (homehost    #f) ;; not used yet
   (on-homehost #f) ;; not used yet
+  (read-only   #f)
   )                ;; goal is to converge on one struct for an area but for now it is too confusing
   
 
@@ -271,29 +272,36 @@
 
 ;; This routine creates the db if not already present. It is only called if the db is not already opened
 ;;
-(define (db:open-db dbstruct #!key (areapath #f))
+(define (db:open-db dbstruct #!key (areapath #f)) ;; TODO: actually use areapath
   (let ((tmpdb-stack (dbr:dbstruct-dbstack dbstruct))) ;; RA => Returns the first reference in dbstruct
     (if (stack? tmpdb-stack)
 	(db:get-db tmpdb-stack) ;; get previously opened db (will create new db handle if all in the stack are already used
-        (let* ((dbpath       (db:dbfile-path)) ;;  0))
+        (let* ((dbpath       (db:dbfile-path )) ;;  0))
                (dbexists     (file-exists? dbpath))
 	       (dbfexists    (file-exists? (conc dbpath "/megatest.db")))
                (tmpdb        (db:open-megatest-db path: dbpath)) ;; lock-create-open dbpath db:initialize-main-db))
                (mtdb         (db:open-megatest-db))
+               (mtdbpath     (db:dbdat-get-path mtdb))
+               (mtdbexists   (file-exists? mtdbpath))
                (refndb       (db:open-megatest-db path: dbpath name: "megatest_ref.db"))
-               (write-access (file-write-access? dbpath)))
+               (write-access (file-write-access? mtdbpath)))
+          ;;(debug:print-info 13 *default-log-port* "db:open-db>> mtdbpath="mtdbpath" mtdbexists="mtdbexists" and write-access="write-access)
           (if (and dbexists (not write-access))
-              (set! *db-write-access* #f))
+              (begin
+                (set! *db-write-access* #f)
+                (dbr:dbstruct-read-only-set! dbstruct #t)))
           (dbr:dbstruct-mtdb-set!   dbstruct mtdb)
-          (dbr:dbstruct-dbstack-set! dbstruct (make-stack))
+          (dbr:dbstruct-tmpdb-set!  dbstruct tmpdb)
+          (dbr:dbstruct-dbstack-set! dbstruct (make-stack)) ;; BB: why a stack?  Why would the number of db's be indeterminate?  Is this a legacy of 1.db 2.db .. ?
           (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb) ;; olddb is already a (cons db path)
           (dbr:dbstruct-refndb-set! dbstruct refndb)
           ;;	    (mutex-unlock! *rundb-mutex*)
-          (if (and (not dbfexists)
-                   write-access) ;; *db-write-access*) ;; did not have a prior db and do have write access
+          (if #t ;;(not dbfexists)
 	      (begin
 		(debug:print 0 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data from " (db:dbdat-get-path mtdb))
-		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb))
+		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb)
+                (debug:print-info 13 *default-log-port* "db:sync-all-tables-list done.")
+                )
 	      (debug:print 0 *default-log-port* " db, " (db:dbdat-get-path tmpdb) " already exists, not propogating data from " (db:dbdat-get-path mtdb)))
 	  ;; (db:multi-db-sync dbstruct 'old2new))  ;; migrate data from megatest.db automatically
           tmpdb))))
@@ -303,15 +311,25 @@
 ;; called in http-transport and replicated in rmt.scm for *local* access. 
 ;;
 (define (db:setup #!key (areapath #f))
-  (or *dbstruct-db*
-      (if (common:on-homehost?)
-	  (let* ((dbstruct (make-dbr:dbstruct)))
-	    (db:open-db dbstruct areapath: areapath)
-	    (set! *dbstruct-db* dbstruct)
-	    dbstruct)
-	  (begin
-	    (debug:print 0 *default-log-port* "ERROR: attempt to open database when not on homehost. Exiting. Homehost: " (common:get-homehost))
-	    (exit 1)))))
+  ;;
+
+  (cond
+   (*dbstruct-db* *dbstruct-db*);; TODO: when multiple areas are supported, this optimization will be a hazard
+   (else ;;(common:on-homehost?)
+    (debug:print-info 13 *default-log-port* "db:setup entered (first time, not cached.)")
+    (let* ((dbstruct (make-dbr:dbstruct)))
+      (when (not *toppath*)
+        (debug:print-info 13 *default-log-port* "in db:setup, *toppath* not set; calling launch:setup")
+        (launch:setup areapath: areapath))
+      (debug:print-info 13 *default-log-port* "Begin db:open-db")
+      (db:open-db dbstruct areapath: areapath)
+      (debug:print-info 13 *default-log-port* "Done db:open-db")
+      (set! *dbstruct-db* dbstruct)
+      ;;(debug:print-info 13 *default-log-port* "new dbstruct = "(dbr:dbstruct->alist dbstruct))
+      dbstruct))))
+   ;; (else
+   ;;  (debug:print 0 *default-log-port* "ERROR: attempt to open database when not on homehost. Exiting. Homehost: " (common:get-homehost))
+   ;;  (exit 1))))
 
 ;; Open the classic megatest.db file (defaults to open in toppath)
 ;;
@@ -325,6 +343,7 @@
 					      (db:initialize-main-db db)
 					      (db:initialize-run-id-db db))))
 	 (write-access (file-write-access? dbpath)))
+    (debug:print-info 13 *default-log-port* "db:open-megatest-db "dbpath)
     (if (and dbexists (not write-access))
 	(set! *db-write-access* #f))
     (cons db dbpath)))
@@ -557,12 +576,31 @@
      0)
    ;; this is the work to be done
    (cond
-    ((not fromdb) (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with fromdb missing") -1)
-    ((not todb)   (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with todb missing") -2)
+    ((not fromdb) (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with fromdb missing")
+     -1)
+    ((not todb)   (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with todb missing")
+     -2)
     ((not (sqlite3:database? (db:dbdat-get-db fromdb)))
-     (debug:print-error 0 *default-log-port* "db:sync-tables called with fromdb not a database " fromdb) -3)
+     (debug:print-error 0 *default-log-port* "db:sync-tables called with fromdb not a database " fromdb)
+     -3)
     ((not (sqlite3:database? (db:dbdat-get-db todb)))
-     (debug:print-error 0 *default-log-port* "db:sync-tables called with todb not a database " todb) -4)
+     (debug:print-error 0 *default-log-port* "db:sync-tables called with todb not a database " todb)
+     -4)
+
+    ((not (file-write-access? (db:dbdat-get-path todb)))
+     (debug:print-error 0 *default-log-port* "db:sync-tables called with todb not a read-only database " todb)
+     -5)
+    ((not (null? (let ((readonly-slave-dbs
+                        (filter
+                         (lambda (dbdat)
+                           (not (file-write-access? (db:dbdat-get-path todb))))
+                         slave-dbs)))
+                   (for-each
+                    (lambda (bad-dbdat)
+                      (debug:print-error
+                       0 *default-log-port* "db:sync-tables called with todb not a read-only database " bad-dbdat))
+                    readonly-slave-dbs)
+                   readonly-slave-dbs))) -6)
     (else
      (let ((stmts       (make-hash-table)) ;; table-field => stmt
 	   (all-stmts   '())              ;; ( ( stmt1 value1 ) ( stml2 value2 ))
@@ -594,7 +632,7 @@
 		 (fromdat    '())
 		 (fromdats   '())
 		 (totrecords 0)
-		 (batch-len  (string->number (or (configf:lookup *configdat* "sync" "batchsize") "10")))
+		 (batch-len  (string->number (or (configf:lookup *configdat* "sync" "batchsize") "100")))
 		 (todat      (make-hash-table))
 		 (count      0))
 
@@ -813,11 +851,10 @@
 ;;  'killservers  - kills all servers
 ;;  'dejunk       - removes junk records
 ;;  'adj-testids  - move test-ids into correct ranges
-;;  'old2new      - sync megatest.db records to .db/{main,1,2 ...}.db
-;;  'new2old      - sync .db/{main,1,2,3 ...}.db to megatest.db
+;;  'old2new      - sync megatest.db to /tmp/.../megatest.db and /tmp/.../megatest_ref.db
+;;  'new2old      - sync /tmp/.../megatest.db to megatest.db and /tmp/.../megatest_ref.db (and update data_synced)
 ;;  'closeall     - close all opened dbs
 ;;  'schema       - attempt to apply schema changes
-;;
 ;;  run-ids: '(1 2 3 ...) or #f (for all)
 ;;
 (define (db:multi-db-sync dbstruct . options)
@@ -860,7 +897,9 @@
 	;;
 	(if (member 'old2new options)
 	    ;; (begin
-	    (db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb tmpdb refndb))
+            (set! data-synced
+                  (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb tmpdb refndb)
+                     data-synced)))
 			      ;; (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
 ;; 	      (for-each 
 ;; 	       (lambda (run-id)
@@ -879,6 +918,7 @@
 	    (set! data-synced
 		  (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb refndb mtdb)
 		      data-synced)))
+
 
 
         (if (member 'fixschema options)

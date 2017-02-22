@@ -73,7 +73,7 @@
           (if csvt  ;; this if blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
               (rmt:csv->test-data run-id test-id csvt)
 	      (debug:print 0 *default-log-port* "ERROR: no csvdat exists for run-id: " run-id " test-id: " test-id " stepname: " stepname ", check that logpro version is 1.15 or newer"))
-	  ;;  (BB> "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
+	  ;;  (debug:print-info 13 *default-log-port* "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
 	  ;;  )
 	  (cond
 	   ((equal? status "PASS") "PASS") ;; skip the message part if status is pass
@@ -723,7 +723,7 @@
 ;;           *runconfigdat* (runconfigs.config info)
 ;;           *configstatus* (status of the read data)
 ;;
-(define (launch:setup #!key (force #f))
+(define (launch:setup #!key (force #f) (areapath #f))
   (mutex-lock! *launch-setup-mutex*)
   (if (and *toppath*
 	   (eq? *configstatus* 'fulldata)) ;; got it all
@@ -731,12 +731,12 @@
 	(debug:print 0 *default-log-port* "NOTE: skipping launch:setup-body call since we have fulldata")
 	(mutex-unlock! *launch-setup-mutex*)
 	*toppath*)
-      (let ((res (launch:setup-body force: force)))
+      (let ((res (launch:setup-body force: force areapath: areapath)))
 	(mutex-unlock! *launch-setup-mutex*)
 	res)))
 
-(define (launch:setup-body #!key (force #f))
-  (let* ((toppath  (or *toppath* (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
+(define (launch:setup-body #!key (force #f) (areapath #f))
+  (let* ((toppath  (or *toppath* areapath (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
 	 (runname  (common:args-get-runname))
 	 (target   (common:args-get-target))
 	 (linktree (common:get-linktree))

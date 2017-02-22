@@ -103,7 +103,7 @@ Misc
 
 (if (not (common:on-homehost?))
     (begin
-      (debug:print 0 *default-log-port* "ERROR: Current policy requires running dashboard on homehost: " (common:get-homehost))))
+      (debug:print 0 *default-log-port* "WARNING: Current policy requires running dashboard on homehost: " (common:get-homehost))))
     
 ;; TODO: Move this inside (main)
 ;;
@@ -114,12 +114,14 @@ Misc
 
 ;; create a watch dog to move changes from lt/.db/*.db to megatest.db
 ;;
-(if (file-write-access? (conc *toppath* "/megatest.db"))
-    (thread-start! (make-thread common:watchdog "Watchdog thread"))
-    (if (not (args:get-arg "-use-db-cache"))
-	(begin
-	  (debug:print-info 0 *default-log-port* "Forcing db-cache mode due to read-only access to megatest.db")
-	  (hash-table-set! args:arg-hash "-use-db-cache" #t))))
+;;;(if (file-write-access? (conc *toppath* "/megatest.db"))
+;;(debug:print-info 13 *default-log-port* "Before common:watchdog spawn")
+(thread-start! (make-thread common:watchdog "Watchdog thread"))
+;;(debug:print-info 13 *default-log-port* "After common:watchdog spawn")
+(if (not (args:get-arg "-use-db-cache"))
+    (begin
+      (debug:print-info 0 *default-log-port* "Forcing db-cache mode due to read-only access to megatest.db")
+      (hash-table-set! args:arg-hash "-use-db-cache" #t)));;;)
 
 ;; data common to all tabs goes here
 ;;
@@ -1700,8 +1702,8 @@ Misc
     (hash-table-set! (dboard:tabdat-last-test-dat tabdat) run-id tests-dat)
     (hash-table-set! (dboard:tabdat-run-update-times tabdat) run-id (- (current-seconds) 10))
     (when (not run)
-        (BB> "ERROR: NO RUN FOR RUN-ID run-id="run-id)
-        (BB> "runs-hash-> " (hash-table->alist runs-hash))
+        (debug:print-info 13 *default-log-port* "ERROR: NO RUN FOR RUN-ID run-id="run-id)
+        (debug:print-info 13 *default-log-port* "runs-hash-> " (hash-table->alist runs-hash))
         )
     tests-mindat))
 
@@ -2077,7 +2079,7 @@ Misc
                            ;; (let* ((modkeys (iup:global "MODKEYSTATE")))
                            ;;   (BB> "modkeys="modkeys))
 
-                           (BB> "click-cb: obj="obj" lin="lin" col="col" status="status)
+                           (debug:print-info 13 *default-log-port* "click-cb: obj="obj" lin="lin" col="col" status="status)
                            ;; status is corrupted on Brandon's home machine.  will have to wait until after shutdown to see if it is still broken in PDX SLES
                            (let* ((toolpath (car (argv)))
                                   (key      (conc lin ":" col))
@@ -2101,21 +2103,21 @@ Misc
 									item-path)))
                                   (status-chars (char-set->list (string->char-set status)))
                                   (testpanel-cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id " &")))
-                             (BB> "status-chars=["status-chars"] status=["status"]")
+                             (debug:print-info 13 *default-log-port* "status-chars=["status-chars"] status=["status"]")
                              (cond
                               ((member #\1 status-chars) ;; 1 is left mouse button
                                (system testpanel-cmd))
                               
                               ((member #\2 status-chars) ;; 2 is middle mouse button
                                
-                               (BB> "mmb- test-name="test-name" testpatt="testpatt)
+                               (debug:print-info 13 *default-log-port* "mmb- test-name="test-name" testpatt="testpatt)
                                (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt item-test-path) ;; popup-menu
                                          #:x 'mouse
                                          #:y 'mouse
                                          #:modal? "NO")
                                )
                               (else
-                               (BB> "unhandled status in run-summary-click-cb.  Doing right click action. (status is corrupted on Brandon's ubuntu host - bad/buggy  iup install??" )
+                               (debug:print-info 13 *default-log-port* "unhandled status in run-summary-click-cb.  Doing right click action. (status is corrupted on Brandon's ubuntu host - bad/buggy  iup install??" )
                                (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt item-test-path) ;; popup-menu
                                          #:x 'mouse
                                          #:y 'mouse
@@ -3427,7 +3429,7 @@ Misc
        ;; (pp (dboard:tabdat->alist tabdat))
        ;; (if (dashboard:database-changed? commondat tabdat context-key: 'runs-rundat)      
        (dashboard:do-update-rundat tabdat)
-       ;;(BB> "dashboard:runs-tab-updater")
+       ;;(debug:print-info 13 *default-log-port* "dashboard:runs-tab-updater")
        ;;(inspect tabdat)
 
        (let ((uidat (dboard:commondat-uidat commondat)))
