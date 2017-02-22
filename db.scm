@@ -295,8 +295,7 @@
           (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb) ;; olddb is already a (cons db path)
           (dbr:dbstruct-refndb-set! dbstruct refndb)
           ;;	    (mutex-unlock! *rundb-mutex*)
-          (if (and (not dbfexists)
-                   write-access) ;; *db-write-access*) ;; did not have a prior db and do have write access
+          (if (not dbfexists)
 	      (begin
 		(debug:print 0 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data from " (db:dbdat-get-path mtdb))
 		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb))
@@ -314,7 +313,9 @@
    (*dbstruct-db* *dbstruct-db*);; TODO: when multiple areas are supported, this optimization will be a hazard
    (else ;;(common:on-homehost?)
     (let* ((dbstruct (make-dbr:dbstruct)))
-      (when (not *toppath*) (launch:setup areapath: areapath))
+      (when (not *toppath*)
+        (BB> "in db:setup, *toppath* not set; calling launch:setup")
+        (launch:setup areapath: areapath))
       (db:open-db dbstruct areapath: areapath)
       (set! *dbstruct-db* dbstruct)
       ;;(BB> "new dbstruct = "(dbr:dbstruct->alist dbstruct))
