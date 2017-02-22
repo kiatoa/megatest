@@ -1083,7 +1083,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (begin
 		      (debug:print-error 0 *default-log-port* "Invalid test fields specified: " (string-intersperse invalid-tests-spec ", "))
 		      (exit)))))
-
 	  ;; Each run
 	  (for-each 
 	   (lambda (run)
@@ -1351,7 +1350,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  (create-directory tempdir #t)
 		  (ods:list->ods tempdir ouf sheets))))
 	  ;; (system (conc "rm -rf " tempdir))
-	  (set! *didsomething* #t))))
+	  (set! *didsomething* #t)
+          (set! *time-to-exit* #t)
+          ) ;; end if true branch (end of a let)
+        ) ;; end if
+    ) ;; end if -list-runs
 
 ;; Don't think I need this. Incorporated into -list-runs instead
 ;;
