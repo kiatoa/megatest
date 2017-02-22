@@ -700,11 +700,19 @@
 
 ;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
 (define (common:watchdog)
+  ;;#t)
   (BB> "common:watchdog entered.")
-  (let ((dbstruct (db:setup)))
-    (if (dbr:dbstruct-read-only dbstruct)
-        (common:readonly-watchdog dbstruct)
-        (common:writable-watchdog dbstruct))))
+
+ (let ((dbstruct (db:setup)))
+     (cond
+      ((dbr:dbstruct-read-only dbstruct)
+       (BB> "loading read-only watchdog")
+       common:readonly-watchdog dbstruct)
+      (else
+         (BB> "loading writable-watchdog.")
+         (common:writable-watchdog dbstruct))))
+     (BB> "watchdog done.");;)
+ )
 
 
 (define (std-exit-procedure)
