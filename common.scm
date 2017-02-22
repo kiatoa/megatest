@@ -607,11 +607,11 @@
   (thread-sleep! 0.05) ;; delay for startup
   (BB> "common:readonly-watchdog entered.")
   ;; sync megatest.db to /tmp/.../megatst.db
-  (let ((sync-cool-off-duration   3)
+  (let* ((sync-cool-off-duration   3)
         (golden-mtdb     (dbr:dbstruct-mtdb dbstruct))
-        (golden-mtpath   (db:dbdat-get-path mtdb))
+        (golden-mtpath   (db:dbdat-get-path golden-mtdb))
         (tmp-mtdb        (dbr:dbstruct-tmpdb dbstruct))
-        (tmp-mtpath      (db:dbdat-get-path mtdb)))
+        (tmp-mtpath      (db:dbdat-get-path tmp-mtdb)))
     (debug:print-info 0 *default-log-port* "Read-only periodic sync thread started.")
     (let loop ((last-sync-time 0))
       (BB> "loop top tmp-mtpath="tmp-mtpath" golden-mtpath="golden-mtpath)
@@ -625,9 +625,9 @@
                   (tmp-mtdb-mtime    (file-modification-time tmp-mtpath)))
               (if (> golden-mtdb-mtime tmp-mtdb-mtime)
                   (let ((res (db:multi-db-sync dbstruct 'old2new)))
-                    (debug:print-info 0 *default-log-port* "rosync called, " res " records transferred."))
-                  (loop (current-seconds)))
-              #t))))
+                    (debug:print-info 0 *default-log-port* "rosync called, " res " records transferred.")))
+              (loop (current-seconds)))
+            #t)))
     (debug:print-info 0 *default-log-port* "Exiting readonly-watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" mtpath="golden-mtpath)))
 
 
@@ -707,7 +707,7 @@
      (cond
       ((dbr:dbstruct-read-only dbstruct)
        (BB> "loading read-only watchdog")
-       common:readonly-watchdog dbstruct)
+       (common:readonly-watchdog dbstruct))
       (else
          (BB> "loading writable-watchdog.")
          (common:writable-watchdog dbstruct))))
