@@ -625,7 +625,7 @@
                   (tmp-mtdb-mtime    (file-modification-time tmp-mtpath)))
               (if (> golden-mtdb-mtime tmp-mtdb-mtime)
                   (let ((res (db:multi-db-sync dbstruct 'old2new)))
-                    (debug:print-info 0 *default-log-port* "rosync called, " res " records transferred.")))
+                    (debug:print-info 13 *default-log-port* "rosync called, " res " records transferred.")))
               (loop (current-seconds)))
             #t)))
     (debug:print-info 0 *default-log-port* "Exiting readonly-watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" mtpath="golden-mtpath)))
