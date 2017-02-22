@@ -2526,7 +2526,7 @@ Misc
 	(set! hdrlst (cons (apply iup:vbox (reverse res)) hdrlst))
 	(loop (+ runnum 1) 0 (make-vector nkeys) '()))
        (else
-	(let ((labl  (iup:label "" #:size (conc cell-width btn-height)  #:fontsize btn-fontsz #:expand "NO"))) ;; #:expand "HORIZONTAL" "60x15" 
+	(let ((labl  (iup:label "" #:size (conc cell-width btn-height)  #:fontsize btn-fontsz #:expand "HORIZONTAL"))) ;; #:expand "HORIZONTAL" "60x15" 
 	  (vector-set! keyvec keynum labl)
 	  (loop runnum (+ keynum 1) keyvec (cons labl res))))))
     ;; By here the hdrlst contains a list of vboxes containing nkeys labels
@@ -2545,7 +2545,7 @@ Misc
 	       (butn       (iup:button
 			    "" ;; button-key 
 			    #:size (conc cell-width btn-height )
-			    #:expand "NO"
+			    #:expand "HORIZONTAL"
 			    #:fontsize btn-fontsz
 			    #:button-cb
 			    (lambda (obj a pressed x y btn . rem)
