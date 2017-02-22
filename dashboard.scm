@@ -115,11 +115,13 @@ Misc
 ;; create a watch dog to move changes from lt/.db/*.db to megatest.db
 ;;
 ;;;(if (file-write-access? (conc *toppath* "/megatest.db"))
-    (thread-start! (make-thread common:watchdog "Watchdog thread"))
-    (if (not (args:get-arg "-use-db-cache"))
-	(begin
-	  (debug:print-info 0 *default-log-port* "Forcing db-cache mode due to read-only access to megatest.db")
-	  (hash-table-set! args:arg-hash "-use-db-cache" #t)));;;)
+;;(BB> "Before common:watchdog spawn")
+(thread-start! (make-thread common:watchdog "Watchdog thread"))
+;;(BB> "After common:watchdog spawn")
+(if (not (args:get-arg "-use-db-cache"))
+    (begin
+      (debug:print-info 0 *default-log-port* "Forcing db-cache mode due to read-only access to megatest.db")
+      (hash-table-set! args:arg-hash "-use-db-cache" #t)));;;)
 
 ;; data common to all tabs goes here
 ;;

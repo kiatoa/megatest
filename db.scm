@@ -276,16 +276,17 @@
   (let ((tmpdb-stack (dbr:dbstruct-dbstack dbstruct))) ;; RA => Returns the first reference in dbstruct
     (if (stack? tmpdb-stack)
 	(db:get-db tmpdb-stack) ;; get previously opened db (will create new db handle if all in the stack are already used
-        (let* ((dbpath       (db:dbfile-path)) ;;  0))
+        (let* ((dbpath       (db:dbfile-path )) ;;  0))
                (dbexists     (file-exists? dbpath))
 	       (dbfexists    (file-exists? (conc dbpath "/megatest.db")))
                (tmpdb        (db:open-megatest-db path: dbpath)) ;; lock-create-open dbpath db:initialize-main-db))
                (mtdb         (db:open-megatest-db))
                (refndb       (db:open-megatest-db path: dbpath name: "megatest_ref.db"))
                (write-access (file-write-access? dbpath)))
+          (BB> "db:open-db>> dbpath="dbpath" dbexists="dbexists" and write-access="write-access)
           (if (and dbexists (not write-access))
               (begin (set! *db-write-access* #f)
-                     (dbr:dbstruct-readonly-set! dbstruct #t)))
+                     (dbr:dbstruct-read-only-set! dbstruct #t)))
           (dbr:dbstruct-mtdb-set!   dbstruct mtdb)
           (dbr:dbstruct-tmpdb-set!  dbstruct tmpdb)
           (dbr:dbstruct-dbstack-set! dbstruct (make-stack)) ;; BB: why a stack?  Why would the number of db's be indeterminate?  Is this a legacy of 1.db 2.db .. ?
@@ -314,6 +315,7 @@
       (when (not *toppath*) (launch:setup areapath: areapath))
       (db:open-db dbstruct areapath: areapath)
       (set! *dbstruct-db* dbstruct)
+      (BB> "new dbstruct = "(dbr:dbstruct->alist dbstruct))
       dbstruct))))
    ;; (else
    ;;  (debug:print 0 *default-log-port* "ERROR: attempt to open database when not on homehost. Exiting. Homehost: " (common:get-homehost))
