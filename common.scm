@@ -274,27 +274,42 @@
 (define (common:exit-on-version-changed)
   (if (common:version-changed?)
       (if (common:on-homehost?)
-	  (let ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config"))
-		(dbstruct (db:setup)))
+	  (let* ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config"))
+                (dbfile (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.db"))
+                (read-only (not (file-write-access? dbfile)))
+                (dbstruct (db:setup)))
 	    (debug:print 0 *default-log-port*
 			 "WARNING: Version mismatch!\n"
 			 "   expected: " (common:version-signature) "\n"
 			 "   got:      " (common:get-last-run-version))
-	    (if (and (file-exists? mtconf)
-		     (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
-		(begin
-		  (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
-		  (handle-exceptions
-		   exn
-		   (begin
-		     (debug:print 0 *default-log-port* "Failed to switch versions.")
-		     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-		     (print-call-chain (current-error-port))
-		     (exit 1))
-		   (common:cleanup-db dbstruct)))
-		(begin
-		  (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
-		  (exit 1))))
+            (cond
+             ((get-environment-variable "MT_SKIP_DB_MIGRATE") #t)
+             ((and (file-exists? mtconf) (file-exists? dbfile) (not read-only)
+                   (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
+              (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
+              (handle-exceptions
+               exn
+               (begin
+                 (debug:print 0 *default-log-port* "Failed to switch versions.")
+                 (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+                 (print-call-chain (current-error-port))
+                 (exit 1))
+               (common:cleanup-db dbstruct)))
+             ((not (file-exists? mtconf))
+              (debug:print 0 *default-log-port* "   megatest.config does not exist in this area.  Cannot proceed with megatest version migration.")
+              (exit 1))
+             ((not (file-exists? dbfile))
+              (debug:print 0 *default-log-port* "   megatest.db does not exist in this area.  Cannot proceed with megatest version migration.")
+              (exit 1))
+             ((not (eq? (current-user-id)(file-owner mtconf)))
+              (debug:print 0 *default-log-port* "   You do not own megatest.db in this area.  Cannot proceed with megatest version migration.")
+              (exit 1))
+             (read-only
+              (debug:print 0 *default-log-port* "   You have read-only access to this area.  Cannot proceed with megatest version migration.")
+              (exit 1))
+             (else
+              (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
+              (exit 1))))
 	  (begin
 	    (debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
 	    (exit 1)))))
@@ -586,7 +601,38 @@
 ;; currently the primary job of the watchdog is to run the sync back to megatest.db from the db in /tmp
 ;; if we are on the homehost and we are a server (by definition we are on the homehost if we are a server)
 ;;
-(define (common:watchdog)
+
+
+(define (common:readonly-watchdog dbstruct)
+  (thread-sleep! 0.05) ;; delay for startup
+  (debug:print-info 13 *default-log-port* "common:readonly-watchdog entered.")
+  ;; sync megatest.db to /tmp/.../megatst.db
+  (let* ((sync-cool-off-duration   3)
+        (golden-mtdb     (dbr:dbstruct-mtdb dbstruct))
+        (golden-mtpath   (db:dbdat-get-path golden-mtdb))
+        (tmp-mtdb        (dbr:dbstruct-tmpdb dbstruct))
+        (tmp-mtpath      (db:dbdat-get-path tmp-mtdb)))
+    (debug:print-info 0 *default-log-port* "Read-only periodic sync thread started.")
+    (let loop ((last-sync-time 0))
+      (debug:print-info 13 *default-log-port* "loop top tmp-mtpath="tmp-mtpath" golden-mtpath="golden-mtpath)
+      (let* ((duration-since-last-sync (- (current-seconds) last-sync-time)))
+        (debug:print-info 13 *default-log-port* "duration-since-last-sync="duration-since-last-sync)
+        (if (and (not *time-to-exit*)
+                 (< duration-since-last-sync sync-cool-off-duration))
+            (thread-sleep! (- sync-cool-off-duration duration-since-last-sync)))
+        (if (not *time-to-exit*)
+            (let ((golden-mtdb-mtime (file-modification-time golden-mtpath))
+                  (tmp-mtdb-mtime    (file-modification-time tmp-mtpath)))
+              (if (> golden-mtdb-mtime tmp-mtdb-mtime)
+                  (let ((res (db:multi-db-sync dbstruct 'old2new)))
+                    (debug:print-info 13 *default-log-port* "rosync called, " res " records transferred.")))
+              (loop (current-seconds)))
+            #t)))
+    (debug:print-info 0 *default-log-port* "Exiting readonly-watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" mtpath="golden-mtpath)))
+
+
+        
+(define (common:writable-watchdog dbstruct)
   (thread-sleep! 0.05) ;; delay for startup
   (let ((legacy-sync (common:run-sync?))
 	(debug-mode  (debug:debug-mode 1))
@@ -594,7 +640,7 @@
         (this-wd-num     (begin (mutex-lock! *wdnum*mutex) (let ((x *wdnum*)) (set! *wdnum* (add1 *wdnum*)) (mutex-unlock! *wdnum*mutex) x))))
     (debug:print-info 3 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id)" this-wd-num="this-wd-num)
     (if (and legacy-sync (not *time-to-exit*))
-	(let* ((dbstruct (db:setup))
+	(let* (;;(dbstruct (db:setup))
 	       (mtdb     (dbr:dbstruct-mtdb dbstruct))
 	       (mtpath   (db:dbdat-get-path mtdb)))
 	  (debug:print-info 0 *default-log-port* "Server running, periodic sync started.")
@@ -608,10 +654,11 @@
                                           (> (- (current-seconds) *db-last-sync*) 5))) ;; sync every five seconds minimum
 		   (start-time       (current-seconds))
 		   (mt-mod-time      (file-modification-time mtpath))
-		   (recently-synced  (> (- start-time mt-mod-time) 4))
+		   (recently-synced  (< (- start-time mt-mod-time) 4))
 		   (will-sync        (and (or need-sync should-sync)
 					  (not sync-in-progress)
 					  (not recently-synced))))
+              (debug:print-info 13 *default-log-port* "WD writable-watchdog top of loop.  need-sync="need-sync" sync-in-progress="sync-in-progress" should-sync="should-sync" start-time="start-time" mt-mod-time="mt-mod-time" recently-synced="recently-synced" will-sync="will-sync)
 	      ;; (if recently-synced (debug:print-info 0 *default-log-port* "Skipping sync due to recently-synced flag=" recently-synced))
 	      ;; (debug:print-info 0 *default-log-port* "need-sync: " need-sync " sync-in-progress: " sync-in-progress " should-sync: " should-sync " will-sync: " will-sync)
 	      (if will-sync (set! *db-sync-in-progress* #t))
@@ -641,7 +688,7 @@
 	    ;;
 	    (if (not *time-to-exit*)
 		(let delay-loop ((count 0))
-                  ;;(BB> "delay-loop top; count="count" pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
+                  ;;(debug:print-info 13 *default-log-port* "delay-loop top; count="count" pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
                                                             
 		  (if (and (not *time-to-exit*)
 			   (< count 4)) ;; was 11, changing to 4. 
@@ -652,9 +699,27 @@
 	    (if (common:low-noise-print 30)
 		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" this-wd-num="this-wd-num)))))))
 
+;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
+(define (common:watchdog)
+  ;;#t)
+  (debug:print-info 13 *default-log-port* "common:watchdog entered.")
+
+ (let ((dbstruct (db:setup)))
+   (debug:print-info 13 *default-log-port* "after db:setup with dbstruct="dbstruct)
+   (cond
+    ((dbr:dbstruct-read-only dbstruct)
+     (debug:print-info 13 *default-log-port* "loading read-only watchdog")
+     (common:readonly-watchdog dbstruct))
+    (else
+     (debug:print-info 13 *default-log-port* "loading writable-watchdog.")
+     (common:writable-watchdog dbstruct))))
+ (debug:print-info 13 *default-log-port* "watchdog done.");;)
+ )
+
+
 (define (std-exit-procedure)
   (on-exit (lambda () 0))
-  ;;(BB> "std-exit-procedure called; *time-to-exit*="*time-to-exit*)
+  ;;(debug:print-info 13 *default-log-port* "std-exit-procedure called; *time-to-exit*="*time-to-exit*)
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
 		       #f
 		       (begin
@@ -701,7 +766,7 @@
 (define (std-signal-handler signum)
   ;; (signal-mask! signum)
   (set! *time-to-exit* #t)
-  ;;(BB> "got signal "signum)
+  ;;(debug:print-info 13 *default-log-port* "got signal "signum)
   (debug:print-error 0 *default-log-port* "Received signal " signum " exiting promptly")
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))
