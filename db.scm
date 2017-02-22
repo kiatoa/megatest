@@ -285,7 +285,7 @@
                (mtdbexists   (file-exists? mtdbpath))
                (refndb       (db:open-megatest-db path: dbpath name: "megatest_ref.db"))
                (write-access (file-write-access? mtdbpath)))
-          ;;(BB> "db:open-db>> mtdbpath="mtdbpath" mtdbexists="mtdbexists" and write-access="write-access)
+          ;;(debug:print-info 13 *default-log-port* "db:open-db>> mtdbpath="mtdbpath" mtdbexists="mtdbexists" and write-access="write-access)
           (if (and dbexists (not write-access))
               (begin
                 (set! *db-write-access* #f)
@@ -300,7 +300,7 @@
 	      (begin
 		(debug:print 0 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data from " (db:dbdat-get-path mtdb))
 		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb)
-                (BB> "db:sync-all-tables-list done.")
+                (debug:print-info 13 *default-log-port* "db:sync-all-tables-list done.")
                 )
 	      (debug:print 0 *default-log-port* " db, " (db:dbdat-get-path tmpdb) " already exists, not propogating data from " (db:dbdat-get-path mtdb)))
 	  ;; (db:multi-db-sync dbstruct 'old2new))  ;; migrate data from megatest.db automatically
@@ -316,16 +316,16 @@
   (cond
    (*dbstruct-db* *dbstruct-db*);; TODO: when multiple areas are supported, this optimization will be a hazard
    (else ;;(common:on-homehost?)
-    (BB> "db:setup entered (first time, not cached.)")
+    (debug:print-info 13 *default-log-port* "db:setup entered (first time, not cached.)")
     (let* ((dbstruct (make-dbr:dbstruct)))
       (when (not *toppath*)
-        (BB> "in db:setup, *toppath* not set; calling launch:setup")
+        (debug:print-info 13 *default-log-port* "in db:setup, *toppath* not set; calling launch:setup")
         (launch:setup areapath: areapath))
-      (BB> "Begin db:open-db")
+      (debug:print-info 13 *default-log-port* "Begin db:open-db")
       (db:open-db dbstruct areapath: areapath)
-      (BB> "Done db:open-db")
+      (debug:print-info 13 *default-log-port* "Done db:open-db")
       (set! *dbstruct-db* dbstruct)
-      ;;(BB> "new dbstruct = "(dbr:dbstruct->alist dbstruct))
+      ;;(debug:print-info 13 *default-log-port* "new dbstruct = "(dbr:dbstruct->alist dbstruct))
       dbstruct))))
    ;; (else
    ;;  (debug:print 0 *default-log-port* "ERROR: attempt to open database when not on homehost. Exiting. Homehost: " (common:get-homehost))
@@ -343,7 +343,7 @@
 					      (db:initialize-main-db db)
 					      (db:initialize-run-id-db db))))
 	 (write-access (file-write-access? dbpath)))
-    (BB> "db:open-megatest-db "dbpath)
+    (debug:print-info 13 *default-log-port* "db:open-megatest-db "dbpath)
     (if (and dbexists (not write-access))
 	(set! *db-write-access* #f))
     (cons db dbpath)))
