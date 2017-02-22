@@ -47,7 +47,7 @@
 
 (define (dtests:get-post-command #!key (default-override #f))
   (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "post-command")))
-    (or cfg-ovrd default-override ""))) ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+    (or cfg-ovrd default-override " &"))) ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
 
 
 (define (test-info-panel testdat store-label widgets)
