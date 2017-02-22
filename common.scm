@@ -605,7 +605,7 @@
 
 (define (common:readonly-watchdog dbstruct)
   (thread-sleep! 0.05) ;; delay for startup
-
+  (BB> "common:readonly-watchdog entered.")
   ;; sync megatest.db to /tmp/.../megatst.db
   (let ((sync-cool-off-duration   3)
         (golden-mtdb     (dbr:dbstruct-mtdb dbstruct))
@@ -614,7 +614,9 @@
         (tmp-mtpath      (db:dbdat-get-path mtdb)))
     (debug:print-info 0 *default-log-port* "Read-only periodic sync thread started.")
     (let loop ((last-sync-time 0))
+      (BB> "loop top tmp-mtpath="tmp-mtpath" golden-mtpath="golden-mtpath)
       (let* ((duration-since-last-sync (- (current-seconds) last-sync-time)))
+        (BB> "duration-since-last-sync="duration-since-last-sync)
         (if (and (not *time-to-exit*)
                  (< duration-since-last-sync sync-cool-off-duration))
             (thread-sleep! (- sync-cool-off-duration duration-since-last-sync)))
@@ -698,6 +700,7 @@
 
 ;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
 (define (common:watchdog)
+  (BB> "common:watchdog entered.")
   (let ((dbstruct (db:setup)))
     (if (dbr:dbstruct-read-only dbstruct)
         (common:readonly-watchdog dbstruct)
