@@ -875,6 +875,11 @@
           ;;(exit 1)
           #f
           ))
+    ;; if have -append-config then read and append here
+    (let ((cfname (args:get-arg "-append-config")))
+      (if (and cfname
+	       (file-read-access? cfname))
+	  (read-config cfname *configdat* #t))) ;; values are added to the hash, no need to do anything special.
     *toppath*))
 
 (define (get-best-disk confdat testconfig)

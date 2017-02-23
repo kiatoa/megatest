@@ -62,6 +62,10 @@ $(PREFIX)/share/docs/megatest_manual.html : docs/manual/megatest_manual.html
 	$(INSTALL) docs/manual/megatest_manual.html $(PREFIX)/share/docs/megatest_manual.html
 	for png in $(PNGFILES);do $(INSTALL) docs/manual/$$png $(PREFIX)/share/docs/$$png;done
 
+$(PREFIX)/share/db/mt-pg.sql : mt-pg.sql
+	mkdir -p $(PREFIX)/share/db
+	$(INSTALL) mt-pg.sql $(PREFIX)/share/db/mt-pg.sql
+
 #multi-dboard : multi-dboard.scm $(OFILES) $(GOFILES)
 #	csc $(CSCOPTS) $(OFILES) $(GOFILES) multi-dboard.scm -o multi-dboard
 
@@ -190,7 +194,8 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
 	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/viewscreen $(PREFIX)/bin/mt_xterm \
-	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun $(PREFIX)/bin/mtutil
+	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun $(PREFIX)/bin/mtutil \
+          $(PREFIX)/share/db/mt-pg.sql
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)
