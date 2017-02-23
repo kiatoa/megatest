@@ -21,7 +21,7 @@
 (declare (uses megatest-version))
 (declare (uses margs))
 (declare (uses configf))
-(declare (uses rmt))
+;; (declare (uses rmt))
 
 (include "megatest-fossil-hash.scm")
 
@@ -291,7 +291,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (if mtconf
 	(begin
 	  (configf:section-var-set! mtconf "dyndat" "toppath" start-dir)))
-    (print "TOPPATH: " (configf:lookup mtconf "dyndat" "toppath"))
+    ;; (print "TOPPATH: " (configf:lookup mtconf "dyndat" "toppath"))
     mtconfdat))
 
 
