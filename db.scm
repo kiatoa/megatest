@@ -2820,11 +2820,12 @@
 	 (db:prep-megatest.db-adj-test-ids (db:dbdat-get-db mtdb) run-id testrecs)))
      run-ids)))
 
-;; Get test data using test_id
+;; Get test data using test_id, run-id is not used
+;; 
 (define (db:get-test-info-by-id dbstruct run-id test-id)
   (db:with-db
    dbstruct
-   run-id
+   #f ;; run-id
    #f
    (lambda (db)
      (let ((res #f))

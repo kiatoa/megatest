@@ -1,4 +1,4 @@
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2017, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -167,8 +167,11 @@ Misc
 
 Utilities
   -env2file fname         : write the environment to fname.csh and fname.sh
-  -envcap fname=context   : save current variables labeled as context in file fname
-  -refdb2dat refdb        : convert refdb to sexp or to format specified by -dumpmode
+  -envcap a               : save current variables labeled as context 'a' in file envdat.db
+  -envdelta a-b           : output enviroment delta from context a to context b to -o fname
+                            set the output mode with -dumpmode csh, bash or ini
+                            note: ini format will use calls to use curr and minimize path
+  -refdb2dat refdb        : convert refdb to sexp or to format specified by s-dumpmode
                             formats: perl, ruby, sqlite3, csv (for csv the -o param
                             will substitute %s for the sheet name in generating 
                             multiple sheets)
@@ -803,7 +806,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-list-targets")
     (if (launch:setup)
         (let ((targets (common:get-runconfig-targets)))
-          (debug:print 1 *default-log-port* "Found "(length targets) " targets")
+          ;; (debug:print 1 *default-log-port* "Found "(length targets) " targets")
           (case (string->symbol (or (args:get-arg "-dumpmode") "alist"))
             ((alist)
              (for-each (lambda (x)
