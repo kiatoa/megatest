@@ -165,6 +165,8 @@ Misc
   -mark-incompletes       : find and mark incomplete tests
   -ping run-id|host:port  : ping server, exit with 0 if found
   -debug N|N,M,O...       : enable debug 0-N or N and M and O ...
+  -config fname           : override the megatest.config file with fname
+  -append-config fname    : append fname to the megatest.config file
 
 Utilities
   -env2file fname         : write the environment to fname.csh and fname.sh
@@ -206,13 +208,13 @@ Called as " (string-intersperse (argv) " ") "
 Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;;  -gui                    : start a gui interface
-;;  -config fname           : override the runconfig file with fname
 
 ;; process args
 (define remargs (args:get-args 
 		 (argv)
 		 (list  "-runtests"  ;; run a specific test
 			"-config"    ;; override the config file name
+			"-append-config"
 			"-execute"   ;; run the command encoded in the base64 parameter
 			"-step"
 			"-target"

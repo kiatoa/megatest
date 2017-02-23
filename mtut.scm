@@ -21,6 +21,7 @@
 (declare (uses megatest-version))
 (declare (uses margs))
 (declare (uses configf))
+(declare (uses rmt))
 
 (include "megatest-fossil-hash.scm")
 
@@ -53,6 +54,7 @@ Actions:
    set-ss                  : set state/status
    archive                 : compress and move test data to archive disk
    kill                    : stop tests or entire runs
+   db                      : database utilities
 
 Contour actions:
    process                 : runs import, rungen and dispatch 
@@ -78,6 +80,9 @@ Misc
   -repl                    : start a repl (useful for extending megatest)
   -load file.scm           : load and run file.scm
   -debug N|N,M,O...        : enable debug messages 0-N or N and M and O ...
+
+Utility
+  pgschema                 : emit postgresql schema; do \"mtutil db pgschema | psql -d mydb\"
 
 Examples:
 
@@ -177,6 +182,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (args:get-arg "-runstep")
 	       (args:get-arg "-envcap")
 	       (args:get-arg "-envdelta")
+	       (member *action* '("db"))   ;; very loose checks on db.
 	       )))
     (debug:print-error 0 *default-log-port* "Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
@@ -522,7 +528,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (dispatch-commands mtconf toppath)))
 	   ((import)   (load-pkts-to-db mtconf)) ;; import pkts
 	   ((rungen)   (generate-run-pkts mtconf toppath))
-	   ((dispatch) (dispatch-commands mtconf toppath)))))))
+	   ((dispatch) (dispatch-commands mtconf toppath)))))
+      ((db)
+       (if (null? remargs)
+	   (print "ERROR: missing sub command for db command")
+	   (let ((subcmd (car remargs)))
+	     (case (string->symbol subcmd)
+	       ((pgschema)
+		(let* ((install-home (common:get-install-area))
+		       (schema-file  (conc install-home "/share/db/mt-pg.sql")))
+		  (if (file-exists? schema-file)
+		      (system (conc "/bin/cat " schema-file)))))
+	       ((junk)
+		(rmt:get-keys))))))))
 
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
