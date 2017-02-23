@@ -541,8 +541,8 @@ Misc
 			     (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id rd)
 			     rd)))
 	 ;; (prev-tests  (dboard:rundat-tests prev-dat)) ;; (vector-ref prev-dat 1))
-         (last-update  (if (or do-not-use-query-timestamps
-			       (dboard:tabdat-filters-changed tabdat))
+         (last-update  (if do-not-use-query-timestamps
+			      ;; (dboard:tabdat-filters-changed tabdat))
 			   0
 			   (dboard:rundat-last-update run-dat)))
 	 (last-db-time (if do-not-use-db-file-timestamps
