@@ -881,6 +881,14 @@
 	  '(0 "n/a")
 	  all-files)))
 
+;; use bash to expand a glob. Does NOT handle paths with spaces!
+;;
+(define (common:bash-glob instr)
+  (string-split
+   (with-input-from-pipe
+       (conc "/bin/bash -c \"echo " instr "\"")
+     read-line)))
+  
 ;;======================================================================
 ;; T A R G E T S  ,   S T A T E ,   S T A T U S ,   
 ;;                    R U N N A M E    A N D   T E S T P A T T

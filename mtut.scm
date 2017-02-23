@@ -82,7 +82,7 @@ Misc
   -debug N|N,M,O...        : enable debug messages 0-N or N and M and O ...
 
 Utility
-  pgschema                 : emit postgresql schema; do \"mtutil db pgschema | psql -d mydb\"
+ db pgschema               : emit postgresql schema; do \"mtutil db pgschema | psql -d mydb\"
 
 Examples:
 
@@ -348,9 +348,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (val        (cadr sense))
 		      (keyparts   (string-split key ":"))
 		      (contour    (car keyparts))
-		      (ruletype   (let ((res (cdr keyparts)))
-				    (if (null? res) #f (cadr keyparts))))
-		      (valparts   (string-split val)) ;; runname-rule params
+		      (len-key    (length keyparts))
+		      (ruletype   (if (> len-key 1)(cadr keyparts) #f))
+		      (action     (if (> len-key 2)(caddr keyparts) #f))
+		      (val-list   (string-split-fields ";\\s*" val #:infix)) ;; (string-split val)) ;; runname-rule params
+		      (val-alist  (if val-list
+				      (map (lambda (x)
+					     (let ((f (string-split-fields "\\s*=\\s*" x #:infix)))
+					       (case (length f)
+						 ((0) `(,#f))  ;; null string case
+						 ((1) `(,(string->symbol (car f))))
+						 ((2) `(,(string->symbol (car f)) . ,(cadr f)))
+						 (else f))))
+					   val-list)
+				      '()))
 		      (runname    (make-runname "" ""))
 		      (runstarts  (find-pkts pdb '(runstart) `((o . ,contour)
 							       (t . ,runkey))))
@@ -370,13 +381,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 ;; get the timestamp for when that run started and pass it
 		 ;; to the rule logic here where "ruletype" will be applied
 		 ;; if it comes back "changed" then proceed to register the runs
-
+		 
 		 (case (string->symbol ruletype)
 		   ((scheduled)
-		    (if (not (eq? (length valparts) 6))
-			(print "ERROR: bad sense spec \"" (string-intersperse sense " ") "\"")
-			(let* ((run-name (car valparts))
-			       (crontab  (string-intersperse (cdr valparts)))
+		    (if (not (alist-ref 'cron val-alist)) ;; gotta have cron spec
+			(print "ERROR: bad sense spec \"" (string-intersperse sense " ") "\" params: " val-alist)
+			(let* ((run-name (alist-ref 'run-name val-alist))
+			       (crontab  (alist-ref 'cron     val-alist))
+			       (action   (alist-ref 'action   val-alist))
 			       (last-run (if (null? starttimes) ;; never run
 					     0
 					     (apply max (map cdr starttimes))))
@@ -384,10 +396,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			       (runname  (if need-run (conc "sched" (time->string (seconds->local-time (current-seconds)) "%M%H%d")))))
 			  (print "last-run: " last-run " need-run: " need-run)
 			  (if need-run
-			      (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (string-intersperse (cdr valparts) "-")) ,runname ,need-run))))))
+			      (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (string-intersperse (string-split (alist-ref 'cron val-alist)) "-"))
+									       ,runname ,need-run ,action))))))
 		   ((file file-or) ;; one or more files must be newer than the reference
-		    (let* ((file-globs  (cdr valparts))
-			   (youngestdat (common:get-youngest file-globs))
+		    (let* ((file-globs  (alist-ref 'glob val-alist))
+			   (youngestdat (common:get-youngest (common:bash-glob file-globs)))
 			   (youngestmod (car youngestdat)))
 		      ;; (print "youngestmod: " youngestmod " starttimes: " starttimes)
 		      (if (null? starttimes) ;; this target has never been run
@@ -401,7 +414,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			   starttimes))
 		      ))
 		   ((file-and) ;; all files must be newer than the reference
-		    (let* ((file-globs  (cdr valparts))
+		    (let* ((file-globs  (alist-ref 'glob val-alist))
 			   (youngestdat (common:get-youngest file-globs))
 			   (youngestmod (car youngestdat))
 			   (success     #t)) ;; any cases of not true, set flag to #f for AND
@@ -514,7 +527,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 ;; 	(hash-table-delete! adjargs key))) ;; we need to delete any params intended for mtutil
 	 ;;  (hash-table-keys adjargs))
 	 (let-values (((uuid pkt)
-		       (command-line->pkt *action* adjargs)))
+		       (command-line->pkt *action* adjargs #f)))
 	   (write-pkt pktsdir uuid pkt))))
       ((dispatch import rungen process)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))

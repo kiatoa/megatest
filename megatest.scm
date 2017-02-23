@@ -170,8 +170,11 @@ Misc
 
 Utilities
   -env2file fname         : write the environment to fname.csh and fname.sh
-  -envcap fname=context   : save current variables labeled as context in file fname
-  -refdb2dat refdb        : convert refdb to sexp or to format specified by -dumpmode
+  -envcap a               : save current variables labeled as context 'a' in file envdat.db
+  -envdelta a-b           : output enviroment delta from context a to context b to -o fname
+                            set the output mode with -dumpmode csh, bash or ini
+                            note: ini format will use calls to use curr and minimize path
+  -refdb2dat refdb        : convert refdb to sexp or to format specified by s-dumpmode
                             formats: perl, ruby, sqlite3, csv (for csv the -o param
                             will substitute %s for the sheet name in generating 
                             multiple sheets)
