@@ -276,15 +276,19 @@
   (let ((tmpdb-stack (dbr:dbstruct-dbstack dbstruct))) ;; RA => Returns the first reference in dbstruct
     (if (stack? tmpdb-stack)
 	(db:get-db tmpdb-stack) ;; get previously opened db (will create new db handle if all in the stack are already used
-        (let* ((dbpath       (db:dbfile-path )) ;;  0))
+        (let* ((dbpath       (db:dbfile-path ))      ;; path to tmp db area
                (dbexists     (file-exists? dbpath))
-	       (dbfexists    (file-exists? (conc dbpath "/megatest.db")))
+	       (tmpdbfname   (conc dbpath "/megatest.db"))
+	       (dbfexists    (file-exists? tmpdbfname)) ;; (conc dbpath "/megatest.db")))
                (tmpdb        (db:open-megatest-db path: dbpath)) ;; lock-create-open dbpath db:initialize-main-db))
                (mtdb         (db:open-megatest-db))
                (mtdbpath     (db:dbdat-get-path mtdb))
                (mtdbexists   (file-exists? mtdbpath))
                (refndb       (db:open-megatest-db path: dbpath name: "megatest_ref.db"))
-               (write-access (file-write-access? mtdbpath)))
+               (write-access (file-write-access? mtdbpath))
+	       (mtdbmodtime  (if mtdbexists (file-modification-time mtdbpath)   #f))
+	       (tmpdbmodtime (if dbfexists  (file-modification-time tmpdbfname) #f)))
+	  
           ;;(debug:print-info 13 *default-log-port* "db:open-db>> mtdbpath="mtdbpath" mtdbexists="mtdbexists" and write-access="write-access)
           (if (and dbexists (not write-access))
               (begin
@@ -296,13 +300,17 @@
           (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb) ;; olddb is already a (cons db path)
           (dbr:dbstruct-refndb-set! dbstruct refndb)
           ;;	    (mutex-unlock! *rundb-mutex*)
-          (if #t ;;(not dbfexists)
+          (if (and write-access
+		   (or (not dbfexists)
+		       (not mtdbmodtime)
+		       (not tmpdbmodtime)
+		       (> (- mtdbmodtime tmpdbmodtime) 10))) ;; if db in tmp is over ten seconds older than the file in MTRA then do a sync back
 	      (begin
 		(debug:print 0 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data from " (db:dbdat-get-path mtdb))
 		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb)
                 (debug:print-info 13 *default-log-port* "db:sync-all-tables-list done.")
                 )
-	      (debug:print 0 *default-log-port* " db, " (db:dbdat-get-path tmpdb) " already exists, not propogating data from " (db:dbdat-get-path mtdb)))
+	      (debug:print 0 *default-log-port* " db, " (db:dbdat-get-path tmpdb) " already exists or fresh enough, not propogating data from " (db:dbdat-get-path mtdb)))
 	  ;; (db:multi-db-sync dbstruct 'old2new))  ;; migrate data from megatest.db automatically
           tmpdb))))
 
