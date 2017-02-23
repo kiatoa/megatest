@@ -406,7 +406,7 @@
 						   (string-match wregx comment))
 					       (begin
 						 ;; (rmt:test-set-state-status-by-id run-id test-id #f "WAIVED" comment)
-						 (rmt:test-set-state-status-by run-id test-id #f "WAIVED" comment)
+						 (rmt:test-set-state-status run-id test-id #f "WAIVED" comment)
 						 (db:test-set-status! testdat "WAIVED")
 						 (cmtcmd comment)
 						 (iup:destroy! dlog))))))
