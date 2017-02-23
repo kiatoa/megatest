@@ -520,7 +520,8 @@
 	  ;;       seems non-ideal but could well break stuff
 	  ;;    BUG? BUG? BUG?
 	  
-	  (let ((rconfig (full-runconfigs-read))) ;; (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target))))
+	  (let ((rconfig (full-runconfigs-read)) ;; (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target))))
+		(wconfig (read-config "waivers.config" #f #t sections: `( "default" ,target )))) ;; read the waivers config if it exists
 	    ;; (setup-env-defaults (conc *toppath* "/runconfigs.config") run-id (make-hash-table) keyvals target)
 	    ;; (set-run-config-vars run-id keyvals target) ;; (db:get-target db run-id))
 	    ;; Now have runconfigs data loaded, set environment vars
