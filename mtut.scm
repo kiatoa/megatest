@@ -382,7 +382,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 ;; to the rule logic here where "ruletype" will be applied
 		 ;; if it comes back "changed" then proceed to register the runs
 		 
-		 (case (string->symbol ruletype)
+		 (case (string->symbol (or ruletype "no-such-rule"))
+                   ((no-such-rule) (print "ERROR: no such rule for " sense))
 		   ((scheduled)
 		    (if (not (alist-ref 'cron val-alist)) ;; gotta have cron spec
 			(print "ERROR: bad sense spec \"" (string-intersperse sense " ") "\" params: " val-alist)
