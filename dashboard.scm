@@ -118,10 +118,10 @@ Misc
 ;;(debug:print-info 13 *default-log-port* "Before common:watchdog spawn")
 (thread-start! (make-thread common:watchdog "Watchdog thread"))
 ;;(debug:print-info 13 *default-log-port* "After common:watchdog spawn")
-(if (not (args:get-arg "-use-db-cache"))
-    (begin
-      (debug:print-info 0 *default-log-port* "Forcing db-cache mode due to read-only access to megatest.db")
-      (hash-table-set! args:arg-hash "-use-db-cache" #t)));;;)
+;; (if (not (args:get-arg "-use-db-cache"))
+;;     (begin
+;;       (debug:print-info 0 *default-log-port* "Forcing db-cache mode due to read-only access to megatest.db")
+;;       (hash-table-set! args:arg-hash "-use-db-cache" #t)));;;)
 
 ;; data common to all tabs goes here
 ;;
@@ -543,10 +543,11 @@ Misc
 			     (hash-table-set! (dboard:tabdat-allruns-by-id tabdat) run-id rd)
 			     rd)))
 	 ;; (prev-tests  (dboard:rundat-tests prev-dat)) ;; (vector-ref prev-dat 1))
-         (last-update  (if (or do-not-use-query-timestamps
-			       (dboard:tabdat-filters-changed tabdat))
-			   0
-			   (dboard:rundat-last-update run-dat)))
+         (last-update  (if ;;(or
+                        do-not-use-query-timestamps
+                        ;;(dboard:tabdat-filters-changed tabdat))
+                        0
+                        (dboard:rundat-last-update run-dat)))
 	 (last-db-time (if do-not-use-db-file-timestamps
 			   0
 			   (dboard:rundat-last-db-time run-dat)))
