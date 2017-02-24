@@ -281,9 +281,10 @@
 	       (tmpdbfname   (conc dbpath "/megatest.db"))
 	       (dbfexists    (file-exists? tmpdbfname)) ;; (conc dbpath "/megatest.db")))
                (tmpdb        (db:open-megatest-db path: dbpath)) ;; lock-create-open dbpath db:initialize-main-db))
+               (mtdbexists   (file-exists? (conc *toppath* "/megatest.db")))
                (mtdb         (db:open-megatest-db))
                (mtdbpath     (db:dbdat-get-path mtdb))
-               (mtdbexists   (file-exists? mtdbpath))
+               
                (refndb       (db:open-megatest-db path: dbpath name: "megatest_ref.db"))
                (write-access (file-write-access? mtdbpath))
 	       (mtdbmodtime  (if mtdbexists (common:lazy-sqlite-db-modification-time mtdbpath)   #f))
@@ -301,16 +302,15 @@
           (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb) ;; olddb is already a (cons db path)
           (dbr:dbstruct-refndb-set! dbstruct refndb)
           ;;	    (mutex-unlock! *rundb-mutex*)
-          (if (and write-access
-		   (or (not dbfexists)
-		       (and modtimedelta
-			    (> modtimedelta 10)))) ;; if db in tmp is over ten seconds older than the file in MTRA then do a sync back
+          (if (or (not dbfexists)
+                  (and modtimedelta
+                       (> modtimedelta 10))) ;; if db in tmp is over ten seconds older than the file in MTRA then do a sync back
 	      (begin
-		(debug:print 0 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data \n    from " (db:dbdat-get-path mtdb) " mod time delta: " modtimedelta)
+		(debug:print 4 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data \n    from " (db:dbdat-get-path mtdb) " mod time delta: " modtimedelta)
 		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb)
                 (debug:print-info 13 *default-log-port* "db:sync-all-tables-list done.")
                 )
-	      (debug:print 0 *default-log-port* " db, " (db:dbdat-get-path tmpdb) " already exists or fresh enough, not propogating data from\n     " (db:dbdat-get-path mtdb) " mod time delta: " modtimedelta) )
+	      (debug:print 4 *default-log-port* " db, " (db:dbdat-get-path tmpdb) " already exists or fresh enough, not propogating data from\n     " (db:dbdat-get-path mtdb) " mod time delta: " modtimedelta) )
 	  ;; (db:multi-db-sync dbstruct 'old2new))  ;; migrate data from megatest.db automatically
           tmpdb))))
 

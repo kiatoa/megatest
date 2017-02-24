@@ -908,7 +908,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        (else
 	(debug:print-error 0 *default-log-port* "-dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
       (set! *didsomething* #t)
-      (pop-directory)))
+      (pop-directory)
+      (set! *time-to-exit* #t)))
 
 (if (args:get-arg "-show-cmdinfo")
     (if (or (args:get-arg ":value")(getenv "MT_CMDINFO"))
