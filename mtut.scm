@@ -29,6 +29,18 @@
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
 
+;; this needs some thought regarding security implications.
+;;
+;;   i. Check that owner of the file and calling user are same?
+;;  ii. Check that we are in a legal megatest area?
+;; iii. Have some form of authentication or record of the md5sum or similar of the file?
+;;
+(if (file-exists? "megatest.config")
+    (if (file-exists? ".mtutil.so")
+	(load ".mtutil.so")
+	(if (file-exists? ".mtutil.scm")
+	(load ".mtutil.scm"))))
+
 ;; Disabled help items
 ;;  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
 ;;                            from prior runs with same keys
@@ -301,12 +313,29 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; make a run request pkt from basic data
 ;;
 (define (create-run-pkt mtconf area runkey runname mode-patt tag-expr pktsdir reason contour sched) 
-  (let ((area-path (configf:lookup mtconf "areas" area)))
+  (let* ((area-dat   (string-split (or (configf:lookup mtconf "areas" area) "")))
+	 (area-path  (car area-dat))
+	 (area-xlatr (if (eq? (length area-dat) 2)(cadr area-dat) #f))
+	 (new-target (if area-xlatr
+			 (let ((xlatr-key (string->symbol area-xlatr)))
+			   (if (alist-ref xlatr-key *target-mappers*)
+			       (begin
+				 (print "Using target mapper: " area-xlatr)
+				 (handle-exceptions
+				     exn
+				     (begin
+				       (print "FAILED TO RUN TARGET MAPPER FOR " area ", called " area-xlatr)
+				       (print "   function is: " (alist-ref xlatr-key *target-mappers*))
+				       (print " message: " ((condition-property-accessor 'exn 'message) exn))
+				       runkey)
+				   ((alist-ref xlatr-key *target-mappers*)
+				    runkey runname area area-path reason contour mode-patt)))))
+			 runkey)))
     (let-values (((uuid pkt)
 		  (command-line->pkt
 		   "run"
 		   (append 
-		    `(("-target"     . ,runkey)
+		    `(("-target"     . ,new-target)
 		      ("-run-name"   . ,runname)
 		      ("-start-dir"  . ,area-path)
 		      ("-msg"        . ,reason)
