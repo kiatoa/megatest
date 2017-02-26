@@ -16,9 +16,11 @@
 ;; dbstruct vector containing all the relevant dbs like main.db, megatest.db, run.db etc
 
 (use (srfi 18) extras tcp stack)
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking z3 typed-records matchable)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking z3 typed-records sql-null matchable)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
+;; (include "/nfs/site/disks/icf_fdk_cw_gwa002/srehman/fossil/dbi/dbi.scm")
+(import (prefix dbi dbi:))
 
 (declare (unit db))
 (declare (uses common))
@@ -407,48 +409,48 @@
    ;;       '("id"             #f)
    ;;       '("str"            #f))
    (list "tests" 
-	 '("id"             #f)
-	 '("run_id"         #f)
-	 '("testname"       #f)
-	 '("host"           #f)
-	 '("cpuload"        #f)
-	 '("diskfree"       #f)
-	 '("uname"          #f)
-	 '("rundir"         #f)
-	 '("shortdir"       #f)
-	 '("item_path"      #f)
-	 '("state"          #f)
-	 '("status"         #f)
-	 '("attemptnum"     #f)
-	 '("final_logf"     #f)
-	 '("logdat"         #f)
-	 '("run_duration"   #f)
-	 '("comment"        #f)
-	 '("event_time"     #f)
-	 '("fail_count"     #f)
-	 '("pass_count"     #f)
-	 '("archived"       #f))
+   '("id"             "INTEGER" 'key)
+   '("run_id"         "INTEGER")
+   '("testname"       "TEXT")
+   '("host"           "TEXT")
+   '("cpuload"        "REAL")
+   '("diskfree"       "INTEGER")
+   '("uname"          "TEXT")
+   '("rundir"         "TEXT")
+   '("shortdir"       "TEXT")
+   '("item_path"      "TEXT")
+   '("state"          "TEXT")
+   '("status"         "TEXT")
+   '("attemptnum"     "INTEGER")
+   '("final_logf"     "TEXT")
+   '("logdat"         "TEXT")
+   '("run_duration"   "INTEGER")
+   '("comment"        "TEXT")
+   '("event_time"     "INTEGER")
+   '("fail_count"     "INTEGER")
+   '("pass_count"     "INTEGER")
+   '("archived"       "INTEGER"))
   (list "test_steps"
-	 '("id"             #f)
-	 '("test_id"        #f)
-	 '("stepname"       #f)
-	 '("state"          #f)
-	 '("status"         #f)
-	 '("event_time"     #f)
-	 '("comment"        #f)
-	 '("logfile"        #f))
+   '("id"             "INTEGER" 'key)
+   '("test_id"        "INTEGER")
+   '("stepname"       "TEXT")
+   '("state"          "TEXT")
+   '("status"         "TEXT")
+   '("event_time"     "INTEGER")
+   '("comment"        "TEXT")
+   '("logfile"        "TEXT"))
    (list "test_data"
-	 '("id"             #f)
-	 '("test_id"        #f)
-	 '("category"       #f)
-	 '("variable"       #f)
-	 '("value"          #f)
-	 '("expected"       #f)
-	 '("tol"            #f)
-	 '("units"          #f)
-	 '("comment"        #f)
-	 '("status"         #f)
-	 '("type"           #f))))
+   '("id"             "INTEGER" 'key)
+   '("test_id"        "INTEGER")
+   '("category"       "TEXT")
+   '("variable"       "TEXT")
+   '("value"          "REAL")
+   '("expected"       "REAL")
+   '("tol"            "REAL")
+   '("units"          "TEXT")
+   '("comment"        "TEXT")
+   '("status"         "TEXT")
+   '("type"           "TEXT"))))
 
 ;; needs db to get keys, this is for syncing all tables
 ;;
@@ -456,26 +458,39 @@
   (let ((keys  (db:get-keys dbstruct)))
     (list
      (list "keys"
-	   '("id"        #f)
-	   '("fieldname" #f)
-	   '("fieldtype" #f))
-     (list "metadat" '("var" #f) '("val" #f))
-     (append (list "runs" 
-		   '("id"  #f))
-	     (map (lambda (k)(list k #f))
-		  (append keys
-			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count" "contour"))))
+	   '("id"        "INTEGER" 'key)
+	   '("fieldname" "TEXT")
+	   '("fieldtype" "TEXT"))
+     (list "metadat" 
+       '("id"   "INTEGER" 'key)
+       '("var"  "TEXT") 
+       '("val"  "TEXT"))
+     (list "runs" 
+		   '("id"             "INTEGER" 'key)
+       '("release"        "TEXT")
+       '("iteration"      "TEXT")
+       '("testsuite_mode" "TEXT")
+       '("runname"        "TEXT")
+       '("state"          "TEXT")
+       '("status"         "TEXT")
+       '("owner"          "TEXT")
+       '("event_time"     "INTEGER")
+       '("comment"        "TEXT")
+       '("fail_count"     "INTEGER")
+       '("pass_count"     "INTEGER"))
+
      (list "test_meta"
-	   '("id"             #f)
-	   '("testname"       #f)
-	   '("owner"          #f)
-	   '("description"    #f)
-	   '("reviewed"       #f)
-	   '("iterated"       #f)
-	   '("avg_runtime"    #f)
-	   '("avg_disk"       #f)
-	   '("tags"           #f)
-	   '("jobgroup"       #f)))))
+	   '("id"             "INTEGER" 'key)
+	   '("testname"       "TEXT")
+     '("author"       "TEXT")
+	   '("owner"          "TEXT")
+	   '("description"    "TEXT")
+	   '("reviewed"       "TEXT")
+	   '("iterated"       "TEXT")
+	   '("avg_runtime"    "REAL")
+	   '("avg_disk"       "REAL")
+	   '("tags"           "TEXT")
+	   '("jobgroup"       "TEXT")))))
 
 (define (db:sync-all-tables-list dbstruct)
   (append (db:sync-main-list dbstruct)
@@ -510,6 +525,8 @@
 	 (fname    (pathname-strip-directory dbpath)))
     (debug:print-info 0 *default-log-port* "Checking db " dbpath " for errors.")
     (cond
+     ((eqv? (dbi:db-dbtype (db:dbdat-get-db dbdat)) 'pg)
+      #t)
      ((not (file-write-access? dbdir))
       (debug:print 0 *default-log-port* "WARNING: can't write to " dbdir ", can't fix " fname)
       #f)
@@ -539,7 +556,7 @@
 	 (exit) ;; we can not safely continue when a db was corrupted - even if fixed.
 	 )
        ;; test read/write access to the database
-       (let ((db (sqlite3:open-database dbpath)))
+       (let ((db (dbi:open 'sqlite3 (cons (cons ('dbname dbpath) '())))))
 	 (cond
 	  ((equal? fname "megatest.db")
 	   (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';"))
@@ -552,7 +569,7 @@
 	  (else
 	   (sqlite3:execute db "vacuum;")))
 	 
-	 (finalize! db)
+	 (sqlite3:finalize! db)
 	 #t))))))
     
 ;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
@@ -563,6 +580,9 @@
 ;;    IFF field-name exists
 ;;
 (define (db:sync-tables tbls last-update fromdb todb . slave-dbs)
+  (set! todb (cons (dbi:convert (db:dbdat-get-db todb)) (db:dbdat-get-path todb)))
+  (set! fromdb (cons (dbi:convert (db:dbdat-get-db fromdb)) (db:dbdat-get-path fromdb)))
+
   (handle-exceptions
    exn
    (begin
@@ -584,6 +604,12 @@
      0)
    ;; this is the work to be done
    (cond
+    ;(not fromdb) (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with fromdb missing") -1)
+    ;((not todb)   (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with todb missing") -2)
+    ;((not (dbi:database? (db:dbdat-get-db fromdb)))
+    ; (debug:print-error 0 *default-log-port* "db:sync-tables called with fromdb not a database " fromdb) -3)
+    ;((not (dbi:database? (db:dbdat-get-db todb)))
+    ; (debug:print-error 0 *default-log-port* "db:sync-tables called with todb not a database " todb) -4)
     ((not fromdb) (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with fromdb missing")
      -1)
     ((not todb)   (debug:print 3 *default-log-port* "WARNING: db:sync-tables called with todb missing")
@@ -639,6 +665,7 @@
 				   " VALUES ( " (string-intersperse (make-list num-fields "?") ",") " );"))
 		 (fromdat    '())
 		 (fromdats   '())
+     	 (tabletypes '())
 		 (totrecords 0)
 		 (batch-len  (string->number (or (configf:lookup *configdat* "sync" "batchsize") "100")))
 		 (todat      (make-hash-table))
@@ -652,9 +679,9 @@
 	     fields)
 
 	    ;; read the source table
-	    (sqlite3:for-each-row
-	     (lambda (a . b)
-	       (set! fromdat (cons (apply vector a b) fromdat))
+	    (dbi:for-each-row
+	     (lambda (a)
+	       (set! fromdat (cons a fromdat))
 	       (if (> (length fromdat) batch-len)
 		   (begin
 		     (set! fromdats (cons fromdat fromdats))
@@ -671,28 +698,45 @@
 		(debug:print-info 4 *default-log-port* "found " totrecords " records to sync"))
 
 	    ;; read the target table
-	    (sqlite3:for-each-row
-	     (lambda (a . b)
-	       (hash-table-set! todat a (apply vector a b)))
+	    (dbi:for-each-row
+	     (lambda (a)
+	       (hash-table-set! todat (vector-ref a 0) a))
 	     (db:dbdat-get-db todb)
 	     full-sel)
 
 	    ;; first pass implementation, just insert all changed rows
 	    (for-each 
 	     (lambda (targdb)
-	       (let* ((db     (db:dbdat-get-db targdb))
-		      (stmth  (sqlite3:prepare db full-ins)))
-		 (db:delay-if-busy targdb) ;; NO WAITING
-		 (for-each
+        (set! targdb (dbi:convert (db:dbdat-get-db targdb)))
+        (if (eqv? (dbi:db-dbtype targdb) 'pg)
+          (let* ((prep "")
+                 (set-stmt "")
+                 (key (car (map car fields)))
+                 (list-fields (map car fields)))
+            (set! prep (string-intersperse (map cadr fields) ","))
+            (set! prep (conc "PREPARE fullupdate (" prep ") AS UPDATE " tablename " SET ")) ;;maybe add lookup in the future depending on where types are needed
+              (let loop ((i 1))
+                  (set! set-stmt (conc set-stmt (list-ref list-fields i) " = $" (+ i 1) ", "))
+                (if (< i (- (length list-fields) 2))
+                (loop (+ i 1))
+                (set! set-stmt (conc set-stmt (list-ref list-fields (+ i 1)) " = $" (+ i 2) " WHERE " key " = $1;"))))
+            (set! full-ins (conc prep set-stmt))))
+	       (let* ((db (dbi:convert (db:dbdat-get-db targdb)))
+		      (stmth  (dbi:prepare db full-ins)))
+		 ;; (db:delay-if-busy targdb) ;; NO WAITING
+		 
+     (for-each
 		  (lambda (fromdat-lst)
-		    (sqlite3:with-transaction
+		    (dbi:with-transaction
 		     db
 		     (lambda ()
 		       (for-each ;; 
 			(lambda (fromrow)
 			  (let* ((a    (vector-ref fromrow 0))
 				 (curr (hash-table-ref/default todat a #f))
-				 (same #t))
+				 (same #t)
+         (res #f)
+         (len (length (vector->list fromrow))))
 			    (let loop ((i 0))
 			      (if (or (not curr)
 				      (not (equal? (vector-ref fromrow i)(vector-ref curr i))))
@@ -700,14 +744,27 @@
 			      (if (and same
 				       (< i (- num-fields 1)))
 				  (loop (+ i 1))))
-			    (if (not same)
-				(begin
-				  (apply sqlite3:execute stmth (vector->list fromrow))
-				  (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
+          (if (eqv? (dbi:db-dbtype db) 'pg) (set! fromrow (list->vector (map (lambda (x) (if (and (string? x) (string-null? x)) (sql-null) x)) (vector->list fromrow)))))
+          (if (not same)
+              (begin 
+                (set! res (apply dbi:prepare-exec stmth (vector->list fromrow)))
+                (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))
+          (if (and (not same) (eqv? (dbi:get-res res 'affected-rows) 0))
+                  (let* ((prep ""))
+                    (set! prep (string-intersperse (map cadr fields) ","))
+                    (set! prep (conc "INSERT INTO " tablename " ( " (string-intersperse (map car fields) ",")
+                     " ) VALUES ( " (string-intersperse (make-list len "?") ",") " );")) ;;maybe add lookup in the future depending on where types are needed 
+                      (begin 
+                        (hash-table-set! numrecs tablename (- 1 (hash-table-ref/default numrecs tablename 0)))
+                        (apply dbi:exec db prep (vector->list fromrow))
+                        (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0))))))))
+        ;;(begin
+				 ;; (dbi:prepare-exec stmth (vector->list fromrow))
+				  ;;(hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
 			fromdat-lst))
 		  ))
 		  fromdats)
-		 (sqlite3:finalize! stmth)))
+		 (dbi:close stmth)))
 	     (append (list todb) slave-dbs))))
 	tbls)
        (let* ((runtime      (- (current-milliseconds) start-time))
@@ -923,6 +980,39 @@
 ;; 		   (db:replace-test-records dbstruct run-id testrecs)
 ;; 		   (sqlite3:finalize! (db:dbdat-get-db (dbr:dbstruct-rundb dbstruct)))))
 ;; 	       run-ids)))
+
+  (if (member 'synctoconfig options)
+      (if (configf:get-section *configdat* "ext-sync")
+                (let* ((dblist (configf:get-section *configdat* "ext-sync"))
+                      (res '())
+                      (cfgdb #f))
+                      (for-each (lambda (dbitem)
+                            (let* ((stringsplit (string-split (cadr dbitem)))
+                                  (dbtype (string->symbol (car stringsplit)))
+                                  (dbpath (cadr stringsplit)))
+                            (case dbtype
+                              ((sqlite3) 
+                                (set! cfgdb (dbi:open dbtype (cons (cons 'dbname dbpath) '()) ))
+                                (db:initialize-main-db (dbi:db-conn cfgdb))
+                                (db:initialize-run-id-db (dbi:db-conn cfgdb))
+                                (set! res (cons (cons cfgdb dbpath) res)))
+                              ((pg)
+                                (let* ((dbinfo '()))
+                                  (for-each 
+                                    (lambda (x)
+                                      (if (not (eqv? (string->symbol x) dbtype))
+                                        (let* ((pair (string-split x ":")))
+                                          (if (not (eqv? pair '()))
+                                            (set! dbinfo (cons (cons (string->symbol (car pair)) (cadr pair)) dbinfo))))))
+                                  stringsplit)
+                                  (set! cfgdb (dbi:open dbtype dbinfo))
+                                  (set! res (cons (cons cfgdb (alist-ref 'host dbinfo)) res))
+                                  )))))
+                      dblist)
+                      (for-each (lambda (todb)
+                        (db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb todb)) res)
+                      
+                      )))
 
 	;; now ensure all newdb data are synced to megatest.db
 	;; do not use the run-ids list passed in to the function

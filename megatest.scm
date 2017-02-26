@@ -345,6 +345,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-convert-to-old"
 			"-import-megatest.db"
 			"-sync-to-megatest.db"
+			"-sync-to-configdb"
 
 			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
@@ -2014,6 +2015,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (db:multi-db-sync 
        (db:setup)
        'new2old
+       )
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-sync-to-configdb")
+    (begin
+      (db:multi-db-sync 
+       (db:setup)
+       'synctoconfig
        )
       (set! *didsomething* #t)))
 
