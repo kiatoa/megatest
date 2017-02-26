@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS run_stats (
 
 CREATE TABLE IF NOT EXISTS test_meta (
        id          SERIAL PRIMARY KEY,
-       testname    TEXT DEFAULT '',
+       test_name    TEXT DEFAULT '',
        author      TEXT DEFAULT '',
        owner       TEXT DEFAULT '',
        description TEXT DEFAULT '',
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS test_meta (
        avg_disk    REAL,
        tags        TEXT DEFAULT '',
        jobgroup    TEXT DEFAULT 'default',
-       CONSTRAINT test_meta_constraint UNIQUE (testname));
+       CONSTRAINT test_meta_constraint UNIQUE (test_name));
 
 CREATE TABLE IF NOT EXISTS tasks_queue (
        id SERIAL PRIMARY KEY,
@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS archive_blocks (
 CREATE TABLE IF NOT EXISTS archive_allocations (
        id SERIAL PRIMARY KEY,
        archive_block_id INTEGER,
-       testname TEXT,
+       test_name TEXT,
        item_path TEXT,
        creation_time INTEGER DEFAULT extract(epoch from now()));
 
@@ -129,16 +129,16 @@ CREATE TABLE IF NOT EXISTS access_log (
 CREATE TABLE IF NOT EXISTS tests  (
        id SERIAL PRIMARY KEY,                                                                            
        run_id       INTEGER   DEFAULT -1,                                                                 
-       testname     TEXT      DEFAULT 'noname',                                                           
+       test_name    TEXT      DEFAULT 'noname',                                                           
+       item_path    TEXT      DEFAULT '',                                                                 
+       state        TEXT      DEFAULT 'NOT_STARTED',                                                      
+       status       TEXT      DEFAULT 'FAIL',                                                             
        host         TEXT      DEFAULT 'n/a',                                                              
        cpuload      REAL      DEFAULT -1,                                                                 
        diskfree     INTEGER   DEFAULT -1,                                                                 
        uname        TEXT      DEFAULT 'n/a',                                                              
        rundir       TEXT      DEFAULT '/tmp/badname',                                                     
        shortdir     TEXT      DEFAULT '/tmp/badname',                                                     
-       item_path    TEXT      DEFAULT '',                                                                 
-       state        TEXT      DEFAULT 'NOT_STARTED',                                                      
-       status       TEXT      DEFAULT 'FAIL',                                                             
        attemptnum   INTEGER   DEFAULT 0,                                                                  
        final_logf   TEXT      DEFAULT 'logs/final.log',                                                   
        logdat       TEXT      DEFAULT '',                                                                 
@@ -149,7 +149,7 @@ CREATE TABLE IF NOT EXISTS tests  (
        pass_count   INTEGER   DEFAULT 0,                                                                  
        archived     INTEGER   DEFAULT 0, -- 0=no, > 1=archive block id where test data can be found       
        last_update  INTEGER DEFAULT extract(epoch from now()),                                               
-       CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path));  
+       CONSTRAINT testsconstraint UNIQUE (run_id, test_name, item_path));  
 
 CREATE TABLE IF NOT EXISTS test_steps (
        id SERIAL PRIMARY KEY,

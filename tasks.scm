@@ -21,6 +21,7 @@
 ;; (import pgdb) ;; pgdb is a module
 
 (include "task_records.scm")
+(include "db_records.scm")
 
 ;;======================================================================
 ;; Tasks db
@@ -638,7 +639,8 @@
 		(pgdb:refresh-run-info
 		 dbh
 		 new-run-id
-		 state status owner event-time comment fail-count pass-count)) ;;  area-id))
+		 state status owner event-time comment fail-count pass-count)
+		new-run-id)
 	      (if (handle-exceptions
 		      exn
 		      (begin (print-call-chain) #f)
@@ -647,24 +649,65 @@
 		     spec-id target run-name state status owner event-time comment fail-count pass-count)) ;; area-id))
 		  (tasks:run-id->mtpg-run-id dbh cached-info run-id)
 		  #f))))))
-		
-		 
-	       
-  ;;(define (tasks:sync-test-data dbh cached-info area-info)
-  ;; (let* ((
+
+(define (tasks:sync-tests-data dbh cached-info test-ids)
+  (let ((test-ht (hash-table-ref cached-info 'tests)))
+    (for-each
+     (lambda (test-id)
+       (let* ((test-info    (rmt:get-test-info-by-id #f test-id))
+	      (run-id       (db:test-get-run_id    test-info)) ;; look these up in db_records.scm
+	      (test-id      (db:test-get-id        test-info))
+	      (test-name    (db:test-get-testname  test-info))
+	      (item-path    (db:test-get-item-path test-info))
+	      (state        (db:test-get-state     test-info))
+	      (status       (db:test-get-status    test-info))
+	      (host         (db:test-get-host      test-info))
+	      (cpuload      (db:test-get-cpuload   test-info))
+	      (diskfree     (db:test-get-diskfree  test-info))
+	      (uname        (db:test-get-uname     test-info))
+	      (run-dir      (db:test-get-rundir    test-info))
+	      (log-file     (db:test-get-final_logf test-info))
+	      (run-duration (db:test-get-run_duration test-info))
+	      (comment      (db:test-get-comment   test-info))
+	      (event-time   (db:test-get-event_time test-info))
+	      (archived     (db:test-get-archived  test-info))
+	      (pgdb-run-id  (tasks:run-id->mtpg-run-id dbh cached-info run-id))
+	      (pgdb-test-id (pgdb:get-test-id dbh pgdb-run-id test-name item-path)))
+	 ;; "id"           "run_id"        "testname"  "state"      "status"      "event_time"
+	 ;; "host"         "cpuload"       "diskfree"  "uname"      "rundir"      "item_path"
+	 ;; "run_duration" "final_logf"    "comment"   "shortdir"   "attemptnum"  "archived"
+	 (if pgdb-test-id ;; have a record
+	     (begin ;; let ((key-name (conc run-id "/" test-name "/" item-path)))
+	       (hash-table-set! test-ht test-id pgdb-test-id)
+	       (pgdb:update-test dbh test-id pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived))
+	     (pgdb:insert-test dbh pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived))
+	 ))
+     test-ids)))
+
+;; get runs changed since last sync
+;; (define (tasks:sync-test-data dbh cached-info area-info)
+;;   (let* ((
 
 (define (tasks:sync-to-postgres configdat)
   (let* ((dbh         (pgdb:open configdat))
 	 (area-info   (pgdb:get-area-by-path dbh *toppath*))
-	 (cached-info (make-hash-table)))
+	 (cached-info (make-hash-table))
+	 (start       (current-seconds)))
     (for-each (lambda (dtype)
 		(hash-table-set! cached-info dtype (make-hash-table)))
 	      '(runs targets tests))
-    (hash-table-set! cached-info 'start (current-seconds))
+    (hash-table-set! cached-info 'start start) ;; when done we'll set sync times to this
     (if area-info
-	(begin
+	(let* ((last-sync-time (vector-ref area-info 3))
+	       (changed        (rmt:get-changed-record-ids last-sync-time))
+	       (run-ids        (alist-ref 'runs       changed))
+	       (test-ids       (alist-ref 'tests      changed))
+	       (test-step-ids  (alist-ref 'test_steps changed))
+	       (test-data-ids  (alist-ref 'test_data  changed))
+	       (run-stat-ids   (alist-ref 'run_stats  changed)))
 	  (print "area-info: " area-info)
-	  (tasks:sync-test-data dbh cached-info area-info)
+	  (if (not (null? test-ids))
+	      (tasks:sync-tests-data dbh cached-info test-ids))
 	  )
 	(if (tasks:set-area dbh configdat)
 	    (tasks:sync-to-postgres configdat)

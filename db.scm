@@ -2844,7 +2844,7 @@
      (let ((res #f))
        (sqlite3:for-each-row ;; attemptnum added to hold pid of top process (not Megatest) controlling a test
 	(lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)
-	  ;;             0    1       2      3      4        5       6      7        8     9     10      11          12          13           14         15          16
+	  ;;                0    1       2      3      4        5       6      7        8     9     10      11          12          13           14         15          16
 	  (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
@@ -3889,6 +3889,27 @@
 		 (set! result (append (if (null? tests)(list waitontest-name) tests) result)))))
 	 waitons)
 	(delete-duplicates result))))
+
+;;======================================================================
+;; Just for sync, procedures to make sync easy
+;;======================================================================
+
+;; get an alist of record ids changed since time since-time
+;;   '((runs . (1 2 3 ...))(steps . (5 6 7 ...) ...))
+;;
+(define (db:get-changed-record-ids dbstruct since-time)
+  ;; no transaction, allow the db to be accessed between the big queries
+  (let ((backcons (lambda (lst item)(cons item lst))))
+    (db:with-db
+     dbstruct #f #f 
+     (lambda (db)
+       `((runs       . ,(fold-row backcons '() db "SELECT id FROM runs  WHERE last_update>?" since-time))
+	 (tests      . ,(fold-row backcons '() db "SELECT id FROM tests WHERE last_update>?" since-time))
+	 (test_steps . ,(fold-row backcons '() db "SELECT id FROM test_steps WHERE last_update>?" since-time))
+	 (test_data  . ,(fold-row backcons '() db "SELECT id FROM test_data  WHERE last_update>?" since-time))
+	 ;; (test_meta  . ,(fold-row backcons '() db "SELECT id FROM test_meta  WHERE last_update>?" since-time))
+	 (run_stats  . ,(fold-row backcons '() db "SELECT id FROM run_stats  WHERE last_update>?" since-time))
+	 )))))
 
 ;;======================================================================
 ;; Extract ods file from the db

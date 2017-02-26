@@ -358,6 +358,9 @@
 (define (rmt:runtests user run-id testpatt params)
   (rmt:send-receive 'runtests run-id testpatt))
 
+(define (rmt:get-changed-record-ids since-time)
+  (rmt:send-receive 'get-changed-record-ids #f (list since-time)) )
+
 ;;======================================================================
 ;;  T E S T   M E T A 
 ;;======================================================================
@@ -411,8 +414,10 @@
 (define (rmt:get-test-id run-id testname item-path)
   (rmt:send-receive 'get-test-id run-id (list run-id testname item-path)))
 
+;; run-id is NOT used
+;;
 (define (rmt:get-test-info-by-id run-id test-id)
-  (if (and (number? run-id)(number? test-id))
+  (if (number? test-id)
       (rmt:send-receive 'get-test-info-by-id run-id (list run-id test-id))
       (begin
 	(debug:print 0 *default-log-port* "WARNING: Bad data handed to rmt:get-test-info-by-id run-id=" run-id ", test-id=" test-id)
