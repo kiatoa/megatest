@@ -34,6 +34,8 @@
 ;;   i. Check that owner of the file and calling user are same?
 ;;  ii. Check that we are in a legal megatest area?
 ;; iii. Have some form of authentication or record of the md5sum or similar of the file?
+;;  iv. Use compiled version in preference to .scm version. Thus there is a manual "blessing"
+;;      required to use .mtutil.scm.
 ;;
 (if (file-exists? "megatest.config")
     (if (file-exists? ".mtutil.so")
