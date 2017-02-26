@@ -146,9 +146,9 @@ Misc
   -contour cname          : add a level of hierarcy to the linktree and run paths
   -rebuild-db             : bring the database schema up to date
   -cleanup-db             : remove any orphan records, vacuum the db
-  -import-megatest.db     : migrate a database from v1.55 series to v1.60 series
-  -sync-to-megatest.db    : migrate data back to megatest.db
-  -use-db-cache           : use cached access to db to reduce load
+  -import-megatest.db     : push data from megatest.db to cache db files in /tmp/$USER
+  -sync-to-megatest.db    : pull data from cache files in /tmp/$USER to megatest.db
+  -sync-to-pg             : sync to new postgresql central style database
   -update-meta            : update the tests metadata for all tests
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
@@ -345,7 +345,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-convert-to-old"
 			"-import-megatest.db"
 			"-sync-to-megatest.db"
-
+			"-sync-to-pg"
+			
 			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only

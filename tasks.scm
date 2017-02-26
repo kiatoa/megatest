@@ -16,6 +16,9 @@
 (declare (uses db))
 (declare (uses rmt))
 (declare (uses common))
+(declare (uses pgdb))
+
+;; (import pgdb) ;; pgdb is a module
 
 (include "task_records.scm")
 
@@ -577,3 +580,14 @@
 ;; 		     (tasks:task-get-owner  task))
 ;;     (tasks:set-state mdb (tasks:task-get-id task) "waiting")))
 
+;;======================================================================
+;;  S Y N C   T O   P O S T G R E S Q L
+;;======================================================================
+
+;; In the spirit of "dump your junk in the tasks module" I'll put the
+;; sync to postgres here for now.
+
+(define (tasks:sync-to-postgres)
+  (let* ((dbh (pgdb:open *configdat*))
+	 (area-info (pgdb:area-path->area-info dbh *toppath*)))
+    (print "area-info: " area-info)))
