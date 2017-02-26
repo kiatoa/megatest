@@ -1,5 +1,5 @@
 -- CREATE TABLE IF NOT EXISTS keys (
---        id INTEGER PRIMARY KEY,
+--        id SERIAL PRIMARY KEY,
 --        fieldname TEXT,
 --        fieldtype TEXT,
 --        CONSTRAINT keyconstraint UNIQUE (fieldname));
@@ -23,20 +23,20 @@ DROP TABLE IF EXISTS test_rundat;
 DROP TABLE IF EXISTS archives;
 
 CREATE TABLE IF NOT EXISTS areas (
-       id INTEGER PRIMARY KEY,
-       area_name TEXT DEFAULT 'local',
-       area_path TEXT DEFAULT '.',
+       id SERIAL PRIMARY KEY,
+       area_name TEXT NOT NULL,
+       area_path TEXT NOT NULL,
        last_sync INTEGER DEFAULT 0,
        CONSTRAINT areaconstraint UNIQUE (area_name));
 
 INSERT INTO areas (id,area_name,area_path) VALUES (0,'local','.');
 
 CREATE TABLE IF NOT EXISTS ttype (
-       id INTEGER PRIMARY KEY,
+       id SERIAL PRIMARY KEY,
        target_spec TEXT DEFAULT '');
        
 CREATE TABLE IF NOT EXISTS runs (
-       id INTEGER PRIMARY KEY,
+       id SERIAL PRIMARY KEY,
        target     TEXT DEFAULT '',
        ttype_id   INTEGER DEFAULT 0,
        runname    TEXT DEFAULT 'norun',
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS runs (
        CONSTRAINT runsconstraint UNIQUE (runname));
 
 CREATE TABLE IF NOT EXISTS run_stats (
-       id     INTEGER PRIMARY KEY,
+       id     SERIAL PRIMARY KEY,
        run_id INTEGER,
        state  TEXT,
        status TEXT,
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS run_stats (
        last_update INTEGER DEFAULT extract(epoch from now()));
 
 CREATE TABLE IF NOT EXISTS test_meta (
-       id          INTEGER PRIMARY KEY,
+       id          SERIAL PRIMARY KEY,
        testname    TEXT DEFAULT '',
        author      TEXT DEFAULT '',
        owner       TEXT DEFAULT '',
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS test_meta (
        CONSTRAINT test_meta_constraint UNIQUE (testname));
 
 CREATE TABLE IF NOT EXISTS tasks_queue (
-       id INTEGER PRIMARY KEY,
+       id SERIAL PRIMARY KEY,
        action TEXT DEFAULT '',
        owner TEXT,
        state TEXT DEFAULT 'new',
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS tasks_queue (
        execution_time INTEGER);
 
 CREATE TABLE IF NOT EXISTS archive_disks (
-       id INTEGER PRIMARY KEY,
+       id SERIAL PRIMARY KEY,
        archive_area_name TEXT,
        disk_path TEXT,
        last_df INTEGER DEFAULT -1,
@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS archive_disks (
        creation_time INTEGER DEFAULT extract(epoch from now()));
 
 CREATE TABLE IF NOT EXISTS archive_blocks (
-       id INTEGER PRIMARY KEY,
+       id SERIAL PRIMARY KEY,
        archive_disk_id INTEGER,
        disk_path TEXT,
        last_du INTEGER DEFAULT -1,
@@ -103,31 +103,31 @@ CREATE TABLE IF NOT EXISTS archive_blocks (
        creation_time INTEGER DEFAULT extract(epoch from now()));
 
 CREATE TABLE IF NOT EXISTS archive_allocations (
-       id INTEGER PRIMARY KEY,
+       id SERIAL PRIMARY KEY,
        archive_block_id INTEGER,
        testname TEXT,
        item_path TEXT,
        creation_time INTEGER DEFAULT extract(epoch from now()));
 
 CREATE TABLE IF NOT EXISTS extradat (
-       id INTEGER PRIMARY KEY,
+       id SERIAL PRIMARY KEY,
        run_id INTEGER,
        key TEXT,
        val TEXT);
 
 CREATE TABLE IF NOT EXISTS metadat (
-       id INTEGER PRIMARY KEY,
+       id SERIAL PRIMARY KEY,
        var TEXT,
        val TEXT);
 
 CREATE TABLE IF NOT EXISTS access_log (
-       id INTEGER PRIMARY KEY,
+       id SERIAL PRIMARY KEY,
        "user" TEXT,
        accessed TIMESTAMP,
        args TEXT);
 
 CREATE TABLE IF NOT EXISTS tests  (
-       id INTEGER PRIMARY KEY,                                                                            
+       id SERIAL PRIMARY KEY,                                                                            
        run_id       INTEGER   DEFAULT -1,                                                                 
        testname     TEXT      DEFAULT 'noname',                                                           
        host         TEXT      DEFAULT 'n/a',                                                              
@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS tests  (
        CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path));  
 
 CREATE TABLE IF NOT EXISTS test_steps (
-       id INTEGER PRIMARY KEY,
+       id SERIAL PRIMARY KEY,
        test_id INTEGER, 
        stepname TEXT, 
        state TEXT DEFAULT 'NOT_STARTED', 
@@ -164,7 +164,7 @@ CREATE TABLE IF NOT EXISTS test_steps (
        CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));
 
 CREATE TABLE IF NOT EXISTS test_data (
-       id INTEGER PRIMARY KEY,
+       id SERIAL PRIMARY KEY,
        test_id INTEGER,
        category TEXT DEFAULT '',
        variable TEXT,
@@ -179,7 +179,7 @@ CREATE TABLE IF NOT EXISTS test_data (
        CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));
 
 CREATE TABLE IF NOT EXISTS test_rundat (
-       id           INTEGER PRIMARY KEY,
+       id           SERIAL PRIMARY KEY,
        test_id      INTEGER,
        update_time  INTEGER,
        cpuload      INTEGER DEFAULT -1,
@@ -188,7 +188,7 @@ CREATE TABLE IF NOT EXISTS test_rundat (
        run_duration INTEGER DEFAULT 0);
 
 CREATE TABLE IF NOT EXISTS archives (
-       id           INTEGER PRIMARY KEY,
+       id           SERIAL PRIMARY KEY,
        test_id      INTEGER,
        state        TEXT DEFAULT 'new',
        status       TEXT DEFAULT 'n/a',
@@ -197,6 +197,6 @@ CREATE TABLE IF NOT EXISTS archives (
        archive_path TEXT);
  
 
-TRUNCATE archive_blocks, archive_allocations, extradat, metadat,
-access_log, tests, test_steps, test_data, test_rundat, archives, runs,
-run_stats, test_meta, tasks_queue, archive_disks;
+-- TRUNCATE archive_blocks, archive_allocations, extradat, metadat,
+-- access_log, tests, test_steps, test_data, test_rundat, archives, runs,
+-- run_stats, test_meta, tasks_queue, archive_disks;
