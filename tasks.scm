@@ -611,7 +611,7 @@
 ;;
 (define (tasks:run-id->mtpg-run-id dbh cached-info run-id)
   (let* ((runs-ht (hash-table-ref cached-info 'runs))
-	 (runinf  (hash-table-ref runs-ht run-id)))
+	 (runinf  (hash-table-ref/default runs-ht run-id #f)))
     (if runinf
 	runinf ;; already cached
 	(let* ((keytarg    (string-intersperse (rmt:get-keys) "/")) ;; e.g. version/iteration/platform
@@ -622,14 +622,15 @@
 	       (new-run-id (pgdb:get-run-id dbh spec-id target run-name))
 	       (row        (db:get-rows run-dat))                   ;; yes, this returns a single row
 	       (header     (db:get-header run-dat))
-	       (state      (db:get-value-by-header rows header "state "))
+	       (state      (db:get-value-by-header row header "state "))
 	       (status     (db:get-value-by-header row header "status"))
 	       (owner      (db:get-value-by-header row header "owner"))
 	       (event-time (db:get-value-by-header row header "event_time"))
 	       (comment    (db:get-value-by-header row header "comment"))
 	       (fail-count (db:get-value-by-header row header "fail_count"))
 	       (pass-count (db:get-value-by-header row header "pass_count"))
-	       (area-id    (db:get-value-by-header row header "area_id)")))
+	       ;; (area-id    (db:get-value-by-header row header "area_id)"))
+	       )
 	  (if new-run-id
 	      (begin ;; let ((run-record (pgdb:get-run-info dbh new-run-id))
 		(hash-table-set! runs-ht run-id new-run-id)
@@ -637,13 +638,13 @@
 		(pgdb:refresh-run-info
 		 dbh
 		 new-run-id
-		 state status owner event-time comment fail-count pass-count area-id))
+		 state status owner event-time comment fail-count pass-count)) ;;  area-id))
 	      (if (handle-exceptions
 		      exn
 		      (begin (print-call-chain) #f)
 		    (pgdb:insert-run
 		     dbh
-		     spec-id target state status owner event-time comment fail-count pass-count area-id))
+		     spec-id target run-name state status owner event-time comment fail-count pass-count)) ;; area-id))
 		  (tasks:run-id->mtpg-run-id dbh cached-info run-id)
 		  #f))))))
 		
