@@ -267,7 +267,8 @@
                                                      (db:general-call dbstruct stmtname realparams)))
                    ((sdb-qry)                      (apply sdb:qry params))
                    ((ping)                         (current-process-id))
-
+		   ((get-changed-record-ids)       (apply db:get-changed-record-ids dbstruct params))
+		   
                    ;; TESTMETA
                    ((testmeta-get-record)       (apply db:testmeta-get-record dbstruct params))
 
