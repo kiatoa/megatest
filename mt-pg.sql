@@ -1,9 +1,27 @@
-CREATE TABLE IF NOT EXISTS keys (
-       id INTEGER PRIMARY KEY,
-       fieldname TEXT,
-       fieldtype TEXT,
-       CONSTRAINT keyconstraint UNIQUE (fieldname));
-		    
+-- CREATE TABLE IF NOT EXISTS keys (
+--        id INTEGER PRIMARY KEY,
+--        fieldname TEXT,
+--        fieldtype TEXT,
+--        CONSTRAINT keyconstraint UNIQUE (fieldname));
+
+DROP TABLE IF EXISTS areas;
+DROP TABLE IF EXISTS ttype;
+DROP TABLE IF EXISTS runs;
+DROP TABLE IF EXISTS run_stats;
+DROP TABLE IF EXISTS test_meta;
+DROP TABLE IF EXISTS tasks_queue;
+DROP TABLE IF EXISTS archive_disks;
+DROP TABLE IF EXISTS archive_blocks;
+DROP TABLE IF EXISTS archive_allocations;
+DROP TABLE IF EXISTS extradat;
+DROP TABLE IF EXISTS metadat;
+DROP TABLE IF EXISTS access_log;
+DROP TABLE IF EXISTS tests;
+DROP TABLE IF EXISTS test_steps;
+DROP TABLE IF EXISTS test_data;
+DROP TABLE IF EXISTS test_rundat;
+DROP TABLE IF EXISTS archives;
+
 CREATE TABLE IF NOT EXISTS areas (
        id INTEGER PRIMARY KEY,
        areaname TEXT DEFAULT 'local',
@@ -108,7 +126,7 @@ CREATE TABLE IF NOT EXISTS access_log (
        accessed TIMESTAMP,
        args TEXT);
 
-CREATE TABLE tests  (
+CREATE TABLE IF NOT EXISTS tests  (
        id INTEGER PRIMARY KEY,                                                                            
        run_id       INTEGER   DEFAULT -1,                                                                 
        testname     TEXT      DEFAULT 'noname',                                                           
