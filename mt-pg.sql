@@ -24,12 +24,12 @@ DROP TABLE IF EXISTS archives;
 
 CREATE TABLE IF NOT EXISTS areas (
        id INTEGER PRIMARY KEY,
-       areaname TEXT DEFAULT 'local',
-       areapath TEXT DEFAULT '.',
+       area_name TEXT DEFAULT 'local',
+       area_path TEXT DEFAULT '.',
        last_sync INTEGER DEFAULT 0,
-       CONSTRAINT areaconstraint UNIQUE (areaname));
+       CONSTRAINT areaconstraint UNIQUE (area_name));
 
-INSERT INTO areas (id,areaname,areapath) VALUES (0,'local','.');
+INSERT INTO areas (id,area_name,area_path) VALUES (0,'local','.');
 
 CREATE TABLE IF NOT EXISTS ttype (
        id INTEGER PRIMARY KEY,
@@ -197,4 +197,6 @@ CREATE TABLE IF NOT EXISTS archives (
        archive_path TEXT);
  
 
-TRUNCATE archive_blocks, archive_allocations, extradat, metadat, access_log, tests, test_steps, test_data, test_rundat, archives, keys, runs, run_stats, test_meta, tasks_queue, archive_disks;
+TRUNCATE archive_blocks, archive_allocations, extradat, metadat,
+access_log, tests, test_steps, test_data, test_rundat, archives, runs,
+run_stats, test_meta, tasks_queue, archive_disks;
