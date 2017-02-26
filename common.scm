@@ -551,10 +551,13 @@
     (if res (cadr res)(if (null? default) #f (car default)))))
 
 (define (common:get-testsuite-name)
-  (or (configf:lookup *configdat* "setup" "testsuite" )
+  (or (configf:lookup *configdat* "setup" "area-name") ;; megatest is a flexible tool, testsuite is too limiting a description.
+      (configf:lookup *configdat* "setup" "testsuite" )
       (if *toppath* 
           (pathname-file *toppath*)
           (pathname-file (current-directory)))))
+
+(define common:get-area-name common:get-testsuite-name)
 
 (define (common:get-db-tmp-area)
   (if *db-cache-path*

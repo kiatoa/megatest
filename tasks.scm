@@ -587,7 +587,87 @@
 ;; In the spirit of "dump your junk in the tasks module" I'll put the
 ;; sync to postgres here for now.
 
-(define (tasks:sync-to-postgres)
-  (let* ((dbh (pgdb:open *configdat*))
-	 (area-info (pgdb:area-path->area-info dbh *toppath*)))
-    (print "area-info: " area-info)))
+;; attempt to automatically set up an area. call only if get area by path
+;; returns naught of interest
+;;
+(define (tasks:set-area dbh configdat #!key (toppath #f)) ;; could I safely put *toppath* in for the default for toppath? when would it be evaluated?
+  (let loop ((area-name (or (configf:lookup configdat "setup" "area-name")
+			    (common:get-area-name)))
+	     (modifier  'none))
+    (let ((success (handle-exceptions
+		       exn
+		       (begin
+			 (debug:print 0 *default-log-port* "ERROR: cannot create area entry, " ((condition-property-accessor 'exn 'message) exn))
+			 #f) ;; FIXME: I don't care for now but I should look at *why* there was an exception
+		     (pgdb:add-area dbh area-name (or toppath *toppath*)))))
+      (or success
+	  (case modifier
+	    ((none)(loop (conc (current-user-name) "_" area-name) 'user))
+	    ((user)(loop (conc (substring (common:get-area-path-signature) 0 4)
+			       area-name) 'areasig))
+	    (else #f)))))) ;; give up
+
+;; gets mtpg-run-id and syncs the record if different
+;;
+(define (tasks:run-id->mtpg-run-id dbh cached-info run-id)
+  (let* ((runs-ht (hash-table-ref cached-info 'runs))
+	 (runinf  (hash-table-ref runs-ht run-id)))
+    (if runinf
+	runinf ;; already cached
+	(let* ((keytarg    (string-intersperse (rmt:get-keys) "/")) ;; e.g. version/iteration/platform
+	       (spec-id    (pgdb:get-ttype dbh keytarg))
+	       (target     (rmt:get-target run-id))                 ;; e.g. v1.63/a3e1/ubuntu
+	       (run-dat    (rmt:get-run-info run-id))               ;; NOTE: get-run-info returns a vector < row header >
+	       (run-name   (rmt:get-run-name-from-id run-id))
+	       (new-run-id (pgdb:get-run-id dbh spec-id target run-name))
+	       (row        (db:get-rows run-dat))                   ;; yes, this returns a single row
+	       (header     (db:get-header run-dat))
+	       (state      (db:get-value-by-header rows header "state "))
+	       (status     (db:get-value-by-header row header "status"))
+	       (owner      (db:get-value-by-header row header "owner"))
+	       (event-time (db:get-value-by-header row header "event_time"))
+	       (comment    (db:get-value-by-header row header "comment"))
+	       (fail-count (db:get-value-by-header row header "fail_count"))
+	       (pass-count (db:get-value-by-header row header "pass_count"))
+	       (area-id    (db:get-value-by-header row header "area_id)")))
+	  (if new-run-id
+	      (begin ;; let ((run-record (pgdb:get-run-info dbh new-run-id))
+		(hash-table-set! runs-ht run-id new-run-id)
+		;; ensure key fields are up to date
+		(pgdb:refresh-run-info
+		 dbh
+		 new-run-id
+		 state status owner event-time comment fail-count pass-count area-id))
+	      (if (handle-exceptions
+		      exn
+		      (begin (print-call-chain) #f)
+		    (pgdb:insert-run
+		     dbh
+		     spec-id target state status owner event-time comment fail-count pass-count area-id))
+		  (tasks:run-id->mtpg-run-id dbh cached-info run-id)
+		  #f))))))
+		
+		 
+	       
+  ;;(define (tasks:sync-test-data dbh cached-info area-info)
+  ;; (let* ((
+
+(define (tasks:sync-to-postgres configdat)
+  (let* ((dbh         (pgdb:open configdat))
+	 (area-info   (pgdb:get-area-by-path dbh *toppath*))
+	 (cached-info (make-hash-table)))
+    (for-each (lambda (dtype)
+		(hash-table-set! cached-info dtype (make-hash-table)))
+	      '(runs targets tests))
+    (hash-table-set! cached-info 'start (current-seconds))
+    (if area-info
+	(begin
+	  (print "area-info: " area-info)
+	  (tasks:sync-test-data dbh cached-info area-info)
+	  )
+	(if (tasks:set-area dbh configdat)
+	    (tasks:sync-to-postgres configdat)
+	    (begin
+	      (debug:print 0 *default-log-port* "ERROR: unable to create an area record")
+	      #f)))))
+

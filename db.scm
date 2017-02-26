@@ -2197,6 +2197,9 @@
                             runnamepatt)))))))
 
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-rows runinfo))
+;; NOTE: Does NOT return a list of rows (or one row) for the first slot of the vector
+;;       this is inconsistent with get-runs but it makes some sense.
+;;
 (define (db:get-run-info dbstruct run-id)
   ;;(if (hash-table-ref/default *run-info-cache* run-id #f)
   ;;    (hash-table-ref *run-info-cache* run-id)
