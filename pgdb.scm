@@ -168,3 +168,10 @@
            r.id,r.target,r.ttype_id,r.run_name,r.state,r.status,r.owner,r.event_time,r.comment
      FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
       WHERE r.target LIKE ?;" target-patt))
+
+(define (pgdb:get-stats-given-target dbh target-patt)
+  (dbi:get-rows
+   dbh
+   "SELECT COUNT(t.id),t.status,r.target FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+        WHERE t.state='COMPLETED' AND r.target LIKE ? GROUP BY t.status,r.target;" target-patt))
+  

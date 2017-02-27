@@ -17,7 +17,9 @@
 	    (s:div 'class "col_12"
 		   (map (lambda (area)
 			  (s:p "data=" (conc area)))
-			(pgdb:get-tests dbh "%"))
+			;; (pgdb:get-tests dbh "%")
+			(pgdb:get-stats-given-target dbh "v1.63/%")
+			)
 		   index:jquery
 		   index:javascript
 		   ))))))
