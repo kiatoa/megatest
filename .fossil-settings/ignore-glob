@@ -1,3 +1,6 @@
+tests/fullrun/logs/*
+tests/fullrun/lt
+tests/fullrun/megatest.db
 altdb.scm
 utils/build/*
 *~

@@ -1,5 +1,10 @@
 1. copy megatest.config to cgi-bin/.megatest.config
 2. edit cgi-bin/.megatest.config, change appropriate settings
+   i. sroot   => points to your models and pages
+  ii. logs, twikidir (legacy, will be removed in future) must be 
+      writeable.
+ iii. domain is used to construct the return URLs (to be fixed).
+  iv. debug mode give a useful stack dump on hitting errors.
 3. compile mtutil and copy the mtut binary (look in the bin dir)
    to cgi-bin/megatest
 4. use mtutil to populate your database schema

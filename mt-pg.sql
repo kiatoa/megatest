@@ -21,6 +21,20 @@ DROP TABLE IF EXISTS test_steps;
 DROP TABLE IF EXISTS test_data;
 DROP TABLE IF EXISTS test_rundat;
 DROP TABLE IF EXISTS archives;
+DROP TABLE IF EXISTS session_vars;
+DROP TABLE IF EXISTS sessions;
+
+CREATE TABLE IF NOT EXISTS session_vars (
+       id SERIAL PRIMARY KEY,
+       session_id INTEGER,
+       page TEXT,
+       key TEXT,
+       value TEXT);
+
+CREATE TABLE IF NOT EXISTS sessions (
+       id SERIAL PRIMARY KEY,
+       session_key TEXT NOT NULL,
+       last_used TIMESTAMP WITHOUT TIME ZONE DEFAULT now());
 
 CREATE TABLE IF NOT EXISTS areas (
        id SERIAL PRIMARY KEY,
