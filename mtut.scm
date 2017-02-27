@@ -25,6 +25,8 @@
 
 (include "megatest-fossil-hash.scm")
 
+(require-library stml)
+
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.mtutilrc")))
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
@@ -586,6 +588,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (system (conc "/bin/cat " schema-file)))))
 	       ((junk)
 		(rmt:get-keys))))))))
+
+;; If HTTP_HOST is defined then we must be in the cgi environment
+;; so run stml and exit
+;;
+(if (get-environment-variable "HTTP_HOST")
+    (begin
+      (stml:main #f)
+      (exit)))
+
 
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
