@@ -148,7 +148,7 @@ Misc
   -cleanup-db             : remove any orphan records, vacuum the db
   -import-megatest.db     : push data from megatest.db to cache db files in /tmp/$USER
   -sync-to-megatest.db    : pull data from cache files in /tmp/$USER to megatest.db
-  -sync-to-pg             : sync to new postgresql central style database
+  -sync-to dest           : sync to new postgresql central style database
   -update-meta            : update the tests metadata for all tests
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
@@ -289,6 +289,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
                         "-src-target"
                         "-src-runname"
                         "-diff-email"
+			"-sync-to"
                         "-diff-html"
 			)
  		 (list  "-h" "-help" "--help"
@@ -345,7 +346,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-convert-to-old"
 			"-import-megatest.db"
 			"-sync-to-megatest.db"
-			"-sync-to-pg"
 			
 			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
@@ -2018,9 +2018,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        )
       (set! *didsomething* #t)))
 
-(if (args:get-arg "-sync-to-pg")
+(if (args:get-arg "-sync-to")
     (let ((toppath (launch:setup)))
-      (tasks:sync-to-postgres *configdat*)
+      (tasks:sync-to-postgres *configdat* (args:get-arg "-sync-to"))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-generate-html")
