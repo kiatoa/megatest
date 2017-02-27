@@ -55,10 +55,10 @@
   (dbi:exec dbh "INSERT INTO areas (area_name,area_path) VALUES (?,?)" area-name area-path))
 
 (define (pgdb:get-areas dbh)
-  (map
-   (lambda (row)
-     (print "row: " row))
-   (dbi:get-rows dbh "SELECT id,area_name,area_path,last_sync FROM areas;")))
+  ;; (map
+  ;;  (lambda (row)
+  ;;    (print "row: " row))
+  (dbi:get-rows dbh "SELECT id,area_name,area_path,last_sync FROM areas;")) ;; )
 
 ;; given an area_path get the area info
 ;;
@@ -160,3 +160,11 @@
 
    run-id  test-name item-path    state   status     host  cpuload diskfree uname
    run-dir log-file  run-duration comment event-time archived test-id))
+
+(define (pgdb:get-tests dbh target-patt)
+  (dbi:get-rows
+   dbh
+   "SELECT t.id,t.run_id,t.test_name,t.item_path,t.state,t.status,t.host,t.cpuload,t.diskfree,t.uname,t.rundir,t.final_logf,t.run_duration,t.comment,t.event_time,t.archived,
+           r.id,r.target,r.ttype_id,r.run_name,r.state,r.status,r.owner,r.event_time,r.comment
+     FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+      WHERE r.target LIKE ?;" target-patt))
