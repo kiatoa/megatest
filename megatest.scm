@@ -2018,6 +2018,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        )
       (set! *didsomething* #t)))
 
+(if (args:get-arg "-sync-to-pg")
+    (let ((toppath (launch:setup)))
+      (tasks:sync-to-postgres *configdat*)
+      (set! *didsomething* #t)))
+
 (if (args:get-arg "-generate-html")
     (let* ((toppath (launch:setup)))
       (if (tests:create-html-tree #f)
@@ -2030,7 +2035,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (not *didsomething*)
-    (debug:print 0 *default-log-port* help))
+    (debug:print 0 *default-log-port* help)
+    (set! *time-to-exit* #t)
+    )
 ;;(debug:print-info 13 *default-log-port* "thread-join! watchdog")
 
 ;; join the watchdog thread if it has been thread-start!ed  (it may not have been started in the case of a server that never enters running state)

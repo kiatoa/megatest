@@ -679,7 +679,8 @@
 	 (if pgdb-test-id ;; have a record
 	     (begin ;; let ((key-name (conc run-id "/" test-name "/" item-path)))
 	       (hash-table-set! test-ht test-id pgdb-test-id)
-	       (pgdb:update-test dbh test-id pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived))
+	       (print "Updating existing test with run-id: " run-id " and test-id: " test-id)
+	       (pgdb:update-test dbh pgdb-test-id pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived))
 	     (pgdb:insert-test dbh pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived))
 	 ))
      test-ids)))
@@ -707,8 +708,10 @@
 	       (run-stat-ids   (alist-ref 'run_stats  changed)))
 	  (print "area-info: " area-info)
 	  (if (not (null? test-ids))
-	      (tasks:sync-tests-data dbh cached-info test-ids))
-	  )
+	      (begin
+		(print "Syncing " (length test-ids) " changed tests")
+		(tasks:sync-tests-data dbh cached-info test-ids)))
+	  (pgdb:write-sync-time dbh area-info start))
 	(if (tasks:set-area dbh configdat)
 	    (tasks:sync-to-postgres configdat)
 	    (begin
