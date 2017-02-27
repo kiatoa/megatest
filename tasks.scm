@@ -689,8 +689,8 @@
 ;; (define (tasks:sync-test-data dbh cached-info area-info)
 ;;   (let* ((
 
-(define (tasks:sync-to-postgres configdat)
-  (let* ((dbh         (pgdb:open configdat))
+(define (tasks:sync-to-postgres configdat dest)
+  (let* ((dbh         (pgdb:open configdat dbname: dest))
 	 (area-info   (pgdb:get-area-by-path dbh *toppath*))
 	 (cached-info (make-hash-table))
 	 (start       (current-seconds)))
@@ -713,7 +713,7 @@
 		(tasks:sync-tests-data dbh cached-info test-ids)))
 	  (pgdb:write-sync-time dbh area-info start))
 	(if (tasks:set-area dbh configdat)
-	    (tasks:sync-to-postgres configdat)
+	    (tasks:sync-to-postgres configdat dest)
 	    (begin
 	      (debug:print 0 *default-log-port* "ERROR: unable to create an area record")
 	      #f)))))
