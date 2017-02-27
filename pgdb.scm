@@ -1,0 +1,162 @@
+;;======================================================================
+;; Copyright 2006-2017, Matthew Welland.
+;; 
+;;  This program is made available under the GNU GPL version 2.0 or
+;;  greater. See the accompanying file COPYING for details.
+;; 
+;;  This program is distributed WITHOUT ANY WARRANTY; without even the
+;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+;;  PURPOSE.
+;;======================================================================
+
+(declare (unit pgdb))
+(declare (uses configf))
+
+;; I don't know how to mix compilation units and modules, so no module here.
+;;
+;; (module pgdb
+;;     (
+;;      open-pgdb
+;;      )
+;; 
+;; (import scheme)
+;; (import data-structures)
+;; (import chicken)
+
+(use typed-records (prefix dbi dbi:))
+
+;; given a configdat lookup the connection info and open the db
+;;
+(define (pgdb:open configdat #!key (dbname #f))  
+  (let ((pgconf (configf:lookup configdat "ext-sync" (or dbname "pgdb"))))
+    (if pgconf
+	(let* ((confdat (map (lambda (conf-item)
+			       (let ((parts (string-split conf-item ":")))
+				 (if (> (length parts) 1)
+				     (let ((key (car parts))
+					   (val (cadr parts)))
+				       (cons (string->symbol key) val))
+				     (begin
+				       (print "ERROR: Bad config setting " conf-item ", should be key:val")
+				       `(,(string->symbol (car parts)) . #f)))))
+			     (string-split pgconf)))
+	       (dbtype   (string->symbol (or (alist-ref 'dbtype confdat) "pg"))))
+	  (if (alist-ref 'dbtype confdat)
+	      (dbi:open dbtype (alist-delete 'dbtype confdat))))
+	#f)))
+
+;;======================================================================
+;;  A R E A S
+;;======================================================================
+
+(defstruct area id area-name area-path last-update)
+
+(define (pgdb:add-area dbh area-name area-path)
+  (dbi:exec dbh "INSERT INTO areas (area_name,area_path) VALUES (?,?)" area-name area-path))
+
+(define (pgdb:get-areas dbh)
+  (map
+   (lambda (row)
+     (print "row: " row))
+   (dbi:get-rows dbh "SELECT id,area_name,area_path,last_sync FROM areas;")))
+
+;; given an area_path get the area info
+;;
+(define (pgdb:get-area-by-path dbh area-path)
+  (dbi:get-one-row dbh "SELECT id,area_name,area_path,last_sync FROM areas WHERE area_path=?;" area-path))
+
+(define (pgdb:write-sync-time dbh area-info new-sync-time)
+  (let ((area-id (vector-ref area-info 0)))
+    (dbi:exec dbh "UPDATE areas SET last_sync=? WHERE id=?;" new-sync-time area-id)))
+
+;;======================================================================
+;;  T A R G E T S
+;;======================================================================
+
+;; Given a target-spec, return the id. Should probably handle this with a join...
+;; if target-spec not found, create a record for it.
+;;
+(define (pgdb:get-ttype dbh target-spec)
+  (let ((spec-id (dbi:get-one dbh "SELECT id FROM ttype WHERE target_spec=?;" target-spec)))
+    (or spec-id
+	(if (handle-exceptions
+		exn
+		(begin
+		  (print-call-chain)
+		  (debug:print 0 *default-log-port* "ERROR: cannot create ttype entry, " ((condition-property-accessor 'exn 'message) exn))
+		  #f)
+	      (dbi:exec dbh "INSERT INTO ttype (target_spec) VALUES (?);" target-spec))
+	    (pgdb:get-ttype dbh target-spec)))))
+
+;;======================================================================
+;;  R U N S
+;;======================================================================
+
+;; given a target spec id, target and run-name return the run-id
+;; if no run found return #f
+;;
+(define (pgdb:get-run-id dbh spec-id target run-name)
+  (dbi:get-one dbh "SELECT id FROM runs WHERE ttype_id=? AND target=? AND run_name=?;"
+	       spec-id target run-name))
+
+;; given a run-id return all the run info
+;;
+(define (pgdb:get-run-info dbh run-id) ;; to join ttype or not?
+  (dbi:get-one-row
+   dbh   ;; 0    1       2       3      4     5      6       7        8         9         10          11         12
+   "SELECT id,target,ttype_id,run_name,state,status,owner,event_time,comment,fail_count,pass_count,last_update,area_id
+       FROM runs WHERE id=?;" run-id))
+
+;; refresh the data in a run record
+;;
+(define (pgdb:refresh-run-info dbh run-id state status owner event-time comment fail-count pass-count) ;; area-id)
+  (dbi:exec
+   dbh
+   "UPDATE runs SET
+      state=?,status=?,owner=?,event_time=?,comment=?,fail_count=?,pass_count=?
+     WHERE id=?;"
+   state status owner event-time comment fail-count pass-count run-id))
+
+;; given all needed info create run record
+;;
+(define (pgdb:insert-run dbh ttype-id target run-name state status owner event-time comment fail-count pass-count)
+  (dbi:exec
+   dbh
+   "INSERT INTO runs (ttype_id,target,run_name,state,status,owner,event_time,comment,fail_count,pass_count)
+      VALUES (?,?,?,?,?,?,?,?,?,?);"
+    ttype-id target run-name state status owner event-time comment fail-count pass-count))
+
+;;======================================================================
+;;  T E S T S
+;;======================================================================
+
+;; given run-id, test_name and item_path return test-id
+;;
+(define (pgdb:get-test-id dbh run-id test-name item-path)
+  (dbi:get-one
+   dbh
+   "SELECT id FROM tests WHERE run_id=? AND test_name=? AND item_path=?;"
+   run-id test-name item-path))
+
+;; create new test record
+;;
+(define (pgdb:insert-test dbh run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived)
+  (dbi:exec
+   dbh
+   "INSERT INTO tests (run_id,test_name,item_path,state,status,host,cpuload,diskfree,uname,rundir,final_logf,run_duration,comment,event_time,archived)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);"
+
+   run-id  test-name item-path    state   status     host  cpuload diskfree uname
+   run-dir log-file  run-duration comment event-time archived))
+
+;; update existing test record
+;;
+(define (pgdb:update-test dbh test-id run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived)
+  (dbi:exec
+   dbh
+   "UPDATE tests SET
+      run_id=?,test_name=?,item_path=?,state=?,status=?,host=?,cpuload=?,diskfree=?,uname=?,rundir=?,final_logf=?,run_duration=?,comment=?,event_time=?,archived=?
+    WHERE id=?;"
+
+   run-id  test-name item-path    state   status     host  cpuload diskfree uname
+   run-dir log-file  run-duration comment event-time archived test-id))

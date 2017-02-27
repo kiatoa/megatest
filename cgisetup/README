@@ -1,0 +1,5 @@
+1. copy megatest.config to cgi-bin/.megatest.config
+2. edit cgi-bin/.megatest.config, change appropriate settings
+3. compile mtutil and copy the mtut binary (look in the bin dir)
+   to cgi-bin/megatest
+4. use mtutil to populate your database schema
