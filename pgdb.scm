@@ -174,4 +174,24 @@
    dbh
    "SELECT COUNT(t.id),t.status,r.target FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
         WHERE t.state='COMPLETED' AND r.target LIKE ? GROUP BY t.status,r.target;" target-patt))
-  
+
+(define (pgdb:get-target-types dbh)
+  (dbi:get-rows dbh "SELECT id,target_spec FROM ttype;"))
+
+;; 
+(define (pgdb:get-targets dbh target-patt)
+  (let ((ttypes (pgdb:get-target-types dbh)))
+    (map
+     (lambda (ttype-dat)
+       (let ((tt-id (vector-ref ttype-dat 0))
+	     (ttype (vector-ref ttype-dat 1)))
+	 (cons ttype
+	       (dbi:get-rows 
+		dbh
+		"SELECT DISTINCT target FROM runs WHERE target LIKE ? AND ttype_id=?;" target-patt tt-id))
+	 ))
+     ttypes)))
+
+(define (pgdb:get-targets-of-type dbh ttype-id target-patt)
+  (dbi:get-rows dbh "SELECT DISTINCT target FROM runs WHERE target LIKE ? AND ttype_id=?;" target-patt ttype-id))
+
