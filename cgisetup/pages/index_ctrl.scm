@@ -1,6 +1,26 @@
-;; Copyright 2007-2008, Matthew Welland. Kiatoa.com All rights reserved.
+;;======================================================================
+;; Copyright 2017, Matthew Welland.
 ;; 
-;; this gets read for ALL pages. Don't weigh it down excessively!
+;;  This program is made available under the GNU GPL version 2.0 or
+;;  greater. See the accompanying file COPYING for details.
+;; 
+;;  This program is distributed WITHOUT ANY WARRANTY; without even the
+;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+;;  PURPOSE.
+;;======================================================================
+
+;; a function <pagename>-action is called on POST
+
+(define (index-action action)
+  (case (string->symbol action)
+    ((filter)
+     (let ((target-type   (s:get-input 'target-type))
+	   (target-filter (s:get-input 'tfilter))
+	   (target        (s:get-input 'target)))
+       (s:session-var-set! "target-type" target-type)
+       (s:set! "tfilter" target-filter)
+       (s:session-var-set! "target"  target)
+       (s:session-var-set! "target-filter" target-filter)))))
 
 (define index:kickstart-junk
 #<<EOF
