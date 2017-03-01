@@ -223,7 +223,7 @@
 	  (sqlite3:execute db "PRAGMA synchronous = 0;")
 	  (if (not file-exists)
               (begin
-		(if (and (not (configf:lookup *configdat* "setup" "no-wal"))
+		(if (and (configf:lookup *configdat* "setup" "use-wal")
                          (string-match "^/tmp/.*" fname)) ;; this is a file in /tmp
 		    (sqlite3:execute db "PRAGMA journal_mode=WAL;")
 		    (print "Creating " fname " in NON-WAL mode."))
