@@ -1,5 +1,5 @@
 ;;======================================================================
-;; Copyright 2006-2017, Matthew Welland.
+;; Copyright 2017, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -195,3 +195,30 @@
 (define (pgdb:get-targets-of-type dbh ttype-id target-patt)
   (dbi:get-rows dbh "SELECT DISTINCT target FROM runs WHERE target LIKE ? AND ttype_id=?;" target-patt ttype-id))
 
+;;======================================================================
+;;  V A R I O U S   D A T A   M A S S A G E   R O U T I N E S
+;;======================================================================
+
+;; probably want to move these to a different model file
+
+;; create a hash of hashes with keys extracted from all-parts
+;; using row-or-col to choose row or column
+;;   ht{row key}=>ht{col key}=>data
+;;
+(define (pgdb:coalesce-runs dbh runs all-parts row-or-col)
+  (let* ((data  (make-hash-table)))
+    ;;	 (rnums (
+    ;; for now just do first => remainder
+    (for-each
+     (lambda (run)
+       (let* ((target (vector-ref run 2))
+	      (parts  (string-split target "/"))
+	      (first  (car parts))
+	      (rest   (string-intersperse (cdr parts) "/"))
+	      (coldat (hash-table-ref/default data first #f)))
+	 (if (not coldat)(let ((newht (make-hash-table)))
+			   (hash-table-set! data first newht)
+			   (set! coldat newht)))
+	 (hash-table-set! coldat rest run)))
+     runs)
+    data))
