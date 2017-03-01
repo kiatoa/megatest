@@ -1,14 +1,15 @@
-;; (require-library chicken)
-;; (import chicken)
+;;======================================================================
+;; Copyright 2017, Matthew Welland.
+;; 
+;;  This program is made available under the GNU GPL version 2.0 or
+;;  greater. See the accompanying file COPYING for details.
+;; 
+;;  This program is distributed WITHOUT ANY WARRANTY; without even the
+;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+;;  PURPOSE.
+;;======================================================================
 
-(include "../../pgdb.scm")
-(declare (uses pgdb))
-
-;; (include "src/common_records.scm")
+(load "models/pgdb.scm")
 (include "pages/index_ctrl.scm")
-(define (pages:index session db shared)
-  ;; (s:log " HTTP_COOKIE=" (get-environment-variable "HTTP_COOKIE"))
-  (include "pages/index_view.scm")
-  ;; (s:html (s:head "head")(s:body "Got here" (current-directory)))
-)
+(include "pages/index_view.scm")
 
