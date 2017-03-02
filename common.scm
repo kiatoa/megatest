@@ -638,6 +638,7 @@
 	(debug-mode  (debug:debug-mode 1))
 	(last-time   (current-seconds))
         (this-wd-num     (begin (mutex-lock! *wdnum*mutex) (let ((x *wdnum*)) (set! *wdnum* (add1 *wdnum*)) (mutex-unlock! *wdnum*mutex) x))))
+    (debug:print-info 2 *default-log-port* "Periodic sync thread started.")
     (debug:print-info 3 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id)" this-wd-num="this-wd-num)
     (if (and legacy-sync (not *time-to-exit*))
 	(let* (;;(dbstruct (db:setup))
