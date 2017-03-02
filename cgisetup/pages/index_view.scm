@@ -23,9 +23,10 @@
 	 ;; (target      (s:session-var-get "target"))
 	 ;; (target-patt (or target "%"))
 	 (row-or-col  (string-split (or (s:session-var-get "row-or-col") "") ","))
-	 (all-data    (pgdb:get-stats-given-target dbh tfilter))
+	 (all-data    (if selected (pgdb:get-stats-given-target dbh selected tfilter)
+			  '()))
 	 ;; (all-data    (pgdb:get-tests dbh tfilter))
-	 (ordered-data (pgdb:coalesce-runs dbh all-data all-parts row-or-col)))
+	 (ordered-data (pgdb:coalesce-runs dbh all-data all-parts row-or-col 0)))
     
     (list
      "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">"
@@ -37,7 +38,7 @@
       (s:body
        ;; (s:session-var-get "target-type")
        ;; (conc " selected = " selected ", ttypes = " ttypes ", curr-ttype = " curr-ttype ", curr-trec = " curr-trec)
-       (conc (hash-table->alist ordered-data))
+       ;; (conc (hash-table->alist ordered-data))
        (s:div 'class "grid flex" 'id "top_of_page"
 	      ;; add visible to columns to help visualize them e.g. "col_12 visible"
 	      ;; BEGINNING OF HEADER
@@ -59,48 +60,81 @@
 			      (s:input 'type "submit" 'name "set-filter-vals" 'value "Submit" 'class "col_3"))
 		       ;; use radio buttons to select whether to put this identifier in row or column.
 		       ;; this seems clumsly and takes up a lot of screen realestate
-		       (s:div 'class "col_12"
-			      (s:div 'class "col_1" "identifier")
-			      (map (lambda (target-var)
-				     (s:div 'class "col_1" target-var))
-				   all-parts))
-		       (s:div 'class "col_12"
-			      (s:div 'class "col_1" "row")
-			      (map (lambda (target-var)
-				     (s:div 'class "col_1" (s:input 'type "checkbox" 'name "row-or-col" 'value target-var
-								    ;; this silly trick preserves the checkmark
-								    (if (member target-var row-or-col) 'checked "")
-								    "")))
-				   all-parts))))
+		       ;; (s:div 'class "col_12"
+		       ;; 	      (s:div 'class "col_1" "identifier")
+		       ;; 	      (map (lambda (target-var)
+		       ;; 		     (s:div 'class "col_1" target-var))
+		       ;; 		   all-parts))
+		       ;; (s:div 'class "col_12"
+		       ;; 	      (s:div 'class "col_1" "row")
+		       ;; 	      (map (lambda (target-var)
+		       ;; 		     (s:div 'class "col_1" (s:input 'type "checkbox" 'name "row-or-col" 'value target-var
+		       ;; 						    ;; this silly trick preserves the checkmark
+		       ;; 						    (if (member target-var row-or-col) 'checked "")
+		       ;; 						    "")))
+		       ;; 		   all-parts))
+		       ))
 		     (s:fieldset
 		      (conc "Runs data for " tfilter)
 		      ;;
-		      ;; This is completely wrong!!! However it may provide some ideas!
+		      ;; A very basic display
 		      ;;
-		      (s:table
-		       (map
-			(lambda (key)
-			  (let ((subdat (hash-table-ref ordered-data key)))
-			    (s:tr (s:td key)
-				  (map
-				   (lambda (remkey)
-				     (s:td remkey
-					   (let ((dat (hash-table-ref subdat remkey)))
-					     (s:td (vector-ref dat 1) (vector-ref dat 0)))))
-				   (sort (hash-table-keys subdat) string>=?)))))
-			(sort (hash-table-keys ordered-data) string>=?)))
-		      
-		;;(map (lambda (area)
-		;;	     (s:p "data=" (conc area)))
-		;;	   ;; (pgdb:get-tests dbh tfilter))
-		;;	   (pgdb:get-stats-given-target dbh tfilter))
-			   
-
-
-			   
-		      index:jquery
-		      index:javascript
-		      ))))))))
+		      (let* ((a-keys (sort (hash-table-keys ordered-data) string>=?))
+			     (b-keys (sort (apply
+					      append
+					      (map (lambda (sub-key)
+						     (let ((subdat (hash-table-ref ordered-data sub-key)))
+						       (hash-table-keys subdat)))
+						   a-keys))
+					   string>=?)))
+			(if #f ;; swap rows/cols
+			    (s:table
+			     (s:tr (s:td "")(map s:tr b-keys))
+			     (map
+			      (lambda (row-key)
+				(let ((subdat (hash-table-ref ordered-data row-key)))
+				  (s:tr (s:td row-key)
+					(map
+					 (lambda (col-key)
+					   (s:td (let ((dat (hash-table-ref/default subdat col-key #f)))
+						   (s:td (if dat
+							     (list (vector-ref dat 1) (vector-ref dat 0))
+							     "")))))
+					 b-keys))))
+			      a-keys))
+			    (s:table
+			     (s:tr (s:td "")(map s:td a-keys))
+			     (map
+			      (lambda (row-key)
+				(s:tr (s:td row-key)
+				      (map
+				       (lambda (col-key)
+					 (let ((val (let* ((ht  (hash-table-ref/default ordered-data col-key #f)))
+						      (if ht (hash-table-ref/default ht row-key #f)))))
+					   (if val
+					       (let* ((total (vector-ref val 1))
+						      (pass  (vector-ref val 2))
+						      (fail  (vector-ref val 3))
+						      (other (vector-ref val 4))
+						      (passper (round (* (/ pass total) 100)))
+						      (failper (- 100 passper)))
+						 (s:td 'style (conc "background: linear-gradient(to right, green " passper "%, red " failper "%);")
+						       (conc total "/" pass "/" fail "/" other)))
+					       (s:td ""))))
+				       a-keys)))
+			      b-keys))))))
+		     
+	      ;;(map (lambda (area)
+	      ;;	     (s:p "data=" (conc area)))
+	      ;;	   ;; (pgdb:get-tests dbh tfilter))
+	      ;;	   (pgdb:get-stats-given-target dbh tfilter))
+	      
+	      
+	      
+	      
+	      index:jquery
+	      index:javascript
+	      ))))))
 
   
 		       ;; 	  (s:div 'class "col_12"
