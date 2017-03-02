@@ -208,6 +208,8 @@
 ;; returns: db existed-prior-to-opening
 ;; RA => Returns a db handler; sets the lock if opened in writable mode
 ;;
+;;(define *db-open-mutex* (make-mutex))
+
 (define (db:lock-create-open fname initproc)
   (let* ((parent-dir   (or (pathname-directory fname)(current-directory))) ;; no parent? go local
 	 (dir-writable (file-write-access? parent-dir))
@@ -215,6 +217,7 @@
 	 (file-write   (if file-exists
 			   (file-write-access? fname)
 			   dir-writable )))
+    ;;(mutex-lock! *db-open-mutex*) ;; tried this mutex, not clear it helped.
     (if file-write ;; dir-writable
 	(let (;; (lock    (obtain-dot-lock fname 1 5 10))
 	      (db      (sqlite3:open-database fname)))
@@ -229,10 +232,18 @@
 		    (print "Creating " fname " in NON-WAL mode."))
 		(initproc db)))
 	  ;; (release-dot-lock fname)
+          ;;(mutex-unlock! *db-open-mutex*)
 	  db)
 	(begin
 	  (debug:print 2 *default-log-port* "WARNING: opening db in non-writable dir " fname)
-	  (sqlite3:open-database fname))))) ;; )
+	  (let ((db (sqlite3:open-database fname)))
+            ;;(mutex-unlock! *db-open-mutex*)
+            db))))) ;; )
+
+
+
+
+
 
 ;; ;; This routine creates the db. It is only called if the db is not already opened
 ;; ;; 
@@ -345,11 +356,12 @@
 ;;   NOTE: returns a dbdat not a dbstruct!
 ;;
 (define (db:open-megatest-db #!key (path #f)(name #f))
-  (let* ((dbpath       (conc (or path *toppath*) "/" (or name "megatest.db")))
+  (let* ((dbdir        (or path *toppath*))
+         (dbpath       (conc  dbdir "/" (or name "megatest.db")))
 	 (dbexists     (file-exists? dbpath))
 	 (db           (db:lock-create-open dbpath
 					    (lambda (db)
-					      (db:initialize-main-db db)
+                                              (db:initialize-main-db db)
 					      (db:initialize-run-id-db db))))
 	 (write-access (file-write-access? dbpath)))
     (debug:print-info 13 *default-log-port* "db:open-megatest-db "dbpath)
@@ -1052,6 +1064,8 @@
 ;;)
 
 (define (db:initialize-main-db dbdat)
+  (when (not *configinfo*)
+           (launch:setup)) ;; added because Elena was getting stack dump because *configinfo* below was #f.
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
 	 (keys     (keys:config-get-fields configdat))
 	 (havekeys (> (length keys) 0))
