@@ -208,7 +208,7 @@
 ;; returns: db existed-prior-to-opening
 ;; RA => Returns a db handler; sets the lock if opened in writable mode
 ;;
-(define *db-open-mutex* (make-mutex))
+;;(define *db-open-mutex* (make-mutex))
 
 (define (db:lock-create-open fname initproc)
   (let* ((parent-dir   (or (pathname-directory fname)(current-directory))) ;; no parent? go local
@@ -217,7 +217,7 @@
 	 (file-write   (if file-exists
 			   (file-write-access? fname)
 			   dir-writable )))
-    (mutex-lock! *db-open-mutex*)
+    ;;(mutex-lock! *db-open-mutex*) ;; tried this mutex, not clear it helped.
     (if file-write ;; dir-writable
 	(let (;; (lock    (obtain-dot-lock fname 1 5 10))
 	      (db      (sqlite3:open-database fname)))
@@ -232,12 +232,12 @@
 		    (print "Creating " fname " in NON-WAL mode."))
 		(initproc db)))
 	  ;; (release-dot-lock fname)
-          (mutex-unlock! *db-open-mutex*)
+          ;;(mutex-unlock! *db-open-mutex*)
 	  db)
 	(begin
 	  (debug:print 2 *default-log-port* "WARNING: opening db in non-writable dir " fname)
 	  (let ((db (sqlite3:open-database fname)))
-            (mutex-unlock! *db-open-mutex*)
+            ;;(mutex-unlock! *db-open-mutex*)
             db))))) ;; )
 
 
