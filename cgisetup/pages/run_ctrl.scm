@@ -9,8 +9,11 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use regex)
-;; (load "models/pgdb.scm")
-(include "pages/index_ctrl.scm")
-(include "pages/index_view.scm")
+;; a function <pagename>-action is called on POST
+
+(define (run-action action)
+  (case (string->symbol action)
+    ((dosomething)
+     (dosomething))))
+
 
