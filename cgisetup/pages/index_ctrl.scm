@@ -13,20 +13,7 @@
 
 (define (index-action action)
   (case (string->symbol action)
-    ((filter)
-     (let ((target-type   (s:get-input 'target-type))
-	   (target-filter (s:get-input 'tfilter))
-	   (target        (s:get-input 'target))
-	   (row-or-col    (s:get-input 'row-or-col)))
-       ;; should not be using session vars for these, session vars are not multi-tab
-       ;; resistant (thinking of you Jeff!)
-       (s:session-var-set! "row-or-col" (if (list? row-or-col)
-					    (string-intersperse row-or-col ",")
-					    row-or-col))
-       (s:session-var-set! "target-type" target-type)
-       (s:set! "tfilter" target-filter)
-       (s:session-var-set! "target"  target)
-       (s:session-var-set! "target-filter" target-filter)))))
+    (else #f)))
 
 ;;======================================================================
 ;; Below are the raw chunks of html, css and jquery stuff needed to make

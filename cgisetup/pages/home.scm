@@ -10,7 +10,7 @@
 ;;======================================================================
 
 (use regex)
-;; (load "models/pgdb.scm")
-(include "pages/index_ctrl.scm")
-(include "pages/index_view.scm")
+(load "models/pgdb.scm")
+(include "pages/home_ctrl.scm")
+(include "pages/home_view.scm")
 

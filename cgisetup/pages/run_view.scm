@@ -9,8 +9,12 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use regex)
-;; (load "models/pgdb.scm")
-(include "pages/index_ctrl.scm")
-(include "pages/index_view.scm")
-
+(define (pages:run session db shared)
+  (let* ((dbh         (s:db))
+	 (target      (s:get-param 'target)))
+    
+    (s:div 'class "col_12"
+	   (s:fieldset
+	    "Show a run"
+	    target))))
+		      

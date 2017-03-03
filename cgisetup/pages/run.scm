@@ -9,8 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use regex)
-;; (load "models/pgdb.scm")
-(include "pages/index_ctrl.scm")
-(include "pages/index_view.scm")
+(load "models/pgdb.scm")
+(include "pages/run_ctrl.scm")
+(include "pages/run_view.scm")
 
