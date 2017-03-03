@@ -102,7 +102,7 @@
 			  (debug:print-info 2 *default-log-port* "connected to " (http-transport:server-dat-make-url start-res))
 			  start-res)
 			(begin    ;; login failed but have a server record, clean out the record and try again
-			  (debug:print-info 0 *default-log-port* "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
+			  (debug:print-info 0 *default-log-port* "client:setup, login failed, will attempt to start server ... start-res=" start-res ", server-dat=" server-dat) ;; had runid.  Fixes part of Randy;s ticket 1405717332
 			  (case *transport-type* 
 			    ((http)(http-transport:close-connections)))
 			  (remote-conndat-set! runremote #f)  ;; (hash-table-delete! runremote run-id)
