@@ -378,8 +378,26 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
 (define *watchdog* (make-thread common:watchdog "Watchdog thread"))
 
-(if (not (args:get-arg "-server"))
-    (thread-start! *watchdog*)) ;; if starting a server; wait till we get to running state before kicking off watchdog
+;;(if (not (args:get-arg "-server"))
+;;    (thread-start! *watchdog*)) ;; if starting a server; wait till we get to running state before kicking off watchdog
+(let* ((no-watchdog-args
+       '("-list-runs"
+         "-list-servers"
+         "-server"
+         "-list-disks"
+         "-list-targets"
+         "-show-runconfig"
+         ;;"-list-db-targets"
+         "-show-runconfig"
+         "-show-config"
+         "-show-cmdinfo"))
+       (no-watchdog-args-vals (filter (lambda (x) x)
+                                      (map args:get-arg no-watchdog-args)))
+       (start-watchdog (null? no-watchdog-args-vals)))
+  ;;(BB> "no-watchdog-args="no-watchdog-args "no-watchdog-args-vals="no-watchdog-args-vals) 
+  (if start-watchdog
+      (thread-start! *watchdog*)))
+
 
 ;; bracket open-output-file with code to make leading directory if it does not exist and handle exceptions
 (define (open-logfile logpath)
