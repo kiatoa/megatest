@@ -202,6 +202,11 @@
 (define (pgdb:get-targets-of-type dbh ttype-id target-patt)
   (dbi:get-rows dbh "SELECT DISTINCT target FROM runs WHERE target LIKE ? AND ttype_id=?;" target-patt ttype-id))
 
+(define (pgdb:get-runs-by-target dbh targets)
+   (dbi:get-rows dbh "SELECT r.run_name, t.test_name, t.status, t.item_path FROM runs as r INNER JOIN tests AS t ON t.run_id=r.id  
+                          WHERE t.state='COMPLETED' AND r.target like ?;" targets)
+)
+
 ;;======================================================================
 ;;  V A R I O U S   D A T A   M A S S A G E   R O U T I N E S
 ;;======================================================================
@@ -229,5 +234,19 @@
 			   (hash-table-set! data first newht)
 			   (set! coldat newht)))
 	 (hash-table-set! coldat rest run)))
+     runs)
+    data))
+
+(define (pgdb:runs-to-hash runs )
+  (let* ((data  (make-hash-table)))
+    (for-each
+     (lambda (run)
+       (let* ((run-name (vector-ref run 0))
+	      (test (conc (vector-ref run 1) ":" (vector-ref run 3)))
+	      (coldat (hash-table-ref/default data run-name #f)))
+	 (if (not coldat)(let ((newht (make-hash-table)))
+			   (hash-table-set! data run-name newht)
+			   (set! coldat newht)))
+	 (hash-table-set! coldat test run)))
      runs)
     data))
