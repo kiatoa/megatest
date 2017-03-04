@@ -63,12 +63,15 @@
 	     ;; 						    "")))
 	     ;; 		   all-parts))
 	     ))
+           (s:br) 
+           (s:p "&nbsp;&nbsp;Result Format: &nbsp;&nbsp;total / pass / fail / other")
+
 	   (s:fieldset
 	    (conc "Runs data for " tfilter)
 	    ;;
 	    ;; A very basic display
 	    ;;
-	    (let* ((a-keys (sort (hash-table-keys ordered-data) string>=?))
+            	    (let* ((a-keys (sort (hash-table-keys ordered-data) string>=?))
 		   (b-keys (delete-duplicates(sort (apply
 				  append
 				  (map (lambda (sub-key)
