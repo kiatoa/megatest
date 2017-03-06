@@ -27,6 +27,8 @@
 
 (require-library stml)
 
+(define *target-mappers* '())
+
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.mtutilrc")))
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
@@ -151,6 +153,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	#f
 	(or inlst *arg-keys*)))
 
+;;======================================================================
+;;  U T I L S
+;;======================================================================
+
 ;; given a mtutil param, return the old megatest equivalent
 ;;
 (define (param-translate param)
@@ -161,6 +167,25 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   (-test-patt . "-testpatt")
 		   (-msg       . "-m")))
       param))
+
+(define (val->alist val)
+  (let ((val-list (string-split-fields ";\\s*" val #:infix)))
+    (if val-list
+	(map (lambda (x)
+	       (let ((f (string-split-fields "\\s*=\\s*" x #:infix)))
+		 (case (length f)
+		   ((0) `(,#f))  ;; null string case
+		   ((1) `(,(string->symbol (car f))))
+		   ((2) `(,(string->symbol (car f)) . ,(cadr f)))
+		   (else f))))
+	     val-list)
+	'())))
+
+(define (push-run-spec torun contour runkey spec)
+  (configf:section-var-set! torun contour runkey
+			    (cons spec
+				  (or (configf:lookup torun contour runkey)
+				      '()))))
 
 ;; Card types:
 ;;
@@ -265,6 +290,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; collect, translate, collate and assemble a pkt from the command-line
 ;;
+;; sched => force the run start time to be recorded as sched Unix
+;; epoch. This aligns times properly for triggers in some cases.
+;;
 (define (command-line->pkt action args-alist sched-in)
   (let* ((sched     (cond
 		     ((vector? sched-in)(local-time->seconds sched-in)) ;; we recieved a time
@@ -316,10 +344,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; make a run request pkt from basic data
 ;;
+;; Override the run start time record with sched. Usually #f is fine.
+;;
 (define (create-run-pkt mtconf area runkey runname mode-patt tag-expr pktsdir reason contour sched) 
-  (let* ((area-dat   (string-split (or (configf:lookup mtconf "areas" area) "")))
-	 (area-path  (car area-dat))
-	 (area-xlatr (if (eq? (length area-dat) 2)(cadr area-dat) #f))
+  (let* ((area-dat   (val->alist (or (configf:lookup mtconf "areas" area) "")))
+	 (area-path  (alist-ref 'path      area-dat))
+	 (area-xlatr (alist-ref 'targtrans area-dat))
 	 (new-target (if area-xlatr
 			 (let ((xlatr-key (string->symbol area-xlatr)))
 			   (if (alist-ref xlatr-key *target-mappers*)
@@ -333,8 +363,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				       (print " message: " ((condition-property-accessor 'exn 'message) exn))
 				       runkey)
 				   ((alist-ref xlatr-key *target-mappers*)
-				    runkey runname area area-path reason contour mode-patt)))))
+				    runkey runname area area-path reason contour mode-patt)))
+			       (begin
+				 (print "ERROR: Failed to find named target translator " xlatr-key ", using original target.")
+				 runkey)))
 			 runkey)))
+    (print "area-path: " area-path " area-xlatr: " area-xlatr " orig-target: " runkey " new-target: " new-target)
     (let-values (((uuid pkt)
 		  (command-line->pkt
 		   "run"
@@ -359,137 +393,196 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(lambda ()
 	  (print pkt))))))
 
+(use trace)(trace create-run-pkt)
+
 ;; collect all needed data and create run pkts for contours with changed inputs
 ;;
 (define (generate-run-pkts mtconf toppath)
-  (with-queue-db
-   mtconf
-   (lambda (pktsdirs pktsdir pdb)
-     (let* ((rgconfdat (find-and-read-config (conc toppath "/runconfigs.config")))
-	    (rgconf    (car rgconfdat))
-	    (areas     (map car (configf:get-section mtconf "areas")))
-	    (contours  (configf:get-section mtconf "contours"))
-	    (torun     (make-hash-table)) ;; target => ( ... info ... )
-	    (rgentargs (hash-table-keys rgconf))) ;; these are the targets registered for automatically triggering
-       
-       (for-each
-	(lambda (runkey)
-	  (let* ((keydats   (configf:get-section rgconf runkey)))
-	    (for-each
-	     (lambda (sense) ;; these are the sense rules
-	       (let* ((key        (car sense))
-		      (val        (cadr sense))
-		      (keyparts   (string-split key ":"))
-		      (contour    (car keyparts))
-		      (len-key    (length keyparts))
-		      (ruletype   (if (> len-key 1)(cadr keyparts) #f))
-		      (action     (if (> len-key 2)(caddr keyparts) #f))
-		      (val-list   (string-split-fields ";\\s*" val #:infix)) ;; (string-split val)) ;; runname-rule params
-		      (val-alist  (if val-list
-				      (map (lambda (x)
-					     (let ((f (string-split-fields "\\s*=\\s*" x #:infix)))
-					       (case (length f)
-						 ((0) `(,#f))  ;; null string case
-						 ((1) `(,(string->symbol (car f))))
-						 ((2) `(,(string->symbol (car f)) . ,(cadr f)))
-						 (else f))))
-					   val-list)
-				      '()))
-		      (runname    (make-runname "" ""))
-		      (runstarts  (find-pkts pdb '(runstart) `((o . ,contour)
-							       (t . ,runkey))))
-		      (rspkts     (map (lambda (x)
-					 (alist-ref 'pkta x))
-				       runstarts))
-		      (starttimes ;; sort by age (youngest first) and delete duplicates by target
-		       (delete-duplicates
-			(sort 
-			 (map (lambda (x)
-				`(,(alist-ref 't x) . ,(string->number (alist-ref 'D x))))
-			      rspkts)
-			 (lambda (a b)(> (cdr a)(cdr b))))      ;; sort descending
-			(lambda (a b)(equal? (car a)(car b))))) ;; remove duplicates by target
-		      )
-		 ;; look in runstarts for matching runs by target and contour
-		 ;; get the timestamp for when that run started and pass it
-		 ;; to the rule logic here where "ruletype" will be applied
-		 ;; if it comes back "changed" then proceed to register the runs
-		 
-		 (case (string->symbol (or ruletype "no-such-rule"))
-                   ((no-such-rule) (print "ERROR: no such rule for " sense))
-		   ((scheduled)
-		    (if (not (alist-ref 'cron val-alist)) ;; gotta have cron spec
-			(print "ERROR: bad sense spec \"" (string-intersperse sense " ") "\" params: " val-alist)
-			(let* ((run-name (alist-ref 'run-name val-alist))
-			       (crontab  (alist-ref 'cron     val-alist))
-			       (action   (alist-ref 'action   val-alist))
-			       (last-run (if (null? starttimes) ;; never run
-					     0
-					     (apply max (map cdr starttimes))))
-			       (need-run (common:cron-event crontab #f last-run))
-			       (runname  (if need-run (conc "sched" (time->string (seconds->local-time (current-seconds)) "%M%H%d")))))
-			  (print "last-run: " last-run " need-run: " need-run)
-			  (if need-run
-			      (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (string-intersperse (string-split (alist-ref 'cron val-alist)) "-"))
-									       ,runname ,need-run ,action))))))
-		   ((file file-or) ;; one or more files must be newer than the reference
-		    (let* ((file-globs  (alist-ref 'glob val-alist))
-			   (youngestdat (common:get-youngest (common:bash-glob file-globs)))
-			   (youngestmod (car youngestdat)))
-		      ;; (print "youngestmod: " youngestmod " starttimes: " starttimes)
-		      (if (null? starttimes) ;; this target has never been run
-			  (configf:section-var-set! torun contour runkey `("file:neverrun" ,runname))
-			  (for-each
-			   (lambda (starttime) ;; look at the time the last run was kicked off for this contour
-			     (if (> youngestmod (cdr starttime))
-				 (begin
-				   (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
-				   (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (cadr youngestdat)) ,runname #f)))))
-			   starttimes))
-		      ))
-		   ((file-and) ;; all files must be newer than the reference
-		    (let* ((file-globs  (alist-ref 'glob val-alist))
-			   (youngestdat (common:get-youngest file-globs))
-			   (youngestmod (car youngestdat))
-			   (success     #t)) ;; any cases of not true, set flag to #f for AND
-		      ;; (print "youngestmod: " youngestmod " starttimes: " starttimes)
-		      (if (null? starttimes) ;; this target has never been run
-			  (configf:section-var-set! torun contour runkey `("file:neverrun" ,runname #f))
-			  (for-each
-			   (lambda (starttime) ;; look at the time the last run was kicked off for this contour
-			     (if (< youngestmod (cdr starttime))
-				 (set! success #f)))
-			   starttimes))
-		      (if success
-			  (begin
-			    (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
-			    (configf:section-var-set! torun contour runkey `(,(conc ruletype ":" (cadr youngestdat)) ,runname #f))))))
-		   )))
-	     keydats)))
-	(hash-table-keys rgconf))
-       
-       ;; now have to run populated
-       (for-each
-	(lambda (contour)
-	  (let* ((mode-tag  (string-split (or (configf:lookup mtconf "contours" contour) "") "/"))
-		 (mode-patt (if (eq? (length mode-tag) 2)(cadr mode-tag) #f))
-		 (tag-expr  (if (null? mode-tag) #f (car mode-tag))))
-	    (for-each
-	     (lambda (runkeydat)
-	       (let* ((runkey (car runkeydat))
-		      (info   (cadr runkeydat)))
-		 (for-each
-		  (lambda (area)
-		    (if (< (length info) 3)
-			(print "ERROR: bad info data for " contour ", " runkey ", " area)
-			(let ((runname (cadr info))
-			      (reason  (car  info))
-			      (sched   (caddr info)))
-			  (print "runkey: " runkey " contour: " contour " info: " info " area: " area  " tag-expr: " tag-expr " mode-patt: " mode-patt)
-			  (create-run-pkt mtconf area runkey runname mode-patt tag-expr pktsdir reason contour sched))))
-		  areas)))
-	     (configf:get-section torun contour))))
-	(hash-table-keys torun))))))
+  (let ((std-runname (conc "sched"  (time->string (seconds->local-time (current-seconds)) "%M%H%d"))))
+    (with-queue-db
+     mtconf
+     (lambda (pktsdirs pktsdir pdb)
+       (let* ((rgconfdat (find-and-read-config (conc toppath "/runconfigs.config")))
+	      (rgconf    (car rgconfdat))
+	      (all-areas (map car (configf:get-section mtconf "areas")))
+	      (contours  (configf:get-section mtconf "contours"))
+	      (torun     (make-hash-table)) ;; target => ( ... info ... )
+	      (rgentargs (hash-table-keys rgconf))) ;; these are the targets registered for automatically triggering
+	 
+	 (for-each
+	  (lambda (runkey)
+	    (let* ((keydats   (configf:get-section rgconf runkey)))
+	      (for-each
+	       (lambda (sense) ;; these are the sense rules
+		 (let* ((key        (car sense))
+			(val        (cadr sense))
+			(keyparts   (string-split key ":"))
+			(contour    (car keyparts))
+			(len-key    (length keyparts))
+			(ruletype   (if (> len-key 1)(cadr keyparts) #f))
+			(action     (if (> len-key 2)(caddr keyparts) #f))
+			;; (val-list   (string-split-fields ";\\s*" val #:infix)) ;; (string-split val)) ;; runname-rule params
+			(val-alist  (val->alist val))
+			(runname    (make-runname "" ""))
+			(runstarts  (find-pkts pdb '(runstart) `((o . ,contour)
+								 (t . ,runkey))))
+			(rspkts     (map (lambda (x)
+					   (alist-ref 'pkta x))
+					 runstarts))
+			(starttimes ;; sort by age (youngest first) and delete duplicates by target
+			 (delete-duplicates
+			  (sort 
+			   (map (lambda (x)
+				  `(,(alist-ref 't x) . ,(string->number (alist-ref 'D x))))
+				rspkts)
+			   (lambda (a b)(> (cdr a)(cdr b))))      ;; sort descending
+			  (lambda (a b)(equal? (car a)(car b))))) ;; remove duplicates by target
+			(last-run (if (null? starttimes) ;; if '() then it has never been run, else get the max
+				      0
+				      (apply max (map cdr starttimes))))
+			)
+		   ;; look in runstarts for matching runs by target and contour
+		   ;; get the timestamp for when that run started and pass it
+		   ;; to the rule logic here where "ruletype" will be applied
+		   ;; if it comes back "changed" then proceed to register the runs
+		   
+		   (case (string->symbol (or ruletype "no-such-rule"))
+		     ((no-such-rule) (print "ERROR: no such rule for " sense))
+		     ((scheduled)
+		      (if (not (alist-ref 'cron val-alist)) ;; gotta have cron spec
+			  (print "ERROR: bad sense spec \"" (string-intersperse sense " ") "\" params: " val-alist)
+			  (let* ((run-name (alist-ref 'run-name val-alist))
+				 (target   (alist-ref 'target   val-alist))
+				 (crontab  (alist-ref 'cron     val-alist))
+				 (action   (alist-ref 'action   val-alist))
+				 (need-run (common:cron-event crontab #f last-run))
+				 (runname  std-runname)) ;; (conc "sched" (time->string (seconds->local-time (current-seconds)) "%M%H%d")))))
+			    (print "last-run: " last-run " need-run: " need-run)
+			    (if need-run
+				(push-run-spec torun contour runkey
+							  `((message . ,(conc ruletype ":" (string-intersperse (string-split (alist-ref 'cron val-alist)) "-")))
+							    (runname . ,runname)
+							    (action  . ,action)
+							    (target  . ,target)))))))
+		     ((script)
+		      ;; syntax is a little different here. It is a list of commands to run, "scriptname = extra_parameters;scriptname = ..."
+		      ;; where scriptname may be repeated multiple times. The script must return unix-epoch of last change, new-target-name and new-run-name
+		      ;; the script is called like this:  scriptname contour runkey std-runname action extra_param1 extra_param2 ...
+		      (for-each
+		       (lambda (cmd)
+			 (print "cmd: " cmd)
+			 (let* ((script (car cmd))
+				(params (cdr cmd))
+				(cmd    (conc script " " contour " " runkey " " std-runname " " action " " params))
+				(res    (handle-exceptions
+					    exn
+					    #f
+					  (print "Running " cmd)
+					  (with-input-from-pipe cmd read-lines))))
+			   (if (and res (not (null? res)))
+			       (let* ((parts       (string-split (car res))) ;;
+				      (rem-lines   (cdr res))
+				      (num-parts   (length parts))
+				      (last-change (string->number (if (> num-parts 0)(car parts) "abc")))  ;; force no run if not a number returned
+				      (new-target  (if (> num-parts 1)
+						       (cadr parts)
+						       runkey))
+				      (new-runname (if (> num-parts 2)
+						       (caddr parts)
+						       std-runname))
+				      (message     (if (null? rem-lines)
+						       cmd
+						       (string-intersperse rem-lines "-")))
+				      (need-run    (> last-change last-run)))
+				 (print "last-run: " last-run " need-run: " need-run)
+				 (if need-run
+				     (let* ((key-msg    `((message  . ,(conc ruletype ":" message))
+							  (runname  . ,runname)
+							  (action   . ,action)
+							  (target   . ,new-target))))
+				       (print "key-msg: " key-msg)
+				       (push-run-spec torun contour runkey key-msg)))))))
+		       val-alist)) ;; iterate over the param split by ;\s*
+		     ((file file-or) ;; one or more files must be newer than the reference
+		      (let* ((file-globs  (alist-ref 'glob val-alist))
+			     (youngestdat (common:get-youngest (common:bash-glob file-globs)))
+			     (youngestmod (car youngestdat)))
+			;; (print "youngestmod: " youngestmod " starttimes: " starttimes)
+			(if (null? starttimes) ;; this target has never been run
+			    (push-run-spec torun contour runkey
+					   `((message . "file:neverrun")
+					     (runname . ,runname)))
+			    (for-each
+			     (lambda (starttime) ;; look at the time the last run was kicked off for this contour
+			       (if (> youngestmod (cdr starttime))
+				   (begin
+				     (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
+				     (push-run-spec torun contour runkey
+						    `((message . ,(conc ruletype ":" (cadr youngestdat)))
+						      (runname . ,runname)
+						      )))))
+			     starttimes))
+			))
+		     ((file-and) ;; all files must be newer than the reference
+		      (let* ((file-globs  (alist-ref 'glob val-alist))
+			     (youngestdat (common:get-youngest file-globs))
+			     (youngestmod (car youngestdat))
+			     (success     #t)) ;; any cases of not true, set flag to #f for AND
+			;; (print "youngestmod: " youngestmod " starttimes: " starttimes)
+			(if (null? starttimes) ;; this target has never been run
+			    (push-run-spec torun contour runkey `("file:neverrun" ,runname #f))
+			    (for-each
+			     (lambda (starttime) ;; look at the time the last run was kicked off for this contour
+			       (if (< youngestmod (cdr starttime))
+				   (set! success #f)))
+			     starttimes))
+			(if success
+			    (begin
+			      (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
+			      (push-run-spec torun contour runkey
+					     `((message . ,(conc ruletype ":" (cadr youngestdat)))
+					       (runname . ,runname)
+					       ))))))
+		     (else (print "ERROR: unrecognised rule \"" ruletype)))))
+	       keydats)))
+	  (hash-table-keys rgconf))
+	 
+	 ;; now have to run populated
+	 (for-each
+	  (lambda (contour)
+	    (print "contour: " contour)
+	    (let* ((val       (or (configf:lookup mtconf "contours" contour) ""))
+		   (val-alist (val->alist val))
+		   (areas     (string-split (or (alist-ref 'areas val-alist) "") ","))
+		   (selector  (alist-ref 'selector val-alist))
+		   (mode-tag  (string-split selector "/"))
+		   (mode-patt (if (eq? (length mode-tag) 2)(cadr mode-tag) #f))
+		   (tag-expr  (if (null? mode-tag) #f (car mode-tag))))
+	      (for-each
+	       (lambda (runkeydatset)
+		 ;; (print "runkeydatset: ")(pp runkeydatset)
+		 (let ((runkey     (car runkeydatset))
+		       (runkeydats (cadr runkeydatset)))
+		   (for-each
+		    (lambda (runkeydat)
+		      (for-each
+		       (lambda (area)
+			 (let ((runname (alist-ref 'runname runkeydat))
+			       (reason  (alist-ref 'message runkeydat))
+			       (sched   (alist-ref 'sched   runkeydat))
+			       (action  (alist-ref 'action  runkeydat))
+			       (target  (or (alist-ref 'target  runkeydat) runkey))) ;; override with target if forced
+			   (if (and runname reason)
+			       ;; instead of unwrapping the runkeydat alist, pass it directly to create-run-pkt
+			       (create-run-pkt mtconf area runkey runname mode-patt tag-expr pktsdir reason contour sched)
+			       (print "ERROR: Missing info to make a run call: runkey=" runkey " contour=" contour " area=" area  " tag-expr=" tag-expr " mode-patt=" mode-patt)
+			       )))
+		       all-areas))
+		    runkeydats)))
+	       (let ((res (configf:get-section torun contour))) ;; each contour / target
+		 ;; (print "res=" res)
+		 res))))
+	  (hash-table-keys torun)))))))
 
 
 (define (pkt->cmdline pkta)
@@ -515,33 +608,44 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; collect all needed data and create run pkts for contours with changed inputs
 ;;
 (define (dispatch-commands mtconf toppath)
-  (with-queue-db
-   mtconf
-   (lambda (pktsdirs pktsdir pdb)
-     (let* ((rgconfdat (find-and-read-config (conc toppath "/runconfigs.config")))
-	    (rgconf    (car rgconfdat))
-	    (areas     (configf:get-section mtconf "areas"))
-	    (contours  (configf:get-section mtconf "contours"))
-	    (pkts      (find-pkts pdb '(cmd) '()))
-	    (torun     (make-hash-table)) ;; target => ( ... info ... )
-	    (rgentargs (hash-table-keys rgconf))) ;; these are the targets registered for automatically triggering
-       (for-each
-	(lambda (pktdat)
-	  (let* ((pkta    (alist-ref 'pkta pktdat))
-		 (cmdline (pkt->cmdline pkta))
-		 (uuid    (alist-ref 'Z pkta))
-		 (logf    (conc "logs/" uuid "-run.log")))
-	    (system (conc "NBFAKE_LOG=" logf " nbfake " cmdline))
-	    (mark-processed pdb (list (alist-ref 'id pktdat)))
-	    (let-values (((ack-uuid ack-pkt)
-			  (add-z-card
-			   (construct-sdat 'P uuid
-					   'T "runstart"
-					   'c (alist-ref 'o pkta) ;; THIS IS WRONG! SHOULD BE 'c
-					   't (alist-ref 't pkta)))))
-	      (write-pkt pktsdir ack-uuid ack-pkt))))
-	pkts)))))
-
+  ;; we are expecting a directory "logs", check and create it, create the log in /tmp if not able to create logs dir
+  (let ((logdir
+	 (if (if (not (directory? "logs"))
+		 (handle-exceptions
+		     exn
+		     #f
+		   (create-directory "logs")
+		   #t)
+		 #t)
+	     "logs"
+	     "/tmp")))
+    (with-queue-db
+     mtconf
+     (lambda (pktsdirs pktsdir pdb)
+       (let* ((rgconfdat (find-and-read-config (conc toppath "/runconfigs.config")))
+	      (rgconf    (car rgconfdat))
+	      (areas     (configf:get-section mtconf "areas"))
+	      (contours  (configf:get-section mtconf "contours"))
+	      (pkts      (find-pkts pdb '(cmd) '()))
+	      (torun     (make-hash-table)) ;; target => ( ... info ... )
+	      (rgentargs (hash-table-keys rgconf))) ;; these are the targets registered for automatically triggering
+	 (for-each
+	  (lambda (pktdat)
+	    (let* ((pkta    (alist-ref 'pkta pktdat))
+		   (cmdline (pkt->cmdline pkta))
+		   (uuid    (alist-ref 'Z pkta))
+		   (logf    (conc logdir "/" uuid "-run.log")))
+	      (system (conc "NBFAKE_LOG=" logf " nbfake " cmdline))
+	      (mark-processed pdb (list (alist-ref 'id pktdat)))
+	      (let-values (((ack-uuid ack-pkt)
+			    (add-z-card
+			     (construct-sdat 'P uuid
+					     'T "runstart"
+					     'c (alist-ref 'o pkta) ;; THIS IS WRONG! SHOULD BE 'c
+					     't (alist-ref 't pkta)))))
+		(write-pkt pktsdir ack-uuid ack-pkt))))
+	  pkts))))))
+  
 (define (get-pkts-dir mtconf)
   (let ((pktsdirs  (configf:lookup mtconf "setup" "pktsdirs"))
 	(pktsdir   (if pktsdirs (car (string-split pktsdirs " ")) #f)))
