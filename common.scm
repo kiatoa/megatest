@@ -1790,9 +1790,18 @@
 ;;  x/y   => x, x+y, x+2y, x+3y while x+Ny<max_for_field
 ;;  a,b,c => a, b ,c
 ;;
+;;   NOTE: with flatten a lot of the crud below can be factored down.
+;;
 (define (common:cron-expand cron-str)
   (if (list? cron-str)
-      (map common:cron-expand cron-str)
+      (flatten
+       (fold (lambda (x res)
+	       (if (list? x)
+		   (let ((newres (map common:cron-expand x)))
+		     (append x newres))
+		   (cons x res)))
+	     '()
+	     cron-str)) ;; (map common:cron-expand cron-str))
       (let ((cron-items (string-split cron-str))
 	    (slash-rx   (regexp "(\\d+)/(\\d+)"))
 	    (comma-rx   (regexp ".*,.*"))
@@ -1802,7 +1811,7 @@
 			  (month      . 12)
 			  (dayofweek  . 7))))
 	(if (< (length cron-items) 5) ;; bad spec
-	    `(,cron-str)              ;; just return the string, something downstream will fix it
+	    cron-str ;; `(,cron-str)              ;; just return the string, something downstream will fix it
 	    (let loop ((hed  (car cron-items))
 		       (tal  (cdr cron-items))
 		       (type 'min)
@@ -1814,12 +1823,21 @@
 						 (incrn          (string->number incr))
 						 (expanded-vals  (common:expand-cron-slash basen incrn (alist-ref type max-vals)))
 						 (new-list-crons (fold (lambda (x myres)
-									 (cons (conc (string-intersperse res " ") " " x " " (string-intersperse tal " "))
+									 (cons (conc (if (null? res)
+											 ""
+											 (conc (string-intersperse res " ") " "))
+										     x " " (string-intersperse tal " "))
 									       myres))
 								       '() expanded-vals)))
-					    (print "new-list-crons: " new-list-crons)
-					    new-list-crons))
-;;					    (map common:cron-expand (map common:cron-expand new-list-crons))))
+					    ;; (print "new-list-crons: " new-list-crons)
+					    ;; (fold (lambda (x res)
+					    ;; 	    (if (list? x)
+					    ;; 		(let ((newres (map common:cron-expand x)))
+					    ;; 		  (append x newres))
+					    ;; 		(cons x res)))
+					    ;; 	  '()
+					    (flatten (map common:cron-expand new-list-crons))))
+		;;					    (map common:cron-expand (map common:cron-expand new-list-crons))))
 		(else (if (null? tal)
 			  cron-str
 			  (loop (car tal)(cdr tal)(car type-tal)(cdr type-tal)(append res (list hed)))))))))))
@@ -1833,7 +1851,7 @@
 ;;  #t => yes, run the job
 ;;  #f => no, do not run the job
 ;;
-(define (common:cron-event cron-str now-seconds-in last-done) ;; ref-seconds = #f is NOW. 
+(define (common:cron-event cron-str now-seconds-in last-done) ;; ref-seconds = #f is NOW.
   (let* ((cron-items     (map string->number (string-split cron-str)))
 	 (now-seconds    (or now-seconds-in (current-seconds)))
 	 (now-time       (seconds->local-time now-seconds))
@@ -1910,6 +1928,16 @@
 	       (set! before moment))
 	     (sort (hash-table-keys all-times) <))
 	    is-in)))))
+
+(define (common:extended-cron  cron-str now-seconds-in last-done)
+  (let ((expanded-cron (common:cron-expand cron-str)))
+    (let loop ((hed (car expanded-cron))
+	       (tal (cdr expanded-cron)))
+      (if (cron-event hed now-seconds-in last-done)
+	  #t
+	  (if (null? tal)
+	      #f
+	      (loop (car tal)(cdr tal)))))))
 
 ;;======================================================================
 ;; C O L O R S
