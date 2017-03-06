@@ -367,6 +367,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      ))
     (debug:print-error 0 *default-log-port* "Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
+;; before doing anything else change to the start-dir if provided
+;;
+(if (args:get-arg "-start-dir")
+    (if (file-exists? (args:get-arg "-start-dir"))
+	(change-directory (args:get-arg "-start-dir"))
+	(begin
+	  (debug:print-error 0 *default-log-port* "non-existant start dir " (args:get-arg "-start-dir") " specified, exiting.")
+	  (exit 1))))
+
 ;; immediately set MT_TARGET if -reqtarg or -target are available
 ;;
 (let ((targ (or (args:get-arg "-reqtarg")(args:get-arg "-target"))))
@@ -439,13 +448,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (system (conc "(" htmlviewercmd " " manual-html " ) &"))
 	  (system (conc "(" htmlviewercmd " http://www.kiatoa.com/cgi-bin/fossils/megatest/doc/tip/docs/manual/megatest_manual.html ) &")))
       (exit)))
-
-(if (args:get-arg "-start-dir")
-    (if (file-exists? (args:get-arg "-start-dir"))
-	(change-directory (args:get-arg "-start-dir"))
-	(begin
-	  (debug:print-error 0 *default-log-port* "non-existant start dir " (args:get-arg "-start-dir") " specified, exiting.")
-	  (exit 1))))
 
 (if (args:get-arg "-version")
     (begin

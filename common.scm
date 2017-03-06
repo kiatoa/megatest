@@ -1775,6 +1775,55 @@
     (if values
 	(apply values result)
 	(values 0 day 1 0 'd))))
+
+;; given x y lim return the cron expansion
+;;
+(define (common:expand-cron-slash x y lim)
+  (let loop ((curr x)
+	     (res  `()))
+    (if (< curr lim)
+	(loop (+ curr y) (cons curr res))
+	(reverse res))))
+
+;; expand a complex cron string to a list of cron strings
+;;
+;;  x/y   => x, x+y, x+2y, x+3y while x+Ny<max_for_field
+;;  a,b,c => a, b ,c
+;;
+(define (common:cron-expand cron-str)
+  (if (list? cron-str)
+      (map common:cron-expand cron-str)
+      (let ((cron-items (string-split cron-str))
+	    (slash-rx   (regexp "(\\d+)/(\\d+)"))
+	    (comma-rx   (regexp ".*,.*"))
+	    (max-vals   '((min        . 60)
+			  (hour       . 24)
+			  (dayofmonth . 28) ;;; BUG!!!! This will be a bug for some combinations
+			  (month      . 12)
+			  (dayofweek  . 7))))
+	(if (< (length cron-items) 5) ;; bad spec
+	    `(,cron-str)              ;; just return the string, something downstream will fix it
+	    (let loop ((hed  (car cron-items))
+		       (tal  (cdr cron-items))
+		       (type 'min)
+		       (type-tal '(hour dayofmonth month dayofweek))
+		       (res  '()))
+	      (regex-case
+		  hed
+		(slash-rx ( _ base incr ) (let* ((basen          (string->number base))
+						 (incrn          (string->number incr))
+						 (expanded-vals  (common:expand-cron-slash basen incrn (alist-ref type max-vals)))
+						 (new-list-crons (fold (lambda (x myres)
+									 (cons (conc (string-intersperse res " ") " " x " " (string-intersperse tal " "))
+									       myres))
+								       '() expanded-vals)))
+					    (print "new-list-crons: " new-list-crons)
+					    new-list-crons))
+;;					    (map common:cron-expand (map common:cron-expand new-list-crons))))
+		(else (if (null? tal)
+			  cron-str
+			  (loop (car tal)(cdr tal)(car type-tal)(cdr type-tal)(append res (list hed)))))))))))
+		      
 	    
 ;; given a cron string and the last time event was processed return #t to run or #f to not run
 ;;
