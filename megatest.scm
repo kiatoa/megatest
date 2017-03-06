@@ -74,7 +74,7 @@ Usage: megatest [options]
   -version                : print megatest version (currently " megatest-version ")
 
 Launching and managing runs
-  -runall                 : run all tests or as specified by -testpatt
+  -run                    : run all tests or as specified by -testpatt
   -remove-runs            : remove the data for a run, requires -runname and -testpatt
                             Optionally use :state and :status
   -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
@@ -464,7 +464,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (let ((original-exit (exit-handler)))
       (exit-handler (lambda (#!optional (exit-code 0))
 		      (printf "Preparing to exit with exit code ~A ...\n" exit-code)
-		      (for-each 
+		      (for-each
+		       
 		       (lambda (pid)
 			 (handle-exceptions
 			  exn
@@ -477,6 +478,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					    (process-signal pid signal/term))))))
 		       (process:children #f))
 		      (original-exit exit-code)))))
+
+;; for some switches alway print the command to stderr
+;;
+(if (args:any? "-run" "-runall" "-list-runs" "-remove-runs" "-set-state-status")
+    (debug:print 0 *default-log-port* (string-intersperse (argv) " ")))
 
 ;;======================================================================
 ;; Misc setup stuff

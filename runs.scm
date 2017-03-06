@@ -264,7 +264,10 @@
     (if (not test-patts) ;; first time in - adjust testpatt
 	(set! test-patts (common:args-get-testpatt runconf)))
     (if (args:get-arg "-tagexpr")
-	(set! allowed-tests (string-join (runs:get-tests-matching-tags (args:get-arg "-tagexpr")) ","))) ;; tests will be ANDed with this list
+	(begin
+	  (set! allowed-tests (string-join (runs:get-tests-matching-tags (args:get-arg "-tagexpr")) ","))
+	  	  (debug:print-info 0 *default-log-port* "filtering initial test list with tagexpr: " (args:get-arg "-tagexpr") " => " allowed-tests)
+		  ));; tests will be ANDed with this list
 
     ;; register this run in monitor.db
     (rmt:tasks-add "run-tests" user target runname test-patts task-key) ;; params)
