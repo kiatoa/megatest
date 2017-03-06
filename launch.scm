@@ -685,7 +685,7 @@
 	       (args:get-arg "-runtests")
 	       (args:get-arg "-execute")))
       (let* ((linktree (get-environment-variable "MT_LINKTREE"))
-	     (target   (common:args-get-target))
+	     (target   (common:args-get-target exit-if-bad: #t))
 	     (runname  (or (args:get-arg "-runname")
 			   (args:get-arg ":runname")
 			   (getenv "MT_RUNNAME")))
@@ -742,7 +742,7 @@
 (define (launch:setup-body #!key (force #f) (areapath #f))
   (let* ((toppath  (or *toppath* areapath (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
 	 (runname  (common:args-get-runname))
-	 (target   (common:args-get-target))
+	 (target   (common:args-get-target exit-if-bad: #t))
 	 (linktree (common:get-linktree))
 	 (contour  (args:get-arg "-contour"))
 	 (sections (if target (list "default" target) #f)) ;; for runconfigs

@@ -956,7 +956,7 @@
     ;; (if res (set-environment-variable "MT_RUNNAME" res)) ;; not sure if this is a good idea. side effect and all ...
     res))
 
-(define (common:args-get-target #!key (split #f))
+(define (common:args-get-target #!key (split #f)(exit-if-bad #f))
   (let* ((keys    (if (hash-table? *configdat*) (keys:config-get-fields *configdat*) '()))
 	 (numkeys (length keys))
 	 (target  (or (args:get-arg "-reqtarg")
@@ -976,6 +976,7 @@
 	(if target
 	    (begin
 	      (debug:print-error 0 *default-log-port* "Invalid target, spaces or blanks not allowed \"" target "\", target should be: " (string-intersperse keys "/") ", have " tlist " for elements")
+	      (if exit-if-bad (exit 1))
 	      #f)
 	    #f))))
 
