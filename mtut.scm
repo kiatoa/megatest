@@ -14,7 +14,7 @@
 (define (toplevel-command . a) #f)
 
 (use srfi-1 posix srfi-69 readline ;;  regex regex-case srfi-69 apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
-     srfi-18 extras format pkts regex
+     srfi-18 extras format pkts regex regex-case
      (prefix dbi dbi:)) ;;  zmq extras)
 
 (declare (uses common))
@@ -186,6 +186,68 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (cons spec
 				  (or (configf:lookup torun contour runkey)
 				      '()))))
+
+(define (fossil:clone-or-sync url name dest-dir)
+  (let ((targ-file (conc dest-dir "/" name))) ;; do not force usage of .fossil extension
+    (handle-exceptions
+	exn
+	(print "ERROR: failed to create directory " dest-dir " message: " ((condition-property-accessor 'exn 'message) exn))
+      (create-directory dest-dir #t))
+    (handle-exceptions
+	exn
+	(print "ERROR: failed to clone or sync 1ossil " url " message: " ((condition-property-accessor 'exn 'message) exn))
+      (if (file-exists? targ-file)
+	  (system (conc "fossil pull --once " url " -R " targ-file))
+	  (system (conc "fossil clone " url " " targ-file))
+	  ))))
+
+(define (fossil:last-change-node-and-time fossils-dir fossil-name branch)
+  (let* ((fossil-file   (conc fossils-dir "/" fossil-name))
+	 (timeline-port (if (file-read-access? fossil-file)
+			    (handle-exceptions
+				exn
+				(begin
+				  (print "ERROR: failed to get timeline from " fossil-file " message: " ((condition-property-accessor 'exn 'message) exn))
+				  #f)
+			      (open-input-pipe (conc "fossil timeline -t ci -W 0 -n 0 -R " fossil-file)))
+			    #f))
+	 (get-line      (lambda ()
+			  (handle-exceptions
+			      exn
+			      (begin
+				(print "ERROR: failed to read from file " fossil-file " message: "  ((condition-property-accessor 'exn 'message) exn))
+				#f)
+			    (read-line timeline-port))))
+	 (date-rx       (regexp "^=== (\\S+) ===$"))
+	 (node-rx       (regexp "^(\\S+) \\[(\\S+)\\].*\\(.*tags:\\s+([^\\)]+)\\)$")))
+    (let loop ((inl (get-line))
+	       (date #f)
+	       (node #f)
+	       (time #f))
+      (cond
+       ((and date time node) ;; have all, return 'em
+	(close-input-port timeline-port)
+	(values (common:date-time->seconds (conc date " " time)) node))
+       ((and inl (not (eof-object? inl))) ;; have a line to process
+	(regex-case inl
+	  (date-rx ( _ newdate ) (loop (get-line) newdate node time))
+	  ;; 22:47:48 [a024d9e60f] Added *user-hash-data* - a global that can be used in -repl and #{scheme ...} calls by the end user (user: matt tags: v1.63)
+	  (node-rx ( _ newtime newnode alltags )
+		   (let ((tags (string-split-fields ",\\s*" alltags #:infix)))
+		     (print "tags: " tags)
+		     (if (member branch tags)
+			 (loop (get-line) date newnode newtime)
+			 (loop (get-line) date node time))))
+	  (else ;; have some unrecognised junk? spit out error message
+	   (print "ERROR: fossil timeline returned unrecognisable junk \"" inl "\"")
+	   (loop (get-line) date node time))))
+       (else ;; no more datat and last node on branch not found
+	(close-input-port timeline-port)
+	(values  (common:date-time->seconds (conc date " " time)) node))))))
+
+;;======================================================================
+;; GLOBALS
+;;======================================================================
 
 ;; Card types:
 ;;
@@ -447,7 +509,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   ;; if it comes back "changed" then proceed to register the runs
 		   
 		   (case (string->symbol (or ruletype "no-such-rule"))
+
 		     ((no-such-rule) (print "ERROR: no such rule for " sense))
+
 		     ((scheduled)
 		      (if (not (alist-ref 'cron val-alist)) ;; gotta have cron spec
 			  (print "ERROR: bad sense spec \"" (string-intersperse sense " ") "\" params: " val-alist)
@@ -464,6 +528,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 							    (runname . ,runname)
 							    (action  . ,action)
 							    (target  . ,target)))))))
+
 		     ((script)
 		      ;; syntax is a little different here. It is a list of commands to run, "scriptname = extra_parameters;scriptname = ..."
 		      ;; where scriptname may be repeated multiple times. The script must return unix-epoch of last change, new-target-name and new-run-name
@@ -503,6 +568,31 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				       (print "key-msg: " key-msg)
 				       (push-run-spec torun contour runkey key-msg)))))))
 		       val-alist)) ;; iterate over the param split by ;\s*
+
+		     ((fossil)
+		      (for-each
+		       (lambda (fspec)
+			 (print "fspec: " fspec)
+			 (let* ((url         (symbol->string (car fspec))) ;; THIS COULD BE TROUBLE. Add option to reading line to return as string.
+				(branch      (cdr fspec))
+				(url-is-file (string-match "^(/|file:).*$" url))
+				(fname       (conc (common:get-signature url) ".fossil"))
+				(fdir        (conc "/tmp/" (current-user-name) "/mtutil_cache")))
+			   (if (not url-is-file) ;; need to sync first
+			       (fossil:clone-or-sync url fname fdir))
+			   (let-values (((datetime node)
+					 (fossil:last-change-node-and-time fdir fname branch)))
+			     (if (null? starttimes)
+				 (push-run-spec torun contour runkey
+						`((message . ,(conc "fossil:" branch "-neverrun"))
+						  (runname . ,(conc runname "-" node))))
+				 (if (> datetime last-run) ;; change time is greater than last-run time
+				     (push-run-spec torun contour runkey
+						    `((message . ,(conc "fossil:" branch "-" node))
+						      (runname . ,(conc runname "-" node))))))
+			     (print "Got datetime=" datetime " node=" node))))
+		       val-alist))
+		     
 		     ((file file-or) ;; one or more files must be newer than the reference
 		      (let* ((file-globs  (alist-ref 'glob val-alist))
 			     (youngestdat (common:get-youngest (common:bash-glob file-globs)))
@@ -512,17 +602,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (push-run-spec torun contour runkey
 					   `((message . "file:neverrun")
 					     (runname . ,runname)))
-			    (for-each
-			     (lambda (starttime) ;; look at the time the last run was kicked off for this contour
-			       (if (> youngestmod (cdr starttime))
-				   (begin
-				     (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
-				     (push-run-spec torun contour runkey
-						    `((message . ,(conc ruletype ":" (cadr youngestdat)))
-						      (runname . ,runname)
-						      )))))
-			     starttimes))
-			))
+			;; (for-each
+			;;  (lambda (starttime) ;; look at the time the last run was kicked off for this contour
+			;;    (if (> youngestmod (cdr starttime))
+			;; 	   (begin
+			;; 	     (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
+			    (if (> youngestmod last-run)
+				(push-run-spec torun contour runkey
+					       `((message . ,(conc ruletype ":" (cadr youngestdat)))
+						 (runname . ,runname)
+						 ))))))
+		      ;; starttimes))
+
 		     ((file-and) ;; all files must be newer than the reference
 		      (let* ((file-globs  (alist-ref 'glob val-alist))
 			     (youngestdat (common:get-youngest file-globs))
@@ -531,18 +622,21 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			;; (print "youngestmod: " youngestmod " starttimes: " starttimes)
 			(if (null? starttimes) ;; this target has never been run
 			    (push-run-spec torun contour runkey `("file:neverrun" ,runname #f))
-			    (for-each
-			     (lambda (starttime) ;; look at the time the last run was kicked off for this contour
-			       (if (< youngestmod (cdr starttime))
-				   (set! success #f)))
-			     starttimes))
-			(if success
-			    (begin
-			      (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
-			      (push-run-spec torun contour runkey
-					     `((message . ,(conc ruletype ":" (cadr youngestdat)))
-					       (runname . ,runname)
-					       ))))))
+			    ;; NB// I think this is wrong. It should be looking at last-run only.
+			    (if (> youngestmod last-run)
+				
+				;; 			    (for-each
+				;; 			     (lambda (starttime) ;; look at the time the last run was kicked off for this contour
+				;; 			       (if (< youngestmod (cdr starttime))
+				;; 				   (set! success #f)))
+				;; 			     starttimes))
+				;; 			(if success
+				;; 			    (begin
+				;; 			      (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
+				(push-run-spec torun contour runkey
+					       `((message . ,(conc ruletype ":" (cadr youngestdat)))
+						 (runname . ,runname)
+						 ))))))
 		     (else (print "ERROR: unrecognised rule \"" ruletype)))))
 	       keydats)))
 	  (hash-table-keys rgconf))

@@ -572,6 +572,9 @@
 (define (common:get-area-path-signature)
   (message-digest-string (md5-primitive) *toppath*))
 
+(define (common:get-signature str)
+  (message-digest-string (md5-primitive) str))
+
 ;;======================================================================
 ;; E X I T   H A N D L I N G
 ;;======================================================================
@@ -1733,6 +1736,11 @@
     ((7 8 9) 3)
     ((10 11 12) 4)
     (else #f)))
+
+;; basic ISO8601 format (e.g. "2017-02-28 06:02:54") date time => Unix epoch
+;;
+(define (common:date-time->seconds datetime)
+  (local-time->seconds (string->time datetime "%Y-%m-%d %H:%M:%S")))
 
 ;; given span of seconds tstart to tend
 ;; find start time to mark and mark delta
