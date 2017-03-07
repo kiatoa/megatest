@@ -38,11 +38,12 @@
 					    (if ht (hash-table-ref/default ht row-key #f)))))
 				 (if val
 				     (let* ((result (vector-ref val 2))
+                                             (test-id (vector-ref val 4))
                                             (bg (if (equal? result "PASS")
                                                       "green"
                                                       "red")))
 				       (s:td 'style (conc "background: " bg )
-					     (s:a 'href (s:link-to "log" 'target result)
+					     (s:a 'href (s:link-to "log" 'testid test-id)
 						  result)))
 				     (s:td ""))))
 			     a-keys)))
