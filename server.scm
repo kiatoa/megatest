@@ -399,7 +399,7 @@
 	     (string->number tmo))
 	(* 60 60 (string->number tmo))
 	;; (* 3 24 60 60) ;; default to three days
-	(* 60 60 1)         ;; default to one hour
-	;; (* 60 60 25)      ;; default to 25 hours
+	;;(* 60 60 1)         ;; default to one hour
+	(* 60 60 25)      ;; default to 25 hours
 	)))
 
