@@ -1589,7 +1589,7 @@
                (debug:print 0 *default-log-port* "WARNING: Marking test(s); " (string-intersperse (map conc all-ids) ", ") " as INCOMPLETE")
                (for-each
                 (lambda (test-id)
-                  (db:test-set-state-status dbstruct run-id test-id "COMPLETE" "DEAD" "Test failed to complete"))
+                  (db:test-set-state-status dbstruct run-id test-id "COMPLETED" "DEAD" "Test failed to complete")) ;; fix for one aspect of Randy's ticket 1405717332
                 all-ids))))))))
 
 ;; ALL REPLACED BY THE BLOCK ABOVE
