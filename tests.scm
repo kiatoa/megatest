@@ -1029,52 +1029,57 @@ EOF
 ;;
 (define (tests:summarize-test run-id test-id)
   (let* ((test-dat  (rmt:get-test-info-by-id run-id test-id))
-	 (steps-dat (rmt:get-steps-for-test run-id test-id))
-	 (test-name (db:test-get-testname test-dat))
-	 (item-path (db:test-get-item-path test-dat))
-	 (full-name (db:test-make-full-name test-name item-path))
-	 (oup       (open-output-file (conc (db:test-get-rundir test-dat) "/test-summary.html")))
-	 (status    (db:test-get-status   test-dat))
-	 (color     (common:get-color-from-status status))
-	 (logf      (db:test-get-final_logf test-dat))
-	 (steps-dat (tests:get-compressed-steps run-id test-id)))
-    ;; (dcommon:get-compressed-steps #f 1 30045)
-    ;; (#("wasting_time" "23:36:13" "23:36:21" "0" "8.0s" "wasting_time.log"))
-
-    (s:output-new
-     oup
-     (s:html
-      (s:title "Summary for " full-name)
-      (s:body 
-       (s:h2 "Summary for " full-name)
-       (s:table 'cellspacing "0" 'border "1"
-	(s:tr (s:td "run id")   (s:td (db:test-get-run_id   test-dat))
-	      (s:td "test id")  (s:td (db:test-get-id       test-dat)))
-	(s:tr (s:td "testname") (s:td test-name)
-	      (s:td "itempath") (s:td item-path))
-	(s:tr (s:td "state")    (s:td (db:test-get-state    test-dat))
-	      (s:td "status")   (s:td (s:a 'href logf (s:font 'color color status))))
-	(s:tr (s:td "TestDate") (s:td (seconds->work-week/day-time 
-				       (db:test-get-event_time test-dat)))
-	      (s:td "Duration") (s:td (seconds->hr-min-sec (db:test-get-run_duration test-dat)))))
-       (s:h3 "Log files")
-       (s:table
-	'cellspacing "0" 'border "1"
-	(s:tr (s:td "Final log")(s:td (s:a 'href logf logf))))
-       (s:table
-	'cellspacing "0" 'border "1"
-	(s:tr (s:td "Step Name")(s:td "Start")(s:td "End")(s:td "Status")(s:td "Duration")(s:td "Log File"))
-	(map (lambda (step-dat)
-	       (s:tr (s:td (tdb:steps-table-get-stepname step-dat))
-		     (s:td (tdb:steps-table-get-start    step-dat))
-		     (s:td (tdb:steps-table-get-end      step-dat))
-		     (s:td (tdb:steps-table-get-status   step-dat))
-		     (s:td (tdb:steps-table-get-runtime  step-dat))
-		     (s:td (let ((step-log (tdb:steps-table-get-log-file step-dat)))
-			     (s:a 'href step-log step-log)))))
-	     steps-dat))
-	)))
-    (close-output-port oup)))
+	 (out-dir   (db:test-get-rundir test-dat))
+	 (out-file  (conc out-dir "/test-summary.html")))
+    ;; first verify we are able to write the output file
+    (if (not (file-write-access? out-dir))
+	(debug:print 0 *default-log-port* "ERROR: cannot write test-summary.html to " out-dir)
+	(let* (;; (steps-dat (rmt:get-steps-for-test run-id test-id))
+	       (test-name (db:test-get-testname test-dat))
+	       (item-path (db:test-get-item-path test-dat))
+	       (full-name (db:test-make-full-name test-name item-path))
+	       (oup       (open-output-file out-file))
+	       (status    (db:test-get-status   test-dat))
+	       (color     (common:get-color-from-status status))
+	       (logf      (db:test-get-final_logf test-dat))
+	       (steps-dat (tests:get-compressed-steps run-id test-id)))
+	  ;; (dcommon:get-compressed-steps #f 1 30045)
+	  ;; (#("wasting_time" "23:36:13" "23:36:21" "0" "8.0s" "wasting_time.log"))
+	  
+	  (s:output-new
+	   oup
+	   (s:html
+	    (s:title "Summary for " full-name)
+	    (s:body 
+	     (s:h2 "Summary for " full-name)
+	     (s:table 'cellspacing "0" 'border "1"
+		      (s:tr (s:td "run id")   (s:td (db:test-get-run_id   test-dat))
+			    (s:td "test id")  (s:td (db:test-get-id       test-dat)))
+		      (s:tr (s:td "testname") (s:td test-name)
+			    (s:td "itempath") (s:td item-path))
+		      (s:tr (s:td "state")    (s:td (db:test-get-state    test-dat))
+			    (s:td "status")   (s:td (s:a 'href logf (s:font 'color color status))))
+		      (s:tr (s:td "TestDate") (s:td (seconds->work-week/day-time 
+						     (db:test-get-event_time test-dat)))
+			    (s:td "Duration") (s:td (seconds->hr-min-sec (db:test-get-run_duration test-dat)))))
+	     (s:h3 "Log files")
+	     (s:table
+	      'cellspacing "0" 'border "1"
+	      (s:tr (s:td "Final log")(s:td (s:a 'href logf logf))))
+	     (s:table
+	      'cellspacing "0" 'border "1"
+	      (s:tr (s:td "Step Name")(s:td "Start")(s:td "End")(s:td "Status")(s:td "Duration")(s:td "Log File"))
+	      (map (lambda (step-dat)
+		     (s:tr (s:td (tdb:steps-table-get-stepname step-dat))
+			   (s:td (tdb:steps-table-get-start    step-dat))
+			   (s:td (tdb:steps-table-get-end      step-dat))
+			   (s:td (tdb:steps-table-get-status   step-dat))
+			   (s:td (tdb:steps-table-get-runtime  step-dat))
+			   (s:td (let ((step-log (tdb:steps-table-get-log-file step-dat)))
+				   (s:a 'href step-log step-log)))))
+		   steps-dat))
+	     )))
+	  (close-output-port oup)))))
 	  
 	  
 ;; MUST BE CALLED local!
