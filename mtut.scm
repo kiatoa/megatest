@@ -354,6 +354,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       pkts))))
       (string-split pktsdirs)))))
 
+(define (get-pkt-alists pkts)
+  (map (lambda (x)
+	 (alist-ref 'pkta x)) ;; 'pkta pulls out the alist from the read pkt
+       pkts))
+
 ;;======================================================================
 ;; Runs
 ;;======================================================================
@@ -512,9 +517,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			(runname    (make-runname "" ""))
 			(runstarts  (find-pkts pdb '(runstart) `((o . ,contour)
 								 (t . ,runkey))))
-			(rspkts     (map (lambda (x)
-					   (alist-ref 'pkta x))
-					 runstarts))
+			(rspkts     (get-pkt-alists runstarts))
+			;; starttimes is for run start times and is used to know when the last run was launched
 			(starttimes ;; sort by age (youngest first) and delete duplicates by target
 			 (delete-duplicates
 			  (sort 
@@ -526,6 +530,21 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			(last-run (if (null? starttimes) ;; if '() then it has never been run, else get the max
 				      0
 				      (apply max (map cdr starttimes))))
+			;; synctimes is for figuring out the last time a sync was done
+			(syncstarts   (find-pkts pdb '(syncstart) '())) ;; no qualifiers, a sync does all tarets etc.
+			(sspkts       (get-pkt-alists syncstarts))
+			(synctimes
+			 (delete-duplicates
+			  (sort 
+			   (map (lambda (x)
+				  `(,(alist-ref 't x) . ,(string->number (alist-ref 'D x))))
+				sspkts)
+			   (lambda (a b)(> (cdr a)(cdr b))))      ;; sort descending
+			  (lambda (a b)(equal? (car a)(car b))))) ;; remove duplicates by target
+			(last-sync (if (null? synctimes) ;; if '() then it has never been run, else get the max
+				      0
+				      (apply max (map cdr synctimes))))
+
 			)
 
 		   (print "runkey: " runkey " ruletype: " ruletype " action: " action)
@@ -545,27 +564,28 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				 (target   (alist-ref 'target   val-alist))
 				 (crontab  (alist-ref 'cron     val-alist))
 				 ;; (action   (alist-ref 'action   val-alist))
-				 (need-run (common:extended-cron crontab #f last-run))
 				 (cron-safe-string (string-translate (string-intersperse (string-split (alist-ref 'cron val-alist)) "-") "*" "X"))
 				 (runname  std-runname)) ;; (conc "sched" (time->string (seconds->local-time (current-seconds)) "%M%H%d")))))
-			    (print "last-run: " last-run " need-run: " need-run)
-			    (if need-run
-				(case (string->symbol action)
-				  ((sync)
+			    ;; (print "last-run: " last-run " need-run: " need-run)
+			    ;; (if need-run
+			    (case (string->symbol action)
+			      ((sync)
+			       (if (common:extended-cron crontab #f last-sync)
 				   (push-run-spec torun contour runkey
 						  `((message . ,(conc ruletype ":sync-" cron-safe-string))
 						    (action  . ,action)
 						    (dbdest  . ,(alist-ref 'dbdest val-alist))
-						    (append  . ,(alist-ref 'appendconf val-alist)))))
-				  ((run)
+						    (append  . ,(alist-ref 'appendconf val-alist))))))
+			      ((run)
+			       (if (common:extended-cron crontab #f last-run)
 				   (push-run-spec torun contour runkey
 						  `((message . ,(conc ruletype ":" cron-safe-string))
 						    (runname . ,runname)
 						    (action  . ,action)
-						    (target  . ,target))))
-				  (else
-				   (print "ERROR: action \"" action "\" has no scheduled handler")
-				   ))))))
+						    (target  . ,target)))))
+			      (else
+			       (print "ERROR: action \"" action "\" has no scheduled handler")
+			       )))))
 
 		     ((script)
 		      ;; syntax is a little different here. It is a list of commands to run, "scriptname = extra_parameters;scriptname = ..."
@@ -785,6 +805,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (for-each
 	  (lambda (pktdat)
 	    (let* ((pkta    (alist-ref 'pkta pktdat))
+		   (action  (alist-ref 'a pkta))
 		   (cmdline (pkt->cmdline pkta))
 		   (uuid    (alist-ref 'Z pkta))
 		   (logf    (conc logdir "/" uuid "-run.log")))
@@ -793,7 +814,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (let-values (((ack-uuid ack-pkt)
 			    (add-z-card
 			     (construct-sdat 'P uuid
-					     'T "runstart"
+					     'T (case (string->symbol action)
+						  ((run) "runstart")
+						  ((sync) "syncstart")    ;; example of translating run -> runstart
+						  (else   action))
 					     'c (alist-ref 'o pkta) ;; THIS IS WRONG! SHOULD BE 'c
 					     't (alist-ref 't pkta)))))
 		(write-pkt pktsdir ack-uuid ack-pkt))))
