@@ -1917,11 +1917,11 @@
 			(<= before now-seconds)
 			(>= moment now-seconds))
 		   (begin
-		     (print)
-		     (print "Before: " (time->string (seconds->local-time before)))
-		     (print "Now:    " (time->string (seconds->local-time now-seconds)))
-		     (print "After:  " (time->string (seconds->local-time moment)))
-		     (print "Last:   " (time->string (seconds->local-time last-done)))
+		     ;; (print)
+		     ;; (print "Before: " (time->string (seconds->local-time before)))
+		     ;; (print "Now:    " (time->string (seconds->local-time now-seconds)))
+		     ;; (print "After:  " (time->string (seconds->local-time moment)))
+		     ;; (print "Last:   " (time->string (seconds->local-time last-done)))
 		     (if (<  last-done before)
 			 (set! is-in before))
 		     ))
@@ -1932,10 +1932,10 @@
 (define (common:extended-cron  cron-str now-seconds-in last-done)
   (let ((expanded-cron (common:cron-expand cron-str)))
     (if (string? expanded-cron)
-	expanded-cron
+	(common:cron-event expanded-cron now-seconds-in last-done)
 	(let loop ((hed (car expanded-cron))
 		   (tal (cdr expanded-cron)))
-	  (if (cron-event hed now-seconds-in last-done)
+	  (if (common:cron-event hed now-seconds-in last-done)
 	      #t
 	      (if (null? tal)
 		  #f
