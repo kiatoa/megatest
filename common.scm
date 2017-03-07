@@ -1931,13 +1931,15 @@
 
 (define (common:extended-cron  cron-str now-seconds-in last-done)
   (let ((expanded-cron (common:cron-expand cron-str)))
-    (let loop ((hed (car expanded-cron))
-	       (tal (cdr expanded-cron)))
-      (if (cron-event hed now-seconds-in last-done)
-	  #t
-	  (if (null? tal)
-	      #f
-	      (loop (car tal)(cdr tal)))))))
+    (if (string? expanded-cron)
+	expanded-cron
+	(let loop ((hed (car expanded-cron))
+		   (tal (cdr expanded-cron)))
+	  (if (cron-event hed now-seconds-in last-done)
+	      #t
+	      (if (null? tal)
+		  #f
+		  (loop (car tal)(cdr tal))))))))
 
 ;;======================================================================
 ;; C O L O R S
