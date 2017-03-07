@@ -359,6 +359,17 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (alist-ref 'pkta x)) ;; 'pkta pulls out the alist from the read pkt
        pkts))
 
+;; given list of pkts (alist mode) return list of D cards as Unix epoch, sorted descending
+;; also delete duplicates by target i.e. (car pkt)
+(define (get-pkt-times pkts)
+  (delete-duplicates
+   (sort 
+    (map (lambda (x)
+	   `(,(alist-ref 't x) . ,(string->number (alist-ref 'D x))))
+	 pkts)
+    (lambda (a b)(> (cdr a)(cdr b))))      ;; sort descending
+   (lambda (a b)(equal? (car a)(car b))))) ;; remove duplicates by target
+
 ;;======================================================================
 ;; Runs
 ;;======================================================================
@@ -466,11 +477,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    `(("-start-dir"  . ,area-path)
 		      ("-msg"        . ,reason)
 		      ("-contour"    . ,contour))
-		    (if runname    '(("-run-name"   . ,runname))      '())
-		    (if new-target `(("-target"     . ,new-target))   '())
-		    (if mode-patt  `(("-mode-patt"  . ,mode-patt))    '())
-		    (if tag-expr   `(("-tag-expr"   . ,tag-expr))     '())
-		    (if dbdest	   `(("-sync-to"    . ,dbdest))       '())
+		    (if runname     `(("-run-name"   . ,runname))      '())
+		    (if new-target  `(("-target"     . ,new-target))   '())
+		    (if mode-patt   `(("-mode-patt"  . ,mode-patt))    '())
+		    (if tag-expr    `(("-tag-expr"   . ,tag-expr))     '())
+		    (if dbdest	    `(("-sync-to"    . ,dbdest))       '())
 		    (if append-conf `(("-append-config" . ,append-conf)) '())
 		    (if (not (or mode-patt tag-expr))
 			`(("-testpatt"  . "%"))
@@ -519,35 +530,23 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 								 (t . ,runkey))))
 			(rspkts     (get-pkt-alists runstarts))
 			;; starttimes is for run start times and is used to know when the last run was launched
-			(starttimes ;; sort by age (youngest first) and delete duplicates by target
-			 (delete-duplicates
-			  (sort 
-			   (map (lambda (x)
-				  `(,(alist-ref 't x) . ,(string->number (alist-ref 'D x))))
-				rspkts)
-			   (lambda (a b)(> (cdr a)(cdr b))))      ;; sort descending
-			  (lambda (a b)(equal? (car a)(car b))))) ;; remove duplicates by target
+			(starttimes (get-pkt-times rspkts)) ;; sort by age (youngest first) and delete duplicates by target
 			(last-run (if (null? starttimes) ;; if '() then it has never been run, else get the max
 				      0
 				      (apply max (map cdr starttimes))))
 			;; synctimes is for figuring out the last time a sync was done
 			(syncstarts   (find-pkts pdb '(syncstart) '())) ;; no qualifiers, a sync does all tarets etc.
 			(sspkts       (get-pkt-alists syncstarts))
-			(synctimes
-			 (delete-duplicates
-			  (sort 
-			   (map (lambda (x)
-				  `(,(alist-ref 't x) . ,(string->number (alist-ref 'D x))))
-				sspkts)
-			   (lambda (a b)(> (cdr a)(cdr b))))      ;; sort descending
-			  (lambda (a b)(equal? (car a)(car b))))) ;; remove duplicates by target
+			(synctimes    (get-pkt-times  sspkts))
 			(last-sync (if (null? synctimes) ;; if '() then it has never been run, else get the max
 				      0
 				      (apply max (map cdr synctimes))))
-
 			)
 
-		   (print "runkey: " runkey " ruletype: " ruletype " action: " action)
+		   (let ((delta (lambda (x)
+				  (round (/ (- (current-seconds) x) 60)))))
+		     (print "runkey: " runkey ", ruletype: " ruletype ", action: " action ", time since; last-run: " (delta last-run) ", last-sync: " (delta last-sync)))
+
 		   ;; look in runstarts for matching runs by target and contour
 		   ;; get the timestamp for when that run started and pass it
 		   ;; to the rule logic here where "ruletype" will be applied
@@ -643,11 +642,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			     (if (null? starttimes)
 				 (push-run-spec torun contour runkey
 						`((message . ,(conc "fossil:" branch "-neverrun"))
-						  (runname . ,(conc runname "-" node))))
+						  (runname . ,(conc runname "-" node))
+						  (target  . ,runkey)))
 				 (if (> datetime last-run) ;; change time is greater than last-run time
 				     (push-run-spec torun contour runkey
 						    `((message . ,(conc "fossil:" branch "-" node))
-						      (runname . ,(conc runname "-" node))))))
+						      (runname . ,(conc runname "-" node))
+						      (target  . ,runkey)))))
 			     (print "Got datetime=" datetime " node=" node))))
 		       val-alist))
 		     
@@ -660,6 +661,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (push-run-spec torun contour runkey
 					   `((message . "file:neverrun")
 					     (action  . ,action)
+					     (target  . ,runkey)
 					     (runname . ,runname)))
 			;; (for-each
 			;;  (lambda (starttime) ;; look at the time the last run was kicked off for this contour
@@ -670,6 +672,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				(push-run-spec torun contour runkey
 					       `((message . ,(conc ruletype ":" (cadr youngestdat)))
 						 (action  . ,action)
+						 (target  . ,runkey)
 						 (runname . ,runname)
 						 ))))))
 		      ;; starttimes))
@@ -684,6 +687,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (push-run-spec torun contour runkey
 					   `((message . "file:neverrun")
 					     (runname . ,runname)
+					     (target  . ,runkey)
 					     (action  . ,action)))
 			    ;; NB// I think this is wrong. It should be looking at last-run only.
 			    (if (> youngestmod last-run)
@@ -699,6 +703,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				(push-run-spec torun contour runkey
 					       `((message . ,(conc ruletype ":" (cadr youngestdat)))
 						 (runname . ,runname)
+						 (target  . ,runkey)
 						 (action  . ,action)
 						 ))))))
 		     (else (print "ERROR: unrecognised rule \"" ruletype)))))
@@ -732,7 +737,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			       (dbdest  (alist-ref 'dbdest  runkeydat))
 			       (append  (alist-ref 'append  runkeydat))
 			       (target  (or (alist-ref 'target  runkeydat) runkey))) ;; override with target if forced
-			   (print "Have: runkey=" runkey " contour=" contour " area=" area " action=" action " tag-expr=" tag-expr " mode-patt=" mode-patt)
+			   (print "Have: runkey=" runkey " contour=" contour " area=" area " action=" action " tag-expr=" tag-expr " mode-patt=" mode-patt " target=" target)
 			   (if (case (or (and action (string->symbol action)) 'noaction)  ;; ensure we have the needed data to run this action
 				 ((noaction) #f)
 				 ((run)      (and runname reason))
@@ -808,8 +813,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   (action  (alist-ref 'a pkta))
 		   (cmdline (pkt->cmdline pkta))
 		   (uuid    (alist-ref 'Z pkta))
-		   (logf    (conc logdir "/" uuid "-run.log")))
-	      (system (conc "NBFAKE_LOG=" logf " nbfake " cmdline))
+		   (logf    (conc logdir "/" uuid "-run.log"))
+		   (fullcmd (conc "NBFAKE_LOG=" logf " nbfake " cmdline)))
+	      (print "RUNNING: " fullcmd)
+	      (system fullcmd)
 	      (mark-processed pdb (list (alist-ref 'id pktdat)))
 	      (let-values (((ack-uuid ack-pkt)
 			    (add-z-card
