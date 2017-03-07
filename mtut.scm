@@ -546,7 +546,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				 (crontab  (alist-ref 'cron     val-alist))
 				 ;; (action   (alist-ref 'action   val-alist))
 				 (need-run (common:extended-cron crontab #f last-run))
-				 (cron-safe-string (string-intersperse (string-split (alist-ref 'cron val-alist)) "-"))
+				 (cron-safe-string (string-translate (string-intersperse (string-split (alist-ref 'cron val-alist)) "-") "*" "X"))
 				 (runname  std-runname)) ;; (conc "sched" (time->string (seconds->local-time (current-seconds)) "%M%H%d")))))
 			    (print "last-run: " last-run " need-run: " need-run)
 			    (if need-run
