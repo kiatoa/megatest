@@ -14,7 +14,7 @@
 ;;======================================================================
 
 (use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3 call-with-environment-variables csv)
-(use typed-records pathname-expand)
+(use typed-records pathname-expand matchable)
 
 (import (prefix base64 base64:))
 (import (prefix sqlite3 sqlite3:))
@@ -456,14 +456,15 @@
 		  (if (string? homehost)
 		      (if (and host-port
 			       (> (length host-port) 1))
-			  (match-let* (((host port) host-port)
-				       ((start-res) (http-transport:client-connect host port))
-				       (ping-res    (rmt:login-no-auto-client-setup start-res)))
+			  (let* ((host      (car host-port))
+                                 (port      (cadr host-port))
+                                 (start-res (http-transport:client-connect host port))
+                                 (ping-res  (rmt:login-no-auto-client-setup start-res)))
 			    (if (and start-res
 				     ping-res)
 				(let ((url  (http-transport:server-dat-make-url start-res)))
 				  (remote-conndat-set! *runremote* start-res)
-				  (remote-url-set! *runremote* url)
+				  (remote-server-url-set! *runremote* url)
 				  (debug:print-info 0 *default-log-port* "connected to " url " using CMDINFO data."))
 				(debug:print-info 0 *default-log-port* "received " host ":" port " for url but could not connect.")
 				)))))))
