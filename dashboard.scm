@@ -112,6 +112,7 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
+;; RA => Might require revert for filters 
 ;; create a watch dog to move changes from lt/.db/*.db to megatest.db
 ;;
 ;;;(if (file-write-access? (conc *toppath* "/megatest.db"))
@@ -122,6 +123,7 @@ Misc
 ;;     (begin
 ;;       (debug:print-info 0 *default-log-port* "Forcing db-cache mode due to read-only access to megatest.db")
 ;;       (hash-table-set! args:arg-hash "-use-db-cache" #t)));;;)
+;;)
 
 ;; data common to all tabs goes here
 ;;
@@ -254,7 +256,7 @@ Misc
   curr-run-id                                           ;; current row to display in Run summary view
   prev-run-id                                           ;; previous runid selected before current runid was selected (used in xor-two-runs runs summary mode
   curr-test-ids                                         ;; used only in dcommon:run-update which is used in newdashboard
-  ((filters-changed  #t)                  : boolean)    ;; to to indicate that the user changed filters for this tab
+  ((filters-changed  #t)                  : boolean)    ;; to indicate that the user changed filters for this tab
   ((last-filter-str  "")                  : string)      ;; conc the target runname and testpatt for a signature of changed filters
   ((hide-empty-runs  #f)                  : boolean)     
   ((hide-not-hide    #t)                  : boolean)     ;; toggle for hide/not hide empty runs
@@ -529,8 +531,8 @@ Misc
                                            "200")))
 	 (states       (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat)))
 	 (statuses     (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)))
-         (do-not-use-db-file-timestamps #f) ;; (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")) ;; this still hosts runs-summary-tab
-         (do-not-use-query-timestamps   #f) ;; (configf:lookup *configdat* "setup" "do-not-use-query-timestamps")) ;; this no longer troubles runs-summary-tab
+         (do-not-use-db-file-timestamps #t) ;; (configf:lookup *configdat* "setup" "do-not-use-db-file-timestamps")) ;; this still hosts runs-summary-tab
+         (do-not-use-query-timestamps   #t) ;; (configf:lookup *configdat* "setup" "do-not-use-query-timestamps")) ;; this no longer troubles runs-summary-tab
 	 (sort-info    (get-curr-sort))
 	 (sort-by      (vector-ref sort-info 1))
 	 (sort-order   (vector-ref sort-info 2))
@@ -1617,9 +1619,9 @@ Misc
 					     (dboard:tabdat-hide-not-hide tabdat)                        ;; not-in
 					     #f #f                                                       ;; sort-by sort-order
 					     #f ;; get all? "id,testname,item_path,state,status,event_time,run_duration"                        ;; qryval
-					     (if (dboard:tabdat-filters-changed tabdat)
-						 0
-						 last-update)
+                                             (if (dboard:tabdat-filters-changed tabdat)
+					         0
+					         last-update)
 					     *dashboard-mode*)
 		  '()))) ;; get 'em all
     ;; (debug:print 0 *default-log-port* "dboard:get-tests-dat: got " (length tdat) " test records for run " run-id)
@@ -1826,7 +1828,6 @@ Misc
                                   (begin
                                     (set! changed #t)
                                     (iup:attribute-set! run-matrix key (cadr value))
-                                    ;; (print "RA=> value" (car value))
                                     (iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
                           matrix-content)
                 

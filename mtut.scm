@@ -545,7 +545,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 		   (let ((delta (lambda (x)
 				  (round (/ (- (current-seconds) x) 60)))))
-		     (print "runkey: " runkey ", ruletype: " ruletype ", action: " action ", time since; last-run: " (delta last-run) ", last-sync: " (delta last-sync)))
+		     (print "runkey: " runkey ", ruletype: " ruletype ", action: " action ", last-run: " last-run " time since; last-run: " (delta last-run) ", last-sync: " (delta last-sync)))
 
 		   ;; look in runstarts for matching runs by target and contour
 		   ;; get the timestamp for when that run started and pass it

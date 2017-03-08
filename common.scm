@@ -67,6 +67,11 @@
         (mutex-unlock! cxt-mutex)
         res))))
         
+;; A hash table that can be accessed by #{scheme ...} calls in
+;; config files. Allows communicating between confgs
+;;
+(define *user-hash-data* (make-hash-table))
+
 (define *db-keys* #f)
 
 (define *configinfo*   #f)   ;; raw results from setup, includes toppath and table from megatest.config
