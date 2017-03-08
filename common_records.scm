@@ -192,7 +192,7 @@
 (define (debug:print-error n e . params)
   ;; normal print
   (if (debug:debug-mode n)
-      (with-output-to-port (or e (current-error-port))
+      (with-output-to-port (if (port? e) e (current-error-port))
 	(lambda ()
 	  (if *logging*
 	      (db:log-event (apply conc params))
@@ -208,7 +208,7 @@
 
 (define (debug:print-info n e . params)
   (if (debug:debug-mode n)
-      (with-output-to-port (or e (current-error-port))
+      (with-output-to-port (if (port? e) e (current-error-port))
 	(lambda ()
 	  (if *logging*
 	      (let ((res (format#format #f "INFO: (~a) ~a" n (apply conc params))))
@@ -216,6 +216,8 @@
 	      ;; (apply print "pid:" (current-process-id) " " "INFO: (" n ") " params) ;; res)
 	      (apply print "INFO: (" n ") " params) ;; res)
 	      )))))
+
+
 
 ;; if a value is printable (i.e. string or number) return the value
 ;; else return an empty string

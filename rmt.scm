@@ -257,7 +257,17 @@
 	 (read-only      (not (file-write-access? db-file-path)))
 	 (start          (current-milliseconds))
 	 (resdat         (if (not (and read-only qry-is-write))
-			     (api:execute-requests dbstruct-local (vector (symbol->string cmd) params))
+			     (let ((v (api:execute-requests dbstruct-local (vector (symbol->string cmd) params))))
+			       (handle-exceptions ;; there has been a long history of receiving strange errors from values returned by the client when things go wrong..
+				exn               ;;  This is an attempt to detect that situation and recover gracefully
+				(begin
+				  (debug:print0 *default-log-port* "ERROR: bad data from server " v " message: "  ((condition-property-accessor 'exn 'message) exn))
+				  (vector #t '())) ;; should always get a vector but if something goes wrong return a dummy
+				(if (and (vector? v)
+					 (> (vector-length v) 1))
+				    (let ((newvec (vector (vector-ref v 0)(vector-ref v 1))))
+				      newvec)           ;; by copying the vector while inside the error handler we should force the detection of a corrupted record
+				    (vector #t '()))))  ;; we could also check that the returned types are valid
 			     (vector #t '())))
 	 (success        (vector-ref resdat 0))
 	 (res            (vector-ref resdat 1))
@@ -279,7 +289,7 @@
 	  (if qry-is-write
 	      (let ((start-time (current-seconds)))
 		(mutex-lock! *db-multi-sync-mutex*)
-		(set! *db-last-access* start-time)  ;; THIS IS PROBABLY USELESS? (we are on a client)
+/		(set! *db-last-access* start-time)  ;; THIS IS PROBABLY USELESS? (we are on a client)
                 (mutex-unlock! *db-multi-sync-mutex*)))))
     res))
 

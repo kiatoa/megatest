@@ -32,7 +32,7 @@
 	   (s:fieldset
 	    "Area type and target filter"
 	    (s:form
-	     'action "home.filter" 'method "post"
+	     'action "home.filter" 'method "get"
 	     (s:div 'class "col_12"
 		    (s:div 'class "col_6"
 			   (s:select (map (lambda (x)
