@@ -8,14 +8,37 @@
 ;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 ;;  PURPOSE.
 ;;======================================================================
-
 (define (pages:run session db shared)
   (let* ((dbh         (s:db))
-	 (target      (string-substitute  "_x_"  "/" (s:get-param 'target) 'all))
-         (runs (pgdb:get-runs-by-target dbh target))
+	 (target-param       (s:get-param 'target))   
+         (target1      (if  (s:get "target") 
+                       (s:get "target")
+                       (s:get-param 'target)))
+         (target (if (equal? target1 #f)
+                     "%"
+                    (string-substitute  "_x_"  "/" target1 'all)     
+                    )) 
+         (run-filter (or (s:get "run-name-filter") "%"))  
+         (runs (pgdb:get-runs-by-target dbh target run-filter))
          (ordered-runs (pgdb:runs-to-hash runs)))
    
     (s:div 'class "col_12"
+            (s:fieldset
+	    "Run filter"
+	    (s:form
+	     'action "run.filter" 'method "post"
+	     (s:div 'class "col_12"
+		     (s:div 'class "col_6"
+                           ;(s:p (conc "param" (s:get-param 'target)) )
+                           ; (s:p (conc "get" (s:get "target")) )
+                           ;(s:p target1)
+			   (s:input-preserve 'name "run-name-filter" 'placeholder "Filter by run names")
+                           (s:input 'type "hidden" 'value target 'name "target" ))
+
+		    (s:div 'class "col_6"
+			   (s:input 'type "submit" 'name "set-filter-vals" 'value "Submit")))
+	     	     ))
+
 	   (s:fieldset
 	   (conc "Show a runs for Target: " target)
              (let* ((a-keys (sort (hash-table-keys ordered-runs) string>=?))
@@ -26,9 +49,9 @@
 					   (hash-table-keys subdat)))
 				       a-keys))
 				 string>=?))))
-  
+              
               (s:table
-		   (s:tr (s:td "")(map s:td a-keys))
+		   (s:tr  (s:th "") (map s:th a-keys))
 		   (map
 		    (lambda (row-key)
 		      (s:tr (s:td row-key)
