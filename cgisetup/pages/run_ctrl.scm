@@ -13,7 +13,10 @@
 
 (define (run-action action)
   (case (string->symbol action)
-    ((dosomething)
-     (dosomething))))
+    ((filter)
+     (let ((run-name-filter (s:get-input 'run-name-filter))
+            (target (s:get-input 'target)))
+     (s:set! "run-name-filter" run-name-filter)
+     (s:set! "target" target)))))
 
 

@@ -202,9 +202,9 @@
 (define (pgdb:get-targets-of-type dbh ttype-id target-patt)
   (dbi:get-rows dbh "SELECT DISTINCT target FROM runs WHERE target LIKE ? AND ttype_id=?;" target-patt ttype-id))
 
-(define (pgdb:get-runs-by-target dbh targets)
+(define (pgdb:get-runs-by-target dbh targets run-patt)
    (dbi:get-rows dbh "SELECT r.run_name, t.test_name, t.status, t.item_path, t.id, t.rundir, t.final_logf FROM runs as r INNER JOIN tests AS t ON t.run_id=r.id  
-                          WHERE t.state='COMPLETED' AND r.target like ?;" targets)
+                          WHERE t.state='COMPLETED' AND r.target like ? AND  r.run_name like ?;" targets run-patt)
 )
 
 (define (pgdb:get-test-by-id dbh id)
