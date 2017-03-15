@@ -617,7 +617,7 @@
 	runinf ;; already cached
 	(let* ((keytarg    (string-intersperse (rmt:get-keys) "/")) ;; e.g. version/iteration/platform
 	       (spec-id    (pgdb:get-ttype dbh keytarg))
-	       (target     (rmt:get-target run-id))                 ;; e.g. v1.63/a3e1/ubuntu
+	       (target     (if (and (args:get-arg "-sync-to") (args:get-arg "-prefix-target")) (set! target (conc (args:get-arg "-prefix-target") (rmt:get-target run-id))) (rmt:get-target run-id)))                 ;; e.g. v1.63/a3e1/ubuntu
 	       (run-dat    (rmt:get-run-info run-id))               ;; NOTE: get-run-info returns a vector < row header >
 	       (run-name   (rmt:get-run-name-from-id run-id))
 	       (new-run-id (pgdb:get-run-id dbh spec-id target run-name))
