@@ -51,7 +51,7 @@
 		    var value metadata: metadata)))
 
 (define (config:eval-string-in-environment str)
-  (handle-exceptions
+  (common:debug-handle-exceptions #t
    exn
    (begin
      (debug:print-error 0 *default-log-port* "problem evaluating \"" str "\" in the shell environment")
@@ -111,7 +111,7 @@
 				;; ((rget)           (conc "(lambda (ht)(runconfigs-get ht \"" cmd "\"))"))
 				(else "(lambda (ht)(print \"ERROR\") \"ERROR\")"))))
 		;; (print "fullcmd=" fullcmd)
-		(handle-exceptions
+		(common:debug-handle-exceptions #t
 		 exn
 		 (begin
 		   (debug:print 0 *default-log-port* "WARNING: failed to process config input \"" l "\"")
@@ -655,15 +655,27 @@
      adat)
     ht))
 
+;; if 
 (define (configf:read-alist fname)
-  (configf:alist->config
-   (with-input-from-file fname read)))
+  (handle-exceptions
+      exn
+      #f
+    (configf:alist->config
+     (with-input-from-file fname read))))
 
 (define (configf:write-alist cdat fname)
-  (with-output-to-file fname
-    (lambda ()
-      (pp (configf:config->alist cdat)))))
-     
+  (let ((dat  (configf:config->alist cdat)))
+    (with-output-to-file fname ;; first write out the file
+      (lambda ()
+	(pp dat)))
+    (if (file-exists? fname)   ;; now verify it is readable
+	(if (configf:read-alist fname)
+	    #t ;; data is good.
+	    (begin
+	      (delete-file fname)
+	      (debug:print 0 *default-log-port* "WARNING: content " dat " for cache " fname " is not readable. Deleting generated file.")
+	      #f))
+	#f)))
 
 ;; convert hierarchial list to ini format
 ;;

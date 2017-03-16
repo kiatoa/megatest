@@ -250,7 +250,7 @@
   (if (not (directory-exists? "logs"))(create-directory "logs"))
   (directory-fold 
    (lambda (file rem)
-     (handle-exceptions
+     (common:debug-handle-exceptions #t
       exn
       (debug:print-info 0 *default-log-port* "failed to rotate log " file ", probably handled by another process.")
       (let* ((fullname (conc "logs/" file))
@@ -293,7 +293,7 @@
              ((and (file-exists? mtconf) (file-exists? dbfile) (not read-only)
                    (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
               (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
-              (handle-exceptions
+              (common:debug-handle-exceptions #t
                exn
                (begin
                  (debug:print 0 *default-log-port* "Failed to switch versions.")
@@ -399,9 +399,9 @@
   (or (getenv "MT_MEGATEST") "megatest"))
 
 (define (common:read-encoded-string instr)
-  (handle-exceptions
+  (common:debug-handle-exceptions #t
    exn
-   (handle-exceptions
+   (common:debug-handle-exceptions #t
     exn
     (begin
       (debug:print-error 0 *default-log-port* "received bad encoded string \"" instr "\", message: " ((condition-property-accessor 'exn 'message) exn))
@@ -842,7 +842,7 @@
 (define (common:get-install-area)
   (let ((exe-path (car (argv))))
     (if (file-exists? exe-path)
-	(handle-exceptions
+	(common:debug-handle-exceptions #t
 	 exn
 	 #f
 	 (pathname-directory
@@ -860,7 +860,7 @@
 	(let ((res (or (and (directory? hed)
 			    (file-write-access? hed)
 			    hed)
-		       (handle-exceptions
+		       (common:debug-handle-exceptions #t
 			exn
 			#f
 			(create-directory hed #t)))))
@@ -876,14 +876,14 @@
 (define (common:get-youngest glob-list)
   (let ((all-files (apply append
 			  (map (lambda (patt)
-				 (handle-exceptions
+				 (common:debug-handle-exceptions #t
 				     exn
 				     '()
 				   (glob patt)))
 			       glob-list))))
     (fold (lambda (fname res)
 	    (let ((last-mod (car res))
-		  (curmod   (handle-exceptions
+		  (curmod   (common:debug-handle-exceptions #t
 				exn
 				0
 			      (file-modification-time fname))))
@@ -1204,19 +1204,19 @@
 ;;
 (define (common:lazy-modification-time fpath)
   (handle-exceptions
-   exn
-   0
-   (file-modification-time fpath)))
+      exn
+      0
+    (file-modification-time fpath)))
 
 ;; find timestamp of newest file associated with a sqlite db file
 (define (common:lazy-sqlite-db-modification-time fpath)
   (let* ((glob-list (handle-exceptions
-                    exn
-                    '("/no/such/file")
-                    (glob (conc fpath "*"))))
+			exn
+			`(,(conc "/no/such/file, message: " ((condition-property-accessor 'exn 'message) exn)))
+		      (glob (conc fpath "*"))))
          (file-list (if (eq? 0 (length glob-list))
-                        '("/no/such/file")
-                        glob-list)))
+			'("/no/such/file")
+			glob-list)))
   (apply max
    (map
     common:lazy-modification-time 
@@ -1235,7 +1235,7 @@
 (define nice-path common:nice-path)
 
 (define (common:read-link-f path)
-  (handle-exceptions
+  (common:debug-handle-exceptions #t
       exn
       (begin
 	(debug:print-error 0 *default-log-port* "command \"/bin/readlink -f " path "\" failed.")

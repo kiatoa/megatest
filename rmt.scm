@@ -196,7 +196,7 @@
 
 ;; (define (rmt:update-db-stats run-id rawcmd params duration)
 ;;   (mutex-lock! *db-stats-mutex*)
-;;   (handle-exceptions
+;;   (common:debug-handle-exceptions #t
 ;;    exn
 ;;    (begin
 ;;      (debug:print 0 *default-log-port* "WARNING: stats collection failed in update-db-stats")
@@ -295,7 +295,7 @@
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
-	 (res  	   (handle-exceptions
+	 (res  	   (common:debug-handle-exceptions #t
 		    exn
 		    #f
 		    (http-transport:client-api-send-receive run-id connection-info cmd params))))
@@ -448,7 +448,7 @@
 (define (rmt:test-set-state-status-by-id run-id test-id newstate newstatus newcomment)
   (rmt:send-receive 'test-set-state-status-by-id run-id (list run-id test-id newstate newstatus newcomment)))
 
-(define (rmt:set-tests-state-status run-id testnames currstate currstatus newstate newstatus)
+(define (rmt:set-tests-state-status run-id                      testnames currstate currstatus newstate newstatus)
   (rmt:send-receive 'set-tests-state-status run-id (list run-id testnames currstate currstatus newstate newstatus)))
 
 (define (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)

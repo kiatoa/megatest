@@ -54,6 +54,7 @@
 		       (loop (file-exists? fullpath)
 			     (- count 1)))
 		     (begin
+		       (debug:print 0 *default-log-port* "ERROR: removing the journal file " fullpath ", this is not good. Look for disk full, write access and other issues.")
 		       (if remove (system (conc "rm -rf " fullpath)))
 		       #f)))
 	       #t))))))
@@ -62,7 +63,7 @@
   (let ((dbdir  (or (configf:lookup *configdat* "setup" "monitordir")
 		    (configf:lookup *configdat* "setup" "dbdir")
 		    (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))))
-    (handle-exceptions
+    (common:debug-handle-exceptions #t
      exn
      (begin
        (debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
@@ -82,7 +83,7 @@
 (define (tasks:open-db #!key (numretries 4))
   (if *task-db*
       *task-db*
-      (handle-exceptions
+      (common:debug-handle-exceptions #t
        exn
        (if (> numretries 0)
 	   (begin
@@ -95,7 +96,7 @@
 	     (print-call-chain (current-error-port))
 	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 	     (debug:print 0 *default-log-port* " exn=" (condition->list exn))))
-       (let* ((dbpath       (tasks:get-task-db-path))
+       (let* ((dbpath        (db:dbfile-path )) ;; (tasks:get-task-db-path))
 	      (dbfile       (conc dbpath "/monitor.db"))
 	      (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
 	      (exists       (file-exists? dbpath))
@@ -470,7 +471,7 @@
   (db:with-db
    dbstruct #f #f
    (lambda (db)
-     (handle-exceptions
+     (common:debug-handle-exceptions #t
       exn
       #f
       (sqlite3:first-result db "SELECT id FROM tasks_queue WHERE params LIKE ?;"
@@ -486,7 +487,7 @@
   (db:with-db
    dbstruct #f #f
    (lambda (db)
-     (handle-exceptions
+     (common:debug-handle-exceptions #t
       exn
       '()
       (sqlite3:first-row db "SELECT id,action,owner,state,target,name,testpatt,keylock,params WHERE
@@ -494,7 +495,7 @@
 			 param-key state-patt action-patt test-patt)))))
 
 (define (tasks:find-task-queue-records dbstruct target run-name test-patt state-patt action-patt)
-  ;; (handle-exceptions
+  ;; (common:debug-handle-exceptions #t
   ;;  exn
   ;;  '()
   ;;  (sqlite3:first-row
@@ -530,7 +531,7 @@
 	       (if (equal? (get-host-name) hostname)
 		   (if (process:alive? pid)
 		       (begin
-			 (handle-exceptions
+			 (common:debug-handle-exceptions #t
 			  exn
 			  (begin
 			    (debug:print 0 *default-log-port* "Kill of process " pid " on host " hostname " failed.")
@@ -595,7 +596,7 @@
   (let loop ((area-name (or (configf:lookup configdat "setup" "area-name")
 			    (common:get-area-name)))
 	     (modifier  'none))
-    (let ((success (handle-exceptions
+    (let ((success (common:debug-handle-exceptions #t
 		       exn
 		       (begin
 			 (debug:print 0 *default-log-port* "ERROR: cannot create area entry, " ((condition-property-accessor 'exn 'message) exn))
@@ -641,7 +642,7 @@
 		 new-run-id
 		 state status owner event-time comment fail-count pass-count)
 		new-run-id)
-	      (if (handle-exceptions
+	      (if (common:debug-handle-exceptions #t
 		      exn
 		      (begin (print-call-chain) #f)
 		    (pgdb:insert-run

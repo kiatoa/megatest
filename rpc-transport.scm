@@ -26,7 +26,7 @@
 
 ;; procstr is the name of the procedure to be called as a string
 (define (rpc-transport:autoremote procstr params)
-  (handle-exceptions
+  (common:debug-handle-exceptions #t
    exn
    (begin
      (debug:print 1 *default-log-port* "Remote failed for " proc " " params)
@@ -138,7 +138,7 @@
 	      ))))))
 
 (define (rpc-transport:find-free-port-and-open port)
-  (handle-exceptions
+  (common:debug-handle-exceptions #t
    exn
 	  (begin
      (print "Failed to bind to port " (rpc:default-server-port) ", trying next port")
@@ -148,7 +148,7 @@
    (tcp-listen (rpc:default-server-port) 10000)))
 
 (define (rpc-transport:ping run-id host port)
-  (handle-exceptions
+  (common:debug-handle-exceptions #t
    exn
    (begin
      (print "SERVER_NOT_FOUND")
@@ -206,7 +206,7 @@
 ;; 		 (string->number port))
 ;; 	    (let ((portn (string->number port)))
 ;; 	      (debug:print-info 2 *default-log-port* "Setting up to connect to host " host ":" port)
-;; 	      (handle-exceptions
+;; 	      (common:debug-handle-exceptions #t
 ;; 	       exn
 ;; 	       (begin
 ;; 		 (debug:print-error 0 *default-log-port* "Failed to open a connection to the server at host: " host " port: " port)

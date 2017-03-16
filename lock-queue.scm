@@ -41,7 +41,7 @@
     (if dbexists
 	(vector db actualfname)
 	(begin
-	  (handle-exceptions
+	  (common:debug-handle-exceptions #t
 	   exn
 	   (begin
 	     (thread-sleep! 10)
@@ -71,7 +71,7 @@
 
 (define (lock-queue:set-state dbdat test-id newstate #!key (remtries 10))
   (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200)
-  (handle-exceptions
+  (common:debug-handle-exceptions #t
    exn
    (if (> remtries 0)
        (begin
@@ -89,7 +89,7 @@
 (define (lock-queue:any-younger? dbdat mystart test-id #!key (remtries 10))
   ;; no need to wait on journal on read only queries
   ;; (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200)
-  (handle-exceptions
+  (common:debug-handle-exceptions #t
    exn
    (if (> remtries 0)
        (begin
@@ -118,7 +118,7 @@
 	 (lckqry    (sqlite3:prepare db "SELECT test_id,run_lock FROM runlocks WHERE run_lock='locked';"))
 	 (mklckqry  (sqlite3:prepare db "INSERT INTO runlocks (test_id,run_lock) VALUES (?,'locked');")))
     (let ((result 
-	   (handle-exceptions
+	   (common:debug-handle-exceptions #t
 	    exn
 	    (begin
 	      (debug:print 0 *default-log-port* "WARNING: failed to get queue lock. Removing lock db and returning fail") ;; Will try again in a few seconds")
@@ -150,7 +150,7 @@
 (define (lock-queue:release-lock fname test-id #!key (count 10))
   (let* ((dbdat (lock-queue:open-db fname)))
     (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 "lock-queue:release-lock; waiting on journal")
-    (handle-exceptions
+    (common:debug-handle-exceptions #t
      exn
      (begin
        (debug:print 0 *default-log-port* "WARNING: Failed to release queue lock. Will try again in few seconds")
@@ -163,7 +163,7 @@
 	   (let ((journal (conc fname "-journal")))
 	     ;; If we've tried ten times and failed there is a serious problem
 	     ;; try to remove the lock db and allow it to be recreated
-	     (handle-exceptions
+	     (common:debug-handle-exceptions #t
 	      exn
 	      #f
 	      (if (file-exists? journal)(delete-file journal))
@@ -175,7 +175,7 @@
 (define (lock-queue:steal-lock dbdat test-id #!key (count 10))
   (debug:print-info 0 *default-log-port* "Attempting to steal lock at " (lock-queue:db-dat-get-path dbdat))
   (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 "lock-queue:steal-lock; waiting on journal")
-  (handle-exceptions
+  (common:debug-handle-exceptions #t
    exn
    (begin
      (debug:print 0 *default-log-port* "WARNING: Failed to steal queue lock. Will try again in few seconds")
@@ -196,7 +196,7 @@
 	 (mystart (current-seconds))
 	 (db      (lock-queue:db-dat-get-db dbdat)))
     ;; (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 waiting-msg: "lock-queue:wait-turn; waiting on journal file")
-    (handle-exceptions
+    (common:debug-handle-exceptions #t
      exn
      (begin
        (debug:print 0 *default-log-port* "WARNING: Failed to find out if it is ok to skip the wait queue. Will try again in few seconds")

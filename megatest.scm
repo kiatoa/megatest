@@ -469,7 +469,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (for-each
 		       
 		       (lambda (pid)
-			 (handle-exceptions
+			 (common:debug-handle-exceptions #t
 			  exn
 			  #t
 			  (let-values (((pid-val exit-status exit-code) (process-wait pid #t)))
@@ -540,7 +540,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (debug:print-info 0 *default-log-port* "Removing cached files:\n    " (string-intersperse files "\n    "))
 		      (for-each 
 		       (lambda (f)
-			 (handle-exceptions
+			 (common:debug-handle-exceptions #t
 			     exn
 			     (debug:print 0 *default-log-port* "WARNING: Failed to remove file " f)
 			   (delete-file f)))
@@ -783,8 +783,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
         (args:get-arg "-kill-server"))
     (let ((tl (launch:setup)))
       (if tl 
-	  (let* ((tdbdat  (tasks:open-db))
-		 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
+	  (let* ((servers (server:get-list *toppath*))
 		 (fmtstr  "~5a~12a~8a~20a~24a~10a~10a~10a~10a\n")
 		 (servers-to-kill '())
                  (kill-switch  (if (args:get-arg "-kill-server") "-9" ""))
@@ -812,11 +811,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 ;;   (zmq-sockets (if status (server:client-connect hostname port) #f)))
 		 ;; no need to login as status of #t indicates we are connecting to correct 
 		 ;; server
-		 (if (equal? state "dead")
-		     (if (> last-update (* 25 60 60)) ;; keep records around for slighly over a day.
-			 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid action: 'delete))
-		     (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
-			 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid)))
+		;; (if (equal? state "dead")
+		;;     (if (> last-update (* 25 60 60)) ;; keep records around for slighly over a day.
+		;; 	 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid action: 'delete))
+		;;     (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
+		;; 	 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid)))
 		 (format #t fmtstr id mt-ver pid hostname (conc interface ":" pullport) pubport last-update
 			 (if status "alive" "dead") transport)
 		 (if (or (equal? id sid)
@@ -1181,7 +1180,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       
 		     (for-each 
 		      (lambda (test)
-		      	(handle-exceptions
+		      	(common:debug-handle-exceptions #f
 			 exn
 			 (begin
 			   (debug:print-error 0 *default-log-port* "Bad data in test record? " test)
