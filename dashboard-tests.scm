@@ -467,7 +467,7 @@
                ;; needed. Revisit this.
 	       (runconfig  (let ((runconfigf (conc  *toppath* "/runconfigs.config"))) ;; no rush but it would be good to convert this call to use runconfig:read
 	 		     (if (file-exists? runconfigf)
-	 			 (common:debug-handle-exceptions #t
+	 			 (handle-exceptions
                                    exn
                                    #f  ;; do nothing, just keep on trucking ....
                                    (setup-env-defaults runconfigf run-id (make-hash-table) keydat environ-patt: keystring))
@@ -475,7 +475,7 @@
 	       (testconfig    (begin
 				;; (runs:set-megatest-env-vars run-id inrunname: runname testname: test-name itempath: item-path)
 				(runs:set-megatest-env-vars run-id inkeyvals: keydat inrunname: runname intarget: keystring testname: testname itempath: item-path) ;; these may be needed by the launching process
-				(common:debug-handle-exceptions #t
+				(handle-exceptions
 				 exn  ;; NOTE: I've no idea why this was written this way. Research, study and fix needed!
 				 (tests:get-testconfig (db:test-get-testname testdat) (db:test-get-item-path testdat) test-registry #f)
 				 (tests:get-testconfig (db:test-get-testname testdat) item-path test-registry #t))))
@@ -515,7 +515,7 @@
 						       request-update))
 				    (newtestdat (if need-update 
 						    ;; NOTE: BUG HIDER, try to eliminate this exception handler
-						    (common:debug-handle-exceptions #t
+						    (handle-exceptions
 						     exn 
 						     (debug:print-info 0 *default-log-port* "test db access issue in examine test for run-id " run-id ", test-id " test-id ": " ((condition-property-accessor 'exn 'message) exn))
 						     (rmt:get-test-info-by-id run-id test-id )))))

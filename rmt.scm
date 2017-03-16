@@ -35,8 +35,9 @@
 ;;
 (define (rmt:get-connection-info areapath #!key (area-dat #f)) ;; TODO: push areapath down.
   (let* ((runremote (or area-dat *runremote*))
-	 (cinfo     (remote-conndat runremote))
-        (run-id 0))
+	 (cinfo     (if (remote? runremote)
+			(remote-conndat runremote)
+			#f)))
     (if cinfo
 	cinfo
 	(if (server:check-if-running areapath)
@@ -196,7 +197,7 @@
 
 ;; (define (rmt:update-db-stats run-id rawcmd params duration)
 ;;   (mutex-lock! *db-stats-mutex*)
-;;   (common:debug-handle-exceptions #t
+;;   (handle-exceptions
 ;;    exn
 ;;    (begin
 ;;      (debug:print 0 *default-log-port* "WARNING: stats collection failed in update-db-stats")
@@ -295,7 +296,7 @@
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
-	 (res  	   (common:debug-handle-exceptions #t
+	 (res  	   (handle-exceptions
 		    exn
 		    #f
 		    (http-transport:client-api-send-receive run-id connection-info cmd params))))

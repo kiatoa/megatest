@@ -76,7 +76,7 @@
 ;; convert to -inline 
 ;;
 (define (db:first-result-default db stmt default . params)
-  (common:debug-handle-exceptions #t
+  (handle-exceptions
    exn
    (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
      ;; check for (exn sqlite3) ((condition-property-accessor 'exn 'message) exn)
@@ -147,7 +147,7 @@
 	(debug:print-info 0 *default-log-port* *api-process-request-count* " parallel api requests being processed in process " (current-process-id) ", throttling access"))
     (if (common:low-noise-print 600 (conc "parallel-api-requests" *max-api-process-requests*))
 	(debug:print-info 2 *default-log-port* "Parallel api request count: " *api-process-request-count* " max parallel requests: " *max-api-process-requests*))
-    (common:debug-handle-exceptions #t
+    (handle-exceptions
      exn
      (begin
        (print-call-chain (current-error-port))
@@ -192,7 +192,7 @@
 ;;
 (define (db:dbfile-path . junk) ;;  run-id)
   (let* ((dbdir           (common:get-db-tmp-area)))
-    (common:debug-handle-exceptions #t
+    (handle-exceptions
      exn
      (begin
        (debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
@@ -261,7 +261,7 @@
 ;;   (let* ((dbfile       (db:dbfile-path run-id)) ;; (conc toppath "/db/" run-id ".db"))
 ;;          (dbexists     (file-exists? dbfile))
 ;;          (db           (db:lock-create-open dbfile (lambda (db)
-;;                                                      (common:debug-handle-exceptions #t
+;;                                                      (handle-exceptions
 ;;                                                       exn
 ;;                                                       (begin
 ;;                                                         ;; (release-dot-lock dbpath)
@@ -542,7 +542,7 @@
      ;;  NOPE: apply this same approach to all db files
      ;;
      (else ;; ((equal? fname "megatest.db") ;; this file can be regenerated if needed
-      (common:debug-handle-exceptions #t
+      (handle-exceptions
        exn
        (begin
 	 ;; (db:move-and-recreate-db dbdat)
@@ -586,7 +586,7 @@
 ;;    IFF field-name exists
 ;;
 (define (db:sync-tables tbls last-update fromdb todb . slave-dbs)
-  (common:debug-handle-exceptions #t
+  (handle-exceptions
    exn
    (begin
      (debug:print 0 *default-log-port* "EXCEPTION: database probably overloaded or unreadable in db:sync-tables.")
@@ -1053,7 +1053,7 @@
       #f))
 
 (define (open-run-close-exception-handling proc idb . params)
-  (common:debug-handle-exceptions #t
+  (handle-exceptions
    exn
    (let ((sleep-time (random 30))
 	 (err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
@@ -3678,7 +3678,7 @@
 	  (let* ((dbpath (db:dbdat-get-path dbdat))
 		 (db     (db:dbdat-get-db   dbdat)) ;; we'll return this so (db:delay--if-busy can be called inline
 		 (dbfj   (conc dbpath "-journal")))
-	    (if (common:debug-handle-exceptions #t
+	    (if (handle-exceptions
 		 exn
 		 (begin
 		   (debug:print-info 0 *default-log-port* "WARNING: failed to test for existance of " dbfj)

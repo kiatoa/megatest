@@ -230,7 +230,7 @@ Version: " megatest-fossil-hash)) ;; "
 	       (writeable (file-write-access? dbpath))
 	       (dbexists  (file-exists? dbpath))
 	       (handler   (make-busy-timeout 136000)))
-	  (common:debug-handle-exceptions #t
+	  (handle-exceptions
 	   exn
 	   (begin
 	     (debug:print 2 *default-log-port* "ERROR: problem accessing db " dbpath
@@ -245,7 +245,7 @@ Version: " megatest-fossil-hash)) ;; "
 	(print "ERROR: invalid path for storing database: " path))))
 
 (define (open-run-close-exception-handling proc idb . params)
-  (common:debug-handle-exceptions #t
+  (handle-exceptions
    exn
    (let ((sleep-time (random 30))
          (err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))

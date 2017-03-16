@@ -52,7 +52,7 @@
 (define (portlogger:open-run-close proc . params)
   (let* ((fname  (conc "/tmp/." (current-user-name) "-portlogger.db"))
 	 (avail  (tasks:wait-on-journal fname 10))) ;; wait up to about 10 seconds for the journal to go away
-    ;;(common:debug-handle-exceptions #t
+    ;;(handle-exceptions
     ;; exn
     ;; (begin
     ;;   ;; (release-dot-lock fname)
@@ -159,7 +159,7 @@
 	 (db      (portlogger:open-db dbfname))
 	 (numargs (length args))
 	 (result  
-	  (common:debug-handle-exceptions #t
+	  (handle-exceptions
 	   exn
 	   (begin
 	     (debug:print 0 *default-log-port* "EXCEPTION: portlogger database at " dbfname " probably overloaded or unreadable. Try removing it.")

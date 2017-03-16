@@ -152,7 +152,7 @@
                    ((kill-server)                     (set! *server-run* #f))
 
                    ;; TESTS
-                   ((test-set-state-status-by-id)     (apply db:test-set-state-status-by-id dbstruct params))
+                   ((test-set-state-status-by-id)     (apply mt:test-set-state-status-by-id dbstruct params))
                    ((delete-test-records)             (apply db:delete-test-records dbstruct params))
                    ((delete-old-deleted-test-records) (apply db:delete-old-deleted-test-records dbstruct params))
                    ((test-set-state-status)           (apply db:test-set-state-status dbstruct params))

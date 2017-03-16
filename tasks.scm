@@ -63,7 +63,7 @@
   (let ((dbdir  (or (configf:lookup *configdat* "setup" "monitordir")
 		    (configf:lookup *configdat* "setup" "dbdir")
 		    (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))))
-    (common:debug-handle-exceptions #t
+    (handle-exceptions
      exn
      (begin
        (debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
@@ -83,7 +83,7 @@
 (define (tasks:open-db #!key (numretries 4))
   (if *task-db*
       *task-db*
-      (common:debug-handle-exceptions #t
+      (handle-exceptions
        exn
        (if (> numretries 0)
 	   (begin
@@ -471,7 +471,7 @@
   (db:with-db
    dbstruct #f #f
    (lambda (db)
-     (common:debug-handle-exceptions #t
+     (handle-exceptions
       exn
       #f
       (sqlite3:first-result db "SELECT id FROM tasks_queue WHERE params LIKE ?;"
@@ -487,7 +487,7 @@
   (db:with-db
    dbstruct #f #f
    (lambda (db)
-     (common:debug-handle-exceptions #t
+     (handle-exceptions
       exn
       '()
       (sqlite3:first-row db "SELECT id,action,owner,state,target,name,testpatt,keylock,params WHERE
@@ -495,7 +495,7 @@
 			 param-key state-patt action-patt test-patt)))))
 
 (define (tasks:find-task-queue-records dbstruct target run-name test-patt state-patt action-patt)
-  ;; (common:debug-handle-exceptions #t
+  ;; (handle-exceptions
   ;;  exn
   ;;  '()
   ;;  (sqlite3:first-row
@@ -531,7 +531,7 @@
 	       (if (equal? (get-host-name) hostname)
 		   (if (process:alive? pid)
 		       (begin
-			 (common:debug-handle-exceptions #t
+			 (handle-exceptions
 			  exn
 			  (begin
 			    (debug:print 0 *default-log-port* "Kill of process " pid " on host " hostname " failed.")
@@ -596,7 +596,7 @@
   (let loop ((area-name (or (configf:lookup configdat "setup" "area-name")
 			    (common:get-area-name)))
 	     (modifier  'none))
-    (let ((success (common:debug-handle-exceptions #t
+    (let ((success (handle-exceptions
 		       exn
 		       (begin
 			 (debug:print 0 *default-log-port* "ERROR: cannot create area entry, " ((condition-property-accessor 'exn 'message) exn))
@@ -642,7 +642,7 @@
 		 new-run-id
 		 state status owner event-time comment fail-count pass-count)
 		new-run-id)
-	      (if (common:debug-handle-exceptions #t
+	      (if (handle-exceptions
 		      exn
 		      (begin (print-call-chain) #f)
 		    (pgdb:insert-run

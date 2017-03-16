@@ -203,11 +203,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (define (fossil:clone-or-sync url name dest-dir)
   (let ((targ-file (conc dest-dir "/" name))) ;; do not force usage of .fossil extension
-    (common:debug-handle-exceptions #t
+    (handle-exceptions
 	exn
 	(print "ERROR: failed to create directory " dest-dir " message: " ((condition-property-accessor 'exn 'message) exn))
       (create-directory dest-dir #t))
-    (common:debug-handle-exceptions #t
+    (handle-exceptions
 	exn
 	(print "ERROR: failed to clone or sync 1ossil " url " message: " ((condition-property-accessor 'exn 'message) exn))
       (if (file-exists? targ-file)
@@ -218,7 +218,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (define (fossil:last-change-node-and-time fossils-dir fossil-name branch)
   (let* ((fossil-file   (conc fossils-dir "/" fossil-name))
 	 (timeline-port (if (file-read-access? fossil-file)
-			    (common:debug-handle-exceptions #t
+			    (handle-exceptions
 				exn
 				(begin
 				  (print "ERROR: failed to get timeline from " fossil-file " message: " ((condition-property-accessor 'exn 'message) exn))
@@ -226,7 +226,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			      (open-input-pipe (conc "fossil timeline -t ci -W 0 -n 0 -R " fossil-file)))
 			    #f))
 	 (get-line      (lambda ()
-			  (common:debug-handle-exceptions #t
+			  (handle-exceptions
 			      exn
 			      (begin
 				(print "ERROR: failed to read from file " fossil-file " message: "  ((condition-property-accessor 'exn 'message) exn))
@@ -452,7 +452,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			   (if (alist-ref xlatr-key *target-mappers*)
 			       (begin
 				 (print "Using target mapper: " area-xlatr)
-				 (common:debug-handle-exceptions #t
+				 (handle-exceptions
 				     exn
 				     (begin
 				       (print "FAILED TO RUN TARGET MAPPER FOR " area ", called " area-xlatr)
@@ -597,7 +597,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (let* ((script (car cmd))
 				(params (cdr cmd))
 				(cmd    (conc script " " contour " " runkey " " std-runname " " action " " params))
-				(res    (common:debug-handle-exceptions #t
+				(res    (handle-exceptions
 					    exn
 					    #f
 					  (print "Running " cmd)
@@ -790,7 +790,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   ;; we are expecting a directory "logs", check and create it, create the log in /tmp if not able to create logs dir
   (let ((logdir
 	 (if (if (not (directory? "logs"))
-		 (common:debug-handle-exceptions #t
+		 (handle-exceptions
 		     exn
 		     #f
 		   (create-directory "logs")

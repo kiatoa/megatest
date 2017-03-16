@@ -97,7 +97,7 @@
 				      ((http)(rmt:login-no-auto-client-setup start-res)))))
 		    (if (and start-res
 			     ping-res)
-			(begin
+			(let ((runremote (or area-dat *runremote*))) ;; it might have been generated only a few statements ago
 			  (remote-conndat-set! runremote start-res) ;; (hash-table-set! runremote run-id start-res)
 			  (debug:print-info 2 *default-log-port* "connected to " (http-transport:server-dat-make-url start-res))
 			  start-res)

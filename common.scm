@@ -250,7 +250,7 @@
   (if (not (directory-exists? "logs"))(create-directory "logs"))
   (directory-fold 
    (lambda (file rem)
-     (common:debug-handle-exceptions #t
+     (handle-exceptions
       exn
       (debug:print-info 0 *default-log-port* "failed to rotate log " file ", probably handled by another process.")
       (let* ((fullname (conc "logs/" file))
@@ -293,7 +293,7 @@
              ((and (file-exists? mtconf) (file-exists? dbfile) (not read-only)
                    (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
               (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
-              (common:debug-handle-exceptions #t
+              (handle-exceptions
                exn
                (begin
                  (debug:print 0 *default-log-port* "Failed to switch versions.")
@@ -399,9 +399,9 @@
   (or (getenv "MT_MEGATEST") "megatest"))
 
 (define (common:read-encoded-string instr)
-  (common:debug-handle-exceptions #t
+  (handle-exceptions
    exn
-   (common:debug-handle-exceptions #t
+   (handle-exceptions
     exn
     (begin
       (debug:print-error 0 *default-log-port* "received bad encoded string \"" instr "\", message: " ((condition-property-accessor 'exn 'message) exn))
@@ -842,7 +842,7 @@
 (define (common:get-install-area)
   (let ((exe-path (car (argv))))
     (if (file-exists? exe-path)
-	(common:debug-handle-exceptions #t
+	(handle-exceptions
 	 exn
 	 #f
 	 (pathname-directory
@@ -860,7 +860,7 @@
 	(let ((res (or (and (directory? hed)
 			    (file-write-access? hed)
 			    hed)
-		       (common:debug-handle-exceptions #t
+		       (handle-exceptions
 			exn
 			#f
 			(create-directory hed #t)))))
@@ -876,14 +876,14 @@
 (define (common:get-youngest glob-list)
   (let ((all-files (apply append
 			  (map (lambda (patt)
-				 (common:debug-handle-exceptions #t
+				 (handle-exceptions
 				     exn
 				     '()
 				   (glob patt)))
 			       glob-list))))
     (fold (lambda (fname res)
 	    (let ((last-mod (car res))
-		  (curmod   (common:debug-handle-exceptions #t
+		  (curmod   (handle-exceptions
 				exn
 				0
 			      (file-modification-time fname))))
@@ -1235,7 +1235,7 @@
 (define nice-path common:nice-path)
 
 (define (common:read-link-f path)
-  (common:debug-handle-exceptions #t
+  (handle-exceptions
       exn
       (begin
 	(debug:print-error 0 *default-log-port* "command \"/bin/readlink -f " path "\" failed.")
