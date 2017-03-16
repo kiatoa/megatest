@@ -30,7 +30,7 @@
 
 ;; (define-syntax common:handle-exceptions
 ;;   (syntax-rules ()
-;;     ((_ exn-in errstmt ...)(common:debug-handle-exceptions #t exn-in errstmt ...))))
+;;     ((_ exn-in errstmt ...)(handle-exceptions exn-in errstmt ...))))
 
 (define-syntax common:debug-handle-exceptions
   (syntax-rules ()

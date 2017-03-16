@@ -25,7 +25,7 @@
 
 (define (process:cmd-run-with-stderr->list cmd . params)
   ;; (print "Called with cmd=" cmd ", proc=" proc ", params=" params)
-;;  (common:debug-handle-exceptions #t
+;;  (handle-exceptions
 ;;   exn
 ;;   (begin
 ;;     (print "ERROR:  Failed to run command: " cmd " " (string-intersperse params " "))
@@ -50,7 +50,7 @@
 
 (define (process:cmd-run-proc-each-line cmd proc . params)
   ;; (print "Called with cmd=" cmd ", proc=" proc ", params=" params)
-  (common:debug-handle-exceptions #t
+  (handle-exceptions
    exn
    (begin
      (print "ERROR:  Failed to run command: " cmd " " (string-intersperse params " "))
@@ -142,7 +142,7 @@
 	     (loop (read-line) (cons pid res))))))))
 
 (define (process:alive? pid)
-  (common:debug-handle-exceptions #t
+  (handle-exceptions
    exn
    ;; possibly pid is a process not a child, look in /proc to see if it is running still
    (file-exists? (conc "/proc/" pid))
@@ -152,7 +152,7 @@
 
 (define (process:alive-on-host? host pid)
   (let ((cmd (conc "ssh " host " ps -o pid= -p " pid)))
-    (common:debug-handle-exceptions #t
+    (handle-exceptions
      exn
      #f ;; anything goes wrong - assume the process in NOT running.
      (with-input-from-pipe 

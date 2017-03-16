@@ -429,7 +429,7 @@
 		 (run-queue-retries 5)
 		 (th1        (make-thread (lambda ()
 					    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
-					    ;; (common:debug-handle-exceptions #t
+					    ;; (handle-exceptions
 					    ;;  exn
 					    ;;  (begin
 					    ;;    (print-call-chain (current-error-port))
@@ -445,7 +445,7 @@
 					    (let ((run-ids (rmt:get-all-run-ids)))
 					      (for-each (lambda (run-id)
 							  (if keep-going
-							      (common:debug-handle-exceptions #t
+							      (handle-exceptions
 							       exn
 							       (debug:print 0 *default-log-port* "error in calling find-and-mark-incomplete for run-id " run-id)
 							       (rmt:find-and-mark-incomplete run-id #f)))) ;; ovr-deadtime)))
@@ -1879,14 +1879,14 @@
     (if (symbolic-link? run-dir)
 	(begin
 	  (debug:print-info 1 *default-log-port* "Removing symlink " run-dir)
-	  (common:debug-handle-exceptions #t
+	  (handle-exceptions
 	   exn
 	   (debug:print-error 0 *default-log-port* " Failed to remove symlink " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
 	   (delete-file run-dir)))
 	(if (directory? run-dir)
 	    (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
 		(debug:print 0 *default-log-port* "WARNING: refusing to remove " run-dir " as it is not empty")
-		(common:debug-handle-exceptions #t
+		(handle-exceptions
 		 exn
 		 (debug:print-error 0 *default-log-port* " Failed to remove directory " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
 		 (delete-directory run-dir)))

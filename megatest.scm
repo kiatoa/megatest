@@ -469,7 +469,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (for-each
 		       
 		       (lambda (pid)
-			 (common:debug-handle-exceptions #t
+			 (handle-exceptions
 			  exn
 			  #t
 			  (let-values (((pid-val exit-status exit-code) (process-wait pid #t)))
@@ -540,7 +540,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (debug:print-info 0 *default-log-port* "Removing cached files:\n    " (string-intersperse files "\n    "))
 		      (for-each 
 		       (lambda (f)
-			 (common:debug-handle-exceptions #t
+			 (handle-exceptions
 			     exn
 			     (debug:print 0 *default-log-port* "WARNING: Failed to remove file " f)
 			   (delete-file f)))

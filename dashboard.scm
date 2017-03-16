@@ -1901,7 +1901,7 @@ Misc
 	 (result-child #f))
     (if (and (file-exists? source)
 	     (file-read-access? source))
-	(common:debug-handle-exceptions #t
+	(handle-exceptions
 	 exn
 	 (begin
 	   (print-call-chain)
@@ -1913,7 +1913,7 @@ Misc
 	  (debug:print 0 *default-log-port* "ERROR: cannot find file to load: \"" source "\" for user view " view-name)))
     ;; now run the user supplied definition for the tab view
     (if success
-	(common:debug-handle-exceptions #t
+	(handle-exceptions
 	 exn
 	 (begin
 	   (print-call-chain)
@@ -1930,7 +1930,7 @@ Misc
     (if success
 	(dboard:commondat-add-updater commondat
 				      (lambda ()
-					(common:debug-handle-exceptions #t
+					(handle-exceptions
 					 exn
 					 (begin
 					   (print-call-chain)
@@ -2717,7 +2717,7 @@ Misc
 ;; (tasks:open-db)
 
 (define (dashboard:get-youngest-run-db-mod-time dbdir)
-  (common:debug-handle-exceptions #t
+  (handle-exceptions
    exn
    (begin
      (debug:print 0 *default-log-port* "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn) " db-dir="dbdir)
@@ -3015,7 +3015,7 @@ Misc
 					(lambda (res t var val)
 					  (cons (vector t var val) res))
 					'() db all-dat-qrystr)))
-		     (let ((zeropt (common:debug-handle-exceptions #t
+		     (let ((zeropt (handle-exceptions
 				    exn
 				    #f
 				    (sqlite3:first-row db all-dat-qrystr))))

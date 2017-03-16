@@ -185,7 +185,7 @@
 	      (let loop ((hed  (car server-logs))
 			 (tal  (cdr server-logs))
 			 (res '()))
-		(let* ((mod-time  (common:debug-handle-exceptions #t
+		(let* ((mod-time  (handle-exceptions
                                    exn
                                    0
                                    (file-modification-time hed))) ;; default to *very* old so log gets ignored if deleted
@@ -289,7 +289,7 @@
 (define (server:dotserver-age-seconds areapath)
   (let ((server-file (conc areapath "/.server")))
     (begin
-      (common:debug-handle-exceptions #t
+      (handle-exceptions
        exn
        #f
        (- (current-seconds)

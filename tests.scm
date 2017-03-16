@@ -1100,7 +1100,7 @@ EOF
 	       (map (lambda (p)
 		      (if (directory-exists? p)
 			  (let ((glob-query (conc p "/" fnamepatt)))
-			    (common:debug-handle-exceptions #t
+			    (handle-exceptions
 				exn
 				(with-input-from-pipe
 				    (conc "echo " glob-query)
@@ -1153,7 +1153,7 @@ EOF
 			    (file-exists? cache-file)))
 	 (cached-dat   (if (and (not force-create)
 				cache-exists)
-			   (common:debug-handle-exceptions #t
+			   (handle-exceptions
 			    exn
 			    #f ;; any issues, just give up with the cached version and re-read
 			    (configf:read-alist cache-file))
@@ -1531,7 +1531,7 @@ EOF
   (let* ((cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory)))
 	 (remtries 10))
-    (common:debug-handle-exceptions #t
+    (handle-exceptions
      exn
      (if (> remtries 0)
 	 (begin

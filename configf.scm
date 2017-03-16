@@ -51,7 +51,7 @@
 		    var value metadata: metadata)))
 
 (define (config:eval-string-in-environment str)
-  (common:debug-handle-exceptions #t
+  (handle-exceptions
    exn
    (begin
      (debug:print-error 0 *default-log-port* "problem evaluating \"" str "\" in the shell environment")
@@ -111,7 +111,7 @@
 				;; ((rget)           (conc "(lambda (ht)(runconfigs-get ht \"" cmd "\"))"))
 				(else "(lambda (ht)(print \"ERROR\") \"ERROR\")"))))
 		;; (print "fullcmd=" fullcmd)
-		(common:debug-handle-exceptions #t
+		(handle-exceptions
 		 exn
 		 (begin
 		   (debug:print 0 *default-log-port* "WARNING: failed to process config input \"" l "\"")
