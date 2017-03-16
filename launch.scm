@@ -365,7 +365,7 @@
 		    (begin
 		      (for-each
 		       (lambda (pid)
-			 (handle-exceptions
+			 (common:debug-handle-exceptions #t
 			  exn
 			  (begin
 			    (debug:print-info 0 *default-log-port* "Unable to kill process with pid " pid ", possibly already killed.")
@@ -380,7 +380,7 @@
 			  (thread-sleep! 5)
 			  ;; (if (process:process-alive? pid)
 			  (map (lambda (pid-num)
-				 (handle-exceptions
+				 (common:debug-handle-exceptions #t
 				  exn
 				  #f
 				  (process-signal pid-num signal/kill)))
@@ -848,14 +848,14 @@
 	  (begin
 	    (if (not (file-exists? linktree))
 		(begin
-		  (handle-exceptions
+		  (common:debug-handle-exceptions #t
 		   exn
 		   (begin
 		     (debug:print-error 0 *default-log-port* "Something went wrong when trying to create linktree dir at " linktree)
 		     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 		     (exit 1))
 		   (create-directory linktree #t))))
-	    (handle-exceptions
+	    (common:debug-handle-exceptions #t
 	     exn
 	     (begin
 	       (debug:print-error 0 *default-log-port* "Something went wrong when trying to create link to linktree at " *toppath*)
@@ -954,7 +954,7 @@
     ;; create the directory for the tests dir links, this is needed no matter what...
     (if (and (not (directory-exists? lnkbase))
 	     (not (file-exists? lnkbase)))
-	(handle-exceptions
+	(common:debug-handle-exceptions #t
 	 exn
 	 (begin
 	   (debug:print-error 0 *default-log-port* "Problem creating linktree base at " lnkbase)
@@ -973,7 +973,7 @@
     (if (not not-iterated) ;; i.e. iterated
 	(let ((iterated-parent  (pathname-directory (conc lnkpath "/" item-path))))
 	  (debug:print-info 2 *default-log-port* "Creating iterated parent " iterated-parent)
-	  (handle-exceptions
+	  (common:debug-handle-exceptions #t
 	   exn
 	   (begin
 	     (debug:print-error 0 *default-log-port* " Failed to create directory " iterated-parent ((condition-property-accessor 'exn 'message) exn) ", exiting")
@@ -981,7 +981,7 @@
 	   (create-directory iterated-parent #t))))
 
     (if (symbolic-link? lnkpath) 
-	(handle-exceptions
+	(common:debug-handle-exceptions #t
 	 exn
 	 (begin
 	   (debug:print-error 0 *default-log-port* " Failed to remove symlink " lnkpath ((condition-property-accessor 'exn 'message) exn) ", exiting")
@@ -990,7 +990,7 @@
 
     (if (not (or (file-exists? lnkpath)
 		 (symbolic-link? lnkpath)))
-	(handle-exceptions
+	(common:debug-handle-exceptions #t
 	 exn
 	 (begin
 	   (debug:print-error 0 *default-log-port* " Failed to create symlink " lnkpath ((condition-property-accessor 'exn 'message) exn) ", exiting")
@@ -1023,7 +1023,7 @@
 		  (not (directory-exists? toptest-path)))
 	      (begin
 		(debug:print-info 2 *default-log-port* "Creating " toptest-path " and link " lnkpath)
-		(handle-exceptions
+		(common:debug-handle-exceptions #t
 		 exn
 		 #f ;; don't care to catch and deal with errors here for now.
 		 (create-directory toptest-path #t))
@@ -1035,7 +1035,7 @@
 	(begin ;; (let ((lnktarget (conc lnkpath "/" item-path)))
 	  (debug:print 2 *default-log-port* "Setting up sub test run area")
 	  (debug:print 2 *default-log-port* " - creating run area in " test-path)
-	  (handle-exceptions
+	  (common:debug-handle-exceptions #t
 	   exn
 	   (begin
 	     (debug:print-error 0 *default-log-port* " Failed to create directory " test-path ((condition-property-accessor 'exn 'message) exn) ", exiting")
@@ -1046,7 +1046,7 @@
 		       "                   to: " lnktarget)
 
 	  ;; If there is already a symlink delete it and recreate it.
-	  (handle-exceptions
+	  (common:debug-handle-exceptions #t
 	   exn
 	   (begin
 	     (debug:print-error 0 *default-log-port* " Failed to re-create link " lnktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")

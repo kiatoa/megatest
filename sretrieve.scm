@@ -123,7 +123,7 @@ Version: " megatest-fossil-hash)) ;; "
 	(let* ((dbpath    (conc path "/" *exe-name* ".db"))
 	       (writeable (file-write-access? dbpath))
 	       (dbexists  (file-exists? dbpath)))
-	  (handle-exceptions
+	  (common:debug-handle-exceptions #t
 	   exn
 	   (begin
 	     (debug:print 2 *default-log-port* "ERROR: problem accessing db " dbpath
@@ -487,7 +487,7 @@ Version: " megatest-fossil-hash)) ;; "
     (if (file-exists? upstream-file)
 	(if (or (not (file-exists? package-config)) ;; if not created call the updater, otherwise call only if upstream newer
 		(> (file-modification-time upstream-file)(file-modification-time package-config)))
-	    (handle-exceptions
+	    (common:debug-handle-exceptions #t
 	     exn
 	     (debug:print-error 0 *default-log-port* "failed to run script " conversion-script " with params " upstream-file " " package-config)
 	     (let ((pid (process-run conversion-script (list upstream-file package-config))))

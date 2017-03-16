@@ -114,7 +114,7 @@ Version: " megatest-fossil-hash)) ;; "
 	(let* ((dbpath    (conc path "/spublish.db"))
 	       (writeable (file-write-access? dbpath))
 	       (dbexists  (file-exists? dbpath)))
-	  (handle-exceptions
+	  (common:debug-handle-exceptions #t
 	   exn
 	   (begin
 	     (debug:print 2 *default-log-port* "ERROR: problem accessing db " dbpath

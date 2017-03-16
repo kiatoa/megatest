@@ -28,9 +28,23 @@
     ((_ (name arg ...) body ...)
      (define-syntax name (syntax-rules () ((name arg ...) (begin body ...)))))))
 
+;; (define-syntax common:handle-exceptions
+;;   (syntax-rules ()
+;;     ((_ exn-in errstmt ...)(common:debug-handle-exceptions #t exn-in errstmt ...))))
+
+(define-syntax common:debug-handle-exceptions
+  (syntax-rules ()
+    ((_ debug exn errstmt body ...)
+     (if debug
+	 (begin body ...)
+	 (handle-exceptions exn errstmt body ...)))))
+
 (define-syntax common:handle-exceptions
   (syntax-rules ()
-    ((_ exn-in errstmt ...)(handle-exceptions exn-in errstmt ...))))
+    ((_ exn errstmt body ...)
+     (begin body ...))))
+
+;; (define handle-exceptions common:handle-exceptions)
 
 ;; iup callbacks are not dumping the stack, this is a work-around
 ;;
@@ -99,7 +113,7 @@
    ((and (number? *verbosity*)
 	 (list? n))
     (member *verbosity* n))))
-      
+
 (define (debug:setup)
   (let ((debugstr (or (args:get-arg "-debug")
 		      (getenv "MT_DEBUG_MODE"))))

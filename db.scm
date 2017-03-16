@@ -76,7 +76,7 @@
 ;; convert to -inline 
 ;;
 (define (db:first-result-default db stmt default . params)
-  (handle-exceptions
+  (common:debug-handle-exceptions #t
    exn
    (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
      ;; check for (exn sqlite3) ((condition-property-accessor 'exn 'message) exn)
@@ -147,7 +147,7 @@
 	(debug:print-info 0 *default-log-port* *api-process-request-count* " parallel api requests being processed in process " (current-process-id) ", throttling access"))
     (if (common:low-noise-print 600 (conc "parallel-api-requests" *max-api-process-requests*))
 	(debug:print-info 2 *default-log-port* "Parallel api request count: " *api-process-request-count* " max parallel requests: " *max-api-process-requests*))
-    (handle-exceptions
+    (common:debug-handle-exceptions #t
      exn
      (begin
        (print-call-chain (current-error-port))
@@ -192,7 +192,7 @@
 ;;
 (define (db:dbfile-path . junk) ;;  run-id)
   (let* ((dbdir           (common:get-db-tmp-area)))
-    (handle-exceptions
+    (common:debug-handle-exceptions #t
      exn
      (begin
        (debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
@@ -261,7 +261,7 @@
 ;;   (let* ((dbfile       (db:dbfile-path run-id)) ;; (conc toppath "/db/" run-id ".db"))
 ;;          (dbexists     (file-exists? dbfile))
 ;;          (db           (db:lock-create-open dbfile (lambda (db)
-;;                                                      (handle-exceptions
+;;                                                      (common:debug-handle-exceptions #t
 ;;                                                       exn
 ;;                                                       (begin
 ;;                                                         ;; (release-dot-lock dbpath)
@@ -542,7 +542,7 @@
      ;;  NOPE: apply this same approach to all db files
      ;;
      (else ;; ((equal? fname "megatest.db") ;; this file can be regenerated if needed
-      (handle-exceptions
+      (common:debug-handle-exceptions #t
        exn
        (begin
 	 ;; (db:move-and-recreate-db dbdat)
@@ -586,7 +586,7 @@
 ;;    IFF field-name exists
 ;;
 (define (db:sync-tables tbls last-update fromdb todb . slave-dbs)
-  (handle-exceptions
+  (common:debug-handle-exceptions #t
    exn
    (begin
      (debug:print 0 *default-log-port* "EXCEPTION: database probably overloaded or unreadable in db:sync-tables.")
@@ -900,7 +900,6 @@
 	     (tmpdb    (db:get-db dbstruct))
              (refndb   (dbr:dbstruct-refndb dbstruct))
 	     (allow-cleanup #t) ;; (if run-ids #f #t))
-	     ;; (tdbdat  (tasks:open-db))
 	     (servers (server:get-list *toppath*)) ;; (tasks:get-all-servers (db:delay-if-busy tdbdat)))
 	     (data-synced 0)) ;; count of changed records (I hope)
     
@@ -1054,7 +1053,7 @@
       #f))
 
 (define (open-run-close-exception-handling proc idb . params)
-  (handle-exceptions
+  (common:debug-handle-exceptions #t
    exn
    (let ((sleep-time (random 30))
 	 (err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
@@ -2582,20 +2581,29 @@
 ;; NB// This call only operates on toplevel tests. Consider replacing it with more general call
 ;;
 (define (db:set-tests-state-status dbstruct run-id testnames currstate currstatus newstate newstatus)
-  (for-each (lambda (testname)
-	      (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
-			       (if currstate  (conc "state='" currstate "' AND ") "")
-			       (if currstatus (conc "status='" currstatus "' AND ") "")
-			       " run_id=? AND testname LIKE ?;"))
-		    (test-id (db:get-test-id dbstruct run-id testname "")))
-		(db:with-db
-		 dbstruct
-		 run-id
-		 #t
-		 (lambda (db)
-		   (sqlite3:execute db qry newstate newstatus run-id testname)))
-		(if test-id (mt:process-triggers dbstruct run-id test-id newstate newstatus))))
-	    testnames))
+  (let ((test-ids '()))
+    (for-each
+     (lambda (testname)
+       (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
+			(if currstate  (conc "state='" currstate "' AND ") "")
+			(if currstatus (conc "status='" currstatus "' AND ") "")
+			" run_id=? AND testname LIKE ?;"))
+	     (test-id (db:get-test-id dbstruct run-id testname "")))
+	 (db:with-db
+	  dbstruct
+	  run-id
+	  #t
+	  (lambda (db)
+	    (sqlite3:execute db qry
+			     (or newstate  currstate "NOT_STARTED")
+			     (or newstatus currstate "UNKNOWN")
+			     run-id testname)))
+	 (if test-id
+	     (begin
+	       (set! test-ids (cons test-id test-ids))
+	       (mt:process-triggers dbstruct run-id test-id newstate newstatus)))))
+     testnames)
+    test-ids))
 
 ;; ;; speed up for common cases with a little logic
 ;; ;; NB// Ultimately this will be deprecated in deference to mt:test-set-state-status-by-id
@@ -3670,7 +3678,7 @@
 	  (let* ((dbpath (db:dbdat-get-path dbdat))
 		 (db     (db:dbdat-get-db   dbdat)) ;; we'll return this so (db:delay--if-busy can be called inline
 		 (dbfj   (conc dbpath "-journal")))
-	    (if (handle-exceptions
+	    (if (common:debug-handle-exceptions #t
 		 exn
 		 (begin
 		   (debug:print-info 0 *default-log-port* "WARNING: failed to test for existance of " dbfj)

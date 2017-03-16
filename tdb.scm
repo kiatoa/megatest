@@ -54,7 +54,7 @@
       (let* ((dbpath              (conc work-area "/testdat.db"))
 	     (dbexists            (file-exists? dbpath))
 	     (work-area-writeable (file-write-access? work-area))
-	     (db                  (handle-exceptions  ;; open the db if area writeable or db pre-existing. open in-mem otherwise. if exception, open in-mem
+	     (db                  (common:debug-handle-exceptions #t  ;; open the db if area writeable or db pre-existing. open in-mem otherwise. if exception, open in-mem
 				   exn
 				   (begin
 				     (print-call-chain (current-error-port))
@@ -83,7 +83,7 @@
 	;; (sqlite3:execute db "PRAGMA synchronous = 0;")
 	(debug:print-info 11 *default-log-port* "open-test-db END (sucessful)" work-area)
 	;; now let's test that everything is correct
-	(handle-exceptions
+	(common:debug-handle-exceptions #t
 	 exn
 	 (begin
 	   (print-call-chain (current-error-port))
