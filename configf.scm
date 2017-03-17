@@ -17,6 +17,7 @@
 (declare (unit configf))
 (declare (uses process))
 (declare (uses env))
+(declare (uses keys))
 
 (include "common_records.scm")
 
