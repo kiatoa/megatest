@@ -35,7 +35,9 @@
 
 (define getenv get-environment-variable)
 (define (safe-setenv key val)
-  (if (and (string? val)(string? key))
+  (if (and (string? val)
+	   (string? key)
+	   (not (substring-index ":" key))) ;; variables containing : are for internal use and cannot be environment variables.
       (handle-exceptions
        exn
        (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val)
