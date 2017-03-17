@@ -14,7 +14,7 @@
 (define (toplevel-command . a) #f)
 
 (use srfi-1 posix srfi-69 readline ;;  regex regex-case srfi-69 apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
-     srfi-18 extras format pkts regex regex-case
+     srfi-18 extras format pkts pkts regex regex-case
      (prefix dbi dbi:)) ;;  zmq extras)
 
 (declare (uses common))
@@ -345,7 +345,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       (let* ((pktdat (string-intersperse
 				       (with-input-from-file pkt read-lines)
 				       "\n"))
-			      (apkt   (convert-pkt->alist pktdat))
+			      (apkt   (pkt->alist pktdat))
 			      (ptype  (alist-ref 'T apkt)))
 			 (add-to-queue pdb pktdat uuid (or ptype 'cmd) #f 0)
 			 (debug:print 4 *default-log-port* "Added " uuid " of type " ptype " to queue"))
@@ -356,7 +356,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (define (get-pkt-alists pkts)
   (map (lambda (x)
-	 (alist-ref 'pkta x)) ;; 'pkta pulls out the alist from the read pkt
+	 (alist-ref 'apkt x)) ;; 'pkta pulls out the alist from the read pkt
        pkts))
 
 ;; given list of pkts (alist mode) return list of D cards as Unix epoch, sorted descending
@@ -764,7 +764,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      ;; (print "key: " key " val: " val " par: " par)
 	      (if par
 		  (conc res " " (param-translate par) " " val)
-		  (if (member key '(a Z U D)) ;; a is the action
+		  (if (member key '(a Z U D T)) ;; a is the action
 		      res
 		      (begin
 			(print "ERROR: Unknown key in packet \"" key "\" with value \"" val "\"")
@@ -810,7 +810,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (rgentargs (hash-table-keys rgconf))) ;; these are the targets registered for automatically triggering
 	 (for-each
 	  (lambda (pktdat)
-	    (let* ((pkta    (alist-ref 'pkta pktdat))
+	    (let* ((pkta    (alist-ref 'apkt pktdat))
 		   (action  (alist-ref 'a pkta))
 		   (cmdline (pkt->cmdline pkta))
 		   (uuid    (alist-ref 'Z pkta))
