@@ -578,7 +578,7 @@
 	      (list  "MT_RUNNAME"   runname)
 	      (list  "MT_MEGATEST"  megatest)
 	      (list  "MT_TARGET"    target)
-	      (list  "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))
+	      (list  "MT_LINKTREE"  (common:get-linktree)) ;; (configf:lookup *configdat* "setup" "linktree"))
 	      (list  "MT_TESTSUITENAME" (common:get-testsuite-name))))
 
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
@@ -684,7 +684,7 @@
 	   (or (args:get-arg "-run")
 	       (args:get-arg "-runtests")
 	       (args:get-arg "-execute")))
-      (let* ((linktree (get-environment-variable "MT_LINKTREE"))
+      (let* ((linktree (common:get-linktree)) ;; (get-environment-variable "MT_LINKTREE"))
 	     (target   (common:args-get-target exit-if-bad: #t))
 	     (runname  (or (args:get-arg "-runname")
 			   (args:get-arg ":runname")
@@ -803,7 +803,9 @@
 	      (let* ((keys         (rmt:get-keys))
 		     (key-vals     (keys:target->keyval keys target))
 		     (linktree     (or (getenv "MT_LINKTREE")
-				       (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f)))
+				       (if *configdat*
+					   (configf:lookup *configdat* "setup" "linktree")
+					   (conc *toppath* "/lt"))))
 		     (second-pass  (find-and-read-config
 				    mtconfig
 				    environ-patt: "env-override"
@@ -842,8 +844,7 @@
 	      (debug:print-error 0 *default-log-port* "No " mtconfig " file found. Giving up.")
 	      (exit 2))))))
     ;; additional house keeping
-    (let* ((linktree (or (getenv "MT_LINKTREE")
-			 (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f))))
+    (let* ((linktree (common:get-linktree)))
       (if linktree
 	  (begin
 	    (if (not (file-exists? linktree))
@@ -934,8 +935,10 @@
 	 (test-path    (conc disk-path (if contour (conc "/" contour) "") "/" test-base))
 
 	 ;; ensure this exists first as links to subtests must be created there
-	 (linktree  (let ((rd (config-lookup *configdat* "setup" "linktree")))
-		      (if rd rd (conc *toppath* "/runs"))))
+	 (linktree  (common:get-linktree))
+	 ;; WAS: (let ((rd (config-lookup *configdat* "setup" "linktree")))
+	 ;;         (if rd rd (conc *toppath* "/runs"))))
+	 ;; which seems wrong ...
 
 	 (lnkbase   (conc linktree (if contour (conc "/" contour) "") "/" target "/" runname))
 	 (lnkpath   (conc lnkbase "/" testname))

@@ -58,7 +58,7 @@
 	 (keys      (if inkeys    inkeys    (rmt:get-keys)))
 	 (keyvals   (if inkeyvals inkeyvals (keys:target->keyval keys target)))
 	 (vals      (hash-table-ref/default *env-vars-by-run-id* run-id #f))
-	 (link-tree (configf:lookup *configdat* "setup" "linktree")))
+	 (link-tree (common:get-linktree))) ;; (configf:lookup *configdat* "setup" "linktree")))
     (if testname (setenv "MT_TEST_NAME" testname))
     (if itempath (setenv "MT_ITEMPATH"  itempath))
 

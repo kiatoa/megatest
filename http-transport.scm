@@ -59,7 +59,7 @@
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname))) 
 	 (start-port      (portlogger:open-run-close portlogger:find-port))
-	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree")))
+	 (link-tree-path  (common:get-linktree))) ;; (configf:lookup *configdat* "setup" "linktree")))
     (debug:print-info 0 *default-log-port* "portlogger recommended port: " start-port)
     (root-path     (if link-tree-path 
 		       link-tree-path

@@ -210,7 +210,7 @@
 	    (let ((tconfig-file (conc hed "/" test-name "/testconfig")))
 	      (if (and (file-exists? tconfig-file)
 		       (file-read-access? tconfig-file))
-		  (let ((link-tree-path (configf:lookup *configdat* "setup" "linktree"))
+		  (let ((link-tree-path (common:get-linktree)) ;; (configf:lookup *configdat* "setup" "linktree"))
 			(old-link-tree  (get-environment-variable "MT_LINKTREE")))
 		    (if link-tree-path (setenv "MT_LINKTREE" link-tree-path))
 		    (let ((newtcfg (read-config tconfig-file #f #f))) ;; NOTE: Does NOT run [system ...]

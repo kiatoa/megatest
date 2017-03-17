@@ -62,7 +62,7 @@
 (define (tasks:get-task-db-path)
   (let ((dbdir  (or (configf:lookup *configdat* "setup" "monitordir")
 		    (configf:lookup *configdat* "setup" "dbdir")
-		    (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))))
+		    (conc (common:get-linktree) "/.db"))))
     (handle-exceptions
      exn
      (begin
