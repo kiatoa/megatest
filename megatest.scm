@@ -528,7 +528,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (if (getenv "MT_TARGET") ;; no point in trying if no target
 	  (if (args:get-arg "-runname")
 	      (let* ((toppath  (launch:setup))
-		     (linktree (if toppath (configf:lookup *configdat* "setup" "linktree")))
+		     (linktree (common:get-linktree)) ;; (if toppath (configf:lookup *configdat* "setup" "linktree")))
 		     (runtop   (conc linktree "/" (getenv "MT_TARGET") "/" (args:get-arg "-runname")))
 		     (files    (if (file-exists? runtop)
 				   (append (glob (conc runtop "/.megatest*"))

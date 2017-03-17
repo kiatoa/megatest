@@ -955,7 +955,10 @@
 (define (common:get-linktree)
   (or (getenv "MT_LINKTREE")
       (if *configdat*
-	  (configf:lookup *configdat* "setup" "linktree"))))
+	  (configf:lookup *configdat* "setup" "linktree")
+	  (if *toppath*
+	      (conc *toppath* "/lt")
+	      #f))))
 
 (define (common:args-get-runname)
   (let ((res (or (args:get-arg "-runname")
