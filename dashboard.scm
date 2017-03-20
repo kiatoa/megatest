@@ -2714,7 +2714,7 @@ Misc
 (define *last-monitor-update-time* 0)
 
 ;; Force creation of the db in case it isn't already there.
-(tasks:open-db)
+;; (tasks:open-db)
 
 (define (dashboard:get-youngest-run-db-mod-time dbdir)
   (handle-exceptions

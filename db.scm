@@ -900,7 +900,6 @@
 	     (tmpdb    (db:get-db dbstruct))
              (refndb   (dbr:dbstruct-refndb dbstruct))
 	     (allow-cleanup #t) ;; (if run-ids #f #t))
-	     ;; (tdbdat  (tasks:open-db))
 	     (servers (server:get-list *toppath*)) ;; (tasks:get-all-servers (db:delay-if-busy tdbdat)))
 	     (data-synced 0)) ;; count of changed records (I hope)
     
@@ -2582,20 +2581,29 @@
 ;; NB// This call only operates on toplevel tests. Consider replacing it with more general call
 ;;
 (define (db:set-tests-state-status dbstruct run-id testnames currstate currstatus newstate newstatus)
-  (for-each (lambda (testname)
-	      (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
-			       (if currstate  (conc "state='" currstate "' AND ") "")
-			       (if currstatus (conc "status='" currstatus "' AND ") "")
-			       " run_id=? AND testname LIKE ?;"))
-		    (test-id (db:get-test-id dbstruct run-id testname "")))
-		(db:with-db
-		 dbstruct
-		 run-id
-		 #t
-		 (lambda (db)
-		   (sqlite3:execute db qry newstate newstatus run-id testname)))
-		(if test-id (mt:process-triggers dbstruct run-id test-id newstate newstatus))))
-	    testnames))
+  (let ((test-ids '()))
+    (for-each
+     (lambda (testname)
+       (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
+			(if currstate  (conc "state='" currstate "' AND ") "")
+			(if currstatus (conc "status='" currstatus "' AND ") "")
+			" run_id=? AND testname LIKE ?;"))
+	     (test-id (db:get-test-id dbstruct run-id testname "")))
+	 (db:with-db
+	  dbstruct
+	  run-id
+	  #t
+	  (lambda (db)
+	    (sqlite3:execute db qry
+			     (or newstate  currstate "NOT_STARTED")
+			     (or newstatus currstate "UNKNOWN")
+			     run-id testname)))
+	 (if test-id
+	     (begin
+	       (set! test-ids (cons test-id test-ids))
+	       (mt:process-triggers dbstruct run-id test-id newstate newstatus)))))
+     testnames)
+    test-ids))
 
 ;; ;; speed up for common cases with a little logic
 ;; ;; NB// Ultimately this will be deprecated in deference to mt:test-set-state-status-by-id

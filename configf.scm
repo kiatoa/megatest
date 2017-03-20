@@ -17,6 +17,7 @@
 (declare (unit configf))
 (declare (uses process))
 (declare (uses env))
+(declare (uses keys))
 
 (include "common_records.scm")
 
@@ -655,15 +656,27 @@
      adat)
     ht))
 
+;; if 
 (define (configf:read-alist fname)
-  (configf:alist->config
-   (with-input-from-file fname read)))
+  (handle-exceptions
+      exn
+      #f
+    (configf:alist->config
+     (with-input-from-file fname read))))
 
 (define (configf:write-alist cdat fname)
-  (with-output-to-file fname
-    (lambda ()
-      (pp (configf:config->alist cdat)))))
-     
+  (let ((dat  (configf:config->alist cdat)))
+    (with-output-to-file fname ;; first write out the file
+      (lambda ()
+	(pp dat)))
+    (if (file-exists? fname)   ;; now verify it is readable
+	(if (configf:read-alist fname)
+	    #t ;; data is good.
+	    (begin
+	      (delete-file fname)
+	      (debug:print 0 *default-log-port* "WARNING: content " dat " for cache " fname " is not readable. Deleting generated file.")
+	      #f))
+	#f)))
 
 ;; convert hierarchial list to ini format
 ;;

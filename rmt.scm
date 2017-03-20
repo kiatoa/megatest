@@ -35,13 +35,14 @@
 ;;
 (define (rmt:get-connection-info areapath #!key (area-dat #f)) ;; TODO: push areapath down.
   (let* ((runremote (or area-dat *runremote*))
-	 (cinfo     (remote-conndat runremote))
-        (run-id 0))
-    (if cinfo
-	cinfo
-	(if (server:check-if-running areapath)
-	    (client:setup areapath)
-	    #f))))
+	 (cinfo     (if (remote? runremote)
+			(remote-conndat runremote)
+			#f)))
+	  (if cinfo
+	      cinfo
+	      (if (server:check-if-running areapath)
+		  (client:setup areapath)
+		  #f))))
 
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
 
@@ -448,7 +449,7 @@
 (define (rmt:test-set-state-status-by-id run-id test-id newstate newstatus newcomment)
   (rmt:send-receive 'test-set-state-status-by-id run-id (list run-id test-id newstate newstatus newcomment)))
 
-(define (rmt:set-tests-state-status run-id testnames currstate currstatus newstate newstatus)
+(define (rmt:set-tests-state-status run-id                      testnames currstate currstatus newstate newstatus)
   (rmt:send-receive 'set-tests-state-status run-id (list run-id testnames currstate currstatus newstate newstatus)))
 
 (define (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)

@@ -54,6 +54,7 @@
 		       (loop (file-exists? fullpath)
 			     (- count 1)))
 		     (begin
+		       (debug:print 0 *default-log-port* "ERROR: removing the journal file " fullpath ", this is not good. Look for disk full, write access and other issues.")
 		       (if remove (system (conc "rm -rf " fullpath)))
 		       #f)))
 	       #t))))))
@@ -61,7 +62,7 @@
 (define (tasks:get-task-db-path)
   (let ((dbdir  (or (configf:lookup *configdat* "setup" "monitordir")
 		    (configf:lookup *configdat* "setup" "dbdir")
-		    (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))))
+		    (conc (common:get-linktree) "/.db"))))
     (handle-exceptions
      exn
      (begin
@@ -95,7 +96,7 @@
 	     (print-call-chain (current-error-port))
 	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 	     (debug:print 0 *default-log-port* " exn=" (condition->list exn))))
-       (let* ((dbpath       (tasks:get-task-db-path))
+       (let* ((dbpath        (db:dbfile-path )) ;; (tasks:get-task-db-path))
 	      (dbfile       (conc dbpath "/monitor.db"))
 	      (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
 	      (exists       (file-exists? dbpath))
