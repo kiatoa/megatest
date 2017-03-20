@@ -373,7 +373,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (if (args:get-arg "-start-dir")
     (if (file-exists? (args:get-arg "-start-dir"))
-	(change-directory (args:get-arg "-start-dir"))
+        (let ((fullpath (common:real-path (args:get-arg "-start-dir"))))
+          (setenv "PWD" fullpath)
+          (change-directory fullpath))
 	(begin
 	  (debug:print-error 0 *default-log-port* "non-existant start dir " (args:get-arg "-start-dir") " specified, exiting.")
 	  (exit 1))))
