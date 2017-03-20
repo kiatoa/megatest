@@ -34,14 +34,16 @@
 ;; else return #f to let the calling proc know that there is no server available
 ;;
 (define (rmt:get-connection-info areapath #!key (area-dat #f)) ;; TODO: push areapath down.
-  (let* ((runremote (or area-dat *runremote*))
-	 (cinfo     (remote-conndat runremote))
-        (run-id 0))
-    (if cinfo
-	cinfo
-	(if (server:check-if-running areapath)
-	    (client:setup areapath)
-	    #f))))
+  (let* ((runremote (or area-dat *runremote*)))
+    (if runremote
+	(let* ((cinfo  (remote-conndat runremote))
+	       (run-id 0))
+	  (if cinfo
+	      cinfo
+	      (if (server:check-if-running areapath)
+		  (client:setup areapath)
+		  #f)))
+	#f)))
 
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
 
