@@ -59,7 +59,7 @@
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname))) 
 	 (start-port      (portlogger:open-run-close portlogger:find-port))
-	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree")))
+	 (link-tree-path  (common:get-linktree))) ;; (configf:lookup *configdat* "setup" "linktree")))
     (debug:print-info 0 *default-log-port* "portlogger recommended port: " start-port)
     (root-path     (if link-tree-path 
 		       link-tree-path
@@ -114,36 +114,36 @@
   (let ((config-hostname (configf:lookup *configdat* "server" "hostname")))
     (debug:print-info 0 *default-log-port* "http-transport:try-start-server time=" (seconds->time-string (current-seconds)) " ipaddrsstr=" ipaddrstr " portnum=" portnum " config-hostname=" config-hostname)
     (handle-exceptions
-     exn
-     (begin
-       (print-error-message exn)
-       (if (< portnum 64000)
-	   (begin 
-	     (debug:print 0 *default-log-port* "WARNING: attempt to start server failed. Trying again ...")
-	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 *default-log-port* "exn=" (condition->list exn))
-	     (portlogger:open-run-close portlogger:set-failed portnum)
-	     (debug:print 0 *default-log-port* "WARNING: failed to start on portnum: " portnum ", trying next port")
-	     (thread-sleep! 0.1)
-
-	     ;; get_next_port goes here
-	     (http-transport:try-start-server ipaddrstr
-					      (portlogger:open-run-close portlogger:find-port)))
-	   (begin
-	     (print "ERROR: Tried and tried but could not start the server"))))
-     ;; any error in following steps will result in a retry
-     (set! *server-info* (list ipaddrstr portnum))
-     (debug:print 0 *default-log-port* "INFO: Trying to start server on " ipaddrstr ":" portnum)
-     ;; This starts the spiffy server
-     ;; NEED WAY TO SET IP TO #f TO BIND ALL
-     ;; (start-server bind-address: ipaddrstr port: portnum)
-     (if config-hostname ;; this is a hint to bind directly
-	 (start-server port: portnum bind-address: (if (equal? config-hostname "-")
-						       ipaddrstr
-						       config-hostname))
-	 (start-server port: portnum))
-     (portlogger:open-run-close portlogger:set-port portnum "released")
-     (debug:print 1 *default-log-port* "INFO: server has been stopped"))))
+	exn
+	(begin
+	  (print-error-message exn)
+	  (if (< portnum 64000)
+	      (begin 
+		(debug:print 0 *default-log-port* "WARNING: attempt to start server failed. Trying again ...")
+		(debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+		(debug:print 0 *default-log-port* "exn=" (condition->list exn))
+		(portlogger:open-run-close portlogger:set-failed portnum)
+		(debug:print 0 *default-log-port* "WARNING: failed to start on portnum: " portnum ", trying next port")
+		(thread-sleep! 0.1)
+		
+		;; get_next_port goes here
+		(http-transport:try-start-server ipaddrstr
+						 (portlogger:open-run-close portlogger:find-port)))
+	      (begin
+		(print "ERROR: Tried and tried but could not start the server"))))
+      ;; any error in following steps will result in a retry
+      (set! *server-info* (list ipaddrstr portnum))
+      (debug:print 0 *default-log-port* "INFO: Trying to start server on " ipaddrstr ":" portnum)
+      ;; This starts the spiffy server
+      ;; NEED WAY TO SET IP TO #f TO BIND ALL
+      ;; (start-server bind-address: ipaddrstr port: portnum)
+      (if config-hostname ;; this is a hint to bind directly
+	  (start-server port: portnum bind-address: (if (equal? config-hostname "-")
+							ipaddrstr
+							config-hostname))
+	  (start-server port: portnum))
+      (portlogger:open-run-close portlogger:set-port portnum "released")
+      (debug:print 1 *default-log-port* "INFO: server has been stopped"))))
 
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
@@ -231,26 +231,26 @@
 					 success
 					 (db:string->obj 
 					  (handle-exceptions
-					   exn
-					   (begin
-					     (set! success #f)
-					     (debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
-					     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-					     (if runremote
-                                                 (remote-conndat-set! runremote #f))
-					     ;; Killing associated server to allow clean retry.")
-					     ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
-					     (mutex-unlock! *http-mutex*)
+					      exn
+					      (begin
+						(set! success #f)
+						(debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
+						(debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+						(if runremote
+						    (remote-conndat-set! runremote #f))
+						;; Killing associated server to allow clean retry.")
+						;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
+						(mutex-unlock! *http-mutex*)
 					     ;;; (signal (make-composite-condition
 					     ;;;          (make-property-condition 'commfail 'message "failed to connect to server")))
 					     ;;; "communications failed"
-					     (db:obj->string #f))
-					   (with-input-from-request ;; was dat
-					    fullurl 
-					    (list (cons 'key "thekey")
-						  (cons 'cmd cmd)
-						  (cons 'params sparams))
-					    read-string))
+						(db:obj->string #f))
+					    (with-input-from-request ;; was dat
+					     fullurl 
+					     (list (cons 'key "thekey")
+						   (cons 'cmd cmd)
+						   (cons 'params sparams))
+					     read-string))
 					  transport: 'http)
                                          0)) ;; added this speculatively
 			      ;; Shouldn't this be a call to the managed call-all-connections stuff above?
@@ -442,13 +442,12 @@
           (http-transport:server-shutdown port)))))))
 
 (define (http-transport:server-shutdown port)
-  (let ((tdbdat (tasks:open-db)))
+  (begin
     ;;(BB> "http-transport:server-shutdown called")
     (debug:print-info 0 *default-log-port* "Starting to shutdown the server. pid="(current-process-id))
     ;;
     ;; start_shutdown
     ;;
-    ;; (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "shutting-down")
     (set! *time-to-exit* #t) ;; tell on-exit to be fast as we've already cleaned up
     (portlogger:open-run-close portlogger:set-port port "released")
     (thread-sleep! 1)

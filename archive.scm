@@ -113,7 +113,7 @@
 	 (test-groups  (make-hash-table)) ;; these two (disk and test groups) could be combined nicely
 	 (bup-exe      (or (configf:lookup *configdat* "archive" "bup") "bup"))
 	 (compress     (or (configf:lookup *configdat* "archive" "compress") "9"))
-	 (linktree     (configf:lookup *configdat* "setup" "linktree")))
+	 (linktree     (common:get-linktree))) ;; (configf:lookup *configdat* "setup" "linktree")))
 
     (if (not archive-dir) ;; no archive disk found, this is fatal
 	(begin
@@ -213,7 +213,7 @@
   ;; allocate as needed should a disk fill up
   ;;
   (let* ((bup-exe      (or (configf:lookup *configdat* "archive" "bup") "bup"))
-	 (linktree     (configf:lookup *configdat* "setup" "linktree")))
+	 (linktree     (common:get-linktree))) ;; (configf:lookup *configdat* "setup" "linktree")))
 
     ;; from the test info bin the path to the test by stem
     ;;

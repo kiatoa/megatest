@@ -476,9 +476,9 @@
 				;; (runs:set-megatest-env-vars run-id inrunname: runname testname: test-name itempath: item-path)
 				(runs:set-megatest-env-vars run-id inkeyvals: keydat inrunname: runname intarget: keystring testname: testname itempath: item-path) ;; these may be needed by the launching process
 				(handle-exceptions
-				 exn
+				 exn  ;; NOTE: I've no idea why this was written this way. Research, study and fix needed!
 				 (tests:get-testconfig (db:test-get-testname testdat) (db:test-get-item-path testdat) test-registry #f)
-				 (tests:get-testconfig (db:test-get-testname testdat) test-registry #t))))
+				 (tests:get-testconfig (db:test-get-testname testdat) item-path test-registry #t))))
 	       (viewlog    (lambda (x)
 			     (if (file-exists? logfile)
 					;(system (conc "firefox " logfile "&"))

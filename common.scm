@@ -19,6 +19,7 @@
 (import (prefix base64 base64:))
 
 (declare (unit common))
+(declare (uses keys))
 
 (include "common_records.scm")
 
@@ -34,12 +35,15 @@
 
 (define getenv get-environment-variable)
 (define (safe-setenv key val)
-  (if (and (string? val)(string? key))
-      (handle-exceptions
-       exn
-       (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val)
-       (setenv key val))
-      (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val)))
+  (if (substring-index ":" key) ;; variables containing : are for internal use and cannot be environment variables.
+      (debug:print-error 4 *default-log-port* "skip setting internal use only variables containing \":\"")
+      (if (and (string? val)
+	       (string? key))
+	  (handle-exceptions
+	      exn
+	      (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val)
+	    (setenv key val))
+	  (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val))))
 
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
@@ -954,8 +958,13 @@
      
 (define (common:get-linktree)
   (or (getenv "MT_LINKTREE")
-      (if *configdat*
-	  (configf:lookup *configdat* "setup" "linktree"))))
+      (or (and *configdat*
+	       (configf:lookup *configdat* "setup" "linktree"))
+	  (if *toppath*
+	      (conc *toppath* "/lt")
+	      (if (file-exists? "megatest.config") ;; we are in the toppath (new area, mtutils compatible)
+		  (conc (current-directory) "/lt")
+		  #f)))))
 
 (define (common:args-get-runname)
   (let ((res (or (args:get-arg "-runname")
@@ -1012,18 +1021,30 @@
 	   (bestadrs (server:get-best-guess-address currhost))
 	   ;; first look in config, then look in file .homehost, create it if not found
 	   (homehost (or (configf:lookup *configdat* "server" "homehost" )
-			 (let ((hhf (conc *toppath* "/.homehost")))
-			   (if (file-exists? hhf)
-			       (with-input-from-file hhf read-line)
-			       (if (file-write-access? *toppath*)
-				   (begin
-				     (with-output-to-file hhf
-				       (lambda ()
-					 (print bestadrs)))
+			 (handle-exceptions
+			     exn
+			     (if (> trynum 0)
+				 (let ((delay-time (* (- 5 trynum) 5)))
+				   (mutex-unlock! *homehost-mutex*)
+				   (debug:print 0 *default-log-port* "ERROR: Failed to read .homehost file, delaying " delay-time " seconds and trying again, message: "  ((condition-property-accessor 'exn 'message) exn))
+				   (thread-sleep! delay-time)
+				   (common:get-homehost trynum: (- trynum 1)))
+				 (begin
+				   (mutex-unlock! *homehost-mutex*)
+				   (debug:print 0 *default-log-port* "ERROR: Failed to read .homehost file after trying five times. Giving up and exiting, message: "  ((condition-property-accessor 'exn 'message) exn))
+				   (exit 1)))
+			   (let ((hhf (conc *toppath* "/.homehost")))
+			     (if (file-exists? hhf)
+				 (with-input-from-file hhf read-line)
+				 (if (file-write-access? *toppath*)
 				     (begin
-				       (mutex-unlock! *homehost-mutex*)
-				       (car (common:get-homehost))))
-				   #f)))))
+				       (with-output-to-file hhf
+					 (lambda ()
+					   (print bestadrs)))
+				       (begin
+					 (mutex-unlock! *homehost-mutex*)
+					 (car (common:get-homehost))))
+				     #f))))))
 	   (at-home  (or (equal? homehost currhost)
 			 (equal? homehost bestadrs))))
       (set! *home-host* (cons homehost at-home))
@@ -1204,19 +1225,19 @@
 ;;
 (define (common:lazy-modification-time fpath)
   (handle-exceptions
-   exn
-   0
-   (file-modification-time fpath)))
+      exn
+      0
+    (file-modification-time fpath)))
 
 ;; find timestamp of newest file associated with a sqlite db file
 (define (common:lazy-sqlite-db-modification-time fpath)
   (let* ((glob-list (handle-exceptions
-                    exn
-                    '("/no/such/file")
-                    (glob (conc fpath "*"))))
+			exn
+			`(,(conc "/no/such/file, message: " ((condition-property-accessor 'exn 'message) exn)))
+		      (glob (conc fpath "*"))))
          (file-list (if (eq? 0 (length glob-list))
-                        '("/no/such/file")
-                        glob-list)))
+			'("/no/such/file")
+			glob-list)))
   (apply max
    (map
     common:lazy-modification-time 
@@ -1613,7 +1634,8 @@
 			     (delim (if (string-search whitesp val) 
 					"\""
 					"")))
-			(print (if (member key ignorevars)
+			(print (if (or (member key ignorevars)
+				       (string-search ":" key)) ;; internal only values to be skipped.
 				   "# export "
 				   "export ")
 			       key "=" delim (mungeval val) delim)))

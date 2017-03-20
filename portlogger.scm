@@ -52,21 +52,25 @@
 (define (portlogger:open-run-close proc . params)
   (let* ((fname  (conc "/tmp/." (current-user-name) "-portlogger.db"))
 	 (avail  (tasks:wait-on-journal fname 10))) ;; wait up to about 10 seconds for the journal to go away
-    (handle-exceptions
-     exn
-     (begin
-       ;; (release-dot-lock fname)
-       (debug:print-error 0 *default-log-port* "portlogger:open-run-close failed. " proc " " params)
-       (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-       (debug:print 0 *default-log-port* "exn=" (condition->list exn))
-       (if (file-exists? fname)(delete-file fname)) ;; brutally get rid of it
-       (print-call-chain (current-error-port)))
+    ;;(handle-exceptions
+    ;; exn
+    ;; (begin
+    ;;   ;; (release-dot-lock fname)
+    ;;   (debug:print-error 0 *default-log-port* "portlogger:open-run-close failed. " proc " " params)
+    ;;   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+    ;;   (debug:print 0 *default-log-port* "exn=" (condition->list exn))
+    ;;   (if (file-exists? fname)
+    ;;	   (begin
+    ;;	     (debug:print 0 *default-log-port* "Removing portlogger database file " fname)
+    ;;	     (delete-file fname))) ;; just get rid of the portlogger file
+    ;;   (print-call-chain (current-error-port)))
      (let* (;; (lock   (obtain-dot-lock fname 2 9 10))
 	    (db     (portlogger:open-db fname))
 	    (res    (apply proc db params)))
        (sqlite3:finalize! db)
        ;; (release-dot-lock fname)
-       res))))
+       res)))
+;; )
 
 ;; (fold-row PROC INIT DATABASE SQL . PARAMETERS) 
 (define (portlogger:take-port db portnum)
@@ -101,20 +105,20 @@
 
 (define (portlogger:get-prev-used-port db)
   (handle-exceptions
-   exn
-   (begin
-     (debug:print 0 *default-log-port* "EXCEPTION: portlogger database probably overloaded or unreadable. If you see this message again remove /tmp/.$USER-portlogger.db")
-     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-     (debug:print 0 *default-log-port* "exn=" (condition->list exn))
-     (print-call-chain (current-error-port))
-     (debug:print 0 *default-log-port* "Continuing anyway.")
-     #f)
-   (sqlite3:fold-row
-    (lambda (var curr)
-      (or curr var curr))
-    #f
-    db
-    "SELECT (port) FROM ports WHERE state='released' LIMIT 1;")))
+      exn
+      (begin
+	(debug:print 0 *default-log-port* "EXCEPTION: portlogger database probably overloaded or unreadable. If you see this message again remove /tmp/.$USER-portlogger.db")
+	(debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+	(debug:print 0 *default-log-port* "exn=" (condition->list exn))
+	(print-call-chain (current-error-port))
+	(debug:print 0 *default-log-port* "Continuing anyway.")
+	#f)
+    (sqlite3:fold-row
+     (lambda (var curr)
+       (or curr var curr))
+     #f
+     db
+     "SELECT (port) FROM ports WHERE state='released' LIMIT 1;")))
 
 (define (portlogger:find-port db)
   (let* ((lowport (let ((val (configf:lookup *configdat* "server" "lowport")))

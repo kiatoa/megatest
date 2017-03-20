@@ -611,8 +611,7 @@
      stats-matrix)))
 
 (define (dcommon:servers-table commondat tabdat)
-  (let* ((tdbdat         (tasks:open-db))
-	 (colnum         0)
+  (let* ((colnum         0)
 	 (rownum         0)
 	 (servers-matrix (iup:matrix #:expand "YES"
 				     #:numcol 7
@@ -623,7 +622,6 @@
 	 (updater        (lambda ()
 			   (if (dashboard:monitor-changed? commondat tabdat)
 			       (let ((servers  (server:get-list *toppath* limit: 10)))
-				 ;; (tasks:get-all-servers (db:delay-if-busy tdbdat))))
 				 (iup:attribute-set! servers-matrix "NUMLIN" (length servers))
 				 ;; (set! colnum 0)
 				 ;; (for-each (lambda (colname)
