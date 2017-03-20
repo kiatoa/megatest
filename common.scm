@@ -35,14 +35,15 @@
 
 (define getenv get-environment-variable)
 (define (safe-setenv key val)
-  (if (and (string? val)
-	   (string? key)
-	   (not (substring-index ":" key))) ;; variables containing : are for internal use and cannot be environment variables.
-      (handle-exceptions
-       exn
-       (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val)
-       (setenv key val))
-      (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val)))
+  (if (substring-index ":" key) ;; variables containing : are for internal use and cannot be environment variables.
+      (debug:print-error 4 *default-log-port* "skip setting internal use only variables containing \":\"")
+      (if (and (string? val)
+	       (string? key))
+	  (handle-exceptions
+	      exn
+	      (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val)
+	    (setenv key val))
+	  (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val))))
 
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
@@ -1621,7 +1622,8 @@
 			     (delim (if (string-search whitesp val) 
 					"\""
 					"")))
-			(print (if (member key ignorevars)
+			(print (if (or (member key ignorevars)
+				       (string-search ":" key)) ;; internal only values to be skipped.
 				   "# export "
 				   "export ")
 			       key "=" delim (mungeval val) delim)))

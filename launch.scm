@@ -744,7 +744,7 @@
 	 (runname  (common:args-get-runname))
 	 (target   (common:args-get-target exit-if-bad: #t))
 	 (linktree (common:get-linktree))
-	 (contour  (args:get-arg "-contour"))
+	 (contour  #f) ;; NOT READY FOR THIS (args:get-arg "-contour"))
 	 (sections (if target (list "default" target) #f)) ;; for runconfigs
 	 (mtconfig (or (args:get-arg "-config") "megatest.config")) ;; allow overriding megatest.config 
 	 (rundir   (if (and runname target linktree)(conc linktree (if contour (conc "/" contour) "") "/" target "/" runname) #f))
@@ -802,10 +802,11 @@
 	      ;; the seed read is done, now read runconfigs, cache it then read megatest.config one more time and cache it
 	      (let* ((keys         (rmt:get-keys))
 		     (key-vals     (keys:target->keyval keys target))
-		     (linktree     (or (getenv "MT_LINKTREE")
-				       (if *configdat*
-					   (configf:lookup *configdat* "setup" "linktree")
-					   (conc *toppath* "/lt"))))
+		     (linktree     (common:get-linktree))
+					; (or (getenv "MT_LINKTREE")
+					;     (if *configdat*
+					; 	   (configf:lookup *configdat* "setup" "linktree")
+					; 	   (conc *toppath* "/lt"))))
 		     (second-pass  (find-and-read-config
 				    mtconfig
 				    environ-patt: "env-override"
@@ -920,7 +921,7 @@
 			(db:get-value-by-header (db:get-rows run-info)
 						(db:get-header run-info)
 						"runname")))
-	 (contour   (args:get-arg "-contour"))
+	 (contour   #f) ;; NOT READY FOR THIS (args:get-arg "-contour"))
 	 ;; convert back to db: from rdb: - this is always run at server end
 	 (target   (string-intersperse (map cadr keyvals) "/"))
 
@@ -1093,7 +1094,7 @@
 (define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
   (mutex-lock! *launch-setup-mutex*) ;; setting variables and processing the testconfig is NOT thread-safe, reuse the launch-setup mutex
   (let* ((item-path       (item-list->path itemdat))
-	 (contour         (args:get-arg "-contour")))
+	 (contour         #f)) ;; NOT READY FOR THIS (args:get-arg "-contour")))
     (let loop ((delta        (- (current-seconds) *last-launch*))
 	       (launch-delay (string->number (or (configf:lookup *configdat* "setup" "launch-delay") "5"))))
       (if (> launch-delay delta)
