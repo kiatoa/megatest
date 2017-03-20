@@ -38,11 +38,11 @@
 	 (cinfo     (if (remote? runremote)
 			(remote-conndat runremote)
 			#f)))
-    (if cinfo
-	cinfo
-	(if (server:check-if-running areapath)
-	    (client:setup areapath)
-	    #f))))
+	  (if cinfo
+	      cinfo
+	      (if (server:check-if-running areapath)
+		  (client:setup areapath)
+		  #f))))
 
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
 

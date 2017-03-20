@@ -1021,18 +1021,30 @@
 	   (bestadrs (server:get-best-guess-address currhost))
 	   ;; first look in config, then look in file .homehost, create it if not found
 	   (homehost (or (configf:lookup *configdat* "server" "homehost" )
-			 (let ((hhf (conc *toppath* "/.homehost")))
-			   (if (file-exists? hhf)
-			       (with-input-from-file hhf read-line)
-			       (if (file-write-access? *toppath*)
-				   (begin
-				     (with-output-to-file hhf
-				       (lambda ()
-					 (print bestadrs)))
+			 (handle-exceptions
+			     exn
+			     (if (> trynum 0)
+				 (let ((delay-time (* (- 5 trynum) 5)))
+				   (mutex-unlock! *homehost-mutex*)
+				   (debug:print 0 *default-log-port* "ERROR: Failed to read .homehost file, delaying " delay-time " seconds and trying again, message: "  ((condition-property-accessor 'exn 'message) exn))
+				   (thread-sleep! delay-time)
+				   (common:get-homehost trynum: (- trynum 1)))
+				 (begin
+				   (mutex-unlock! *homehost-mutex*)
+				   (debug:print 0 *default-log-port* "ERROR: Failed to read .homehost file after trying five times. Giving up and exiting, message: "  ((condition-property-accessor 'exn 'message) exn))
+				   (exit 1)))
+			   (let ((hhf (conc *toppath* "/.homehost")))
+			     (if (file-exists? hhf)
+				 (with-input-from-file hhf read-line)
+				 (if (file-write-access? *toppath*)
 				     (begin
-				       (mutex-unlock! *homehost-mutex*)
-				       (car (common:get-homehost))))
-				   #f)))))
+				       (with-output-to-file hhf
+					 (lambda ()
+					   (print bestadrs)))
+				       (begin
+					 (mutex-unlock! *homehost-mutex*)
+					 (car (common:get-homehost))))
+				     #f))))))
 	   (at-home  (or (equal? homehost currhost)
 			 (equal? homehost bestadrs))))
       (set! *home-host* (cons homehost at-home))
