@@ -14,7 +14,7 @@
 ;;======================================================================
 
 (use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3 call-with-environment-variables csv)
-(use typed-records pathname-expand)
+(use typed-records pathname-expand matchable)
 
 (import (prefix base64 base64:))
 (import (prefix sqlite3 sqlite3:))
@@ -415,9 +415,11 @@
 	       (runscript (assoc/default 'runscript cmdinfo))
 	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
 	       ;; (runremote (assoc/default 'runremote cmdinfo))
-	       (transport (assoc/default 'transport cmdinfo))
+	       ;; (transport (assoc/default 'transport cmdinfo))  ;; not used
 	       ;; (serverinf (assoc/default 'serverinf cmdinfo))
-	       (port      (assoc/default 'port      cmdinfo))
+	       ;; (port      (assoc/default 'port      cmdinfo))
+	       (serverurl (assoc/default 'serverurl cmdinfo))
+	       (homehost  (assoc/default 'homehost  cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (test-id   (assoc/default 'test-id   cmdinfo))
 	       (target    (assoc/default 'target    cmdinfo))
@@ -445,6 +447,47 @@
 
 	  (if contour (setenv "MT_CONTOUR" contour))
 	  
+	  ;; On NFS it can be slow and unreliable to get needed startup information.
+	  ;;  i. Check if we are on the homehost, if so, proceed
+	  ;; ii. Check if host and port passed in via CMDINFO are valid and if
+	  ;;     possible use them.
+	  (let ((bestadrs (server:get-best-guess-address (get-host-name)))
+		(needcare #f))
+	    (if (equal? homehost bestadrs) ;; we are likely on the homehost
+		(debug:print-info 0 *default-log-port* "test " test-name " appears to be running on the homehost " homehost)
+		(let ((host-port (if serverurl (string-split serverurl ":") #f)))
+		  (if (not *runremote*)(set! *runremote* (make-remote))) ;; init *runremote*
+		  (if (string? homehost)
+		      (if (and host-port
+			       (> (length host-port) 1))
+			  (let* ((host      (car host-port))
+                                 (port      (cadr host-port))
+                                 (start-res (http-transport:client-connect host port))
+                                 (ping-res  (rmt:login-no-auto-client-setup start-res)))
+			    (if (and start-res
+				     ping-res)
+				(let ((url  (http-transport:server-dat-make-url start-res)))
+				  (remote-conndat-set! *runremote* start-res)
+				  (remote-server-url-set! *runremote* url)
+				  (debug:print-info 0 *default-log-port* "connected to " url " using CMDINFO data."))
+				(debug:print-info 0 *default-log-port* "received " host ":" port " for url but could not connect.")
+				))
+			  (begin
+			    (debug:print-info 0 *default-log-port* (if host-port
+								       (conc "received invalid host-port information " host-port)
+								       "no host-port information received"))
+			    ;; potential for bad situation if simultaneous starting of hundreds of jobs on servers, set needcare.
+			    (set! needcare #t)))
+		      (begin
+			(debug:print-info 0 *default-log-port* "received no homehost information. Please report this to support as it should not happen.")
+			(set! needcare #t)))))
+	    (if needcare  ;; due to very slow NFS we will do a brute force mkdir to ensure that the directory inode it truly available on this host
+		(let ((logdir (conc top-path "/logs"))) ;; we'll try to create this directory
+		  (handle-exceptions
+		      exn
+		      (debug:print 0 *default-log-port* "Failed to create directory " logdir " expect problems, message: " ((condition-property-accessor 'exn 'message) exn))
+		    (create-directory logdir #t)))))
+		  
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
 	    (if (or (file-exists? top-path)
@@ -1191,8 +1234,15 @@
 		       (with-output-to-string
 			 (lambda () ;; (list 'hosts     hosts)
 			   (write (list (list 'testpath  test-path)
-					(list 'transport (conc *transport-type*))
+					;; (list 'transport (conc *transport-type*))
 					;; (list 'serverinf *server-info*)
+					(list 'homehost  (let* ((hhdat (common:get-homehost)))
+							   (if hhdat
+							       (car hhdat)
+							       #f)))
+					(list 'serverurl (if *runremote*
+							     (remote-server-url *runremote*)
+							     #f)) ;; 
 					(list 'toppath   *toppath*)
 					(list 'work-area work-area)
 					(list 'test-name test-name) 
