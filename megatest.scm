@@ -290,6 +290,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
                         "-src-runname"
                         "-diff-email"
 			"-sync-to"
+			"-prefix-target"			
+			"-pgsync"
                         "-diff-html"
 			)
  		 (list  "-h" "-help" "--help"
