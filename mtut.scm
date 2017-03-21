@@ -452,7 +452,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (area-xlatr (alist-ref 'targtrans area-dat))
 	 (new-runname (let* ((callname (if (string? runtrans)(string->symbol runtrans) #f))
 			     (mapper   (if callname (hash-table-ref/default *runname-mappers* callname #f) #f)))
-			(print "callname=" callname " runtrans=" runtrans)
+			(print "callname=" callname " runtrans=" runtrans " mapper=" mapper)
 			(if (and callname
 				 (not (equal? callname "auto"))
 				 (not mapper))
@@ -461,10 +461,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (handle-exceptions
 				exn
 				(begin
+				  (print-call-chain)
 				  (print "FAILED TO RUN RUNNAME MAPPER " callname " FOR AREA " area)
 				  (print " message: " ((condition-property-accessor 'exn 'message) exn))
 				  runname)
-			      (mapper target runname area area-path reason contour mode-patt))
+			      (print "(mapper " (string-intersperse (list runkey runname area area-path reason contour mode-patt) ", ") ")")
+			      (mapper runkey runname area area-path reason contour mode-patt))
 			    runname)))
 	 (new-target (if area-xlatr 
 			 (let ((xlatr-key (string->symbol area-xlatr)))
