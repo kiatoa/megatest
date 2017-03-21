@@ -393,13 +393,14 @@
 	#t
 	#f)))
 
+;; timeout is in hours
 (define (server:get-timeout)
   (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
     (if (and (string? tmo)
 	     (string->number tmo))
 	(* 60 60 (string->number tmo))
 	;; (* 3 24 60 60) ;; default to three days
-	;;(* 60 60 1)         ;; default to one hour
-	(* 60 60 25)      ;; default to 25 hours
+	;;(* 60 60 1)     ;; default to one hour
+	(* 60 60 0.25)    ;; default to 0.25 hours
 	)))
 
