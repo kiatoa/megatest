@@ -400,16 +400,23 @@
 ;; close all opened run-id dbs
 (define (db:close-all dbstruct)
   (if (dbr:dbstruct? dbstruct)
-      (begin
-        ;; (db:sync-touched dbstruct 0 force-sync: #t) ;; NO. Do not do this here. Instead we rely on a server to be started when there are writes, even if the server itself is not going to be used as a server.
+      (handle-exceptions
+	  exn
+	  (begin
+	    (debug:print 0 *default-log-port* "WARNING: Finalizing failed, "  ((condition-property-accessor 'exn 'message) exn))
+	    (print-call-chain *default-log-port*))
+	;; (db:sync-touched dbstruct 0 force-sync: #t) ;; NO. Do not do this here. Instead we rely on a server to be started when there are writes, even if the server itself is not going to be used as a server.
         (let ((tdbs (map db:dbdat-get-db 
                          (stack->list (dbr:dbstruct-dbstack dbstruct))))
               (mdb (db:dbdat-get-db (dbr:dbstruct-mtdb   dbstruct)))
               (rdb (db:dbdat-get-db (dbr:dbstruct-refndb dbstruct))))
-          (map sqlite3:finalize! tdbs)
-          (if mdb (sqlite3:finalize! mdb))
-          (if rdb (sqlite3:finalize! rdb))))))
-  
+          (map (lambda (db)
+		 (if (sqlite3:database? db)
+		     (sqlite3:finalize! db)))
+	       tdbs)
+          (if (sqlite3:database? mdb) (sqlite3:finalize! mdb))
+          (if (sqlite3:database? rdb) (sqlite3:finalize! rdb))))))
+
 ;;   (let ((locdbs (dbr:dbstruct-locdbs dbstruct)))
 ;;     (if (hash-table? locdbs)
 ;; 	(for-each (lambda (run-id)
