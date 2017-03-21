@@ -27,8 +27,8 @@
 
 (require-library stml)
 
-(define *target-mappers*  '())
-(define *runname-mappers* '())
+(define *target-mappers*  (make-hash-table)) ;; '())
+(define *runname-mappers* (make-hash-table)) ;; '())
 
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.mtutilrc")))
   (if (file-exists? debugcontrolf)
@@ -444,26 +444,42 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; iii. Maybe have an abstraction alist with meaningful names for the pkt keys
 ;;
 ;; Override the run start time record with sched. Usually #f is fine.
-;;
-(define (create-run-pkt mtconf action area runkey runname mode-patt tag-expr pktsdir reason contour sched dbdest append-conf)
+;; 
+(define (create-run-pkt mtconf action area runkey runname mode-patt tag-expr pktsdir reason contour sched dbdest append-conf runtrans)
   (let* ((good-val   (lambda (inval)(and inval (string? inval)(not (string-null? inval)))))
 	 (area-dat   (val->alist (or (configf:lookup mtconf "areas" area) "")))
 	 (area-path  (alist-ref 'path      area-dat))
 	 (area-xlatr (alist-ref 'targtrans area-dat))
-	 (new-target (if area-xlatr
+	 (new-runname (let* ((callname (if (string? runtrans)(string->symbol runtrans) #f))
+			     (mapper   (if callname (hash-table-ref/default *runname-mappers* callname #f) #f)))
+			(print "callname=" callname " runtrans=" runtrans)
+			(if (and callname
+				 (not (equal? callname "auto"))
+				 (not mapper))
+			    (print "Failed to find runname mapper " callname " for area " area))
+			(if mapper
+			    (handle-exceptions
+				exn
+				(begin
+				  (print "FAILED TO RUN RUNNAME MAPPER " callname " FOR AREA " area)
+				  (print " message: " ((condition-property-accessor 'exn 'message) exn))
+				  runname)
+			      (mapper target runname area area-path reason contour mode-patt))
+			    runname)))
+	 (new-target (if area-xlatr 
 			 (let ((xlatr-key (string->symbol area-xlatr)))
-			   (if (alist-ref xlatr-key *target-mappers*)
+			   (if (hash-table-exists? *target-mappers* xlatr-key)
 			       (begin
 				 (print "Using target mapper: " area-xlatr)
 				 (handle-exceptions
 				     exn
 				     (begin
 				       (print "FAILED TO RUN TARGET MAPPER FOR " area ", called " area-xlatr)
-				       (print "   function is: " (alist-ref xlatr-key *target-mappers*))
+				       (print "   function is: " (hash-table-ref/default *target-mappers* xlatr-key #f ) )
 				       (print " message: " ((condition-property-accessor 'exn 'message) exn))
 				       runkey)
-				   ((alist-ref xlatr-key *target-mappers*)
-				    runkey runname area area-path reason contour mode-patt)))
+				   ((hash-table-ref *target-mappers* xlatr-key)
+				    runkey new-runname area area-path reason contour mode-patt)))
 			       (begin
 				 (print "ERROR: Failed to find named target translator " xlatr-key ", using original target.")
 				 runkey)))
@@ -481,11 +497,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    `(("-start-dir"  . ,area-path)
 		      ("-msg"        . ,reason)
 		      ("-contour"    . ,contour))
-		    (if (good-val runname)     `(("-run-name"   . ,runname))      '())
-		    (if (good-val new-target)  `(("-target"     . ,new-target))   '())
-		    (if (good-val mode-patt)   `(("-mode-patt"  . ,mode-patt))    '())
-		    (if (good-val tag-expr)    `(("-tag-expr"   . ,tag-expr))     '())
-		    (if (good-val dbdest)      `(("-sync-to"    . ,dbdest))       '())
+		    (if (good-val new-runname) `(("-run-name"      . ,new-runname)) '())
+		    (if (good-val new-target)  `(("-target"        . ,new-target))  '())
+		    (if (good-val mode-patt)   `(("-mode-patt"     . ,mode-patt))   '())
+		    (if (good-val tag-expr)    `(("-tag-expr"      . ,tag-expr))    '())
+		    (if (good-val dbdest)      `(("-sync-to"       . ,dbdest))      '())
 		    (if (good-val append-conf) `(("-append-config" . ,append-conf)) '())
 		    (if (not (or mode-patt tag-expr))
 			`(("-testpatt"  . "%"))
@@ -530,6 +546,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			;; (val-list   (string-split-fields ";\\s*" val #:infix)) ;; (string-split val)) ;; runname-rule params
 			(val-alist  (val->alist val))
 			(runname    (make-runname "" ""))
+			(runtrans   (alist-ref 'runtrans val-alist))
+			
 			(runstarts  (find-pkts pdb '(runstart) `((o . ,contour)
 								 (t . ,runkey))))
 			(rspkts     (get-pkt-alists runstarts))
@@ -551,6 +569,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				  (round (/ (- (current-seconds) x) 60)))))
 		     (print "runkey: " runkey ", ruletype: " ruletype ", action: " action ", last-run: " last-run " time since; last-run: " (delta last-run) ", last-sync: " (delta last-sync)))
 
+		   (print "val-alist=" val-alist " runtrans=" runtrans)
+		   
 		   ;; look in runstarts for matching runs by target and contour
 		   ;; get the timestamp for when that run started and pass it
 		   ;; to the rule logic here where "ruletype" will be applied
@@ -584,6 +604,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				   (push-run-spec torun contour runkey
 						  `((message . ,(conc ruletype ":" cron-safe-string))
 						    (runname . ,runname)
+						    (runtrans . ,runtrans)
 						    (action  . ,action)
 						    (target  . ,target)))))
 			      (else
@@ -624,6 +645,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				 (if need-run
 				     (let* ((key-msg    `((message  . ,(conc ruletype ":" message))
 							  (runname  . ,runname)
+							  (runtrans . ,runtrans)
 							  (action   . ,action)
 							  (target   . ,new-target))))
 				       (print "key-msg: " key-msg)
@@ -647,11 +669,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				 (push-run-spec torun contour runkey
 						`((message . ,(conc "fossil:" branch "-neverrun"))
 						  (runname . ,(conc runname "-" node))
+						  (runtrans . ,runtrans)
 						  (target  . ,runkey)))
 				 (if (> datetime last-run) ;; change time is greater than last-run time
 				     (push-run-spec torun contour runkey
 						    `((message . ,(conc "fossil:" branch "-" node))
 						      (runname . ,(conc runname "-" node))
+						      (runtrans . ,runtrans)
 						      (target  . ,runkey)))))
 			     (print "Got datetime=" datetime " node=" node))))
 		       val-alist))
@@ -665,6 +689,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (push-run-spec torun contour runkey
 					   `((message . "file:neverrun")
 					     (action  . ,action)
+					     (runtrans . ,runtrans)
 					     (target  . ,runkey)
 					     (runname . ,runname)))
 			;; (for-each
@@ -677,6 +702,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					       `((message . ,(conc ruletype ":" (cadr youngestdat)))
 						 (action  . ,action)
 						 (target  . ,runkey)
+						 (runtrans . ,runtrans)
 						 (runname . ,runname)
 						 ))))))
 		      ;; starttimes))
@@ -691,6 +717,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (push-run-spec torun contour runkey
 					   `((message . "file:neverrun")
 					     (runname . ,runname)
+					     (runtrans . ,runtrans)
 					     (target  . ,runkey)
 					     (action  . ,action)))
 			    ;; NB// I think this is wrong. It should be looking at last-run only.
@@ -707,6 +734,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				(push-run-spec torun contour runkey
 					       `((message . ,(conc ruletype ":" (cadr youngestdat)))
 						 (runname . ,runname)
+						 (runtrans . ,runtrans)
 						 (target  . ,runkey)
 						 (action  . ,action)
 						 ))))))
@@ -735,6 +763,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (for-each
 		       (lambda (area)
 			 (let ((runname (alist-ref 'runname runkeydat))
+			       (runtrans (alist-ref 'runtrans runkeydat))
 			       (reason  (alist-ref 'message runkeydat))
 			       (sched   (alist-ref 'sched   runkeydat))
 			       (action  (alist-ref 'action  runkeydat))
@@ -748,7 +777,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				 ((sync)     (and reason dbdest))
 				 (else       #f))
 			       ;; instead of unwrapping the runkeydat alist, pass it directly to create-run-pkt
-			       (create-run-pkt mtconf action area runkey runname mode-patt tag-expr pktsdir reason contour sched dbdest append) 
+			       (create-run-pkt mtconf action area runkey runname mode-patt tag-expr pktsdir reason contour sched dbdest append runtrans) 
 			       (print "ERROR: Missing info to make a " action " call: runkey=" runkey " contour=" contour " area=" area  " tag-expr=" tag-expr " mode-patt=" mode-patt " dbdest=" dbdest)
 			       )))
 		       all-areas))
