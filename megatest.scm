@@ -1092,7 +1092,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			;;   runstmp))
 	       (db-targets  (args:get-arg "-list-db-targets"))
 	       (seen        (make-hash-table))
-	       (dmode       (let ((d (args:get-arg "-dumpmode")))
+	       (dmode       (let ((d (args:get-arg "-dumpmode"))) ;; json, sexpr
 			      (if d (string->symbol d) #f)))
 	       (data        (make-hash-table))
 	       (fields-spec (if (args:get-arg "-fields")
@@ -1151,7 +1151,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 							     'normal)
 				       '())))
 		     (case dmode
-		       ((json ods)
+		       ((json ods sexpr)
 			(if runs-spec
 			    (for-each 
 			     (lambda (field-name)
@@ -1206,7 +1206,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 							"" 
 							(conc "(" itempath ")")))))
 			   (case dmode
-			     ((json ods)
+			     ((json ods sexpr)
 			      (if tests-spec
 				  (for-each
 				   (lambda (field-name)
@@ -1289,7 +1289,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				     first second))))
 			  tests))))))
 	   runs)
-	  (if (eq? dmode 'json)(json-write data))
+	  (case dmode
+	    ((json)  (json-write data))
+	    ((sexpr) (pp (common:to-alist data))))
 	  (let* ((metadat-fields (delete-duplicates
 				  (append keys '( "runname" "time" "owner" "pass_count" "fail_count" "state" "status" "comment" "id"))))
 		 (run-fields    '(
@@ -1362,7 +1364,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 									 (cons '()
 									       (cons run-fields tests)))))
 							   (begin
-							     (debug:print 0 *default-log-port* "WARNING: run " target "/" runname " appears to have no data")
+							     (debug:print 4 *default-log-port* "WARNING: run " target "/" runname " appears to have no data")
 							     ;; (pp rundat)
 							     '()))))
 						   runsdat)
