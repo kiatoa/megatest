@@ -27,7 +27,8 @@
 
 (require-library stml)
 
-(define *target-mappers* '())
+(define *target-mappers*  '())
+(define *runname-mappers* '())
 
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.mtutilrc")))
   (if (file-exists? debugcontrolf)
@@ -258,6 +259,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        (else ;; no more datat and last node on branch not found
 	(close-input-port timeline-port)
 	(values  (common:date-time->seconds (conc date " " time)) node))))))
+
 
 ;;======================================================================
 ;; GLOBALS
