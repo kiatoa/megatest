@@ -28,7 +28,7 @@
 ;; given a configdat lookup the connection info and open the db
 ;;
 (define (pgdb:open configdat #!key (dbname #f))  
-  (let ((pgconf (or (configf:lookup configdat "ext-sync" (or dbname "pgdb")) (args:get-arg "-pgsync"))))
+  (let ((pgconf (or (args:get-arg "-pgsync") (configf:lookup configdat "ext-sync" (or dbname "pgdb")))))
     (if pgconf
 	(let* ((confdat (map (lambda (conf-item)
 			       (let ((parts (string-split conf-item ":")))
