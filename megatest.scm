@@ -62,6 +62,7 @@
 ;; Disabled help items
 ;;  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
 ;;                            from prior runs with same keys
+;;  -daemonize              : fork into background and disconnect from stdin/out
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -156,7 +157,6 @@ Misc
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
   -transport http|rpc     : use http or rpc for transport (default is http) 
-  -daemonize              : fork into background and disconnect from stdin/out
   -log logfile            : send stdout and stderr to logfile
   -list-servers           : list the servers 
   -stop-server id         : stop server specified by id (see output of -list-servers), use
@@ -429,14 +429,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
     
 (if (or (args:get-arg "-log")(args:get-arg "-server")) ;; redirect the log always when a server
-    (let* ((tl   (or (args:get-arg "-log")(launch:setup)))   ;; run launch:setup if -server
-	   (logf (or (args:get-arg "-log") ;; use -log unless we are a server, then craft a logfile name
-		     (conc tl "/logs/server-" (current-process-id) "-" (get-host-name) ".log")))
-	   (oup  (open-logfile logf)))
-      (if (not (args:get-arg "-log"))
-	  (hash-table-set! args:arg-hash "-log" logf)) ;; fake out future queries of -log
-      (debug:print-info 0 *default-log-port* "Sending log output to " logf)
-      (set! *default-log-port* oup)))
+    (handle-exceptions
+	exn
+	(begin
+	  (print "ERROR: Failed to switch to log output. " ((conition-property-accessor 'exn 'message) exn))
+	  )
+      (let* ((tl   (or (args:get-arg "-log")(launch:setup)))   ;; run launch:setup if -server
+	     (logf (or (args:get-arg "-log") ;; use -log unless we are a server, then craft a logfile name
+		       (conc tl "/logs/server-" (current-process-id) "-" (get-host-name) ".log")))
+	     (oup  (open-logfile logf)))
+	(if (not (args:get-arg "-log"))
+	    (hash-table-set! args:arg-hash "-log" logf)) ;; fake out future queries of -log
+	(debug:print-info 0 *default-log-port* "Sending log output to " logf)
+	(set! *default-log-port* oup))))
 
 (if (or (args:get-arg "-h")
 	(args:get-arg "-help")
