@@ -89,6 +89,7 @@ Launching and managing runs
   -run-wait               : wait on run specified by target and runname
   -preclean               : remove the existing test directory before running the test
   -clean-cache            : remove the cached megatest.config and runconfig.config files
+  -no-cache               : do not use the cached config files. 
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
@@ -304,6 +305,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-rerun-clean"
 			"-rerun-all"
 			"-clean-cache"
+			"-no-cache"
 			"-cache-db"
                         "-use-db-cache"
 			;; misc
@@ -853,7 +855,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (cfgf   (if rundir (conc rundir "/.runconfig." megatest-version "-" megatest-fossil-hash) #f)))
     (if (and cfgf
 	     (file-exists? cfgf)
-	     (file-write-access? cfgf))
+	     (file-write-access? cfgf)
+	     (common:use-cache?))
 	(configf:read-alist cfgf)
 	(let* ((keys   (rmt:get-keys))
 	       (target (common:args-get-target))
