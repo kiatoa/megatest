@@ -280,10 +280,11 @@
    "logs"))
 
 ;; Force a megatest cleanup-db if version is changed and skip-version-check not specified
+;; Do NOT check if not on homehost!
 ;;
 (define (common:exit-on-version-changed)
-  (if (common:version-changed?)
-      (if (common:on-homehost?)
+  (if (common:on-homehost?)
+      (if (common:version-changed?)
 	  (let* ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config"))
                 (dbfile (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.db"))
                 (read-only (not (file-write-access? dbfile)))
@@ -319,10 +320,10 @@
               (exit 1))
              (else
               (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
-              (exit 1))))
-	  (begin
-	    (debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
-	    (exit 1)))))
+              (exit 1)))))
+      (begin
+	(debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
+	(exit 1))))
 
 ;;======================================================================
 ;; S P A R S E   A R R A Y S
@@ -720,20 +721,19 @@
 
 ;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
 (define (common:watchdog)
-  ;;#t)
   (debug:print-info 13 *default-log-port* "common:watchdog entered.")
-
- (let ((dbstruct (db:setup)))
-   (debug:print-info 13 *default-log-port* "after db:setup with dbstruct="dbstruct)
-   (cond
-    ((dbr:dbstruct-read-only dbstruct)
-     (debug:print-info 13 *default-log-port* "loading read-only watchdog")
-     (common:readonly-watchdog dbstruct))
-    (else
-     (debug:print-info 13 *default-log-port* "loading writable-watchdog.")
-     (common:writable-watchdog dbstruct))))
- (debug:print-info 13 *default-log-port* "watchdog done.");;)
- )
+  (if (common:on-homehost?)
+      (let ((dbstruct (db:setup)))
+	(debug:print-info 13 *default-log-port* "after db:setup with dbstruct="dbstruct)
+	(cond
+	 ((dbr:dbstruct-read-only dbstruct)
+	  (debug:print-info 13 *default-log-port* "loading read-only watchdog")
+	  (common:readonly-watchdog dbstruct))
+	 (else
+	  (debug:print-info 13 *default-log-port* "loading writable-watchdog.")
+	  (common:writable-watchdog dbstruct)))
+	(debug:print-info 13 *default-log-port* "watchdog done."))
+      (debug:print-info 13 *default-log-port* "no need for watchdog on non-homehost")))
 
 
 (define (std-exit-procedure)
