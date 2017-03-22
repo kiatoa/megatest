@@ -58,7 +58,7 @@
      sections)
     (if already-seen
 	(begin
-	  (debug:print 2 *default-log-port* "Key settings found in runconfig.config:")
+	  (debug:print 2 *default-log-port* "Key settings found in runconfigs.config:")
 	  (for-each (lambda (fullkey)
 		      (debug:print 2 *default-log-port* (format #f "~20a ~a\n" fullkey (hash-table-ref/default whatfound fullkey 0))))
 		    sections)
