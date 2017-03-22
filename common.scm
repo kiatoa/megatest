@@ -562,7 +562,7 @@
 (define (common:get-testsuite-name)
   (or (configf:lookup *configdat* "setup" "area-name") ;; megatest is a flexible tool, testsuite is too limiting a description.
       (configf:lookup *configdat* "setup" "testsuite" )
-      (if *toppath* 
+      (if (string? *toppath* )
           (pathname-file *toppath*)
           (pathname-file (current-directory)))))
 
@@ -571,12 +571,14 @@
 (define (common:get-db-tmp-area)
   (if *db-cache-path*
       *db-cache-path*
-      (let ((dbpath (create-directory (conc "/tmp/" (current-user-name)
-					    "/megatest_localdb/"
-					    (common:get-testsuite-name) "/"
-					    (string-translate *toppath* "/" ".")) #t)))
-	(set! *db-cache-path* dbpath)
-	dbpath)))
+      (if *toppath*
+	  (let ((dbpath (create-directory (conc "/tmp/" (current-user-name)
+						"/megatest_localdb/"
+						(common:get-testsuite-name) "/"
+						(string-translate *toppath* "/" ".")) #t)))
+	    (set! *db-cache-path* dbpath)
+	    dbpath)
+	  #f)))
 
 (define (common:get-area-path-signature)
   (message-digest-string (md5-primitive) *toppath*))
@@ -1058,6 +1060,13 @@
     (if hh
 	(cdr hh)
 	#f)))
+
+;; do we honor the caches of the config files?
+;;
+(define (common:use-cache?)
+  (not (or (args:get-arg "-no-cache")
+	   (and *configdat*
+		(equal? (configf:lookup *configdat* "setup" "use-cache") "no")))))
 
 ;;======================================================================
 ;; M I S C   L I S T S

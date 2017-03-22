@@ -1146,13 +1146,15 @@ EOF
 ;;   if have path to test directory save the config as .testconfig and return it
 ;;
 (define (tests:get-testconfig test-name item-path test-registry system-allowed #!key (force-create #f))
-  (let* ((cache-path   (tests:get-test-path-from-environment))
+  (let* ((use-cache    (common:use-cache?))
+	 (cache-path   (tests:get-test-path-from-environment))
 	 (cache-file   (and cache-path (conc cache-path "/.testconfig")))
 	 (cache-exists (and cache-file
 			    (not force-create)  ;; if force-create then pretend there is no cache to read
 			    (file-exists? cache-file)))
 	 (cached-dat   (if (and (not force-create)
-				cache-exists)
+				cache-exists
+				use-cache)
 			   (handle-exceptions
 			    exn
 			    #f ;; any issues, just give up with the cached version and re-read

@@ -783,7 +783,8 @@
 	res)))
 
 (define (launch:setup-body #!key (force #f) (areapath #f))
-  (let* ((toppath  (or *toppath* areapath (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
+  (let* ((use-cache (common:use-cache?))
+	 (toppath  (or *toppath* areapath (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
 	 (runname  (common:args-get-runname))
 	 (target   (common:args-get-target exit-if-bad: #t))
 	 (linktree (common:get-linktree))
@@ -806,7 +807,7 @@
      ((eq? *configstatus* 'fulldata)
       *toppath*)
      ;; if mtcachef exists just read it, however we need to assume toppath is available in $MT_RUN_AREA_HOME
-     ((and mtcachef (file-exists? mtcachef) (get-environment-variable "MT_RUN_AREA_HOME"))
+     ((and mtcachef (file-exists? mtcachef) (get-environment-variable "MT_RUN_AREA_HOME") use-cache)
       (set! *configdat*    (configf:read-alist mtcachef))
       (set! *runconfigdat* (configf:read-alist rccachef))
       (set! *configinfo*   (list *configdat*  (get-environment-variable "MT_RUN_AREA_HOME")))
@@ -919,6 +920,7 @@
 	(begin
 	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")
           ;;(exit 1)
+	  (set! *toppath* #f) ;; force it to be false so we return #f
           #f
           ))
     ;; if have -append-config then read and append here
