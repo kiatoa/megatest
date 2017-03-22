@@ -54,22 +54,22 @@
 (defstruct cxt
   (taskdb #f)
   (cmutex (make-mutex)))
-(define *contexts* (make-hash-table))
-(define *context-mutex* (make-mutex))
+;; (define *contexts* (make-hash-table))
+;; (define *context-mutex* (make-mutex))
 
-;; safe method for accessing a context given a toppath
-;;
-(define (common:with-cxt toppath proc)
-  (mutex-lock! *context-mutex*)
-  (let ((cxt (hash-table-ref/default *contexts* toppath #f)))
-    (if (not cxt)
-        (set! cxt (let ((x (make-cxt)))(hash-table-set! *contexts* toppath x) x)))
-    (let ((cxt-mutex (cxt-mutex cxt)))
-      (mutex-unlock! *context-mutex*)
-      (mutex-lock! cxt-mutex)
-      (let ((res (proc cxt)))
-        (mutex-unlock! cxt-mutex)
-        res))))
+;; ;; safe method for accessing a context given a toppath
+;; ;;
+;; (define (common:with-cxt toppath proc)
+;;   (mutex-lock! *context-mutex*)
+;;   (let ((cxt (hash-table-ref/default *contexts* toppath #f)))
+;;     (if (not cxt)
+;;         (set! cxt (let ((x (make-cxt)))(hash-table-set! *contexts* toppath x) x)))
+;;     (let ((cxt-mutex (cxt-mutex cxt)))
+;;       (mutex-unlock! *context-mutex*)
+;;       (mutex-lock! cxt-mutex)
+;;       (let ((res (proc cxt)))
+;;         (mutex-unlock! cxt-mutex)
+;;         res))))
         
 ;; A hash table that can be accessed by #{scheme ...} calls in
 ;; config files. Allows communicating between confgs
@@ -88,7 +88,7 @@
 (define *test-meta-updated* (make-hash-table))
 (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
 (define *passnum*           0) ;; when running track calls to run-tests or similar
-(define *alt-log-file* #f)  ;; used by -log
+;; (define *alt-log-file* #f)  ;; used by -log
 (define *common:denoise*    (make-hash-table)) ;; for low noise printing
 (define *default-log-port*  (current-error-port))
 (define *time-zero* (current-seconds)) ;; for the watchdog
@@ -118,16 +118,16 @@
 (define *my-client-signature* #f)
 (define *transport-type*    'http)             ;; override with [server] transport http|rpc|nmsg
 (define *runremote*         #f)                ;; if set up for server communication this will hold <host port>
-(define *max-cache-size*    0)
+;; (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))
-(define *server-id*         #f)
-(define *server-info*       #f)
+;; (define *server-id*         #f)
+(define *server-info*       #f)  ;; good candidate for easily convert to non-global
 (define *time-to-exit*      #f)
 (define *server-run*        #t)
 (define *run-id*            #f)
 (define *server-kind-run*   (make-hash-table))
 (define *home-host*         #f)
-(define *total-non-write-delay* 0)
+;; (define *total-non-write-delay* 0)
 (define *heartbeat-mutex*   (make-mutex))
 (define *api-process-request-count* 0)
 (define *max-api-process-requests* 0)

@@ -478,13 +478,13 @@
 ;; start_server? 
 ;;
 (define (http-transport:launch)
-  (if (args:get-arg "-daemonize")
-      (begin
-	(daemon:ize)
-	(if *alt-log-file* ;; we should re-connect to this port, I think daemon:ize disrupts it
-	    (begin
-	      (current-error-port *alt-log-file*)
-	      (current-output-port *alt-log-file*)))))
+  ;; (if (args:get-arg "-daemonize")
+  ;;     (begin
+  ;; 	(daemon:ize)
+  ;; 	(if *alt-log-file* ;; we should re-connect to this port, I think daemon:ize disrupts it
+  ;; 	    (begin
+  ;; 	      (current-error-port *alt-log-file*)
+  ;; 	      (current-output-port *alt-log-file*)))))
   (let* ((th2 (make-thread (lambda ()
 			     (debug:print-info 0 *default-log-port* "Server run thread started")
 			     (http-transport:run 
@@ -543,7 +543,7 @@
   (mutex-lock! *heartbeat-mutex*)
   (let ((res 
 	 (conc "<table>"
-	       "<tr><td>Max cached queries</td>        <td>" *max-cache-size* "</td></tr>"
+	       ;; "<tr><td>Max cached queries</td>        <td>" *max-cache-size* "</td></tr>"
 	       "<tr><td>Number of cached writes</td>   <td>" *number-of-writes* "</td></tr>"
 	       "<tr><td>Average cached write time</td> <td>" (if (eq? *number-of-writes* 0)
 								 "n/a (no writes)"
@@ -551,10 +551,10 @@
 								    *number-of-writes*))
 	       " ms</td></tr>"
 	       "<tr><td>Number non-cached queries</td> <td>"  *number-non-write-queries* "</td></tr>"
-	       "<tr><td>Average non-cached time</td>   <td>" (if (eq? *number-non-write-queries* 0)
-								 "n/a (no queries)"
-								 (/ *total-non-write-delay* 
-								    *number-non-write-queries*))
+	       ;; "<tr><td>Average non-cached time</td>   <td>" (if (eq? *number-non-write-queries* 0)
+	       ;; 							 "n/a (no queries)"
+	       ;; 							 (/ *total-non-write-delay* 
+	       ;; 							    *number-non-write-queries*))
 	       " ms</td></tr>"
 	       "<tr><td>Last access</td><td>"              (seconds->time-string *db-last-access*) "</td></tr>"
 	       "</table>")))
