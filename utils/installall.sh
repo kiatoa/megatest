@@ -29,6 +29,7 @@ echo Set OPTION to std, currently OPTION=$OPTION
 echo
 echo Additionally, if you want mysql-client, you will need to make sure
 echo mysql_config is in your path
+echo for postgres to install dbi libpq-dev
 echo
 echo You are using PREFIX=$PREFIX
 echo You are using proxy="$proxy"
