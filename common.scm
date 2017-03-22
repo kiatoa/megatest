@@ -275,10 +275,11 @@
    "logs"))
 
 ;; Force a megatest cleanup-db if version is changed and skip-version-check not specified
+;; Do NOT check if not on homehost!
 ;;
 (define (common:exit-on-version-changed)
-  (if (common:version-changed?)
-      (if (common:on-homehost?)
+  (if (common:on-homehost?)
+      (if (common:version-changed?)
 	  (let* ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config"))
                 (dbfile (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.db"))
                 (read-only (not (file-write-access? dbfile)))
@@ -314,10 +315,10 @@
               (exit 1))
              (else
               (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
-              (exit 1))))
-	  (begin
-	    (debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
-	    (exit 1)))))
+              (exit 1)))))
+      (begin
+	(debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
+	(exit 1))))
 
 ;;======================================================================
 ;; S P A R S E   A R R A Y S
@@ -556,19 +557,21 @@
 
 (define (common:get-testsuite-name)
   (or (configf:lookup *configdat* "setup" "testsuite" )
-      (if *toppath* 
+      (if (string? *toppath* )
           (pathname-file *toppath*)
           (pathname-file (current-directory)))))
 
 (define (common:get-db-tmp-area)
   (if *db-cache-path*
       *db-cache-path*
-      (let ((dbpath (create-directory (conc "/tmp/" (current-user-name)
-					    "/megatest_localdb/"
-					    (common:get-testsuite-name) "/"
-					    (string-translate *toppath* "/" ".")) #t)))
-	(set! *db-cache-path* dbpath)
-	dbpath)))
+      (if *toppath*
+	  (let ((dbpath (create-directory (conc "/tmp/" (current-user-name)
+						"/megatest_localdb/"
+						(common:get-testsuite-name) "/"
+						(string-translate *toppath* "/" ".")) #t)))
+	    (set! *db-cache-path* dbpath)
+	    dbpath)
+	  #f)))
 
 (define (common:get-area-path-signature)
   (message-digest-string (md5-primitive) *toppath*))
@@ -707,20 +710,19 @@
 
 ;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
 (define (common:watchdog)
-  ;;#t)
   (debug:print-info 13 *default-log-port* "common:watchdog entered.")
-
- (let ((dbstruct (db:setup)))
-   (debug:print-info 13 *default-log-port* "after db:setup with dbstruct="dbstruct)
-   (cond
-    ((dbr:dbstruct-read-only dbstruct)
-     (debug:print-info 13 *default-log-port* "loading read-only watchdog")
-     (common:readonly-watchdog dbstruct))
-    (else
-     (debug:print-info 13 *default-log-port* "loading writable-watchdog.")
-     (common:writable-watchdog dbstruct))))
- (debug:print-info 13 *default-log-port* "watchdog done.");;)
- )
+  (if (common:on-homehost?)
+      (let ((dbstruct (db:setup)))
+	(debug:print-info 13 *default-log-port* "after db:setup with dbstruct="dbstruct)
+	(cond
+	 ((dbr:dbstruct-read-only dbstruct)
+	  (debug:print-info 13 *default-log-port* "loading read-only watchdog")
+	  (common:readonly-watchdog dbstruct))
+	 (else
+	  (debug:print-info 13 *default-log-port* "loading writable-watchdog.")
+	  (common:writable-watchdog dbstruct)))
+	(debug:print-info 13 *default-log-port* "watchdog done."))
+      (debug:print-info 13 *default-log-port* "no need for watchdog on non-homehost")))
 
 
 (define (std-exit-procedure)
@@ -1006,6 +1008,13 @@
     (if hh
 	(cdr hh)
 	#f)))
+
+;; do we honor the caches of the config files?
+;;
+(define (common:use-cache?)
+  (not (or (args:get-arg "-no-cache")
+	   (and *configdat*
+		(equal? (configf:lookup *configdat* "setup" "use-cache") "no")))))
 
 ;;======================================================================
 ;; M I S C   L I S T S
