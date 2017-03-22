@@ -2,7 +2,7 @@
 # rm <files>.o ; make install CSCOPTS='-profile' ; ... ;  chicken-profile | less
 
 PREFIX=$(PWD)
-CSCOPTS= 
+CSCOPTS=-O4
 INSTALL=install
 SRCFILES = common.scm items.scm launch.scm \
    ods.scm runconfig.scm server.scm configf.scm \
