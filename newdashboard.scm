@@ -586,7 +586,7 @@ Misc
 		  (runs window-id)
 		  (tests window-id)
 		  (runcontrol window-id)
-		  (mtest window-id) 
+		  (mtest *toppath* window-id) 
 		  (rconfig window-id)
 		  )))
      (iup:attribute-set! tabtop "TABTITLE0" "Runs")
