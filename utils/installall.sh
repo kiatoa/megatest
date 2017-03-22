@@ -36,6 +36,8 @@ echo
 echo "Set additional_libpath to help find gtk or other libraries, don't forget a leading :"
 
 SYSTEM_TYPE=$(lsb_release -irs |tr ' ' '_' |tr '\n' '-')$(uname -i)-$OPTION
+CHICKEN_VERSION=4.11.0
+CHICKEN_BASEVER=4.11.0
 
 # Set up variables
 #
@@ -45,6 +47,8 @@ Ubuntu-16.04-x86_64-std)
 	CDVER=5.10
 	IUPVER=3.17
 	IMVER=3.11
+	CHICKEN_VERSION=4.12.0
+	CHICKEN_BASEVER=4.12.0
 	;;
 Ubuntu-16.04-i686-std)
 	KTYPE=32
@@ -112,8 +116,6 @@ fi
 mkdir -p tgz
 
 # http://code.call-cc.org/releases/4.8.0/chicken-4.8.0.5.tar.gz
-export CHICKEN_VERSION=4.11.0
-export CHICKEN_BASEVER=4.11.0
 chicken_targz=chicken-${CHICKEN_VERSION}.tar.gz
 if ! [[ -e tgz/$chicken_targz ]]; then 
     wget http://code.call-cc.org/releases/${CHICKEN_BASEVER}/${chicken_targz}
