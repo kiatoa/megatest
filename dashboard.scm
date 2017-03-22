@@ -101,10 +101,6 @@ Misc
       (print help)
       (exit)))
 
-(if (not (common:on-homehost?))
-    (begin
-      (debug:print 0 *default-log-port* "WARNING: Current policy requires running dashboard on homehost: " (common:get-homehost))))
-    
 ;; TODO: Move this inside (main)
 ;;
 (if (not (launch:setup))
@@ -112,6 +108,10 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
+(if (not (common:on-homehost?))
+    (begin
+      (debug:print 0 *default-log-port* "WARNING: Current policy requires running dashboard on homehost: " (common:get-homehost))))
+    
 ;; RA => Might require revert for filters 
 ;; create a watch dog to move changes from lt/.db/*.db to megatest.db
 ;;

@@ -88,11 +88,12 @@ Launching and managing runs
   -get-run-status         : gets status for run specified by target and runname
   -run-wait               : wait on run specified by target and runname
   -preclean               : remove the existing test directory before running the test
-  -clean-cache            : remove the cached megatest.config and runconfig.config files
+  -clean-cache            : remove the cached megatest.config and runconfigs.config files
+  -no-cache               : do not use the cached config files. 
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
-  -reqtarg key1/key2/...  : run for key1, key2, etc. but key1/key2 must be in runconfig
+  -reqtarg key1/key2/...  : run for key1, key2, etc. but key1/key2 must be in runconfigs
   -testpatt patt1/patt2,patt3/...  : % is wildcard
   -runname                : required, name for this particular test run
   -state                  : Applies to runs, tests or steps depending on context
@@ -211,6 +212,7 @@ Called as " (string-intersperse (argv) " ") "
 Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;;  -gui                    : start a gui interface
+;;  -config fname           : override the runconfigs file with fname
 
 ;; process args
 (define remargs (args:get-args 
@@ -311,6 +313,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-rerun-clean"
 			"-rerun-all"
 			"-clean-cache"
+			"-no-cache"
 			"-cache-db"
                         "-use-db-cache"
 			;; misc
@@ -869,7 +872,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (cfgf   (if rundir (conc rundir "/.runconfig." megatest-version "-" megatest-fossil-hash) #f)))
     (if (and cfgf
 	     (file-exists? cfgf)
-	     (file-write-access? cfgf))
+	     (file-write-access? cfgf)
+	     (common:use-cache?))
 	(configf:read-alist cfgf)
 	(let* ((keys   (rmt:get-keys))
 	       (target (common:args-get-target))
