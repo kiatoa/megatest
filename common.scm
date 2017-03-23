@@ -558,9 +558,10 @@
 
 (define (common:get-testsuite-name)
   (or (configf:lookup *configdat* "setup" "testsuite" )
-      (if (string? *toppath* )
+      (getenv "MT_TESTSUITE_NAME")
+      (if *toppath*
           (pathname-file *toppath*)
-          (pathname-file (current-directory)))))
+          #f))) ;; (pathname-file (current-directory)))))
 
 (define (common:get-db-tmp-area)
   (if *db-cache-path*
@@ -952,7 +953,8 @@
 (define (common:get-linktree)
   (or (getenv "MT_LINKTREE")
       (if *configdat*
-	  (configf:lookup *configdat* "setup" "linktree"))))
+	  (configf:lookup *configdat* "setup" "linktree")
+	  #f)))
 
 (define (common:args-get-runname)
   (let ((res (or (args:get-arg "-runname")
