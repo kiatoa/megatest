@@ -97,7 +97,7 @@
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; ensure we have a record for our connection for given area
      ((not runremote)                     
-      (set! *runremote* (make-remote))
+      (set! *runremote* (make-remote)) ;; new runremote will come from this on next iteration
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  1")
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
@@ -144,17 +144,22 @@
       (let ((server-url  (server:check-if-running *toppath*))) ;; (server:read-dotserver->url *toppath*))) ;; (server:check-if-running *toppath*))) ;; Do NOT want to run server:check-if-running - very expensive to do for every write call
 	(if server-url
 	    (remote-server-url-set! runremote server-url) ;; the string can be consumed by the client setup if needed
-	    (server:kind-run *toppath*)))
+	    (if (common:force-server?)
+		(server:start-and-wait *toppath*)
+		(server:kind-run *toppath*))))
+      (remote-force-server-set! runremote (common:force-server?))
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5.1")
       (rmt:open-qry-close-locally cmd 0 params))
 
-     ((and (not (cdr (remote-hh-dat runremote)))        ;; not on a homehost 
-           (not (remote-conndat runremote)))            ;; and no connection
+     ((or (and (remote-force-server runremote)              ;; we are forcing a server and don't yet have a connection to one
+	       (not (remote-conndat runremote)))
+	  (and (not (cdr (remote-hh-dat runremote)))        ;; not on a homehost 
+	       (not (remote-conndat runremote))))           ;; and no connection
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  6  hh-dat: " (remote-hh-dat runremote) " conndat: " (remote-conndat runremote))
       (mutex-unlock! *rmt-mutex*)
       (server:start-and-wait *toppath*)
-      (if (common:force-server?)(remote-force-server-set! runremote #t))
+      (remote-force-server-set! runremote (common:force-server?))
       (remote-conndat-set! runremote (rmt:get-connection-info *toppath*)) ;; calls client:setup which calls client:setup-http
       (rmt:send-receive cmd rid params attemptnum: attemptnum)) ;; TODO: add back-off timeout as
      ;; all set up if get this far, dispatch the query
