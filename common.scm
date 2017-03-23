@@ -1044,8 +1044,8 @@
 ;; force use of server?
 ;;
 (define (common:force-server?)
-  (let ((force-setting (configf:lookup "server" "force"))
-	(force-type    (if force-setting (string->symbol force-setting) #f)))
+  (let* ((force-setting (configf:lookup "server" "force"))
+         (force-type    (if force-setting (string->symbol force-setting) #f)))
     (case force-type
       ((#f)     #f)
       ((always) #t)
