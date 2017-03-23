@@ -152,7 +152,8 @@
   (last-server-check 0)  ;; last time we checked to see if the server was alive
   (conndat           #f)
   (transport         *transport-type*)
-  (server-timeout    (or (server:get-timeout) 100))) ;; default to 100 seconds
+  (server-timeout    (or (server:get-timeout) 100))
+  (force-server      #f)) ;; default to 100 seconds
 
 ;; launching and hosts
 (defstruct host
@@ -1015,6 +1016,18 @@
   (not (or (args:get-arg "-no-cache")
 	   (and *configdat*
 		(equal? (configf:lookup *configdat* "setup" "use-cache") "no")))))
+
+;; force use of server?
+;;
+(define (common:force-server?)
+  (let ((force-setting (configf:lookup "server" "force"))
+	(force-type    (if force-setting (string->symbol force-setting) #f)))
+    (case force-type
+      ((#f)     #f)
+      ((always) #t)
+      ((test)   (if (args:get-arg "-execute") ;; we are in a test
+		    #t
+		    #f)))))
 
 ;;======================================================================
 ;; M I S C   L I S T S

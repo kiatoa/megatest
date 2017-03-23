@@ -110,9 +110,9 @@
 			  (client:setup-http areapath remaining-tries: (- remaining-tries 1))
 			  )))
 		  (begin    ;; no server registered
-		    (server:kind-run areapath)
+		    ;; (server:kind-run areapath)
+		    (server:start-and-wait areapath)
 		    (debug:print-info 0 *default-log-port* "client:setup, no server registered, remaining-tries=" remaining-tries)
 		    (thread-sleep! 1) ;; (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
-		    (server:start-and-wait areapath)
 		    (client:setup-http areapath remaining-tries: (- remaining-tries 1)))))))))
 
