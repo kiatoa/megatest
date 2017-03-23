@@ -925,7 +925,31 @@
       (debug:print-info 0 *default-log-port* "testpatt defined in "testpatt-key" from runconfigs: " rtestpatt)
       rtestpatt)
      (else args-testpatt))))
-     
+
+
+
+(define (common:false-on-exception thunk #!key (message #f))
+  (handle-exceptions exn
+                     (begin
+                       (if message
+                           (debug:print-info 0 *default-log-port* message))
+                       #f) (thunk) ))
+
+(define (common:file-exists? path-string)
+  ;; this avoids stack dumps in the case where 
+
+  ;;;; TODO: catch permission denied exceptions and emit appropriate warnings, eg:  system error while trying to access file: "/nfs/pdx/disks/icf_env_disk001/bjbarcla/gwa/issues/mtdev/randy-slow/reproduce/q...
+  (common:false-on-exception (lambda () (file-exists? path-string))
+                             message: (conc "Unable to access path: " path-string)
+                             ))
+
+(define (common:directory-exists? path-string)
+  ;;;; TODO: catch permission denied exceptions and emit appropriate warnings, eg:  system error while trying to access file: "/nfs/pdx/disks/icf_env_disk001/bjbarcla/gwa/issues/mtdev/randy-slow/reproduce/q...
+  (common:false-on-exception (lambda () (directory-exists? path-string))
+                             message: (conc "Unable to access path: " path-string)
+                             ))
+
+
 (define (common:get-linktree)
   (or (getenv "MT_LINKTREE")
       (if *configdat*
@@ -1023,7 +1047,7 @@
 ;;
 (define (common:force-server?)
   (let* ((force-setting (configf:lookup "server" "force"))
-	(force-type    (if force-setting (string->symbol force-setting) #f)))
+         (force-type    (if force-setting (string->symbol force-setting) #f)))
     (case force-type
       ((#f)     #f)
       ((always) #t)
