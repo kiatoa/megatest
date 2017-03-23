@@ -432,7 +432,16 @@
 	      (lambda ()
 		(equal? key-string (read-line))))
 	    #f))))
-	
+
+(define (common:simple-file-lock-and-wait fname #!key (expire-time 300))
+  (let ((end-time (+ expire-time (current-seconds))))
+    (let loop ((got-lock (common:simple-file-lock fname expire-time: expire-time)))
+      (if got-lock
+	  #t
+	  (if (> end-time (current-seconds))
+	      (loop (common:simple-file-lock fname expire-time: expire-time))
+	      #f)))))
+
 (define (common:simple-file-release-lock fname)
   (delete-file* fname))
 
@@ -1046,14 +1055,17 @@
 ;; force use of server?
 ;;
 (define (common:force-server?)
-  (let* ((force-setting (configf:lookup "server" "force"))
-         (force-type    (if force-setting (string->symbol force-setting) #f)))
+  (let* ((force-setting (configf:lookup *configdat* "server" "force"))
+	 (force-type    (if force-setting (string->symbol force-setting) #f)))
     (case force-type
       ((#f)     #f)
       ((always) #t)
       ((test)   (if (args:get-arg "-execute") ;; we are in a test
 		    #t
-		    #f)))))
+		    #f))
+      (else
+       (debug:print 0 *default-log-port* "ERROR: Bad server force setting " force-setting ", forcing server.")
+       #t)))) ;; default to requiring server 
 
 ;;======================================================================
 ;; M I S C   L I S T S

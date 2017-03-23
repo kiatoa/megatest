@@ -272,7 +272,7 @@
 	     (lock-file    (conc areapath "/logs/server-start.lock")))
 	(if	(> (- (current-seconds) when-run) run-delay)
 		(begin
-		  (common:simple-file-lock lock-file expire-time: 15)
+		  (common:simple-file-lock-and-wait lock-file expire-time: 15)
 		  (server:run areapath)
 		  (thread-sleep! 5) ;; don't release the lock for at least a few seconds
 		  (common:simple-file-release-lock lock-file)))
