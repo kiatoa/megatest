@@ -1056,16 +1056,21 @@
 ;;
 (define (common:force-server?)
   (let* ((force-setting (configf:lookup *configdat* "server" "force"))
-	 (force-type    (if force-setting (string->symbol force-setting) #f)))
-    (case force-type
-      ((#f)     #f)
-      ((always) #t)
-      ((test)   (if (args:get-arg "-execute") ;; we are in a test
-		    #t
-		    #f))
-      (else
-       (debug:print 0 *default-log-port* "ERROR: Bad server force setting " force-setting ", forcing server.")
-       #t)))) ;; default to requiring server 
+	 (force-type    (if force-setting (string->symbol force-setting) #f))
+	 (force-result  (case force-type
+			  ((#f)     #f)
+			  ((always) #t)
+			  ((test)   (if (args:get-arg "-execute") ;; we are in a test
+					#t
+					#f))
+			  (else
+			   (debug:print 0 *default-log-port* "ERROR: Bad server force setting " force-setting ", forcing server.")
+			   #t)))) ;; default to requiring server
+    (if force-result
+	(begin
+	  (debug:print-info 0 *default-log-port* "forcing use of server, force setting is \"" force-setting "\".")
+	  #t)
+	#f)))
 
 ;;======================================================================
 ;; M I S C   L I S T S
