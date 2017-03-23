@@ -152,7 +152,8 @@
   (last-server-check 0)  ;; last time we checked to see if the server was alive
   (conndat           #f)
   (transport         *transport-type*)
-  (server-timeout    (or (server:get-timeout) 100))) ;; default to 100 seconds
+  (server-timeout    (or (server:get-timeout) 100))
+  (force-server      #f)) ;; default to 100 seconds
 
 ;; launching and hosts
 (defstruct host
@@ -923,7 +924,31 @@
       (debug:print-info 0 *default-log-port* "testpatt defined in "testpatt-key" from runconfigs: " rtestpatt)
       rtestpatt)
      (else args-testpatt))))
-     
+
+
+
+(define (common:false-on-exception thunk #!key (message #f))
+  (handle-exceptions exn
+                     (begin
+                       (if message
+                           (debug:print-info 0 *default-log-port* message))
+                       #f) (thunk) ))
+
+(define (common:file-exists? path-string)
+  ;; this avoids stack dumps in the case where 
+
+  ;;;; TODO: catch permission denied exceptions and emit appropriate warnings, eg:  system error while trying to access file: "/nfs/pdx/disks/icf_env_disk001/bjbarcla/gwa/issues/mtdev/randy-slow/reproduce/q...
+  (common:false-on-exception (lambda () (file-exists? path-string))
+                             message: (conc "Unable to access path: " path-string)
+                             ))
+
+(define (common:directory-exists? path-string)
+  ;;;; TODO: catch permission denied exceptions and emit appropriate warnings, eg:  system error while trying to access file: "/nfs/pdx/disks/icf_env_disk001/bjbarcla/gwa/issues/mtdev/randy-slow/reproduce/q...
+  (common:false-on-exception (lambda () (directory-exists? path-string))
+                             message: (conc "Unable to access path: " path-string)
+                             ))
+
+
 (define (common:get-linktree)
   (or (getenv "MT_LINKTREE")
       (if *configdat*
@@ -1015,6 +1040,18 @@
   (not (or (args:get-arg "-no-cache")
 	   (and *configdat*
 		(equal? (configf:lookup *configdat* "setup" "use-cache") "no")))))
+
+;; force use of server?
+;;
+(define (common:force-server?)
+  (let ((force-setting (configf:lookup "server" "force"))
+	(force-type    (if force-setting (string->symbol force-setting) #f)))
+    (case force-type
+      ((#f)     #f)
+      ((always) #t)
+      ((test)   (if (args:get-arg "-execute") ;; we are in a test
+		    #t
+		    #f)))))
 
 ;;======================================================================
 ;; M I S C   L I S T S

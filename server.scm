@@ -259,18 +259,24 @@
 ;; kind start up of servers, wait 40 seconds before allowing another server for a given
 ;; run-id to be launched
 (define (server:kind-run areapath)
-  (let* ((last-run-dat (hash-table-ref/default *server-kind-run* areapath '(0 0))) ;; callnum, whenrun
-         (call-num     (car last-run-dat))
-         (when-run     (cadr last-run-dat))
-         (run-delay    (+ (case call-num
-                            ((0)    0)
-                            ((1)   20)
-                            ((2)  300)
-                            (else 600))
-                          (random 5)))) ;; add a small random number just in case a lot of jobs hit the work hosts simultaneously
-    (if	(> (- (current-seconds) when-run) run-delay)
-        (server:run areapath))
-    (hash-table-set! *server-kind-run* areapath (list (+ call-num 1)(current-seconds)))))
+  (if (not (server:check-if-running areapath)) ;; why try if there is already a server running?
+      (let* ((last-run-dat (hash-table-ref/default *server-kind-run* areapath '(0 0))) ;; callnum, whenrun
+	     (call-num     (car last-run-dat))
+	     (when-run     (cadr last-run-dat))
+	     (run-delay    (+ (case call-num
+				((0)    0)
+				((1)   20)
+				((2)  300)
+				(else 600))
+			      (random 5)))   ;; add a small random number just in case a lot of jobs hit the work hosts simultaneously
+	     (lock-file    (conc areapath "/logs/server-start.lock")))
+	(if	(> (- (current-seconds) when-run) run-delay)
+		(begin
+		  (common:simple-file-lock lock-file expire-time: 15)
+		  (server:run areapath)
+		  (thread-sleep! 5) ;; don't release the lock for at least a few seconds
+		  (common:simple-file-release-lock lock-file)))
+	(hash-table-set! *server-kind-run* areapath (list (+ call-num 1)(current-seconds))))))
 
 (define (server:start-and-wait areapath #!key (timeout 60))
   (let ((give-up-time (+ (current-seconds) timeout)))

@@ -109,7 +109,8 @@
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  2")
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; on homehost and this is a read
-     ((and (cdr (remote-hh-dat runremote))   ;; on homehost
+     ((and (not (remote-force-server runremote))      ;; honor forced use of server
+	   (cdr (remote-hh-dat runremote))     ;; on homehost
            (member cmd api:read-only-queries)) ;; this is a read
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  3")
@@ -126,15 +127,17 @@
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
 
      ;; on homehost and this is a write, we already have a server
-     ((and (cdr (remote-hh-dat runremote))         ;; on homehost
+     ((and (not (remote-force-server runremote))     ;; honor forced use of server
+	   (cdr (remote-hh-dat runremote))           ;; on homehost
            (not (member cmd api:read-only-queries))  ;; this is a write
-           (remote-server-url runremote))          ;; have a server
+           (remote-server-url runremote))            ;; have a server
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  4")
       (rmt:open-qry-close-locally cmd 0 params))
 
      ;;  on homehost, no server contact made and this is a write, passively start a server 
-     ((and (cdr (remote-hh-dat runremote)) ; new
+     ((and (not (remote-force-server runremote)) ;; honor forced use of server
+	   (cdr (remote-hh-dat runremote))       ;; new
            (not (remote-server-url runremote))
 	   (not (member cmd api:read-only-queries)))
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5")
@@ -151,10 +154,12 @@
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  6  hh-dat: " (remote-hh-dat runremote) " conndat: " (remote-conndat runremote))
       (mutex-unlock! *rmt-mutex*)
       (server:start-and-wait *toppath*)
+      (if (common:force-server?)(remote-force-server-set! runremote #t))
       (remote-conndat-set! runremote (rmt:get-connection-info *toppath*)) ;; calls client:setup which calls client:setup-http
       (rmt:send-receive cmd rid params attemptnum: attemptnum)) ;; TODO: add back-off timeout as
      ;; all set up if get this far, dispatch the query
-     ((cdr (remote-hh-dat runremote)) ;; we are on homehost
+     ((and (not (remote-force-server runremote))
+	   (cdr (remote-hh-dat runremote))) ;; we are on homehost
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  7")
       (rmt:open-qry-close-locally cmd (if rid rid 0) params))
