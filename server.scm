@@ -243,6 +243,15 @@
 	(car srvrs)
 	#f)))
 
+(define (server:get-rand-best areapath)
+  (let ((srvrs (server:get-best (server:get-list areapath))))
+    (if (list? srvrs)
+	(let* ((len (length srvrs))
+	       (idx (random len)))
+	  (list-ref srvrs idx))
+	#f)))
+
+
 (define (server:record->url servr)
   (match-let (((mod-time host port start-time pid)
 	       servr))
@@ -294,9 +303,11 @@
 
 ;; no longer care if multiple servers are started by accident. older servers will drop off in time.
 ;;
-(define (server:check-if-running areapath)
-  (let* ((servers       (server:get-best (server:get-list areapath))))
-    (if (null? servers)
+(define (server:check-if-running areapath #!key (numservers "2"))
+  (let* ((ns            (string->number
+			 (or (configf:lookup *configdat* "server" "numservers") numservers)))
+	 (servers       (server:get-best (server:get-list areapath))))
+    (if (< (length servers) (random ns)) ;; somewhere between 0 and numservers
         #f
         (let loop ((hed (car servers))
                    (tal (cdr servers)))
