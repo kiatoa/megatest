@@ -292,15 +292,6 @@
 
 (define server:try-running server:run) ;; there is no more per-run servers ;; REMOVE ME. BUG.
 
-(define (server:dotserver-age-seconds areapath)
-  (let ((server-file (conc areapath "/.server")))
-    (begin
-      (handle-exceptions
-       exn
-       #f
-       (- (current-seconds)
-          (file-modification-time server-file))))))
-    
 ;; no longer care if multiple servers are started by accident. older servers will drop off in time.
 ;;
 (define (server:check-if-running areapath)
