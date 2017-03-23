@@ -772,7 +772,7 @@
 	 (rundir   (if (and runname target linktree)(conc linktree "/" target "/" runname) #f))
 	 (mtcachef (and rundir (conc rundir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	 (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
-	 (cancreate (and rundir (file-exists? rundir)(file-write-access? rundir)))
+	 (cancreate (and rundir (common:file-exists? rundir)(file-write-access? rundir)))
          (cxt       (hash-table-ref/default *contexts* toppath #f)))
 
     ;; create our cxt for this area if it doesn't already exist
@@ -785,7 +785,7 @@
      ((eq? *configstatus* 'fulldata)
       *toppath*)
      ;; if mtcachef exists just read it, however we need to assume toppath is available in $MT_RUN_AREA_HOME
-     ((and mtcachef (file-exists? mtcachef) (get-environment-variable "MT_RUN_AREA_HOME") use-cache)
+     ((and mtcachef (common:file-exists? mtcachef) (get-environment-variable "MT_RUN_AREA_HOME") use-cache)
       (set! *configdat*    (configf:read-alist mtcachef))
       (set! *runconfigdat* (configf:read-alist rccachef))
       (set! *configinfo*   (list *configdat*  (get-environment-variable "MT_RUN_AREA_HOME")))
@@ -868,7 +868,7 @@
 			 (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f))))
       (if linktree
 	  (begin
-	    (if (not (file-exists? linktree))
+	    (if (not (common:file-exists? linktree))
 		(begin
 		  (handle-exceptions
 		   exn
@@ -964,13 +964,13 @@
     (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path run-id)
 
     (debug:print 2 *default-log-port* "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
-    (if (not (file-exists? linktree))
+    (if (not (common:file-exists? linktree))
 	(begin
 	  (debug:print 0 *default-log-port* "WARNING: linktree did not exist! Creating it now at " linktree)
 	  (create-directory linktree #t))) ;; (system (conc "mkdir -p " linktree))))
     ;; create the directory for the tests dir links, this is needed no matter what...
-    (if (and (not (directory-exists? lnkbase))
-	     (not (file-exists? lnkbase)))
+    (if (and (not (common:directory-exists? lnkbase))
+	     (not (common:file-exists? lnkbase)))
 	(handle-exceptions
 	 exn
 	 (begin
