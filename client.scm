@@ -80,7 +80,7 @@
       ;; Alternatively here, we can get the list of candidate servers and work our way
       ;; through them searching for a good one.
       ;;
-      (let* ((server-dat (server:get-first-best areapath))
+      (let* ((server-dat (server:get-rand-best areapath)) ;; (server:get-first-best areapath))
 	     (runremote  (or area-dat *runremote*)))
 	(if (not server-dat) ;; no server found
 	    (client:setup-http areapath remaining-tries: (- remaining-tries 1))

@@ -2098,14 +2098,18 @@
 			    (lambda (a b)
 			      (let ((sum-a (common:sum (hash-table-ref *db-api-call-time* a)))
 				    (sum-b (common:sum (hash-table-ref *db-api-call-time* b))))
-				(> sum-a sum-b))))))
+				(> sum-a sum-b)))))
+	(total        0))
     (for-each
      (lambda (cmd-key)
        (let* ((dat  (hash-table-ref *db-api-call-time* cmd-key))
-	      (avg  (if (> (length dat) 0)
+	      (num  (length dat))
+	      (avg  (if (> num 0)
 			(/ (common:sum dat)(length dat)))))
+	 (set! total (+ total num))
 	 (debug:print-info 0 *default-log-port* cmd-key "\tavg: " avg " max: " (common:max dat) " min: " (common:min-max < dat) " num: " (length dat))))
-     ordered-keys)))
+     ordered-keys)
+    (debug:print-info 0 *default-log-port* "TOTAL: " total " api calls since start.")))
 
 (define (db:get-all-run-ids dbstruct)
   (db:with-db

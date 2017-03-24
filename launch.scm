@@ -787,7 +787,7 @@
 	     (rundir   (if (and runname target linktree)(conc linktree "/" target "/" runname) #f))
 	     (mtcachef (and rundir (conc rundir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	     (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
-	 (cancreate (and rundir (common:file-exists? rundir)(file-write-access? rundir)))
+	     (cancreate (and rundir (common:file-exists? rundir)(file-write-access? rundir)))
 	     (cxt       (hash-table-ref/default *contexts* toppath #f)))
 
 	;; create our cxt for this area if it doesn't already exist
