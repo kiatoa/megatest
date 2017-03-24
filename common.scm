@@ -416,22 +416,25 @@
 ;; to get the lock
 ;;
 (define (common:simple-file-lock fname #!key (expire-time 300))
-  (if (file-exists? fname)
-      (if (> (- (current-seconds)(file-modification-time fname)) expire-time)
-	  (begin
-	    (delete-file* fname)
-	    (common:simple-file-lock fname expire-time: expire-time))
-	  #f)
-      (let ((key-string (conc (get-host-name) "-" (current-process-id))))
-	(with-output-to-file fname
-	  (lambda ()
-	    (print key-string)))
-	(thread-sleep! 0.25)
-	(if (file-exists? fname)
-	    (with-input-from-file fname
-	      (lambda ()
-		(equal? key-string (read-line))))
-	    #f))))
+  (handle-exceptions
+      exn
+      #f ;; don't really care what went wrong right now. NOTE: I have not seen this one actually fail.
+    (if (file-exists? fname)
+	(if (> (- (current-seconds)(file-modification-time fname)) expire-time)
+	    (begin
+	      (delete-file* fname)
+	      (common:simple-file-lock fname expire-time: expire-time))
+	    #f)
+	(let ((key-string (conc (get-host-name) "-" (current-process-id))))
+	  (with-output-to-file fname
+	    (lambda ()
+	      (print key-string)))
+	  (thread-sleep! 0.25)
+	  (if (file-exists? fname)
+	      (with-input-from-file fname
+		(lambda ()
+		  (equal? key-string (read-line))))
+	      #f)))))
 
 (define (common:simple-file-lock-and-wait fname #!key (expire-time 300))
   (let ((end-time (+ expire-time (current-seconds))))
@@ -439,11 +442,16 @@
       (if got-lock
 	  #t
 	  (if (> end-time (current-seconds))
-	      (loop (common:simple-file-lock fname expire-time: expire-time))
+	      (begin
+		(thread-sleep! 3)
+		(loop (common:simple-file-lock fname expire-time: expire-time)))
 	      #f)))))
 
 (define (common:simple-file-release-lock fname)
-  (delete-file* fname))
+  (handle-exceptions
+      exn
+      #f ;; I don't really care why this failed (at least for now)
+    (delete-file* fname)))
 
 ;;======================================================================
 ;; S T A T E S   A N D   S T A T U S E S
