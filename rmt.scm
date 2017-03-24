@@ -58,11 +58,22 @@
   ;; 2. check the age of the connections. refresh the connection if it is older than timeout-20 seconds.
   ;; 3. do the query, if on homehost use local access
   ;;
-  (let* ((start-time (current-seconds)) ;; snapshot time so all use cases get same value
-         (areapath *toppath*);; TODO - resolve from dbstruct to be compatible with multiple areas
-         (dbfile (conc *toppath* "/megatest.db"))
-         (readonly-mode (not (file-write-access? dbfile))) ;; TODO: use dbstruct or runremote to figure this out in future
-	 (runremote  (or area-dat *runremote*)))
+  (let* ((start-time    (current-seconds)) ;; snapshot time so all use cases get same value
+         (areapath      *toppath*);; TODO - resolve from dbstruct to be compatible with multiple areas
+	 (runremote     (or area-dat
+			    *runremote*))
+	 (readonly-mode (if (and runremote
+				 (remote-ro-mode-checked runremote))
+			    (remote-ro-mode runremote)
+			    (let* ((dbfile  (conc *toppath* "/megatest.db"))
+				   (ro-mode (not (file-write-access? dbfile)))) ;; TODO: use dbstruct or runremote to figure this out in future
+			      (if runremote
+				  (begin
+				    (remote-ro-mode-set! runremote ro-mode)
+				    (remote-ro-mode-checked-set! runremote #t)
+				    ro-mode)
+				  ro-mode)))))
+
     ;;(print "BB> readonly-mode is "readonly-mode" dbfile is "dbfile)
     (cond
      ;; give up if more than 15 attempts
@@ -96,7 +107,7 @@
       (mutex-unlock! *rmt-mutex*)
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; ensure we have a record for our connection for given area
-     ((not runremote)                     
+     ((not runremote)                  ;; can remove this one. should never get here.         
       (set! *runremote* (make-remote)) ;; new runremote will come from this on next iteration
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  1")

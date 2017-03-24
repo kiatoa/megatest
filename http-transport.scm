@@ -420,7 +420,10 @@
 	  (begin
 	    (debug:print 0 *default-log-port* "SERVER STARTED: " iface ":" port " AT " (current-seconds))
 	    (flush-output *default-log-port*)))
-
+      (if (common:low-noise-print 60 "dbstats")
+	  (begin
+	    (debug:print 0 *default-log-port* "Server stats:")
+	    (db:print-current-query-stats)))
       (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600))
 	     (adjusted-timeout (if (> hrs-since-start 1)
 				   (- server-timeout (inexact->exact (round (* hrs-since-start 60))))  ;; subtract 60 seconds per hour
