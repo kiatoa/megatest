@@ -169,7 +169,8 @@
 	       (not (remote-conndat runremote))))           ;; and no connection
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  6  hh-dat: " (remote-hh-dat runremote) " conndat: " (remote-conndat runremote))
       (mutex-unlock! *rmt-mutex*)
-      (server:start-and-wait *toppath*)
+      (if (not (server:check-if-running *toppath*)) ;; who knows, maybe one has started up?
+	  (server:start-and-wait *toppath*))
       (remote-force-server-set! runremote (common:force-server?))
       (remote-conndat-set! runremote (rmt:get-connection-info *toppath*)) ;; calls client:setup which calls client:setup-http
       (rmt:send-receive cmd rid params attemptnum: attemptnum)) ;; TODO: add back-off timeout as
@@ -219,7 +220,8 @@
 		  (remote-server-url-set! runremote #f)
 		  (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
 		  (mutex-unlock! *rmt-mutex*)
-		  (server:start-and-wait *toppath*)
+		  (if (not (server:check-if-running *toppath*))
+		      (server:start-and-wait *toppath*))
 		  (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1))))))))))
 
 ;; (define (rmt:update-db-stats run-id rawcmd params duration)
