@@ -127,6 +127,8 @@
    (cond
     ((not (vector? dat))                    ;; it is an error to not receive a vector
      (vector #f #f "remote must be called with a vector")       )
+    ((> *api-process-request-count* 25)
+     (vector #f 'overloaded))
     (else  
      (let* ((cmd-in (vector-ref dat 0))
             (cmd    (if (symbol? cmd-in)
