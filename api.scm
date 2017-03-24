@@ -273,12 +273,13 @@
 
                    ;; TASKS 
                    ((find-task-queue-records)   (apply tasks:find-task-queue-records dbstruct params))))))
+       ;; save all stats
+       (let ((delta-t (- (current-milliseconds)
+			 start-t)))
+	 (hash-table-set! *db-api-call-time* cmd
+			  (cons delta-t (hash-table-ref/default *db-api-call-time* cmd '()))))
        (if (not writecmd-in-readonly-mode)
-           (let ((delta-t (- (current-milliseconds)
-                             start-t)))
-             (hash-table-set! *db-api-call-time* cmd
-                              (cons delta-t (hash-table-ref/default *db-api-call-time* cmd '())))
-             (vector #t res))
+	   (vector #t res)
            (vector #f res)))))))
 
 ;; http-server  send-response

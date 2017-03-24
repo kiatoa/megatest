@@ -248,7 +248,8 @@
 
 (define (server:get-rand-best areapath)
   (let ((srvrs (server:get-best (server:get-list areapath))))
-    (if (list? srvrs)
+    (if (and (list? srvrs)
+	     (not (null? srvrs)))
 	(let* ((len (length srvrs))
 	       (idx (random len)))
 	  (list-ref srvrs idx))
