@@ -2720,7 +2720,7 @@ Misc
   (handle-exceptions
    exn
    (begin
-     (debug:print 0 *default-log-port* "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn) " db-dir="dbdir)
+     (debug:print 2 *default-log-port* "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn) " db-dir="dbdir)
      (current-seconds)) ;; something went wrong - just print an error and return current-seconds
    (common:max (map (lambda (filen)
 		      (file-modification-time filen))
