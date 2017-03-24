@@ -127,6 +127,8 @@
    (cond
     ((not (vector? dat))                    ;; it is an error to not receive a vector
      (vector #f #f "remote must be called with a vector")       )
+    ((> *api-process-request-count* 20)
+     (vector #f 'overloaded))
     (else  
      (let* ((cmd-in (vector-ref dat 0))
             (cmd    (if (symbol? cmd-in)
@@ -273,12 +275,13 @@
 
                    ;; TASKS 
                    ((find-task-queue-records)   (apply tasks:find-task-queue-records dbstruct params))))))
+       ;; save all stats
+       (let ((delta-t (- (current-milliseconds)
+			 start-t)))
+	 (hash-table-set! *db-api-call-time* cmd
+			  (cons delta-t (hash-table-ref/default *db-api-call-time* cmd '()))))
        (if (not writecmd-in-readonly-mode)
-           (let ((delta-t (- (current-milliseconds)
-                             start-t)))
-             (hash-table-set! *db-api-call-time* cmd
-                              (cons delta-t (hash-table-ref/default *db-api-call-time* cmd '())))
-             (vector #t res))
+	   (vector #t res)
            (vector #f res)))))))
 
 ;; http-server  send-response

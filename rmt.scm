@@ -58,11 +58,22 @@
   ;; 2. check the age of the connections. refresh the connection if it is older than timeout-20 seconds.
   ;; 3. do the query, if on homehost use local access
   ;;
-  (let* ((start-time (current-seconds)) ;; snapshot time so all use cases get same value
-         (areapath *toppath*);; TODO - resolve from dbstruct to be compatible with multiple areas
-         (dbfile (conc *toppath* "/megatest.db"))
-         (readonly-mode (not (file-write-access? dbfile))) ;; TODO: use dbstruct or runremote to figure this out in future
-	 (runremote  (or area-dat *runremote*)))
+  (let* ((start-time    (current-seconds)) ;; snapshot time so all use cases get same value
+         (areapath      *toppath*);; TODO - resolve from dbstruct to be compatible with multiple areas
+	 (runremote     (or area-dat
+			    *runremote*))
+	 (readonly-mode (if (and runremote
+				 (remote-ro-mode-checked runremote))
+			    (remote-ro-mode runremote)
+			    (let* ((dbfile  (conc *toppath* "/megatest.db"))
+				   (ro-mode (not (file-write-access? dbfile)))) ;; TODO: use dbstruct or runremote to figure this out in future
+			      (if runremote
+				  (begin
+				    (remote-ro-mode-set! runremote ro-mode)
+				    (remote-ro-mode-checked-set! runremote #t)
+				    ro-mode)
+				  ro-mode)))))
+
     ;;(print "BB> readonly-mode is "readonly-mode" dbfile is "dbfile)
     (cond
      ;; give up if more than 15 attempts
@@ -96,7 +107,7 @@
       (mutex-unlock! *rmt-mutex*)
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; ensure we have a record for our connection for given area
-     ((not runremote)                     
+     ((not runremote)                  ;; can remove this one. should never get here.         
       (set! *runremote* (make-remote)) ;; new runremote will come from this on next iteration
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  1")
@@ -158,7 +169,8 @@
 	       (not (remote-conndat runremote))))           ;; and no connection
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  6  hh-dat: " (remote-hh-dat runremote) " conndat: " (remote-conndat runremote))
       (mutex-unlock! *rmt-mutex*)
-      (server:start-and-wait *toppath*)
+      (if (not (server:check-if-running *toppath*)) ;; who knows, maybe one has started up?
+	  (server:start-and-wait *toppath*))
       (remote-force-server-set! runremote (common:force-server?))
       (remote-conndat-set! runremote (rmt:get-connection-info *toppath*)) ;; calls client:setup which calls client:setup-http
       (rmt:send-receive cmd rid params attemptnum: attemptnum)) ;; TODO: add back-off timeout as
@@ -197,14 +209,20 @@
 	       (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport runremote) " is unknown")
 	       (mutex-unlock! *rmt-mutex*)
 	       (exit 1)))
-	    (begin
-	      (debug:print 0 *default-log-port* "WARNING: communication failed. Trying again, try num: " attemptnum)
-	      (remote-conndat-set!    runremote #f)
-	      (remote-server-url-set! runremote #f)
-              (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
-	      (mutex-unlock! *rmt-mutex*)
-	      (server:start-and-wait *toppath*)
-	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))))))))
+	    (if (eq? res 'overloaded)
+		(let ((wait-delay (+ attemptnum (* attemptnum 10))))
+		  (debug:print 0 *default-log-port* "WARNING: server is overloaded. Delaying " wait-delay " seconds and trying call again.")
+		  (thread-sleep! wait-delay)
+		  (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
+		(begin
+		  (debug:print 0 *default-log-port* "WARNING: communication failed. Trying again, try num: " attemptnum)
+		  (remote-conndat-set!    runremote #f)
+		  (remote-server-url-set! runremote #f)
+		  (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
+		  (mutex-unlock! *rmt-mutex*)
+		  (if (not (server:check-if-running *toppath*))
+		      (server:start-and-wait *toppath*))
+		  (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1))))))))))
 
 ;; (define (rmt:update-db-stats run-id rawcmd params duration)
 ;;   (mutex-lock! *db-stats-mutex*)
