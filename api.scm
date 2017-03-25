@@ -118,26 +118,25 @@
 (define (api:execute-requests dbstruct dat)
   (handle-exceptions
    exn
-   (let ((call-chain (get-call-chain))
-         )
+   (let ((call-chain (get-call-chain)))
      (debug:print 0 *default-log-port* "WARNING: api:execute-requests received an exception from peer, dat=" dat)
      (print-call-chain (current-error-port))
      (debug:print 0 *default-log-port* " message: "  ((condition-property-accessor 'exn 'message) exn))       
      (vector #f (vector exn call-chain dat))) ;; return some stuff for debug if an exception happens
    (cond
     ((not (vector? dat))                    ;; it is an error to not receive a vector
-     (vector #f #f "remote must be called with a vector")       )
-    ((> *api-process-request-count* 20)
-     (vector #f 'overloaded))
+     (vector #f (vector #f "remote must be called with a vector")))
+    ((> *api-process-request-count* 20) ;; 20)
+     'overloaded) ;; the inner vector is what gets returned. nope, don't know why. please refactor!
     (else  
-     (let* ((cmd-in (vector-ref dat 0))
-            (cmd    (if (symbol? cmd-in)
-                        cmd-in
-                        (string->symbol cmd-in)))
-            (params (vector-ref dat 1))
-            (start-t (current-milliseconds))
-            (readonly-mode (dbr:dbstruct-read-only dbstruct))
-            (readonly-command (member cmd api:read-only-queries))
+     (let* ((cmd-in            (vector-ref dat 0))
+            (cmd               (if (symbol? cmd-in)
+				   cmd-in
+				   (string->symbol cmd-in)))
+            (params            (vector-ref dat 1))
+            (start-t           (current-milliseconds))
+            (readonly-mode     (dbr:dbstruct-read-only dbstruct))
+            (readonly-command  (member cmd api:read-only-queries))
             (writecmd-in-readonly-mode (and readonly-mode (not readonly-command)))
             (res    
              (if writecmd-in-readonly-mode
@@ -275,15 +274,19 @@
                    ((testmeta-get-record)       (apply db:testmeta-get-record dbstruct params))
 
                    ;; TASKS 
-                   ((find-task-queue-records)   (apply tasks:find-task-queue-records dbstruct params))))))
+                   ((find-task-queue-records)   (apply tasks:find-task-queue-records dbstruct params))
+		   (else
+		    (debug:print 0 *default-log-port* "ERROR: bad api call " cmd)
+		    (conc "ERROR: BAD api call " cmd))))))
+       
        ;; save all stats
        (let ((delta-t (- (current-milliseconds)
 			 start-t)))
 	 (hash-table-set! *db-api-call-time* cmd
 			  (cons delta-t (hash-table-ref/default *db-api-call-time* cmd '()))))
-       (if (not writecmd-in-readonly-mode)
-	   (vector #t res)
-           (vector #f res)))))))
+       (if writecmd-in-readonly-mode
+	   (vector #f res)
+           (vector #t res)))))))
 
 ;; http-server  send-response
 ;;                 api:process-request
@@ -295,9 +298,12 @@
   (set! *api-process-request-count* (+ *api-process-request-count* 1))
   (let* ((cmd     ($ 'cmd))
 	 (paramsj ($ 'params))
-	 (params  (db:string->obj paramsj transport: 'http)) ;; (rmt:json-str->dat paramsj))
-	 (resdat  (api:execute-requests dbstruct (vector cmd params))) ;; #( flag result )
-	 (res     (vector-ref resdat 1)))
+	 (params  (db:string->obj paramsj transport: 'http)) ;; incoming data from the POST (or is it a GET?)
+	 (resdat  (api:execute-requests dbstruct (vector cmd params))) ;; process the request, resdat = #( flag result )
+	 (success (vector-ref resdat 0))
+	 (res     (vector-ref resdat 1))) ;; (vector flag payload), get the payload, ignore the flag (why?)
+    (if (not success)
+	(debug:print 0 *default-log-port* "ERROR: success flag is #f for " cmd " with params " params))
     (if (> *api-process-request-count* *max-api-process-requests*)
 	(set! *max-api-process-requests* *api-process-request-count*))
     (set! *api-process-request-count* (- *api-process-request-count* 1))

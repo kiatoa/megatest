@@ -142,22 +142,25 @@
 ;;
 (define (server:logf-get-start-info logf)
   (let ((rx (regexp "^SERVER STARTED: (\\S+):(\\d+) AT ([\\d\\.]+)"))) ;; SERVER STARTED: host:port AT timesecs
-    (with-input-from-file
-	logf
-      (lambda ()
-	(let loop ((inl  (read-line))
-		   (lnum 0))
-	  (if (not (eof-object? inl))
-	      (let ((mlst (string-match rx inl)))
-		(if (not mlst)
-		    (if (< lnum 500) ;; give up if more than 500 lines of server log read
-			(loop (read-line)(+ lnum 1))
-			(list #f #f #f))
-		    (let ((dat  (cdr mlst)))
-		      (list (car dat) ;; host
-			    (string->number (cadr dat)) ;; port
-			    (string->number (caddr dat))))))
-	      (list #f #f #f)))))))
+    (handle-exceptions
+	exn
+	(list #f #f #f) ;; no idea what went wrong, call it a bad server
+      (with-input-from-file
+	  logf
+	(lambda ()
+	  (let loop ((inl  (read-line))
+		     (lnum 0))
+	    (if (not (eof-object? inl))
+		(let ((mlst (string-match rx inl)))
+		  (if (not mlst)
+		      (if (< lnum 500) ;; give up if more than 500 lines of server log read
+			  (loop (read-line)(+ lnum 1))
+			  (list #f #f #f))
+		      (let ((dat  (cdr mlst)))
+			(list (car dat) ;; host
+			      (string->number (cadr dat)) ;; port
+			      (string->number (caddr dat))))))
+		(list #f #f #f))))))))
 
 ;; get a list of servers with all relevant data
 ;; ( mod-time host port start-time pid )
@@ -186,9 +189,9 @@
 			 (tal  (cdr server-logs))
 			 (res '()))
 		(let* ((mod-time  (handle-exceptions
-                                   exn
-                                   0
-                                   (file-modification-time hed))) ;; default to *very* old so log gets ignored if deleted
+				      exn
+				      (current-seconds) ;; 0
+				    (file-modification-time hed))) ;; default to *very* old so log gets ignored if deleted
 		       (down-time (- (current-seconds) mod-time))
 		       (serv-dat  (if (or (< num-serv-logs 10)
 				  	  (< down-time day-seconds))
