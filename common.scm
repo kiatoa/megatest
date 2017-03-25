@@ -157,7 +157,10 @@
   (last-server-check 0)  ;; last time we checked to see if the server was alive
   (conndat           #f)
   (transport         *transport-type*)
-  (server-timeout    (or (server:get-timeout) 100))) ;; default to 100 seconds
+  (server-timeout    (or (server:get-timeout) 100)) ;; default to 100 seconds
+  (force-server      #f)
+  (ro-mode           #f)  
+  (ro-mode-checked   #f)) ;; flag that indicates we have checked for ro-mode
 
 ;; launching and hosts
 (defstruct host
@@ -420,25 +423,42 @@
 ;; to get the lock
 ;;
 (define (common:simple-file-lock fname #!key (expire-time 300))
-  (if (file-exists? fname)
-      (if (> (- (current-seconds)(file-modification-time fname)) expire-time)
-	  (begin
-	    (delete-file* fname)
-	    (common:simple-file-lock fname expire-time: expire-time))
-	  #f)
-      (let ((key-string (conc (get-host-name) "-" (current-process-id))))
-	(with-output-to-file fname
-	  (lambda ()
-	    (print key-string)))
-	(thread-sleep! 0.25)
-	(if (file-exists? fname)
-	    (with-input-from-file fname
-	      (lambda ()
-		(equal? key-string (read-line))))
-	    #f))))
-	
+  (handle-exceptions
+      exn
+      #f ;; don't really care what went wrong right now. NOTE: I have not seen this one actually fail.
+    (if (file-exists? fname)
+	(if (> (- (current-seconds)(file-modification-time fname)) expire-time)
+	    (begin
+	      (delete-file* fname)
+	      (common:simple-file-lock fname expire-time: expire-time))
+	    #f)
+	(let ((key-string (conc (get-host-name) "-" (current-process-id))))
+	  (with-output-to-file fname
+	    (lambda ()
+	      (print key-string)))
+	  (thread-sleep! 0.25)
+	  (if (file-exists? fname)
+	      (with-input-from-file fname
+		(lambda ()
+		  (equal? key-string (read-line))))
+	      #f)))))
+
+(define (common:simple-file-lock-and-wait fname #!key (expire-time 300))
+  (let ((end-time (+ expire-time (current-seconds))))
+    (let loop ((got-lock (common:simple-file-lock fname expire-time: expire-time)))
+      (if got-lock
+	  #t
+	  (if (> end-time (current-seconds))
+	      (begin
+		(thread-sleep! 3)
+		(loop (common:simple-file-lock fname expire-time: expire-time)))
+	      #f)))))
+
 (define (common:simple-file-release-lock fname)
-  (delete-file* fname))
+  (handle-exceptions
+      exn
+      #f ;; I don't really care why this failed (at least for now)
+    (delete-file* fname)))
 
 ;;======================================================================
 ;; S T A T E S   A N D   S T A T U S E S
@@ -563,9 +583,10 @@
 (define (common:get-testsuite-name)
   (or (configf:lookup *configdat* "setup" "area-name") ;; megatest is a flexible tool, testsuite is too limiting a description.
       (configf:lookup *configdat* "setup" "testsuite" )
+      (getenv "MT_TESTSUITE_NAME")
       (if (string? *toppath* )
           (pathname-file *toppath*)
-          (pathname-file (current-directory)))))
+          #f))) ;; (pathname-file (current-directory)))))
 
 (define common:get-area-name common:get-testsuite-name)
 
@@ -957,7 +978,31 @@
       (debug:print-info 0 *default-log-port* "testpatt defined in "testpatt-key" from runconfigs: " rtestpatt)
       rtestpatt)
      (else args-testpatt))))
-     
+
+
+
+(define (common:false-on-exception thunk #!key (message #f))
+  (handle-exceptions exn
+                     (begin
+                       (if message
+                           (debug:print-info 0 *default-log-port* message))
+                       #f) (thunk) ))
+
+(define (common:file-exists? path-string)
+  ;; this avoids stack dumps in the case where 
+
+  ;;;; TODO: catch permission denied exceptions and emit appropriate warnings, eg:  system error while trying to access file: "/nfs/pdx/disks/icf_env_disk001/bjbarcla/gwa/issues/mtdev/randy-slow/reproduce/q...
+  (common:false-on-exception (lambda () (file-exists? path-string))
+                             message: (conc "Unable to access path: " path-string)
+                             ))
+
+(define (common:directory-exists? path-string)
+  ;;;; TODO: catch permission denied exceptions and emit appropriate warnings, eg:  system error while trying to access file: "/nfs/pdx/disks/icf_env_disk001/bjbarcla/gwa/issues/mtdev/randy-slow/reproduce/q...
+  (common:false-on-exception (lambda () (directory-exists? path-string))
+                             message: (conc "Unable to access path: " path-string)
+                             ))
+
+
 (define (common:get-linktree)
   (or (getenv "MT_LINKTREE")
       (or (and *configdat*
@@ -1059,6 +1104,33 @@
   (let ((hh (common:get-homehost)))
     (if hh
 	(cdr hh)
+	#f)))
+
+;; do we honor the caches of the config files?
+;;
+(define (common:use-cache?)
+  (not (or (args:get-arg "-no-cache")
+	   (and *configdat*
+		(equal? (configf:lookup *configdat* "setup" "use-cache") "no")))))
+
+;; force use of server?
+;;
+(define (common:force-server?)
+  (let* ((force-setting (configf:lookup *configdat* "server" "force"))
+	 (force-type    (if force-setting (string->symbol force-setting) #f))
+	 (force-result  (case force-type
+			  ((#f)     #f)
+			  ((always) #t)
+			  ((test)   (if (args:get-arg "-execute") ;; we are in a test
+					#t
+					#f))
+			  (else
+			   (debug:print 0 *default-log-port* "ERROR: Bad server force setting " force-setting ", forcing server.")
+			   #t)))) ;; default to requiring server
+    (if force-result
+	(begin
+	  (debug:print-info 0 *default-log-port* "forcing use of server, force setting is \"" force-setting "\".")
+	  #t)
 	#f)))
 
 ;; do we honor the caches of the config files?

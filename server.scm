@@ -169,7 +169,7 @@
     ;; otherwise attempt to create the logs dir and then
     ;; continue
     (if (if (directory-exists? (conc areapath "/logs"))
-	    #t
+	    '()
 	    (if (file-write-access? areapath)
 		(begin
 		  (condition-case
@@ -177,7 +177,7 @@
 		    (exn (i/o file)(debug:print 0 *default-log-port* "ERROR: Cannot create directory at " (conc areapath "/logs")))
 		    (exn ()(debug:print 0 *default-log-port* "ERROR: Unknown error attemtping to get server list.")))
 		  (directory-exists? (conc areapath "/logs")))
-		#f))
+		'()))
 	(let* ((server-logs   (glob (conc areapath "/logs/server-*.log")))
 	       (num-serv-logs (length server-logs)))
 	  (if (null? server-logs)
@@ -220,17 +220,20 @@
   (let ((now (current-seconds)))
     (sort
      (filter (lambda (rec)
-	       (let ((start-time (list-ref rec 3))
-		     (mod-time   (list-ref rec 0)))
-		 ;; (print "start-time: " start-time " mod-time: " mod-time)
-		 (and start-time mod-time
-		      (> (- now start-time) 0)    ;; been running at least 0 seconds
-		      (< (- now mod-time)   16)   ;; still alive - file touched in last 16 seconds
-		      (< (- now start-time) 
-                         (+ (- (string->number (or (configf:lookup *configdat* "server" "runtime") "3600"))
-                               180)
-                            (random 360))) ;; under one hour running time +/- 180
-		      )))
+	       (if (and (list? rec)
+			(> (length rec) 2))
+		   (let ((start-time (list-ref rec 3))
+			 (mod-time   (list-ref rec 0)))
+		     ;; (print "start-time: " start-time " mod-time: " mod-time)
+		     (and start-time mod-time
+			  (> (- now start-time) 0)    ;; been running at least 0 seconds
+			  (< (- now mod-time)   16)   ;; still alive - file touched in last 16 seconds
+			  (< (- now start-time) 
+			     (+ (- (string->number (or (configf:lookup *configdat* "server" "runtime") "3600"))
+				   180)
+				(random 360))) ;; under one hour running time +/- 180
+			  ))
+		   #f))
 	     srvlst)
      (lambda (a b)
        (< (list-ref a 3)
@@ -242,6 +245,16 @@
 	     (not (null? srvrs)))
 	(car srvrs)
 	#f)))
+
+(define (server:get-rand-best areapath)
+  (let ((srvrs (server:get-best (server:get-list areapath))))
+    (if (and (list? srvrs)
+	     (not (null? srvrs)))
+	(let* ((len (length srvrs))
+	       (idx (random len)))
+	  (list-ref srvrs idx))
+	#f)))
+
 
 (define (server:record->url servr)
   (match-let (((mod-time host port start-time pid)
@@ -259,18 +272,24 @@
 ;; kind start up of servers, wait 40 seconds before allowing another server for a given
 ;; run-id to be launched
 (define (server:kind-run areapath)
-  (let* ((last-run-dat (hash-table-ref/default *server-kind-run* areapath '(0 0))) ;; callnum, whenrun
-         (call-num     (car last-run-dat))
-         (when-run     (cadr last-run-dat))
-         (run-delay    (+ (case call-num
-                            ((0)    0)
-                            ((1)   20)
-                            ((2)  300)
-                            (else 600))
-                          (random 5)))) ;; add a small random number just in case a lot of jobs hit the work hosts simultaneously
-    (if	(> (- (current-seconds) when-run) run-delay)
-        (server:run areapath))
-    (hash-table-set! *server-kind-run* areapath (list (+ call-num 1)(current-seconds)))))
+  (if (not (server:check-if-running areapath)) ;; why try if there is already a server running?
+      (let* ((last-run-dat (hash-table-ref/default *server-kind-run* areapath '(0 0))) ;; callnum, whenrun
+	     (call-num     (car last-run-dat))
+	     (when-run     (cadr last-run-dat))
+	     (run-delay    (+ (case call-num
+				((0)    0)
+				((1)   20)
+				((2)  300)
+				(else 600))
+			      (random 5)))   ;; add a small random number just in case a lot of jobs hit the work hosts simultaneously
+	     (lock-file    (conc areapath "/logs/server-start.lock")))
+	(if	(> (- (current-seconds) when-run) run-delay)
+		(begin
+		  (common:simple-file-lock-and-wait lock-file expire-time: 15)
+		  (server:run areapath)
+		  (thread-sleep! 5) ;; don't release the lock for at least a few seconds
+		  (common:simple-file-release-lock lock-file)))
+	(hash-table-set! *server-kind-run* areapath (list (+ call-num 1)(current-seconds))))))
 
 (define (server:start-and-wait areapath #!key (timeout 60))
   (let ((give-up-time (+ (current-seconds) timeout)))
@@ -286,20 +305,18 @@
 
 (define server:try-running server:run) ;; there is no more per-run servers ;; REMOVE ME. BUG.
 
-(define (server:dotserver-age-seconds areapath)
-  (let ((server-file (conc areapath "/.server")))
-    (begin
-      (handle-exceptions
-       exn
-       #f
-       (- (current-seconds)
-          (file-modification-time server-file))))))
-    
 ;; no longer care if multiple servers are started by accident. older servers will drop off in time.
 ;;
-(define (server:check-if-running areapath)
-  (let* ((servers       (server:get-best (server:get-list areapath))))
-    (if (null? servers)
+(define (server:check-if-running areapath #!key (numservers "2"))
+  (let* ((ns            (string->number
+			 (or (configf:lookup *configdat* "server" "numservers") numservers)))
+	 (servers       (server:get-best (server:get-list areapath))))
+    ;; (print "servers: " servers " ns: " ns)
+    (if (or (and servers
+		 (null? servers))
+	    (not servers)
+	    (and (list? servers)
+		 (< (length servers) (random ns)))) ;; somewhere between 0 and numservers
         #f
         (let loop ((hed (car servers))
                    (tal (cdr servers)))
