@@ -199,30 +199,24 @@
 	     (res      (if (vector? dat) (vector-ref dat 1) #f)))
 	(if (vector? conninfo)(http-transport:server-dat-update-last-access conninfo)) ;; refresh access time
 	;; (mutex-unlock! *rmt-mutex*)
-        (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat " runremote = "runremote)
-	(if success
-	    (case (remote-transport runremote)
-	      ((http)
-	       (mutex-unlock! *rmt-mutex*)
-	       res)
-	      (else
-	       (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport runremote) " is unknown")
-	       (mutex-unlock! *rmt-mutex*)
-	       (exit 1)))
-	    (if (eq? res 'overloaded)
+        (debug:print-info 13 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat " runremote = " runremote)
+	(mutex-unlock! *rmt-mutex*)
+	(if success ;; success only tells us that the transport was successful, have to examine the data to see if there was a detected issue at the other end
+	    (if (and (symbol? res)
+		     (eq? res 'overloaded))
 		(let ((wait-delay (+ attemptnum (* attemptnum 10))))
 		  (debug:print 0 *default-log-port* "WARNING: server is overloaded. Delaying " wait-delay " seconds and trying call again.")
 		  (thread-sleep! wait-delay)
 		  (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
-		(begin
-		  (debug:print 0 *default-log-port* "WARNING: communication failed. Trying again, try num: " attemptnum)
-		  (remote-conndat-set!    runremote #f)
-		  (remote-server-url-set! runremote #f)
-		  (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
-		  (mutex-unlock! *rmt-mutex*)
-		  (if (not (server:check-if-running *toppath*))
-		      (server:start-and-wait *toppath*))
-		  (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1))))))))))
+		res) ;; All good, return res
+	    (begin
+	      (debug:print 0 *default-log-port* "WARNING: communication failed. Trying again, try num: " attemptnum)
+	      (remote-conndat-set!    runremote #f)
+	      (remote-server-url-set! runremote #f)
+	      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
+	      (if (not (server:check-if-running *toppath*))
+		  (server:start-and-wait *toppath*))
+	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))))))))
 
 ;; (define (rmt:update-db-stats run-id rawcmd params duration)
 ;;   (mutex-lock! *db-stats-mutex*)

@@ -268,8 +268,8 @@
 	 (thread-terminate! th2)
 	 (debug:print-info 11 *default-log-port* "got res=" res)
 	 (if (vector? res)
-	     (if (vector-ref res 0)
-		 res
+	     (if (vector-ref res 0) ;; this is the first flag or the second flag?
+		 res ;; this is the *inner* vector? seriously? why?
                  (if (debug:debug-mode 11)
                      (begin ;; note: this code also called in nmsg-transport - consider consolidating it
                        (debug:print-error 11 *default-log-port* "error occured at server, info=" (vector-ref res 2))
