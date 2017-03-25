@@ -488,7 +488,10 @@
 		  (tests:test-set-toplog! run-id test-name outputfilename))
 		;; didn't get the lock, check to see if current update started later than this 
 		;; update, if so we can exit without doing any work
-		(if (> my-start-time (file-modification-time lockf))
+		(if (> my-start-time (handle-exceptions
+					 exn
+					 0
+				       (file-modification-time lockf)))
 		    ;; we started since current re-gen in flight, delay a little and try again
 		    (begin
 		      (debug:print-info 1 *default-log-port* "Waiting to update " outputfilename ", another test currently updating it")
