@@ -80,7 +80,7 @@
       ;; Alternatively here, we can get the list of candidate servers and work our way
       ;; through them searching for a good one.
       ;;
-      (let* ((server-dat (server:get-first-best areapath))
+      (let* ((server-dat (server:get-rand-best areapath)) ;; (server:get-first-best areapath))
 	     (runremote  (or area-dat *runremote*)))
 	(if (not server-dat) ;; no server found
 	    (client:setup-http areapath remaining-tries: (- remaining-tries 1))
@@ -110,9 +110,9 @@
 			  (client:setup-http areapath remaining-tries: (- remaining-tries 1))
 			  )))
 		  (begin    ;; no server registered
-		    (server:kind-run areapath)
+		    ;; (server:kind-run areapath)
+		    (server:start-and-wait areapath)
 		    (debug:print-info 0 *default-log-port* "client:setup, no server registered, remaining-tries=" remaining-tries)
 		    (thread-sleep! 1) ;; (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
-		    (server:start-and-wait areapath)
 		    (client:setup-http areapath remaining-tries: (- remaining-tries 1)))))))))
 
