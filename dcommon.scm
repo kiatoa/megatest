@@ -1282,3 +1282,14 @@
 		      (if deleted (loop next-row next-col #f)) ;; exit on this not met
 		      (loop next-row next-col deleted)))))
 	  (iup:attribute-set! steps-matrix "REDRAW" "ALL")))))
+
+;;======================================================================
+;; U T I L I T I E S
+;;======================================================================
+
+(define (dcommon:run-html-viewer lfilename)
+  (let ((htmlviewercmd (configf:lookup *configdat* "setup" "htmlviewercmd")))
+    (if htmlviewercmd
+	(system (conc "(" htmlviewercmd " " lfilename " ) &")) 
+	(iup:send-url lfilename))))
+

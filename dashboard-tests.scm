@@ -339,12 +339,6 @@
 			       btns)))
 	       btns))))))
 
-(define (dashboard-tests:run-html-viewer lfilename)
-  (let ((htmlviewercmd (configf:lookup *configdat* "setup" "htmlviewercmd")))
-    (if htmlviewercmd
-	(system (conc "(" htmlviewercmd " " lfilename " ) &")) 
-	(iup:send-url lfilename))))
-
 (define (dashboard-tests:run-a-step info)
   #t)
 
@@ -482,14 +476,14 @@
 	       (viewlog    (lambda (x)
 			     (if (file-exists? logfile)
 					;(system (conc "firefox " logfile "&"))
-				 (dashboard-tests:run-html-viewer logfile)
+				 (dcommon:run-html-viewer logfile)
 				 (message-window (conc "File " logfile " not found")))))
 	       (view-a-log (lambda (lfile) 
 			     (let ((lfilename (conc rundir "/" lfile)))
 			       ;; (print "lfilename: " lfilename)
 			       (if (file-exists? lfilename)
 					;(system (conc "firefox " logfile "&"))
-				   (dashboard-tests:run-html-viewer lfilename)
+				   (dcommon:run-html-viewer lfilename)
 				   (message-window (conc "File " lfilename " not found"))))))
 	       (xterm      (lambda (x)
 			     (if (directory-exists? rundir)
