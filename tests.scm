@@ -944,15 +944,17 @@ EOF
 	 (debug:print 6 *default-log-port* "step=" step)
 	 (let ((record (hash-table-ref/default 
 			res 
-			(tdb:step-get-stepname step) 
-			;;        stepname                start end status Duration  Logfile Comment
-			(vector (tdb:step-get-stepname step) ""   "" ""     ""        ""     ""))))
+			(tdb:step-get-stepname step)
+			;;           0                      1    2    3       4         5       6       7
+			;;        stepname                start end status Duration  Logfile Comment  first-id
+			(vector (tdb:step-get-stepname step) ""   "" ""     ""        ""     ""       #f))))
 	   (debug:print 6 *default-log-port* "record(before) = " record 
 			"\nid:       " (tdb:step-get-id step)
 			"\nstepname: " (tdb:step-get-stepname step)
 			"\nstate:    " (tdb:step-get-state step)
 			"\nstatus:   " (tdb:step-get-status step)
 			"\ntime:     " (tdb:step-get-event_time step))
+	   (if (not (vector-ref record 7))(vector-set! record 7 (tdb:step-get-id step))) ;; do not clobber the id if previously set
 	   (case (string->symbol (tdb:step-get-state step))
 	     ((start)(vector-set! record 1 (tdb:step-get-event_time step))
 	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
@@ -1000,30 +1002,34 @@ EOF
 ;; 
 ;;
 (define (tests:get-compressed-steps run-id test-id)
-  (let* ((steps-data  (rmt:get-steps-for-test run-id test-id))
-	 (comprsteps  (tests:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
+  (let* ((steps-data  (rmt:get-steps-for-test run-id test-id)) ;;      0       1    2    3       4       5       6      7       
+	 (comprsteps  (tests:process-steps-table steps-data))) ;; #<stepname start end status Duration Logfile Comment id>
     (map (lambda (x)
 	   ;; take advantage of the \n on time->string
-	   (vector
-	    (vector-ref x 0)
+	   (vector    ;; we are constructing basically the original vector but collapsing start end records
+	    (vector-ref x 0)                              ;; id        0
 	    (let ((s (vector-ref x 1)))
-	      (if (number? s)(seconds->time-string s) s))
+	      (if (number? s)(seconds->time-string s) s)) ;; starttime 1
 	    (let ((s (vector-ref x 2)))
-	      (if (number? s)(seconds->time-string s) s))
-	    (vector-ref x 3)    ;; status
-	    (vector-ref x 4)
-	    (vector-ref x 5)  ;; time delta
-	    (vector-ref x 6)))
+	      (if (number? s)(seconds->time-string s) s)) ;; endtime   2
+	    (vector-ref x 3)                              ;; status    3    
+	    (vector-ref x 4)                              ;; duration  4
+	    (vector-ref x 5)                              ;; logfile   5
+	    (vector-ref x 6)                              ;; comment   6
+	    (vector-ref x 7)))                            ;; id        7
 	 (sort (hash-table-values comprsteps)
 	       (lambda (a b)
 		 (let ((time-a (vector-ref a 1))
-		       (time-b (vector-ref b 1)))
+		       (time-b (vector-ref b 1))
+		       (id-a   (vector-ref a 7))
+		       (id-b   (vector-ref b 7)))
 		   (if (and (number? time-a)(number? time-b))
 		       (if (< time-a time-b)
 			   #t
 			   (if (eq? time-a time-b)
-			       (string<? (conc (vector-ref a 2))
-					 (conc (vector-ref b 2)))
+			       (< id-a id-b)
+			       ;; (string<? (conc (vector-ref a 2))
+			       ;;	    (conc (vector-ref b 2)))
 			       #f))
 		       (string<? (conc time-a)(conc time-b)))))))))
 

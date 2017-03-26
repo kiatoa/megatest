@@ -2091,7 +2091,8 @@ Misc
                                   (target   (rmt:get-target run-id))
                                   (runname  (db:get-value-by-header (db:get-rows run-info)
                                                                     (db:get-header run-info) "runname"))
-                                  (test-name (db:test-get-testname (rmt:get-test-info-by-id run-id test-id)))
+				  (test-info  (rmt:get-test-info-by-id run-id test-id))
+                                  (test-name (db:test-get-testname test-info))
                                   (testpatt  (let ((tlast (rmt:tasks-get-last target runname)))
                                                 (if tlast
                                                     (let ((tpatt (tasks:task-get-testpatt tlast)))
@@ -2113,14 +2114,14 @@ Misc
                               ((member #\2 status-chars) ;; 2 is middle mouse button
                                
                                (debug:print-info 13 *default-log-port* "mmb- test-name="test-name" testpatt="testpatt)
-                               (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt item-test-path) ;; popup-menu
+                               (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt item-test-path test-info) ;; popup-menu
                                          #:x 'mouse
                                          #:y 'mouse
                                          #:modal? "NO")
                                )
                               (else
                                (debug:print-info 13 *default-log-port* "unhandled status in run-summary-click-cb.  Doing right click action. (status is corrupted on Brandon's ubuntu host - bad/buggy  iup install??" )
-                               (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt item-test-path) ;; popup-menu
+                               (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt item-test-path test-info) ;; popup-menu
                                          #:x 'mouse
                                          #:y 'mouse
                                          #:modal? "NO")
@@ -2304,7 +2305,7 @@ Misc
 					;(iup:button "dec rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (if (> (dboard:tabdat-num-tests tabdat) 0)(- (dboard:tabdat-num-tests tabdat) 1) 0))))
      )))
 
-(define (dashboard:popup-menu  run-id test-id target runname test-name testpatt item-test-path)
+(define (dashboard:popup-menu  run-id test-id target runname test-name testpatt item-test-path test-info)
   (iup:menu 
    (iup:menu-item
     "Test Control Panel"
@@ -2317,9 +2318,33 @@ Misc
         )))
    
    (iup:menu-item
-    (conc "View Log (not yet implemented) " item-test-path)
+    (conc "View Log " item-test-path)
+    #:action
+    (lambda (obj)
+      (let* ((rundir    (db:test-get-rundir      test-info))
+	     (logf      (db:test-get-final_logf  test-info))
+	     (fullfile  (conc rundir "/" logf)))
+	(if (common:file-exists? fullfile)
+	    (dcommon:run-html-viewer fullfile)
+	    (message-window (conc "file " fullfile " not found.")))))
     )
-   
+   (let* ((steps (tests:get-compressed-steps run-id test-id))   ;; #<stepname start end status Duration Logfile Comment id>
+	  (rundir (db:test-get-rundir test-info)))
+     (iup:menu-item
+      "Step logs"
+      (apply iup:menu
+	     (map (lambda (step)
+		    (let ((stepname (vector-ref step 0))
+			  (logfile  (vector-ref step 5))
+			  (status   (vector-ref step 3)))
+		      (iup:menu-item
+		       (conc stepname "/" (if (string=? logfile "") "no log!" logfile) " (" status ")")
+		       #:action (lambda (obj)
+				  (let ((fullfile (conc rundir "/" logfile)))
+				    (if (common:file-exists? fullfile)
+					(dcommon:run-html-viewer fullfile)
+					(message-window (conc "file " fullfile " not found"))))))))
+		  steps))))
    (iup:menu-item
     (conc "Rerun " item-test-path)
     #:action
@@ -2564,7 +2589,8 @@ Misc
 					      (target   (rmt:get-target run-id))
 					      (runname  (db:get-value-by-header (db:get-rows run-info)
 										(db:get-header run-info) "runname"))
-					      (test-name (db:test-get-testname (rmt:get-test-info-by-id run-id test-id)))
+					      (test-info (rmt:get-test-info-by-id run-id test-id))
+					      (test-name (db:test-get-testname test-info))
 					      (testpatt  (let ((tlast (rmt:tasks-get-last target runname)))
 							   (if tlast
 							       (let ((tpatt (tasks:task-get-testpatt tlast)))
@@ -2576,7 +2602,7 @@ Misc
                                               (item-test-path (conc test-name "/" (if (equal? item-path "")
 									"%" 
 									item-path))))
-					 (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt item-test-path) ;; popup-menu
+					 (iup:show (dashboard:popup-menu run-id test-id target runname test-name testpatt item-test-path test-info) ;; popup-menu
 						   #:x 'mouse
 						   #:y 'mouse
 						   #:modal? "NO")
