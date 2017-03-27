@@ -1560,9 +1560,8 @@
 			 (set! skip-test "Skipping due to previous tests running"))))
 		  ((and skip-check
 			(configf:lookup test-conf "skip" "fileexists"))
-		   (if (file-exists? (configf:lookup test-conf "skip" "fileexists"))
+		   (if (common:file-exists? (configf:lookup test-conf "skip" "fileexists"))
 		       (set! skip-test (conc "Skipping due to existance of file " (configf:lookup test-conf "skip" "fileexists")))))
-
 		  ((and skip-check
 			(configf:lookup test-conf "skip" "rundelay"))
 		   ;; run-ids = #f means *all* runs
