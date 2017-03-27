@@ -535,31 +535,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; handle a clean-cache request as early as possible
 ;;
 (if (args:get-arg "-clean-cache")
-    (begin
+    (let ((toppath  (launch:setup)))
       (set! *didsomething* #t) ;; suppress the help output.
-      (if (getenv "MT_TARGET") ;; no point in trying if no target
-	  (if (args:get-arg "-runname")
-	      (let* ((toppath  (launch:setup))
-		     (linktree (common:get-linktree)) ;; (if toppath (configf:lookup *configdat* "setup" "linktree")))
-		     (runtop   (conc linktree "/" (getenv "MT_TARGET") "/" (args:get-arg "-runname")))
-		     (files    (if (file-exists? runtop)
-				   (append (glob (conc runtop "/.megatest*"))
-					   (glob (conc runtop "/.runconfig*")))
-				   '())))
-		(if (null? files)
-		    (debug:print-info 0 *default-log-port* "No cached megatest or runconfigs files found. None removed.")
-		    (begin
-		      (debug:print-info 0 *default-log-port* "Removing cached files:\n    " (string-intersperse files "\n    "))
-		      (for-each 
-		       (lambda (f)
-			 (handle-exceptions
-			     exn
-			     (debug:print 0 *default-log-port* "WARNING: Failed to remove file " f)
-			   (delete-file f)))
-		       files))))
-	      (debug:print-error 0 *default-log-port* "-clean-cache requires -runname."))
-	  (debug:print-error 0 *default-log-port* "-clean-cache requires -target or -reqtarg"))))
-	    
+      (runs:clean-cache (getenv "MT_TARGET")(args:get-arg "-runname" toppath))))
 	  
 (if (args:get-arg "-env2file")
     (begin
@@ -1457,6 +1435,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			      state:  states
 			      ;; status: statuses
 			      new-state-status: "NOT_STARTED,n/a")
+	     (runs:clean-cache target runname *toppath*)
 	     (runs:operate-on 'set-state-status
 			      target
 			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
@@ -1475,6 +1454,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			      state:  #f
 			      ;; status: statuses
 			      new-state-status: "NOT_STARTED,n/a")
+	     (runs:clean-cache target runname *toppath*)
 	     (runs:operate-on 'set-state-status
 			      target
 			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))

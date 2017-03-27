@@ -147,6 +147,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ("-repl"       . #f)
     ("-immediate"  . I)
     ("-preclean"   . r)
+    ("-rerun-all"  . u)
     ))
 
 ;; alist to map actions to old megatest commands
@@ -513,7 +514,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			'())
 		    (if (or (not action)
 			    (equal? action "run"))
-			`(("-preclean"  . " "))      ;; if run we *always* want preclean set, use single space as placeholder
+			`(("-preclean"  . " ")
+			  ("-rerun-all" . " "))      ;; if run we *always* want preclean set, use single space as placeholder
 			'())
 		    )
 		   sched)))
