@@ -547,11 +547,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (lambda (sense) ;; these are the sense rules
 		 (let* ((key        (car sense))
 			(val        (cadr sense))
-			(keyparts   (string-split key ":")) ;; contour:ruletype:action
+			(keyparts   (string-split key ":")) ;; contour:ruletype:action:optional
 			(contour    (car keyparts))
 			(len-key    (length keyparts))
 			(ruletype   (if (> len-key 1)(cadr keyparts) #f))
 			(action     (if (> len-key 2)(caddr keyparts) #f))
+			(optional   (if (> len-key 3)(cadddr keyparts) #f))
 			;; (val-list   (string-split-fields ";\\s*" val #:infix)) ;; (string-split val)) ;; runname-rule params
 			(val-alist  (val->alist val))
 			(runname    (make-runname "" ""))
@@ -658,7 +659,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 							  (action   . ,action)
 							  (target   . ,new-target))))
 				       (print "key-msg: " key-msg)
-				       (push-run-spec torun contour runkey key-msg)))))))
+				       (push-run-spec torun contour
+						      (if optional  ;; we need to be able to differentiate same contour, different behavior. 
+							  (conc runkey ":" optional)  ;; NOTE: NOT COMPLETELY IMPLEMENTED. DO NOT USE
+							  runkey)
+						      key-msg)))))))
 		       val-alist)) ;; iterate over the param split by ;\s*
 
 		     ((fossil)
