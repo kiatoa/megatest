@@ -675,8 +675,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				(url-is-file (string-match "^(/|file:).*$" url))
 				(fname       (conc (common:get-signature url) ".fossil"))
 				(fdir        (conc "/tmp/" (current-user-name) "/mtutil_cache")))
-			   (if (not url-is-file) ;; need to sync first
-			       (fossil:clone-or-sync url fname fdir))
+			   ;; (if (not url-is-file) ;; need to sync first --- for now, clone 'em all.
+			   (fossil:clone-or-sync url fname fdir) ;; )
 			   (let-values (((datetime node)
 					 (fossil:last-change-node-and-time fdir fname branch)))
 			     (if (null? starttimes)
