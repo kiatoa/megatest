@@ -672,7 +672,7 @@
       (if (or (not (null? reg))(not (null? tal)))
 	   (list (car newtal)(append (cdr newtal) reg) '() reruns)
 	  #f)) 
-     ((null? runnables) #f) ;; if we get here and non-completed is null the it's all over.
+     ((null? runnables) #f) ;; if we get here and non-completed is null then it is all over.
      (else
       (debug:print 0 *default-log-port* "WARNING: FAILS or incomplete tests maybe preventing completion of this run. Watch for issues with test " hed ", continuing for now")
       ;; (list (runs:queue-next-hed tal reg reglen regfull)
@@ -847,7 +847,8 @@
      ((and have-resources
 	   (or (null? prereqs-not-met)
 	       (and (member 'toplevel testmode) ;;  'toplevel)
-		    (null? non-completed))))
+		    (null? non-completed)
+		    (not (member 'exclusive testmode)))))
       ;; (hash-table-delete! *max-tries-hash* (db:test-make-full-name test-name item-path))
       ;; we are going to reset all the counters for test retries by setting a new hash table
       ;; this means they will increment only when nothing can be run
@@ -1407,7 +1408,8 @@
      (or (not (vector? t))
 	 (and (equal? "NOT_STARTED" (db:test-get-state t))
 	      (member (db:test-get-status t)
-			      '("n/a" "KEEP_TRYING")))))
+		      '("n/a" "KEEP_TRYING")))
+	 (and (equal? "RUNNING" (db:test-get-state t))))) ;; account for a test that is running
    prereqs-not-met))
 
 (define (runs:pretty-string lst)
