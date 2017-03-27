@@ -146,6 +146,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ;; misc
     ("-repl"       . #f)
     ("-immediate"  . I)
+    ("-preclean"   . r)
     ))
 
 ;; alist to map actions to old megatest commands
@@ -394,7 +395,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		     (else     (current-seconds))))
 	 (args-data (if args-alist
 			args-alist
-			(hash-table->alist args:arg-hash)))
+			(hash-table->alist args:arg-hash))) ;; if no args-alist then we assume this is a call driven directly by commandline
 	 (alldat    (apply append (list 'T "cmd"
 					'a action
 					'U (current-user-name)
@@ -402,12 +403,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			   (map (lambda (x)
 				  (let* ((param (car x))
 					 (value (cdr x))
-					 (pmeta (assoc param *arg-keys*))
-					 (smeta (assoc param *switch-keys*))
+					 (pmeta (assoc param *arg-keys*))    ;; translate the card key to a megatest switch or parameter
+					 (smeta (assoc param *switch-keys*)) ;; first lookup the key in arg-keys or switch-keys
 					 (meta  (if (or pmeta smeta)
-						    (cdr (or pmeta smeta))
+						    (cdr (or pmeta smeta))   ;; found it?
 						    #f)))
-				    (if (or pmeta smeta)
+				    (if (or pmeta smeta)                     ;; construct the switch/param pair.
 					(list meta value)
 					'())))
 				(filter cdr args-data)))))
@@ -452,11 +453,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (area-xlatr (alist-ref 'targtrans area-dat))
 	 (new-runname (let* ((callname (if (string? runtrans)(string->symbol runtrans) #f))
 			     (mapper   (if callname (hash-table-ref/default *runname-mappers* callname #f) #f)))
-			(print "callname=" callname " runtrans=" runtrans " mapper=" mapper)
+			;; (print "callname=" callname " runtrans=" runtrans " mapper=" mapper)
 			(if (and callname
 				 (not (equal? callname "auto"))
 				 (not mapper))
-			    (print "Failed to find runname mapper " callname " for area " area))
+			    (print "No mapper " callname " for area " area " using " callname " as the runname"))
 			(if mapper
 			    (handle-exceptions
 				exn
@@ -467,7 +468,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				  runname)
 			      (print "(mapper " (string-intersperse (list runkey runname area area-path reason contour mode-patt) ", ") ")")
 			      (mapper runkey runname area area-path reason contour mode-patt))
-			    runname)))
+			    (case callname
+			      ((auto) runname)
+			      (else   runtrans)))))
 	 (new-target (if area-xlatr 
 			 (let ((xlatr-key (string->symbol area-xlatr)))
 			   (if (hash-table-exists? *target-mappers* xlatr-key)
@@ -507,6 +510,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (if (good-val append-conf) `(("-append-config" . ,append-conf)) '())
 		    (if (not (or mode-patt tag-expr))
 			`(("-testpatt"  . "%"))
+			'())
+		    (if (or (not action)
+			    (equal? action "run"))
+			`(("-preclean"  . " "))      ;; if run we *always* want preclean set, use single space as placeholder
 			'())
 		    )
 		   sched)))
@@ -794,7 +801,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (fold (lambda (a res)
 	    (let* ((key (car a)) ;; get the key name
 		   (val (cdr a))
-		   (par (lookup-param-by-key key)))
+		   (par (or (lookup-param-by-key key)  ;; need to check also if it is a switch
+			    (lookup-param-by-key key inlst: *switch-keys*))))
 	      ;; (print "key: " key " val: " val " par: " par)
 	      (if par
 		  (conc res " " (param-translate par) " " val)
