@@ -2078,3 +2078,26 @@
      prev-tests)))
 	 
      
+;; clean cache files
+(define (runs:clean-cache target runname toppath)
+  (if target
+      (if runname
+	  (let* ((linktree (common:get-linktree)) ;; (if toppath (configf:lookup *configdat* "setup" "linktree")))
+		 (runtop   (conc linktree "/" target "/" runname))
+		 (files    (if (file-exists? runtop)
+			       (append (glob (conc runtop "/.megatest*"))
+				       (glob (conc runtop "/.runconfig*")))
+			       '())))
+	    (if (null? files)
+		(debug:print-info 0 *default-log-port* "No cached megatest or runconfigs files found. None removed.")
+		(begin
+		  (debug:print-info 0 *default-log-port* "Removing cached files:\n    " (string-intersperse files "\n    "))
+		  (for-each 
+		   (lambda (f)
+		     (handle-exceptions
+			 exn
+			 (debug:print 0 *default-log-port* "WARNING: Failed to remove file " f)
+		       (delete-file f)))
+		   files))))
+	  (debug:print-error 0 *default-log-port* "-clean-cache requires -runname."))
+      (debug:print-error 0 *default-log-port* "-clean-cache requires -target or -reqtarg")))

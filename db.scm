@@ -3867,84 +3867,90 @@
 ;; 
 ;; (define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path mode)
 (define (db:get-prereqs-not-met dbstruct run-id waitons ref-test-name ref-item-path mode itemmaps) ;; #!key (mode '(normal))(itemmap #f))
-  (if (eq? mode 'exclusive)
-      (let ((running-tests (db:get-tests-for-run dbstruct
-						 #f  ;; run-id of #f means for all runs. 
-						 (if (string=? ref-item-path "")
-						     ref-test-name
-						     (conc ref-test-name "/" ref-item-path))
-						 '("LAUNCHED" "REMOTEHOSTSTART" "RUNNING")
-						 '()
-						 #f
-						 #f
-						 'shortlist
-						 0 ;; last update, beginning of time ....
-						 #f)))
-	running-tests)
-      (if (or (not waitons)
-	      (null? waitons))
-	  '()
-	  (let* ((unmet-pre-reqs '())
-		 (result         '()))
-	    (for-each 
-	     (lambda (waitontest-name)
-	       ;; by getting the tests with matching name we are looking only at the matching test 
-	       ;; and related sub items
-	       ;; next should be using mt:get-tests-for-run?
-	       (let ((tests             (db:get-tests-for-run-state-status dbstruct run-id waitontest-name))
-		     (ever-seen         #f)
-		     (parent-waiton-met #f)
-		     (item-waiton-met   #f))
-		 (for-each 
-		  (lambda (test)
-		    ;; (if (equal? waitontest-name (db:test-get-testname test)) ;; by defintion this had better be true ...
-		    (let* ((state             (db:test-get-state test))
-			   (status            (db:test-get-status test))
-			   (item-path         (db:test-get-item-path test))
-			   (is-completed      (equal? state "COMPLETED"))
-			   (is-running        (equal? state "RUNNING"))
-			   (is-killed         (equal? state "KILLED"))
-			   (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
-			   ;;                                       testname-b    path-a    path-b
-			   (same-itempath     (db:compare-itempaths ref-test-name item-path ref-item-path itemmaps))) ;; (equal? ref-item-path item-path)))
-		      (set! ever-seen #t)
-		      (cond
-		       ;; case 1, non-item (parent test) is 
-		       ((and (equal? item-path "") ;; this is the parent test of the waiton being examined
-			     is-completed
-			     (or is-ok (not (null? (lset-intersection eq? mode '(toplevel)))))) ;;  itemmatch itemwait))))))
-			(set! parent-waiton-met #t))
-		       ;; Special case for toplevel and KILLED
-		       ((and (equal? item-path "") ;; this is the parent test
-			     is-killed
-			     (member 'toplevel mode))
-			(set! parent-waiton-met #t))
-		       ;; For itemwait mode IFF the previous matching item is good the set parent-waiton-met
-		       ((and (not (null? (lset-intersection eq? mode '(itemmatch itemwait)))) ;; how is that different from (member mode '(itemmatch itemwait)) ?????
-			     ;; (not (equal? item-path "")) ;; this applies to both top level (to allow launching of next batch) and items
-			     same-itempath)
-			(if (and is-completed is-ok)
-			    (set! item-waiton-met #t))
-			(if (and (equal? item-path "")
-				 (or is-completed is-running));; this is the parent, set it to run if completed or running
-			    (set! parent-waiton-met #t)))
-		       ;; normal checking of parent items, any parent or parent item not ok blocks running
-		       ((and is-completed
-			     (or is-ok 
-				 (member 'toplevel mode))              ;; toplevel does not block on FAIL
-			     (and is-ok (member 'itemmatch mode))) ;; itemmatch blocks on not ok
-			(set! item-waiton-met #t)))))
-		  tests)
-		 ;; both requirements, parent and item-waiton must be met to NOT add item to
-		 ;; prereq's not met list
-		 (if (not (or parent-waiton-met item-waiton-met))
-		     (set! result (append (if (null? tests) (list waitontest-name) tests) result)))
-		 ;; if the test is not found then clearly the waiton is not met...
-		 ;; (if (not ever-seen)(set! result (cons waitontest-name result)))))
-		 (if (not ever-seen)
-		     (set! result (append (if (null? tests)(list waitontest-name) tests) result)))))
-	     waitons)
-	    (delete-duplicates result)))))
+  (append
+   (if (member 'exclusive mode)
+       (let ((running-tests (db:get-tests-for-run dbstruct
+						  #f  ;; run-id of #f means for all runs. 
+						  (if (string=? ref-item-path "")   ;; testpatt
+						      ref-test-name
+						      (conc ref-test-name "/" ref-item-path))
+						  '("LAUNCHED" "REMOTEHOSTSTART" "RUNNING") ;; states
+						  '()          ;; statuses
+						  #f           ;; offset
+						  #f           ;; limit
+						  #f           ;; not-in
+						  #f           ;; sort by
+						  #f           ;; sort order
+						  'shortlist   ;; query type
+						  0            ;; last update, beginning of time ....
+						  #f           ;; mode
+						  )))
+	 (map db:test-get-testname running-tests))
+       '())
+   (if (or (not waitons)
+	   (null? waitons))
+       '()
+       (let* ((unmet-pre-reqs '())
+	      (result         '()))
+	 (for-each 
+	  (lambda (waitontest-name)
+	    ;; by getting the tests with matching name we are looking only at the matching test 
+	    ;; and related sub items
+	    ;; next should be using mt:get-tests-for-run?
+	    (let ((tests             (db:get-tests-for-run-state-status dbstruct run-id waitontest-name))
+		  (ever-seen         #f)
+		  (parent-waiton-met #f)
+		  (item-waiton-met   #f))
+	      (for-each 
+	       (lambda (test)
+		 ;; (if (equal? waitontest-name (db:test-get-testname test)) ;; by defintion this had better be true ...
+		 (let* ((state             (db:test-get-state test))
+			(status            (db:test-get-status test))
+			(item-path         (db:test-get-item-path test))
+			(is-completed      (equal? state "COMPLETED"))
+			(is-running        (equal? state "RUNNING"))
+			(is-killed         (equal? state "KILLED"))
+			(is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
+			;;                                       testname-b    path-a    path-b
+			(same-itempath     (db:compare-itempaths ref-test-name item-path ref-item-path itemmaps))) ;; (equal? ref-item-path item-path)))
+		   (set! ever-seen #t)
+		   (cond
+		    ;; case 1, non-item (parent test) is 
+		    ((and (equal? item-path "") ;; this is the parent test of the waiton being examined
+			  is-completed
+			  (or is-ok (not (null? (lset-intersection eq? mode '(toplevel)))))) ;;  itemmatch itemwait))))))
+		     (set! parent-waiton-met #t))
+		    ;; Special case for toplevel and KILLED
+		    ((and (equal? item-path "") ;; this is the parent test
+			  is-killed
+			  (member 'toplevel mode))
+		     (set! parent-waiton-met #t))
+		    ;; For itemwait mode IFF the previous matching item is good the set parent-waiton-met
+		    ((and (not (null? (lset-intersection eq? mode '(itemmatch itemwait)))) ;; how is that different from (member mode '(itemmatch itemwait)) ?????
+			  ;; (not (equal? item-path "")) ;; this applies to both top level (to allow launching of next batch) and items
+			  same-itempath)
+		     (if (and is-completed is-ok)
+			 (set! item-waiton-met #t))
+		     (if (and (equal? item-path "")
+			      (or is-completed is-running));; this is the parent, set it to run if completed or running
+			 (set! parent-waiton-met #t)))
+		    ;; normal checking of parent items, any parent or parent item not ok blocks running
+		    ((and is-completed
+			  (or is-ok 
+			      (member 'toplevel mode))              ;; toplevel does not block on FAIL
+			  (and is-ok (member 'itemmatch mode))) ;; itemmatch blocks on not ok
+		     (set! item-waiton-met #t)))))
+	       tests)
+	      ;; both requirements, parent and item-waiton must be met to NOT add item to
+	      ;; prereq's not met list
+	      (if (not (or parent-waiton-met item-waiton-met))
+		  (set! result (append (if (null? tests) (list waitontest-name) tests) result)))
+	      ;; if the test is not found then clearly the waiton is not met...
+	      ;; (if (not ever-seen)(set! result (cons waitontest-name result)))))
+	      (if (not ever-seen)
+		  (set! result (append (if (null? tests)(list waitontest-name) tests) result)))))
+	  waitons)
+	 (delete-duplicates result)))))
 
 ;;======================================================================
 ;; Just for sync, procedures to make sync easy

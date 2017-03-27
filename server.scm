@@ -194,9 +194,9 @@
 				    (file-modification-time hed))) ;; default to *very* old so log gets ignored if deleted
 		       (down-time (- (current-seconds) mod-time))
 		       (serv-dat  (if (or (< num-serv-logs 10)
-				  	  (< down-time day-seconds))
-				     (server:logf-get-start-info hed)
-				     '())) ;; don't waste time processing server files not touched in the past day if there are more than ten servers to look at
+				  	  (< down-time 900)) ;; day-seconds))
+				      (server:logf-get-start-info hed)
+				      '())) ;; don't waste time processing server files not touched in the 15 minutes if there are more than ten servers to look at
 		       (serv-rec (cons mod-time serv-dat))
 		       (fmatch   (string-match fname-rx hed))
 		       (pid      (if fmatch (string->number (list-ref fmatch 2)) #f))
