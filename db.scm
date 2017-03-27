@@ -3885,7 +3885,13 @@
 						  0            ;; last update, beginning of time ....
 						  #f           ;; mode
 						  )))
-	 (map db:test-get-testname running-tests))
+	;;(map (lambda (testdat)
+	;;	(if (equal? (db:test-get-item-path testdat) "")
+	;;	    (db:test-get-testname testdat)
+	;;	    (conc (db:test-get-testname testdat)
+	;;		  "/"
+	;;		  (db:test-get-item-path testdat))))
+	 running-tests) ;; calling functions want the entire data
        '())
    (if (or (not waitons)
 	   (null? waitons))
@@ -3944,7 +3950,7 @@
 	      ;; both requirements, parent and item-waiton must be met to NOT add item to
 	      ;; prereq's not met list
 	      (if (not (or parent-waiton-met item-waiton-met))
-		  (set! result (append (if (null? tests) (list waitontest-name) tests) result)))
+		  (set! result (append (if (null? tests) (list waitontest-name) tests) result))) ;; appends the string if the full record is not available
 	      ;; if the test is not found then clearly the waiton is not met...
 	      ;; (if (not ever-seen)(set! result (cons waitontest-name result)))))
 	      (if (not ever-seen)
