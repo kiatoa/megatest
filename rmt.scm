@@ -200,7 +200,7 @@
 	(if success ;; success only tells us that the transport was successful, have to examine the data to see if there was a detected issue at the other end
 	    (if (and (vector? res)
 		     (eq? (vector-length res) 2)
-		     (eq? (vector-ref res 2) 'overloaded)) ;; since we are looking at the data to carry the error we'll use a fairly obtuse combo to minimise the chances of some sort of collision.
+		     (eq? (vector-ref res 1) 'overloaded)) ;; since we are looking at the data to carry the error we'll use a fairly obtuse combo to minimise the chances of some sort of collision.
 		(let ((wait-delay (+ attemptnum (* attemptnum 10))))
 		  (debug:print 0 *default-log-port* "WARNING: server is overloaded. Delaying " wait-delay " seconds and trying call again.")
 		  (mutex-lock! *rmt-mutex*)
