@@ -128,7 +128,7 @@
      (vector #f (vector #f "remote must be called with a vector")))
     ((> *api-process-request-count* 20) ;; 20)
      (debug:print 0 *default-log-port* "WARNING: api:execute-requests received an overloaded message.")
-     (vector #f (vector 'overloaded))) ;; the inner vector is what gets returned. nope, don't know why. please refactor!
+     (vector #f (vector #f 'overloaded))) ;; the inner vector is what gets returned. nope, don't know why. please refactor!
     (else  
      (let* ((cmd-in            (vector-ref dat 0))
             (cmd               (if (symbol? cmd-in)

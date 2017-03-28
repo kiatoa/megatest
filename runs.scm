@@ -255,6 +255,10 @@
       (set-signal-handler! signal/int sighand)
       (set-signal-handler! signal/term sighand))
 
+    ;; force the starting of a server
+    (debug:print 0 *default-log-port* "waiting on server...")
+    (server:start-and-wait *toppath*)
+    
     (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (set! runconf (if (file-exists? runconfigf)
 		      (setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
@@ -1178,10 +1182,11 @@
 			   ;; prereqs-not-met: prereqs-not-met
 			   )))
 	(runs:dat-regfull-set! runsdat regfull)
-	;; every couple minutes verify the server is there for this run
-	;; (if (and (common:low-noise-print 60 "try start server"  run-id)
-	;; 	 (tasks:need-server run-id))
-	;;     (tasks:start-and-wait-for-server tdbdat run-id 10)) ;; NOTE: delay and wait is done under the hood
+
+	;; every 15 minutes verify the server is there for this run
+	(if (and (common:low-noise-print 240 "try start server"  run-id)
+		 (not (server:check-if-running *toppath*)))
+	    (server:kind-run *toppath*))
 	
 	(if (> num-running 0)
 	  (set! last-time-some-running (current-seconds)))

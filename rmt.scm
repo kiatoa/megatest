@@ -198,10 +198,14 @@
         (debug:print-info 13 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat " runremote = " runremote)
 	(mutex-unlock! *rmt-mutex*)
 	(if success ;; success only tells us that the transport was successful, have to examine the data to see if there was a detected issue at the other end
-	    (if (and (symbol? res)
-		     (eq? res 'overloaded))
+	    (if (and (vector? res)
+		     (eq? (vector-length res) 2)
+		     (eq? (vector-ref res 2) 'overloaded)) ;; since we are looking at the data to carry the error we'll use a fairly obtuse combo to minimise the chances of some sort of collision.
 		(let ((wait-delay (+ attemptnum (* attemptnum 10))))
 		  (debug:print 0 *default-log-port* "WARNING: server is overloaded. Delaying " wait-delay " seconds and trying call again.")
+		  (mutex-lock! *rmt-mutex*)
+		  (set! *runremote* #f) ;; force starting over
+		  (mutex-unlock! *rmt-mutex*)
 		  (thread-sleep! wait-delay)
 		  (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
 		res) ;; All good, return res
