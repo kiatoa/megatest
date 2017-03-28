@@ -271,10 +271,9 @@
 	     (if (vector-ref res 0) ;; this is the first flag or the second flag?
 		 res ;; this is the *inner* vector? seriously? why?
                  (if (debug:debug-mode 11)
-                     (begin ;; note: this code also called in nmsg-transport - consider consolidating it
-                       (debug:print-error 11 *default-log-port* "error occured at server, info=" (vector-ref res 2))
-                       (debug:print 11 *default-log-port* " client call chain:")
+                     (let ((call-chain (get-call-chain))) ;; note: this code also called in nmsg-transport - consider consolidating it
                        (print-call-chain (current-error-port))
+                       (debug:print-error 11 *default-log-port* "error above occured at server, res=" res " message: " ((condition-property-accessor 'exn 'message) exn))
                        (debug:print 11 *default-log-port* " server call chain:")
                        (pp (vector-ref res 1) (current-error-port))
                        (signal (vector-ref res 0)))
