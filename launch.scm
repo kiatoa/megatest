@@ -474,15 +474,16 @@
                                  (ping-res  (rmt:login-no-auto-client-setup start-res)))
 			    (if (and start-res
 				     ping-res)
-				(let ((url  (http-transport:server-dat-make-url start-res)))
+				;; (begin ;; let ((url  (http-transport:server-dat-make-url start-res)))
+				(begin
 				  (remote-conndat-set! *runremote* start-res)
-				  (remote-server-url-set! *runremote* url)
-				  (if (server:ping url)
-				      (debug:print-info 0 *default-log-port* "connected to " url " using CMDINFO data.")
-				      (begin
-					(debug:print-info 0 *default-log-port* "have CMDINFO data but failed to connect to " url)
-					(remote-conndat-set! *runremote* #f)
-					(remote-server-url-set! *runremote* #f))))
+				  ;; (remote-server-url-set! *runremote* url)
+				  ;; (if (server:ping url)
+				  (debug:print-info 0 *default-log-port* "connected to " host ":" port " using CMDINFO data."))
+				;; (begin
+				;; 	(debug:print-info 0 *default-log-port* "have CMDINFO data but failed to connect to " url)
+				;; 	(remote-conndat-set! *runremote* #f)
+				;; 	(remote-server-url-set! *runremote* #f))))
 				(debug:print-info 0 *default-log-port* "received " host ":" port " for url but could not connect.")
 				))
 			  (begin
