@@ -34,9 +34,9 @@
       (load fname)
       (print "ERROR: Unit test " unit-test-name " not found in unittests directory")))
 
-
- (list "abc" "abc/%" "ab%/c%" "~abc/c%" "abc/~c%" "a,b/c,%/d" "%/,%/a" "%/,%/a" "%/,%/a" "%" "%" "%/" "%/" "%abc%")
- (list "abc" "abc"   "abcd"   "abc"     "abc"     "a"         "abc"     "def"    "ghi"   "a" "a"  "a"  "a" "abc")
- (list   ""  ""      "cde"    "cde"     "cde"     ""            ""      "a"       "b"    ""  "b"  ""   "b" "abc")
- (list   #t    #t       #t    #f           #f      #t           #t       #t       #f     #t  #t   #t    #f #t))
+;;; huh? why is this here?
+;; (list "abc" "abc/%" "ab%/c%" "~abc/c%" "abc/~c%" "a,b/c,%/d" "%/,%/a" "%/,%/a" "%/,%/a" "%" "%" "%/" "%/" "%abc%")
+;; (list "abc" "abc"   "abcd"   "abc"     "abc"     "a"         "abc"     "def"    "ghi"   "a" "a"  "a"  "a" "abc")
+;; (list   ""  ""      "cde"    "cde"     "cde"     ""            ""      "a"       "b"    ""  "b"  ""   "b" "abc")
+;; (list   #t    #t       #t    #f           #f      #t           #t       #t       #f     #t  #t   #t    #f #t)
 
