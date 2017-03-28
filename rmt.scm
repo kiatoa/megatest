@@ -99,9 +99,9 @@
      ;; reset the connection if it has been unused too long
      ((and runremote
            (remote-conndat runremote)
-	   (let ((expire-time (+ (- start-time (remote-server-timeout runremote))))) ;; NOTE: REMOVED the 30 second noise. If adding it back be sure to offset!! add 30 seconds of noise so that not all running tests expire at the same time causing a storm of server starts
+	   (let ((expire-time (+ (- start-time (remote-server-timeout runremote))(random 10)))) ;; Subtract or add the random value? Seems like it should be substract but Neither fixes the "WARNING: failure in with-input-from-request to #<request>.\n message: Server closed connection before sending response"
 	     (< (http-transport:server-dat-get-last-access (remote-conndat runremote)) expire-time)))
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  8")
+      (debug:print-info 0 *default-log-port* "Connection to " (remote-server-url runremote) " expired due to no accesses, forcing new connection.")
       (remote-conndat-set! runremote #f) ;; invalidate the connection, thus forcing a new connection.
       (mutex-unlock! *rmt-mutex*)
       (rmt:send-receive cmd rid params attemptnum: attemptnum))

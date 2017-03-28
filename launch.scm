@@ -480,11 +480,9 @@
 				  ;; (remote-server-url-set! *runremote* url)
 				  ;; (if (server:ping url)
 				  (debug:print-info 0 *default-log-port* "connected to " host ":" port " using CMDINFO data."))
-				;; (begin
-				;; 	(debug:print-info 0 *default-log-port* "have CMDINFO data but failed to connect to " url)
-				;; 	(remote-conndat-set! *runremote* #f)
-				;; 	(remote-server-url-set! *runremote* #f))))
-				(debug:print-info 0 *default-log-port* "received " host ":" port " for url but could not connect.")
+				(begin
+				  (debug:print-info 0 *default-log-port* "have CMDINFO data but failed to connect to " host ":" port)
+				  (remote-conndat-set! *runremote* #f))
 				))
 			  (begin
 			    (debug:print-info 0 *default-log-port* (if host-port
