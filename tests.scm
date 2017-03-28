@@ -43,7 +43,12 @@
     (tests:get-valid-tests (make-hash-table) test-search-path)))
 
 (define (tests:get-tests-search-path cfgdat)
-  (let ((paths (map cadr (configf:get-section cfgdat "tests-paths"))))
+  (let ((paths (let ((section (if cfgdat
+				  (configf:get-section cfgdat "tests-paths")
+				  #f)))
+		 (if section
+		     (map cadr section)
+		     '()))))
     (filter (lambda (d)
 	      (if (directory-exists? d)
 		  d

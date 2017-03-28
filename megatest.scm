@@ -535,7 +535,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-clean-cache")
     (let ((toppath  (launch:setup)))
       (set! *didsomething* #t) ;; suppress the help output.
-      (runs:clean-cache (getenv "MT_TARGET")(args:get-arg "-runname" toppath))))
+      (runs:clean-cache (getenv "MT_TARGET")(args:get-arg "-runname") toppath)))
 	  
 (if (args:get-arg "-env2file")
     (begin
