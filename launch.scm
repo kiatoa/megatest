@@ -482,15 +482,18 @@
 				  (debug:print-info 0 *default-log-port* "connected to " host ":" port " using CMDINFO data."))
 				(begin
 				  (debug:print-info 0 *default-log-port* "have CMDINFO data but failed to connect to " host ":" port)
-				  (remote-conndat-set! *runremote* #f))
+				  (set! *runremote* #f))
+				  ;; (remote-conndat-set! *runremote* #f))
 				))
 			  (begin
+			    (set! *runremote* #f)
 			    (debug:print-info 0 *default-log-port* (if host-port
 								       (conc "received invalid host-port information " host-port)
 								       "no host-port information received"))
 			    ;; potential for bad situation if simultaneous starting of hundreds of jobs on servers, set needcare.
 			    (set! needcare #t)))
 		      (begin
+			(set! *runremote* #f)
 			(debug:print-info 0 *default-log-port* "received no homehost information. Please report this to support as it should not happen.")
 			(set! needcare #t)))))
 	    (if needcare  ;; due to very slow NFS we will do a brute force mkdir to ensure that the directory inode it truly available on this host
