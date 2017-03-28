@@ -73,7 +73,17 @@
 				    ro-mode)
 				  ro-mode)))))
 
-    ;;(print "BB> readonly-mode is "readonly-mode" dbfile is "dbfile)
+     ;; ensure we have a record for our connection for given area
+     (if (not runremote)                   ;; can remove this one. should never get here.         
+	 (begin
+	   (set! *runremote* (make-remote))
+	   (set! runremote   *runremote*))) ;; new runremote will come from this on next iteration
+     ;; ensure we have a homehost record
+     (if (not (pair? (remote-hh-dat runremote)))  ;; not on homehost
+	 (thread-sleep! 0.1) ;; since we shouldn't get here, delay a little
+	 (remote-hh-dat-set! runremote (common:get-homehost)))
+
+     ;;(print "BB> readonly-mode is "readonly-mode" dbfile is "dbfile)
     (cond
      ;; give up if more than 15 attempts
      ((> attemptnum 15)
@@ -105,19 +115,6 @@
       (remote-conndat-set! runremote #f) ;; invalidate the connection, thus forcing a new connection.
       (mutex-unlock! *rmt-mutex*)
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
-     ;; ensure we have a record for our connection for given area
-     ((not runremote)                  ;; can remove this one. should never get here.         
-      (set! *runremote* (make-remote)) ;; new runremote will come from this on next iteration
-      (mutex-unlock! *rmt-mutex*)
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  1")
-      (rmt:send-receive cmd rid params attemptnum: attemptnum))
-     ;; ensure we have a homehost record
-     ((not (pair? (remote-hh-dat runremote)))  ;; not on homehost
-      (thread-sleep! 0.1) ;; since we shouldn't get here, delay a little
-      (remote-hh-dat-set! runremote (common:get-homehost))
-      (mutex-unlock! *rmt-mutex*)
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  2")
-      (rmt:send-receive cmd rid params attemptnum: attemptnum))
      ;; on homehost and this is a read
      ((and (not (remote-force-server runremote))      ;; honor forced use of server
 	   (cdr (remote-hh-dat runremote))     ;; on homehost
@@ -127,10 +124,10 @@
       (rmt:open-qry-close-locally cmd 0 params))
 
      ;; on homehost and this is a write, we already have a server, but server has died
-     ((and (cdr (remote-hh-dat runremote))         ;; on homehost
+     ((and (cdr (remote-hh-dat runremote))           ;; on homehost
            (not (member cmd api:read-only-queries))  ;; this is a write
-           (remote-server-url runremote)           ;; have a server
-           (not (server:check-if-running *toppath*)))  ;; server has died.
+           (remote-server-url runremote)             ;; have a server
+           (not (server:ping (remote-server-url runremote))))  ;; server has died. NOTE: this is not a cheap call! Need better approach.
       (set! *runremote* (make-remote))
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  4.1")
