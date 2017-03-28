@@ -220,27 +220,31 @@
 ;; and servers should stick around for about two hours or so.
 ;;
 (define (server:get-best srvlst)
-  (let ((now (current-seconds)))
-    (sort
-     (filter (lambda (rec)
-	       (if (and (list? rec)
-			(> (length rec) 2))
-		   (let ((start-time (list-ref rec 3))
-			 (mod-time   (list-ref rec 0)))
-		     ;; (print "start-time: " start-time " mod-time: " mod-time)
-		     (and start-time mod-time
-			  (> (- now start-time) 0)    ;; been running at least 0 seconds
-			  (< (- now mod-time)   16)   ;; still alive - file touched in last 16 seconds
-			  (< (- now start-time) 
-			     (+ (- (string->number (or (configf:lookup *configdat* "server" "runtime") "3600"))
-				   180)
-				(random 360))) ;; under one hour running time +/- 180
-			  ))
-		   #f))
-	     srvlst)
-     (lambda (a b)
-       (< (list-ref a 3)
-	  (list-ref b 3))))))
+  (let* ((nums (server:get-num-servers))
+	 (now  (current-seconds))
+	 (slst (sort
+		(filter (lambda (rec)
+			  (if (and (list? rec)
+				   (> (length rec) 2))
+			      (let ((start-time (list-ref rec 3))
+				    (mod-time   (list-ref rec 0)))
+				;; (print "start-time: " start-time " mod-time: " mod-time)
+				(and start-time mod-time
+				     (> (- now start-time) 0)    ;; been running at least 0 seconds
+				     (< (- now mod-time)   16)   ;; still alive - file touched in last 16 seconds
+				     (< (- now start-time) 
+					(+ (- (string->number (or (configf:lookup *configdat* "server" "runtime") "3600"))
+					      180)
+					   (random 360))) ;; under one hour running time +/- 180
+				     ))
+			      #f))
+			srvlst)
+		(lambda (a b)
+		  (< (list-ref a 3)
+		     (list-ref b 3))))))
+    (if (> (length slst) nums)
+	(take slst nums)
+	slst)))
 
 (define (server:get-first-best areapath)
   (let ((srvrs (server:get-best (server:get-list areapath))))
@@ -308,11 +312,15 @@
 
 (define server:try-running server:run) ;; there is no more per-run servers ;; REMOVE ME. BUG.
 
+(define (server:get-num-servers #!key (numservers 2))
+  (let ((ns (string->number
+	     (or (configf:lookup *configdat* "server" "numservers") "notanumber"))))
+    (or ns numservers)))
+
 ;; no longer care if multiple servers are started by accident. older servers will drop off in time.
 ;;
-(define (server:check-if-running areapath #!key (numservers "2"))
-  (let* ((ns            (string->number
-			 (or (configf:lookup *configdat* "server" "numservers") numservers)))
+(define (server:check-if-running areapath) ;;  #!key (numservers "2"))
+  (let* ((ns            (server:get-num-servers))
 	 (servers       (server:get-best (server:get-list areapath))))
     ;; (print "servers: " servers " ns: " ns)
     (if (or (and servers

@@ -227,15 +227,17 @@
 			      (mutex-lock! *http-mutex*)
 			      ;; (condition-case (with-input-from-request "http://localhost"; #f read-lines)
 			      ;;					       ((exn http client-error) e (print e)))
-			      (set! res (vector
+			      (set! res (vector                ;;; DON'T FORGET - THIS IS THE CLIENT SIDE! NOTE: consider moving this to client.scm since we are only supporting http transport at this time.
 					 success
 					 (db:string->obj 
 					  (handle-exceptions
 					      exn
-					      (begin
+					      (let ((call-chain (get-call-chain))
+						    (msg        ((condition-property-accessor 'exn 'message) exn)))
 						(set! success #f)
 						(debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
-						(debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+						(debug:print 0 *default-log-port* " message: " msg)
+						(debug:print 0 *default-log-port* " cmd: " cmd " params: " params)
 						(if runremote
 						    (remote-conndat-set! runremote #f))
 						;; Killing associated server to allow clean retry.")
