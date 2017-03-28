@@ -406,6 +406,8 @@
 	     (else       #f))
 	   (loop (read-line) inl))))))
 
+;; NOT USED (well, ok, reference in rpc-transport but otherwise not used).
+;;
 (define (server:login toppath)
   (lambda (toppath)
     (set! *db-last-access* (current-seconds)) ;; might not be needed.
