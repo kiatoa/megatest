@@ -439,7 +439,10 @@
           (if (common:low-noise-print 120 "server continuing")
               (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
 	      (let ((curr-time (current-seconds)))
-		(change-file-times server-log-file curr-time curr-time)))
+		(handle-exceptions
+		    exn
+		    (debug:print 0 *default-log-port* "ERROR: Failed to change timestamp on log file " server-log-file ". Are you out of space on that disk?")
+		  (change-file-times server-log-file curr-time curr-time))))
           (loop 0 server-state bad-sync-count (current-milliseconds)))
          (else
           (debug:print-info 0 *default-log-port* "Server timed out. seconds since last db access: " (- (current-seconds) last-access))

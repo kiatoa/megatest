@@ -669,7 +669,7 @@
     (with-output-to-file fname ;; first write out the file
       (lambda ()
 	(pp dat)))
-    (if (file-exists? fname)   ;; now verify it is readable
+    (if (common:file-exists? fname)   ;; now verify it is readable
 	(if (configf:read-alist fname)
 	    #t ;; data is good.
 	    (begin
