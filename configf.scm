@@ -673,8 +673,11 @@
 	(if (configf:read-alist fname)
 	    #t ;; data is good.
 	    (begin
-	      (delete-file fname)
-	      (debug:print 0 *default-log-port* "WARNING: content " dat " for cache " fname " is not readable. Deleting generated file.")
+	      (handle-exceptions
+		  exn
+		  #f
+		(debug:print 0 *default-log-port* "WARNING: content " dat " for cache " fname " is not readable. Deleting generated file.")
+		(delete-file fname))
 	      #f))
 	#f)))
 

@@ -421,6 +421,6 @@
 	(* 60 60 (string->number tmo))
 	;; (* 3 24 60 60) ;; default to three days
 	;;(* 60 60 1)     ;; default to one hour
-	(* 60 60 0.25)    ;; default to 0.25 hours
+	(* 60 5)          ;; default to five minutes
 	)))
 

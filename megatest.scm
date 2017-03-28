@@ -159,8 +159,7 @@ Misc
   -transport http|rpc     : use http or rpc for transport (default is http) 
   -log logfile            : send stdout and stderr to logfile
   -list-servers           : list the servers 
-  -stop-server id         : stop server specified by id (see output of -list-servers), use
-                            0 to kill all
+  -kill-servers           : kill all servers
   -repl                   : start a repl (useful for extending megatest)
   -load file.scm          : load and run file.scm
   -mark-incompletes       : find and mark incomplete tests
@@ -255,9 +254,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-start-dir"
 			"-contour"
 			"-server"
-			"-stop-server"
 			"-transport"
-			"-kill-server"
 			"-port"
 			"-extract-ods"
 			"-pathmod"
@@ -321,6 +318,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-lock"
 			"-unlock"
 			"-list-servers"
+			"-kill-servers"
                         "-run-wait"      ;; wait on a run to complete (i.e. no RUNNING)
 			"-local"         ;; run some commands using local db access
                         "-generate-html"
@@ -493,9 +491,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       (process:children #f))
 		      (original-exit exit-code)))))
 
-;; for some switches alway print the command to stderr
+;; for some switches always print the command to stderr
 ;;
-(if (args:any? "-run" "-runall" "-list-runs" "-remove-runs" "-set-state-status")
+(if (args:any? "-run" "-runall" "-remove-runs" "-set-state-status")
     (debug:print 0 *default-log-port* (string-intersperse (argv) " ")))
 
 ;;======================================================================
@@ -769,55 +767,42 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (or (args:get-arg "-list-servers")
-	(args:get-arg "-stop-server")
-        (args:get-arg "-kill-server"))
+        (args:get-arg "-kill-servers"))
     (let ((tl (launch:setup)))
-      (if tl 
+      (if tl ;; all roads from here exit
 	  (let* ((servers (server:get-list *toppath*))
-		 (fmtstr  "~5a~12a~8a~20a~24a~10a~10a~10a~10a\n")
-		 (servers-to-kill '())
-                 (kill-switch  (if (args:get-arg "-kill-server") "-9" ""))
-                 (killinfo   (or (args:get-arg "-stop-server") (args:get-arg "-kill-server") ))
-		 (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
-		 (sid        (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f)))
-	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface:OutPort" "InPort" "LastBeat" "State" "Transport")
-	    (format #t fmtstr "==" "=====" "===" "====" "=================" "======" "========" "=====" "=========")
-	    (for-each 
+		 (fmtstr  "~8a~22a~20a~20a~8a\n"))
+	    (format #t fmtstr "pid" "Interface:port" "age (hms)" "Last mod" "State")
+	    (format #t fmtstr "===" "==============" "=========" "========" "=====")
+	    (for-each ;;  ( mod-time host port start-time pid )
 	     (lambda (server)
-	       (let* ((id         (vector-ref server 0))
-		      (pid        (vector-ref server 1))
-		      (hostname   (vector-ref server 2))
-		      (interface  (vector-ref server 3)) 
-		      (pullport   (vector-ref server 4))
-		      (pubport    (vector-ref server 5))
-		      (start-time (vector-ref server 6))
-		      (priority   (vector-ref server 7))
-		      (state      (vector-ref server 8))
-		      (mt-ver     (vector-ref server 9))
-		      (last-update (vector-ref server 10)) 
-		      (transport  (vector-ref server 11))
-		      (killed     #f)
-		      (status     (< last-update 20)))
-		 ;;   (zmq-sockets (if status (server:client-connect hostname port) #f)))
-		 ;; no need to login as status of #t indicates we are connecting to correct 
-		 ;; server
-		;; (if (equal? state "dead")
-		;;     (if (> last-update (* 25 60 60)) ;; keep records around for slighly over a day.
-		;; 	 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid action: 'delete))
-		;;     (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
-		;; 	 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid)))
-		 (format #t fmtstr id mt-ver pid hostname (conc interface ":" pullport) pubport last-update
-			 (if status "alive" "dead") transport)
-		 (if (or (equal? id sid)
-			 (equal? sid 0)) ;; kill all/any
+	       (let* ((mtm (any->number (car server)))
+		      (mod (if mtm (- (current-seconds) mtm) "unk"))
+		      (age (- (current-seconds)(or (any->number (list-ref server 3)) (current-seconds))))
+		      (url (conc (cadr server) ":" (caddr server)))
+		      (pid (list-ref server 4))
+		      (alv (if (number? mod)(< mod 10) #f)))
+		 (format #t
+			 fmtstr
+			 pid
+			 url
+			 (seconds->hr-min-sec age)
+			 (seconds->hr-min-sec mod)
+			 (if alv "alive" "dead"))
+		 (if (and alv
+			  (args:get-arg "-kill-servers"))
 		     (begin
-		       (debug:print-info 0 *default-log-port* "Attempting to kill "kill-switch" server with pid " pid)
-		       (tasks:kill-server hostname pid kill-switch: kill-switch)))))
-	     servers)
+		       (debug:print-info 0 *default-log-port* "Attempting to kill server with pid " pid)
+		       (server:kill server)))))
+	     (sort servers (lambda (a b)
+			     (let ((ma (or (any->number (car a)) 9e9))
+				   (mb (or (any->number (car b)) 9e9)))
+			       (> ma mb)))))
 	    (debug:print-info 1 *default-log-port* "Done with listservers")
 	    (set! *didsomething* #t)
-	    (exit)) ;; must do, would have to add checks to many/all calls below
+	    (exit))
 	  (exit))))
+      ;; must do, would have to add checks to many/all calls below
 
 ;;======================================================================
 ;; Weird special calls that need to run *after* the server has started?
