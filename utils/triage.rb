@@ -35,6 +35,7 @@ sig_patterns = [
                 'http-transport.scm:366: exit',
                 'should never happen',
                 'FATAL: \*configdat\* was inaccessible! This should never happen.',
+                'FATAL ERROR: http-transport:client-api-send-receive called with no server info',
                 '!!ISOENV PRESENT!!'
 
            ]
