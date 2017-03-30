@@ -10,20 +10,11 @@
 
 (use defstruct)
 (use scsh-process)
-
 (use srfi-18)
 (use srfi-19)
-;;(use utils)
-;;(use format)
 (use refdb)
-;; (require-library ini-file)
-;; (import (prefix ini-file ini:))
-
 (use sql-de-lite srfi-1 posix regex regex-case srfi-69)
-;; (import (prefix sqlite3 sqlite3:))
-;; 
 (declare (uses common))
-
 (declare (uses configf))
 (declare (uses margs))
 (declare (uses megatest-version))
@@ -67,35 +58,35 @@ Version: " megatest-fossil-hash)) ;; "
 ;;======================================================================
 
 ;; replace (strftime('%s','now')), with datetime('now'))
-(define (sretrieve:initialize-db db)
-  (for-each
-   (lambda (qry)
-     (exec (sql db qry)))
-   (list 
-    "CREATE TABLE IF NOT EXISTS actions
-         (id           INTEGER PRIMARY KEY,
-          action       TEXT NOT NULL,
-          retriever    TEXT NOT NULL,
-          datetime     TIMESTAMP DEFAULT (datetime('now','localtime')),
-          srcpath      TEXT NOT NULL,
-          comment      TEXT DEFAULT '' NOT NULL,
-          state        TEXT DEFAULT 'new');"
-    "CREATE TABLE IF NOT EXISTS bundles
-         (id           INTEGER PRIMARY KEY,
-          bundle       TEXT NOT NULL,
-          release      TEXT NOT NULL,
-          status       TEXT NOT NULL,
-          event_date   TEXT NOT NULL);"
-    )))
-
-(define (sretrieve:register-action db action submitter source-path comment)
- ; (print "(sretrieve:register-action db " db " action " action " submitter " submitter " source-path " source-path " comment " comment)
-  (exec (sql db "INSERT INTO actions (action,retriever,srcpath,comment)
-                 VALUES(?,?,?,?)")
-	action
-	submitter
-	source-path
-	(or comment "")))
+;(define (sretrieve:initialize-db db)
+;  (for-each
+;   (lambda (qry)
+;     (exec (sql db qry)))
+;   (list 
+;    "CREATE TABLE IF NOT EXISTS actions
+;         (id           INTEGER PRIMARY KEY,
+;          action       TEXT NOT NULL,
+;          retriever    TEXT NOT NULL,
+;          datetime     TIMESTAMP DEFAULT (datetime('now','localtime')),
+;          srcpath      TEXT NOT NULL,
+;          comment      TEXT DEFAULT '' NOT NULL,
+;          state        TEXT DEFAULT 'new');"
+;    "CREATE TABLE IF NOT EXISTS bundles
+;         (id           INTEGER PRIMARY KEY,
+;          bundle       TEXT NOT NULL,
+;          release      TEXT NOT NULL,
+;          status       TEXT NOT NULL,
+;          event_date   TEXT NOT NULL);"
+;    )))
+;
+;(define (sretrieve:register-action db action submitter source-path comment)
+; ; (print "(sretrieve:register-action db " db " action " action " submitter " submitter " source-path " source-path " comment " comment)
+;  (exec (sql db "INSERT INTO actions (action,retriever,srcpath,comment)
+;                 VALUES(?,?,?,?)")
+;	action
+;	submitter
+;	source-path
+;	(or comment "")))
 
 ;; (call-with-database
 ;;  (lambda (db)
@@ -103,136 +94,136 @@ Version: " megatest-fossil-hash)) ;; "
 ;;   ...))
 
 ;; Create the sqlite db
-(define (sretrieve:db-do configdat proc) 
-  (let ((path (configf:lookup configdat "database" "location")))
-    (if (not path)
-	(begin
-	  (debug:print 0 "[database]\nlocation /some/path\n\n Is missing from the config file!")
-	  (exit 1)))
-    (if (and path
-	     (directory? path)
-	     (file-read-access? path))
-	(let* ((dbpath    (conc path "/" *exe-name* ".db"))
-	       (writeable (file-write-access? dbpath))
-	       (dbexists  (file-exists? dbpath)))
-	  (handle-exceptions
-	   exn
-	   (begin
-	     (debug:print 2 "ERROR: problem accessing db " dbpath
-			  ((condition-property-accessor 'exn 'message) exn))
-	     (exit 1))
-            ;;(debug:print 0 "calling proc " proc "db path " dbpath )
-	   (call-with-database
-            dbpath
-	    (lambda (db)
-	       ;;(debug:print 0 "calling proc " proc " on db " db)
-	      (set-busy-handler! db (busy-timeout 10000)) ;; 10 sec timeout
-	      (if (not dbexists)(sretrieve:initialize-db db))
-	      (proc db)))))
-	(debug:print 0 "ERROR: invalid path for storing database: " path))))
+;(define (sretrieve:db-do configdat proc) 
+;  (let ((path (configf:lookup configdat "database" "location")))
+;    (if (not path)
+;	(begin
+;	  (debug:print 0 "[database]\nlocation /some/path\n\n Is missing from the config file!")
+;	  (exit 1)))
+;    (if (and path
+;	     (directory? path)
+;	     (file-read-access? path))
+;	(let* ((dbpath    (conc path "/" *exe-name* ".db"))
+;	       (writeable (file-write-access? dbpath))
+;	       (dbexists  (file-exists? dbpath)))
+;	  (handle-exceptions
+;	   exn
+;	   (begin
+;	     (debug:print 2 "ERROR: problem accessing db " dbpath
+;			  ((condition-property-accessor 'exn 'message) exn))
+;	     (exit 1))
+;            ;;(debug:print 0 "calling proc " proc "db path " dbpath )
+;	   (call-with-database
+;            dbpath
+;	    (lambda (db)
+;	       ;;(debug:print 0 "calling proc " proc " on db " db)
+;	      (set-busy-handler! db (busy-timeout 10000)) ;; 10 sec timeout
+;	      (if (not dbexists)(sretrieve:initialize-db db))
+;	      (proc db)))))
+;	(debug:print 0 "ERROR: invalid path for storing database: " path))))
 
 ;; copy in directory to dest, validation is done BEFORE calling this
 ;;
-(define (sretrieve:get configdat retriever version comment)
-  (let* ((base-dir  (configf:lookup configdat "settings" "base-dir"))
-	 (datadir   (conc base-dir "/" version)))
-    (if (or (not base-dir)
-	    (not (file-exists? base-dir)))
-	(begin
-	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
-	  (exit 1)))
-    (print datadir)
-    (if (not (file-exists? datadir))
-	(begin
-	  (debug:print 0 "ERROR: Bad version (" version "), no data found at " datadir "." )
-	  (exit 1)))
-    
-    (sretrieve:db-do
-     configdat
-     (lambda (db)
-       (sretrieve:register-action db "get" retriever datadir comment)))
-      (sretrieve:do-as-calling-user
-       (lambda ()
-         (if (directory? datadir)
-	   (begin
-  	    (change-directory datadir)
-	    (let ((files (filter (lambda (x)
-				(not (member x '("." ".."))))
-			      (glob "*" ".*"))))
-	     (print "files: " files)
-	     (process-execute "/bin/tar" (append (append (list  "chfv" "-") files) (list "--ignore-failed-read")))))
-             (begin
-               (let* ((parent-dir (pathname-directory datadir) )
-                      (filename  (conc(pathname-file datadir) "." (pathname-extension datadir))))
-                  (change-directory parent-dir)  
-                  (process-execute "/bin/tar" (list "chfv" "-" filename))
-             )))
-))))
-
-
-;; copy in file to dest, validation is done BEFORE calling this
-;;
-(define (sretrieve:cp configdat retriever file comment)
-  (let* ((base-dir  (configf:lookup configdat "settings" "base-dir"))
-         (allowed-sub-paths (configf:lookup configdat "settings" "allowed-sub-paths"))    
-	 (datadir   (conc base-dir "/" file))
-         (filename  (conc(pathname-file datadir) "." (pathname-extension datadir))))
-    (if (or (not base-dir)
-	    (not (file-exists? base-dir)))
-	(begin
-	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
-	  (exit 1)))
-    (print datadir)
-    (if (not (file-exists? datadir))
-	(begin
-	  (debug:print 0 "ERROR: File  (" file "), not found at " base-dir "." )
-	  (exit 1)))
-    (if (directory? datadir)
-	(begin
-	  (debug:print 0 "ERROR: (" file ") is a dirctory!! cp cmd works only on files ." )
-	  (exit 1)))
-    (if(not (string-match (regexp  allowed-sub-paths) file))
-        (begin
-	  (debug:print 0 "ERROR: Access denied to file (" file ")!! " )
-	  (exit 1)))
-     
-     (sretrieve:db-do
-     configdat
-     (lambda (db)
-       (sretrieve:register-action db "cp" retriever datadir comment)))
-      (sretrieve:do-as-calling-user
-      ;;  (debug:print 0 "ph:  "(pathname-directory datadir)  "!! " )
-       (change-directory (pathname-directory datadir))  
-       ;;(debug:print 0 "ph: /bin/tar" (list "chfv" "-" filename) )
-      (process-execute "/bin/tar" (list "chfv" "-" filename)))
-      ))
-
-;; ls in file to dest, validation is done BEFORE calling this
-;;
-(define (sretrieve:ls configdat retriever file comment)
-  (let* ((base-dir  (configf:lookup configdat "settings" "base-dir"))
-         (allowed-sub-paths (configf:lookup configdat "settings" "allowed-sub-paths"))    
-	 (datadir   (conc base-dir "/" file))
-         (filename  (conc(pathname-file datadir) "." (pathname-extension datadir))))
-    (if (or (not base-dir)
-	    (not (file-exists? base-dir)))
-	(begin
-	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
-	  (exit 1)))
-    (print datadir)
-    (if (not (file-exists? datadir))
-	(begin
-	  (debug:print 0 "ERROR: File  (" file "), not found at " base-dir "." )
-	  (exit 1)))
-      (if(not (string-match (regexp  allowed-sub-paths) file))
-        (begin
-	  (debug:print 0 "ERROR: Access denied to file (" file ")!! " )
-	  (exit 1)))
-   
-        (sretrieve:do-as-calling-user
-        (lambda ()
-	  (process-execute "/bin/ls" (list "-ls"  "-lrt" datadir ))
- ))))
+;(define (sretrieve:get configdat retriever version comment)
+;  (let* ((base-dir  (configf:lookup configdat "settings" "base-dir"))
+;	 (datadir   (conc base-dir "/" version)))
+;    (if (or (not base-dir)
+;	    (not (file-exists? base-dir)))
+;	(begin
+;	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
+;	  (exit 1)))
+;    (print datadir)
+;    (if (not (file-exists? datadir))
+;	(begin
+;	  (debug:print 0 "ERROR: Bad version (" version "), no data found at " datadir "." )
+;	  (exit 1)))
+;    
+;    (sretrieve:db-do
+;     configdat
+;     (lambda (db)
+;       (sretrieve:register-action db "get" retriever datadir comment)))
+;      (sretrieve:do-as-calling-user
+;       (lambda ()
+;         (if (directory? datadir)
+;	   (begin
+;  	    (change-directory datadir)
+;	    (let ((files (filter (lambda (x)
+;				(not (member x '("." ".."))))
+;			      (glob "*" ".*"))))
+;	     (print "files: " files)
+;	     (process-execute "/bin/tar" (append (append (list  "chfv" "-") files) (list "--ignore-failed-read")))))
+;             (begin
+;               (let* ((parent-dir (pathname-directory datadir) )
+;                      (filename  (conc(pathname-file datadir) "." (pathname-extension datadir))))
+;                  (change-directory parent-dir)  
+;                  (process-execute "/bin/tar" (list "chfv" "-" filename))
+;             )))
+;))))
+;
+;
+;;; copy in file to dest, validation is done BEFORE calling this
+;;;
+;(define (sretrieve:cp configdat retriever file comment)
+;  (let* ((base-dir  (configf:lookup configdat "settings" "base-dir"))
+;         (allowed-sub-paths (configf:lookup configdat "settings" "allowed-sub-paths"))    
+;	 (datadir   (conc base-dir "/" file))
+;         (filename  (conc(pathname-file datadir) "." (pathname-extension datadir))))
+;    (if (or (not base-dir)
+;	    (not (file-exists? base-dir)))
+;	(begin
+;	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
+;	  (exit 1)))
+;    (print datadir)
+;    (if (not (file-exists? datadir))
+;	(begin
+;	  (debug:print 0 "ERROR: File  (" file "), not found at " base-dir "." )
+;	  (exit 1)))
+;    (if (directory? datadir)
+;	(begin
+;	  (debug:print 0 "ERROR: (" file ") is a dirctory!! cp cmd works only on files ." )
+;	  (exit 1)))
+;    (if(not (string-match (regexp  allowed-sub-paths) file))
+;        (begin
+;	  (debug:print 0 "ERROR: Access denied to file (" file ")!! " )
+;	  (exit 1)))
+;     
+;     (sretrieve:db-do
+;     configdat
+;     (lambda (db)
+;       (sretrieve:register-action db "cp" retriever datadir comment)))
+;      (sretrieve:do-as-calling-user
+;      ;;  (debug:print 0 "ph:  "(pathname-directory datadir)  "!! " )
+;       (change-directory (pathname-directory datadir))  
+;       ;;(debug:print 0 "ph: /bin/tar" (list "chfv" "-" filename) )
+;      (process-execute "/bin/tar" (list "chfv" "-" filename)))
+;      ))
+;
+;;; ls in file to dest, validation is done BEFORE calling this
+;;;
+;(define (sretrieve:ls configdat retriever file comment)
+;  (let* ((base-dir  (configf:lookup configdat "settings" "base-dir"))
+;         (allowed-sub-paths (configf:lookup configdat "settings" "allowed-sub-paths"))    
+;	 (datadir   (conc base-dir "/" file))
+;         (filename  (conc(pathname-file datadir) "." (pathname-extension datadir))))
+;    (if (or (not base-dir)
+;	    (not (file-exists? base-dir)))
+;	(begin
+;	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
+;	  (exit 1)))
+;    (print datadir)
+;    (if (not (file-exists? datadir))
+;	(begin
+;	  (debug:print 0 "ERROR: File  (" file "), not found at " base-dir "." )
+;	  (exit 1)))
+;      (if(not (string-match (regexp  allowed-sub-paths) file))
+;        (begin
+;	  (debug:print 0 "ERROR: Access denied to file (" file ")!! " )
+;	  (exit 1)))
+;   
+;        (sretrieve:do-as-calling-user
+;        (lambda ()
+;	  (process-execute "/bin/ls" (list "-ls"  "-lrt" datadir ))
+; ))))
 
 
 
@@ -252,25 +243,25 @@ Version: " megatest-fossil-hash)) ;; "
  ))
 
 
-(define (sretrieve:backup-move path)
-  (let* ((trashdir  (conc (pathname-directory path) "/.trash"))
-	 (trashfile (conc trashdir "/" (current-seconds) "-" (pathname-file path))))
-    (create-directory trashdir #t)
-    (if (directory? path)
-	(system (conc "mv " path " " trashfile))
-	(file-move path trash-file))))
-
-
-(define (sretrieve:lst->path pathlst)
-  (conc "/" (string-intersperse (map conc pathlst) "/")))
-
-(define (sretrieve:path->lst path)
-  (string-split path "/"))
-
-(define (sretrieve:pathdat-apply-heuristics configdat path)
-  (cond
-   ((file-exists? path) "found")
-   (else (conc path " not installed"))))
+;(define (sretrieve:backup-move path)
+;  (let* ((trashdir  (conc (pathname-directory path) "/.trash"))
+;	 (trashfile (conc trashdir "/" (current-seconds) "-" (pathname-file path))))
+;    (create-directory trashdir #t)
+;    (if (directory? path)
+;	(system (conc "mv " path " " trashfile))
+;	(file-move path trash-file))))
+;
+;
+;(define (sretrieve:lst->path pathlst)
+;  (conc "/" (string-intersperse (map conc pathlst) "/")))
+;
+;(define (sretrieve:path->lst path)
+;  (string-split path "/"))
+;
+;(define (sretrieve:pathdat-apply-heuristics configdat path)
+;  (cond
+;   ((file-exists? path) "found")
+;   (else (conc path " not installed"))))
 
 ;;======================================================================
 ;; MISC
@@ -306,37 +297,33 @@ Version: " megatest-fossil-hash)) ;; "
 ;; SHELL
 ;;======================================================================
 
-
-(define *refdb*     "/p/foundry/env/pkgs/chicken/4.10.0_ext/bin/refdb") 
-(define *refdbloc*     "/nfs/site/disks/ch_ciaf_disk023/fdk_gwa_disk003/pjhatwal/fossil/megatest1.60/megatest/datashare-testing/sretrieve_configs") 
-
 ;; Create the sqlite db for shell
-(define (sretrieve:shell-db-do path proc) 
-    (if (not path)
-	(begin
-	  (debug:print 0 "[database]\nlocation /some/path\n\n Is missing from the config file!")
-	  (exit 1)))
-    (if (and path
-	     (directory? path)
-	     (file-read-access? path))
-	(let* ((dbpath    (conc path "/" *exe-name* ".db"))
-	       (writeable (file-write-access? dbpath))
-	       (dbexists  (file-exists? dbpath)))
-	  (handle-exceptions
-	   exn
-	   (begin
-	     (debug:print 2 "ERROR: problem accessing db " dbpath
-			  ((condition-property-accessor 'exn 'message) exn))
-	     (exit 1))
-            ;;(debug:print 0 "calling proc " proc "db path " dbpath )
-	   (call-with-database
-            dbpath
-	    (lambda (db)
-	       ;;(debug:print 0 "calling proc " proc " on db " db)
-	      (set-busy-handler! db (busy-timeout 10000)) ;; 10 sec timeout
-	      (if (not dbexists)(sretrieve:initialize-db db))
-	      (proc db)))))
-	(debug:print 0 "ERROR: invalid path for storing database: " path)))
+;(define (sretrieve:shell-db-do path proc) 
+;    (if (not path)
+;	(begin
+;	  (debug:print 0 "[database]\nlocation /some/path\n\n Is missing from the config file!")
+;	  (exit 1)))
+;    (if (and path
+;	     (directory? path)
+;	     (file-read-access? path))
+;	(let* ((dbpath    (conc path "/" *exe-name* ".db"))
+;	       (writeable (file-write-access? dbpath))
+;	       (dbexists  (file-exists? dbpath)))
+;	  (handle-exceptions
+;	   exn
+;	   (begin
+;	     (debug:print 2 "ERROR: problem accessing db " dbpath
+;			  ((condition-property-accessor 'exn 'message) exn))
+;	     (exit 1))
+;            ;;(debug:print 0 "calling proc " proc "db path " dbpath )
+;	   (call-with-database
+;            dbpath
+;	    (lambda (db)
+;	       ;;(debug:print 0 "calling proc " proc " on db " db)
+;	      (set-busy-handler! db (busy-timeout 10000)) ;; 10 sec timeout
+;	      (if (not dbexists)(sretrieve:initialize-db db))
+;	      (proc db)))))
+;	(debug:print 0 "ERROR: invalid path for storing database: " path)))
 
 
 
@@ -359,9 +346,6 @@ Version: " megatest-fossil-hash)) ;; "
    (else  
     #f))))
  
-    
-
-
 
 (define (sretrieve:get-accessable-projects  area)
    (let* ((projects `()))
@@ -384,6 +368,8 @@ Version: " megatest-fossil-hash)) ;; "
              (print (string-intersperse top-areas " "))
            (let* ((target-path (sauth-common:get-target-path  base-path-list  ext-path top-areas base-path)))
                 ;(print "Resolved path: " target-path)
+                (if (not (equal? target-path #f))
+                  (begin   
                 (if (symbolic-link? target-path)
                    (set! target-path (conc target-path "/"))) 
                 (if (not (equal? target-path #f))
@@ -398,7 +384,7 @@ Version: " megatest-fossil-hash)) ;; "
                     (run (pipe
       	      	      (ls "-lrt" ,target-path)
                       (begin (system (string-join (cdr tail-cmd-list))))))
-      ))))))))))
+      ))))))))))))
 
 (define (sretrieve:shell-cat-cmd base-pathlist ext-path top-areas base-path tail-cmd-list)
   (let* ((resolved-path (sauth-common:resolve-path ext-path base-pathlist top-areas ))
@@ -622,8 +608,15 @@ Version: " megatest-fossil-hash)) ;; "
                     (change-directory start-dir)))))))))))
 
 (define (sretrieve:get-shell-cmd-line target-path base-path restrictions iport)
-     (if (not (file-exists? target-path))
-        (print "Target path does not exist!")
+   (handle-exceptions
+	   exn 
+	   (begin
+	     (sauth:print-error (conc "Problem fetching the data. Sauth provieds sudo access to only one unix group. Please ensure you have washed all the remaining groups. System Error: " 
+			  ((condition-property-accessor 'exn 'message) exn)))
+	     (exit 1))
+  
+    (if (not (file-exists? target-path))
+        (print "Error:Target path does not exist!")
     (begin
     (if (not (equal? target-path #f))
     (begin     
@@ -644,7 +637,9 @@ Version: " megatest-fossil-hash)) ;; "
                      (begin
                    ;    (sretrieve:do-as-calling-user
                    ; (lambda ()
-		      ;(create-directory start-dir #t)))
+                    
+                  (if (not (file-exists?  (conc "/tmp/" (current-user-name)))) 
+		      (create-directory (conc "/tmp/" (current-user-name)) #t))
                           (change-directory parent-dir)
                             (create-fifo  tmpfile)
                                   (process-fork 
@@ -677,7 +672,7 @@ Version: " megatest-fossil-hash)) ;; "
                  ;(run (pipe
                   ; (tar "chfv" "-" ,filename)
                   ; (begin (system (conc "cd " start-dir ";tar xUf -")))))
-                    (change-directory start-dir)))))))))))
+                    (change-directory start-dir))))))))))))
 
 (define (sretrieve:make_file path exclude base_path)
    (find-files 
@@ -873,44 +868,45 @@ Version: " megatest-fossil-hash)
 ;;======================================================================
 ;;(define *default-log-port* (current-error-port))
 
-(define (sretrieve:load-config exe-dir exe-name)
-  (let* ((fname   (conc exe-dir "/." exe-name ".config")))
-    ;; (ini:property-separator-patt " *  *")
-    ;; (ini:property-separator #\space)
-    (if (file-exists? fname)
-	;; (ini:read-ini fname)
-	(read-config fname #f #f)
-	(make-hash-table))))
+;(define (sretrieve:load-config exe-dir exe-name)
+;  (let* ((fname   (conc exe-dir "/." exe-name ".config")))
+;    ;; (ini:property-separator-patt " *  *")
+;    ;; (ini:property-separator #\space)
+;    (if (file-exists? fname)
+;	;; (ini:read-ini fname)
+;	(read-config fname #f #f)
+;	(make-hash-table))))
 
 ;; package-type is "megatest", "builds", "kits" etc.
 ;;
 
-(define (sretrieve:load-packages configdat exe-dir package-type)
-  (push-directory exe-dir)
-  (let* ((packages-metadir  (configf:lookup configdat "settings" "packages-metadir"))
-	 (conversion-script (configf:lookup configdat "settings" "conversion-script"))
-	 (upstream-file     (configf:lookup configdat "settings" "upstream-file"))
-	 (package-config    (conc packages-metadir "/" package-type ".config")))
-       (if (file-exists? upstream-file)
-	(if (or (not (file-exists? package-config)) ;; if not created call the updater, otherwise call only if upstream newer
-		(> (file-modification-time upstream-file)(file-modification-time package-config)))
-	    (handle-exceptions
-	     exn
-	     (debug:print 0 "ERROR: failed to run script " conversion-script " with params " upstream-file " " package-config)
-	     (let ((pid (process-run conversion-script (list upstream-file package-config))))
-	       (process-wait pid)))
-	    (debug:print 0 "Skipping update of " package-config " from " upstream-file))
-	(debug:print 0 "Skipping update of " package-config " as " upstream-file " not found"))
-       (let ((res (if (file-exists? package-config)
-		   (begin
-		     (debug:print 0 "Reading package config " package-config)
-		     (read-config package-config #f #t))
-		   (make-hash-table))))
-      (pop-directory)
-      res)))
+;(define (sretrieve:load-packages configdat exe-dir package-type)
+;  (push-directory exe-dir)
+;  (let* ((packages-metadir  (configf:lookup configdat "settings" "packages-metadir"))
+;	 (conversion-script (configf:lookup configdat "settings" "conversion-script"))
+;	 (upstream-file     (configf:lookup configdat "settings" "upstream-file"))
+;	 (package-config    (conc packages-metadir "/" package-type ".config")))
+;       (if (file-exists? upstream-file)
+;	(if (or (not (file-exists? package-config)) ;; if not created call the updater, otherwise call only if upstream newer
+;		(> (file-modification-time upstream-file)(file-modification-time package-config)))
+;	    (handle-exceptions
+;	     exn
+;	     (debug:print 0 "ERROR: failed to run script " conversion-script " with params " upstream-file " " package-config)
+;	     (let ((pid (process-run conversion-script (list upstream-file package-config))))
+;	       (process-wait pid)))
+;	    (debug:print 0 "Skipping update of " package-config " from " upstream-file))
+;	(debug:print 0 "Skipping update of " package-config " as " upstream-file " not found"))
+;       (let ((res (if (file-exists? package-config)
+;		   (begin
+;		     (debug:print 0 "Reading package config " package-config)
+;		     (read-config package-config #f #t))
+;		   (make-hash-table))))
+;      (pop-directory)
+;      res)))
 
-;(define (toplevel-command . args) #f)
-(define (sretrieve:process-action configdat action . args)
+(define (toplevel-command . args) #f)
+(define (sretrieve:process-action  action . args)
+    ; (print action)
  ;  (use readline)
     (case (string->symbol action)
       ((get)
@@ -937,9 +933,9 @@ Version: " megatest-fossil-hash)
              		(print "Area " area " does not exist")
           	         (exit 1)))
               (let* ((target-path (sauth-common:get-target-path '()  (conc area "/" sub-path) top-areas base-path))
-				 (restrictions (if (equal? target-path #f)
-                                                 ""
-                                               (sretrieve:shell-lookup base-path))))
+		     (restrictions (if (equal? target-path #f)
+                                        ""
+                                       (sretrieve:shell-lookup base-path))))
              (if (not (equal? target-path #f))
                  (begin  
                    (sauthorize:do-as-calling-user
@@ -1033,7 +1029,7 @@ Version: " megatest-fossil-hash)
 	     (print  "ERROR: Missing arguments <area>!!" )
 	     (exit 1))
              (sretrieve:shell (car args)))) 
-      (else (debug:print 0 "Unrecognised command " action))))
+      (else (print 0 "Unrecognised command " action))))
 
 (define (main)
   (let* ((args      (argv))
@@ -1042,10 +1038,11 @@ Version: " megatest-fossil-hash)
 	 (exe-name  (pathname-file (car (argv))))
 	 (exe-dir   (or (pathname-directory prog)
 			(sretrieve:find exe-name (string-split (get-environment-variable "PATH") ":"))))
-	 (configdat (sretrieve:load-config exe-dir exe-name)))
+	 ;(configdat (sretrieve:load-config exe-dir exe-name))
+)
     ;; preserve the exe data in the config file
-    (hash-table-set! configdat "exe-info" (list (list "exe-name" exe-name)
-						(list "exe-dir"  exe-dir)))
+    ;(hash-table-set! configdat "exe-info" (list (list "exe-name" exe-name)
+					;	(list "exe-dir"  exe-dir)))
     (cond
      ;; one-word commands
      ((eq? (length rema) 1)
@@ -1057,7 +1054,8 @@ Version: " megatest-fossil-hash)
      ;; multi-word commands
      ((null? rema)(print sretrieve:help))
      ((>= (length rema) 2)
-      (apply sretrieve:process-action configdat (car rema)(cdr rema)))
+      
+      (apply sretrieve:process-action  (car rema) (cdr rema)))
      (else (debug:print 0 "ERROR: Unrecognised command. Try \"sretrieve help\"")))))
 
 (main)

@@ -10,39 +10,16 @@
 
 (use defstruct)
 (use scsh-process)
-
 (use refdb)
-
-
-;; (use ssax)
-;; (use sxml-serializer)
-;; (use sxml-modifications)
-;; (use regex)
-;; (use srfi-69)
-;; (use regex-case)
-;; (use posix)
-;; (use json)
-;; (use csv)
 (use srfi-18)
 (use srfi-19)
-
 (use format)
-
-;; (require-library ini-file)
-;; (import (prefix ini-file ini:))
-
 (use sql-de-lite srfi-1 posix regex regex-case srfi-69)
-;; (import (prefix sqlite3 sqlite3:))
-;; 
+
 (declare (uses configf))
 ;; (declare (uses tree))
 (declare (uses margs))
-;; (declare (uses dcommon))
-;; (declare (uses launch))
-;; (declare (uses gutils))
-;; (declare (uses db))
-;; (declare (uses synchash))
-;; (declare (uses server))
+
 (declare (uses megatest-version))
 ;; (declare (uses tbd))
 
@@ -86,28 +63,28 @@ Version: " megatest-fossil-hash)) ;; "
 (define *default-log-port* (current-error-port))
 (define *verbosity*         1)
 
-(define (spublish:initialize-db db)
-  (for-each
-   (lambda (qry)
-     (exec (sql db qry)))
-   (list 
-    "CREATE TABLE IF NOT EXISTS actions
-         (id           INTEGER PRIMARY KEY,
-          action       TEXT NOT NULL,
-          submitter    TEXT NOT NULL,
-          datetime     TIMESTAMP DEFAULT (strftime('%s','now')),
-          srcpath      TEXT NOT NULL,
-          comment      TEXT DEFAULT '' NOT NULL,
-          state        TEXT DEFAULT 'new');"
-    )))
+;(define (spublish:initialize-db db)
+;  (for-each
+;   (lambda (qry)
+;     (exec (sql db qry)))
+;   (list 
+;    "CREATE TABLE IF NOT EXISTS actions
+;         (id           INTEGER PRIMARY KEY,
+;          action       TEXT NOT NULL,
+;          submitter    TEXT NOT NULL,
+;          datetime     TIMESTAMP DEFAULT (strftime('%s','now')),
+;          srcpath      TEXT NOT NULL,
+;          comment      TEXT DEFAULT '' NOT NULL,
+;          state        TEXT DEFAULT 'new');"
+;    )))
 
-(define (spublish:register-action db action submitter source-path comment)
-  (exec (sql db "INSERT INTO actions (action,submitter,srcpath,comment)
-                 VALUES(?,?,?,?)")
-	action
-	submitter
-	source-path
-	comment))
+;(define (spublish:register-action db action submitter source-path comment)
+;  (exec (sql db "INSERT INTO actions (action,submitter,srcpath,comment)
+;                 VALUES(?,?,?,?)")
+;	action
+;	submitter
+;	source-path
+;	comment))
 
 ;; (call-with-database
 ;;  (lambda (db)
@@ -115,204 +92,204 @@ Version: " megatest-fossil-hash)) ;; "
 ;;   ...))
 
 ;; Create the sqlite db
-(define (spublish:db-do configdat proc) 
-  (let ((path (configf:lookup configdat "database" "location")))
-    (if (not path)
-	(begin
-	  (print "[database]\nlocation /some/path\n\n Is missing from the config file!")
-	  (exit 1)))
-    (if (and path
-	     (directory? path)
-	     (file-read-access? path))
-	(let* ((dbpath    (conc path "/spublish.db"))
-	       (writeable (file-write-access? dbpath))
-	       (dbexists  (file-exists? dbpath)))
-	  (handle-exceptions
-	   exn
-	   (begin
-	     (debug:print 2 *default-log-port* "ERROR: problem accessing db " dbpath
-			  ((condition-property-accessor 'exn 'message) exn))
-	     (exit 1))
-	   (call-with-database
-            dbpath
-	    (lambda (db)
-	      ;; (print "calling proc " proc " on db " db)
-	      (set-busy-handler! db (busy-timeout 10000)) ;; 10 sec timeout
-	      (if (not dbexists)(spublish:initialize-db db))
-	      (proc db)))))
-	(print "ERROR: invalid path for storing database: " path))))
+;(define (spublish:db-do configdat proc) 
+;  (let ((path (configf:lookup configdat "database" "location")))
+;    (if (not path)
+;	(begin
+;	  (print "[database]\nlocation /some/path\n\n Is missing from the config file!")
+;	  (exit 1)))
+;    (if (and path
+;	     (directory? path)
+;	     (file-read-access? path))
+;	(let* ((dbpath    (conc path "/spublish.db"))
+;	       (writeable (file-write-access? dbpath))
+;	       (dbexists  (file-exists? dbpath)))
+;	  (handle-exceptions
+;	   exn
+;	   (begin
+;	     (debug:print 2 *default-log-port* "ERROR: problem accessing db " dbpath
+;			  ((condition-property-accessor 'exn 'message) exn))
+;	     (exit 1))
+;	   (call-with-database
+;            dbpath
+;	    (lambda (db)
+;	      ;; (print "calling proc " proc " on db " db)
+;	      (set-busy-handler! db (busy-timeout 10000)) ;; 10 sec timeout
+;	      (if (not dbexists)(spublish:initialize-db db))
+;	      (proc db)))))
+;	(print "ERROR: invalid path for storing database: " path))))
+;
+;;; copy in file to dest, validation is done BEFORE calling this
+;;;
+;(define (spublish:cp configdat submitter source-path target-dir targ-file dest-dir comment)
+;  (let ((dest-dir-path (conc target-dir "/" dest-dir))
+;        (targ-path (conc target-dir "/" dest-dir "/" targ-file)))
+;    (if (file-exists? targ-path)
+;	(begin
+;	  (print "ERROR: target file already exists, remove it before re-publishing")
+;	  (exit 1)))
+;       (if (not(file-exists? dest-dir-path))
+;	(begin
+;	  (print "ERROR: target directory " dest-dir-path " does not exists." )
+;	  (exit 1)))
+;
+;    (spublish:db-do
+;     configdat
+;     (lambda (db)
+;       (spublish:register-action db "cp" submitter source-path comment)))
+;    (let* (;; (target-path (configf:lookup "settings" "target-path"))
+;	   (th1         (make-thread
+;			 (lambda ()
+;			   (file-copy source-path targ-path #t))
+;                            (print " ... file " targ-path " copied to " targ-path)
+;			 ;; (let ((pid (process-run "cp" (list source-path target-dir))))
+;			 ;;   (process-wait pid)))
+;			 "copy thread"))
+;	   (th2         (make-thread
+;			 (lambda ()
+;			   (let loop ()
+;			     (thread-sleep! 15)
+;			     (display ".")
+;			     (flush-output)
+;			     (loop)))
+;			 "action is happening thread")))
+;      (thread-start! th1)
+;      (thread-start! th2)
+;      (thread-join! th1))
+;    (cons #t "Successfully saved data")))
+;
+;;; copy directory to dest, validation is done BEFORE calling this
+;;;
+;
+;(define (spublish:tar configdat submitter target-dir dest-dir comment)
+;  (let ((dest-dir-path (conc target-dir "/" dest-dir)))
+;       (if (not(file-exists? dest-dir-path))
+;	(begin
+;	  (print "ERROR: target directory " dest-dir-path " does not exists." )
+;	  (exit 1)))
+;    ;;(print dest-dir-path )
+;    (spublish:db-do
+;     configdat
+;     (lambda (db)
+;       (spublish:register-action db "tar" submitter dest-dir-path comment)))
+;       (change-directory dest-dir-path)
+;       (process-wait (process-run "/bin/tar" (list "xf" "-")))
+;       (print "Data copied to " dest-dir-path) 
+;
+;        (cons #t "Successfully saved data")))
 
-;; copy in file to dest, validation is done BEFORE calling this
-;;
-(define (spublish:cp configdat submitter source-path target-dir targ-file dest-dir comment)
-  (let ((dest-dir-path (conc target-dir "/" dest-dir))
-        (targ-path (conc target-dir "/" dest-dir "/" targ-file)))
-    (if (file-exists? targ-path)
-	(begin
-	  (print "ERROR: target file already exists, remove it before re-publishing")
-	  (exit 1)))
-       (if (not(file-exists? dest-dir-path))
-	(begin
-	  (print "ERROR: target directory " dest-dir-path " does not exists." )
-	  (exit 1)))
 
-    (spublish:db-do
-     configdat
-     (lambda (db)
-       (spublish:register-action db "cp" submitter source-path comment)))
-    (let* (;; (target-path (configf:lookup "settings" "target-path"))
-	   (th1         (make-thread
-			 (lambda ()
-			   (file-copy source-path targ-path #t))
-                            (print " ... file " targ-path " copied to " targ-path)
-			 ;; (let ((pid (process-run "cp" (list source-path target-dir))))
-			 ;;   (process-wait pid)))
-			 "copy thread"))
-	   (th2         (make-thread
-			 (lambda ()
-			   (let loop ()
-			     (thread-sleep! 15)
-			     (display ".")
-			     (flush-output)
-			     (loop)))
-			 "action is happening thread")))
-      (thread-start! th1)
-      (thread-start! th2)
-      (thread-join! th1))
-    (cons #t "Successfully saved data")))
-
-;; copy directory to dest, validation is done BEFORE calling this
-;;
-
-(define (spublish:tar configdat submitter target-dir dest-dir comment)
-  (let ((dest-dir-path (conc target-dir "/" dest-dir)))
-       (if (not(file-exists? dest-dir-path))
-	(begin
-	  (print "ERROR: target directory " dest-dir-path " does not exists." )
-	  (exit 1)))
-    ;;(print dest-dir-path )
-    (spublish:db-do
-     configdat
-     (lambda (db)
-       (spublish:register-action db "tar" submitter dest-dir-path comment)))
-       (change-directory dest-dir-path)
-       (process-wait (process-run "/bin/tar" (list "xf" "-")))
-       (print "Data copied to " dest-dir-path) 
-
-        (cons #t "Successfully saved data")))
-
-
-(define (spublish:validate target-dir targ-mk)
-  (let* ((normal-path (normalize-pathname targ-mk))
-        (targ-path (conc target-dir "/" normal-path)))
-    (if (string-contains   normal-path "..")
-    (begin
-      (print "ERROR: Path  " targ-mk " resolved outside target area "  target-dir )
-      (exit 1)))
-
-    (if (not (string-contains targ-path target-dir))
-    (begin
-      (print "ERROR: You cannot update data outside " target-dir ".")
-      (exit 1)))
-    (print "Path " targ-mk " is valid.")   
- ))
+;(define (spublish:validate target-dir targ-mk)
+;  (let* ((normal-path (normalize-pathname targ-mk))
+;        (targ-path (conc target-dir "/" normal-path)))
+;    (if (string-contains   normal-path "..")
+;    (begin
+;      (print "ERROR: Path  " targ-mk " resolved outside target area "  target-dir )
+;      (exit 1)))
+;
+;    (if (not (string-contains targ-path target-dir))
+;    (begin
+;      (print "ERROR: You cannot update data outside " target-dir ".")
+;      (exit 1)))
+;    (print "Path " targ-mk " is valid.")   
+; ))
 ;; make directory in dest
 ;;
 
-(define (spublish:mkdir configdat submitter target-dir targ-mk comment)
-  (let ((targ-path (conc target-dir "/" targ-mk)))
-    
-    (if (file-exists? targ-path)
-	(begin
-	  (print "ERROR: target Directory " targ-path " already exist!!")
-	  (exit 1)))
-    (spublish:db-do
-     configdat
-     (lambda (db)
-       (spublish:register-action db "mkdir" submitter targ-mk comment)))
-    (let* ((th1         (make-thread
-			 (lambda ()
-			   (create-directory targ-path #t)
-			   (print " ... dir " targ-path " created"))
-			 "mkdir thread"))
-	   (th2         (make-thread
-			 (lambda ()
-			   (let loop ()
-			     (thread-sleep! 15)
-			     (display ".")
-			     (flush-output)
-			     (loop)))
-			 "action is happening thread")))
-      (thread-start! th1)
-      (thread-start! th2)
-      (thread-join! th1))
-    (cons #t "Successfully saved data")))
+;(define (spublish:mkdir configdat submitter target-dir targ-mk comment)
+;  (let ((targ-path (conc target-dir "/" targ-mk)))
+;    
+;    (if (file-exists? targ-path)
+;	(begin
+;	  (print "ERROR: target Directory " targ-path " already exist!!")
+;	  (exit 1)))
+;    (spublish:db-do
+;     configdat
+;     (lambda (db)
+;       (spublish:register-action db "mkdir" submitter targ-mk comment)))
+;    (let* ((th1         (make-thread
+;			 (lambda ()
+;			   (create-directory targ-path #t)
+;			   (print " ... dir " targ-path " created"))
+;			 "mkdir thread"))
+;	   (th2         (make-thread
+;			 (lambda ()
+;			   (let loop ()
+;			     (thread-sleep! 15)
+;			     (display ".")
+;			     (flush-output)
+;			     (loop)))
+;			 "action is happening thread")))
+;      (thread-start! th1)
+;      (thread-start! th2)
+;      (thread-join! th1))
+;    (cons #t "Successfully saved data")))
 
 ;; create a symlink in dest
 ;;
-(define (spublish:ln configdat submitter target-dir targ-link link-name comment)
-  (let ((targ-path (conc target-dir "/" link-name)))
-    (if (file-exists? targ-path)
-	(begin
-	  (print "ERROR: target file " targ-path " already exist!!")
-	  (exit 1)))
-     (if (not (file-exists? targ-link ))
-	(begin
-	  (print "ERROR: target file " targ-link " does not exist!!")
-	  (exit 1)))
- 
-    (spublish:db-do
-     configdat
-     (lambda (db)
-       (spublish:register-action db "ln" submitter link-name comment)))
-    (let* ((th1         (make-thread
-			 (lambda ()
-			   (create-symbolic-link targ-link targ-path  )
-			   (print " ... link " targ-path " created"))
-			 "symlink thread"))
-	   (th2         (make-thread
-			 (lambda ()
-			   (let loop ()
-			     (thread-sleep! 15)
-			     (display ".")
-			     (flush-output)
-			     (loop)))
-			 "action is happening thread")))
-      (thread-start! th1)
-      (thread-start! th2)
-      (thread-join! th1))
-    (cons #t "Successfully saved data")))
+;(define (spublish:ln configdat submitter target-dir targ-link link-name comment)
+;  (let ((targ-path (conc target-dir "/" link-name)))
+;    (if (file-exists? targ-path)
+;	(begin
+;	  (print "ERROR: target file " targ-path " already exist!!")
+;	  (exit 1)))
+;     (if (not (file-exists? targ-link ))
+;	(begin
+;	  (print "ERROR: target file " targ-link " does not exist!!")
+;	  (exit 1)))
+; 
+;    (spublish:db-do
+;     configdat
+;     (lambda (db)
+;       (spublish:register-action db "ln" submitter link-name comment)))
+;    (let* ((th1         (make-thread
+;			 (lambda ()
+;			   (create-symbolic-link targ-link targ-path  )
+;			   (print " ... link " targ-path " created"))
+;			 "symlink thread"))
+;	   (th2         (make-thread
+;			 (lambda ()
+;			   (let loop ()
+;			     (thread-sleep! 15)
+;			     (display ".")
+;			     (flush-output)
+;			     (loop)))
+;			 "action is happening thread")))
+;      (thread-start! th1)
+;      (thread-start! th2)
+;      (thread-join! th1))
+;    (cons #t "Successfully saved data")))
 
 
 ;; remove copy of file in dest
 ;;
-(define (spublish:rm configdat submitter target-dir targ-file comment)
-  (let ((targ-path (conc target-dir "/" targ-file)))
-    (if (not (file-exists? targ-path))
-	(begin
-	  (print "ERROR: target file " targ-path " not found, nothing to remove.")
-	  (exit 1)))
-    (spublish:db-do
-     configdat
-     (lambda (db)
-       (spublish:register-action db "rm" submitter targ-file comment)))
-    (let* ((th1         (make-thread
-			 (lambda ()
-			   (delete-file targ-path)
-			   (print " ... file " targ-path " removed"))
-			 "rm thread"))
-	   (th2         (make-thread
-			 (lambda ()
-			   (let loop ()
-			     (thread-sleep! 15)
-			     (display ".")
-			     (flush-output)
-			     (loop)))
-			 "action is happening thread")))
-      (thread-start! th1)
-      (thread-start! th2)
-      (thread-join! th1))
-    (cons #t "Successfully saved data")))
+;(define (spublish:rm configdat submitter target-dir targ-file comment)
+;  (let ((targ-path (conc target-dir "/" targ-file)))
+;    (if (not (file-exists? targ-path))
+;	(begin
+;	  (print "ERROR: target file " targ-path " not found, nothing to remove.")
+;	  (exit 1)))
+;    (spublish:db-do
+;     configdat
+;     (lambda (db)
+;       (spublish:register-action db "rm" submitter targ-file comment)))
+;    (let* ((th1         (make-thread
+;			 (lambda ()
+;			   (delete-file targ-path)
+;			   (print " ... file " targ-path " removed"))
+;			 "rm thread"))
+;	   (th2         (make-thread
+;			 (lambda ()
+;			   (let loop ()
+;			     (thread-sleep! 15)
+;			     (display ".")
+;			     (flush-output)
+;			     (loop)))
+;			 "action is happening thread")))
+;      (thread-start! th1)
+;      (thread-start! th2)
+;      (thread-join! th1))
+;    (cons #t "Successfully saved data")))
 
 (define (spublish:backup-move path)
   (let* ((trashdir  (conc (pathname-directory path) "/.trash"))
@@ -338,39 +315,37 @@ Version: " megatest-fossil-hash)) ;; "
 ;; MISC
 ;;======================================================================
 
-(define (spublish:do-as-calling-user proc)
-  (let ((eid (current-effective-user-id))
-        (cid (current-user-id)))
-    (if (not (eq? eid cid)) ;; running suid
-            (set! (current-effective-user-id) cid))
-    ;; (print "running as " (current-effective-user-id))
-    (proc)
-    (if (not (eq? eid cid))
-        (set! (current-effective-user-id) eid))))
+;(define (spublish:do-as-calling-user proc)
+;  (let ((eid (current-effective-user-id))
+;        (cid (current-user-id)))
+;    (if (not (eq? eid cid)) ;; running suid
+;            (set! (current-effective-user-id) cid))
+;    ;; (print "running as " (current-effective-user-id))
+;    (proc)
+;    (if (not (eq? eid cid))
+;        (set! (current-effective-user-id) eid))))
 
-(define (spublish:find name paths)
-  (if (null? paths)
-      #f
-      (let loop ((hed (car paths))
-		 (tal (cdr paths)))
-	(if (file-exists? (conc hed "/" name))
-	    hed
-	    (if (null? tal)
-		#f
-		(loop (car tal)(cdr tal)))))))
+;(define (spublish:find name paths)
+;  (if (null? paths)
+;      #f
+;      (let loop ((hed (car paths))
+;		 (tal (cdr paths)))
+;	(if (file-exists? (conc hed "/" name))
+;	    hed
+;	    (if (null? tal)
+;		#f
+;		(loop (car tal)(cdr tal)))))))
+
 ;;========================================================================
 ;;Shell 
 ;;========================================================================
 (define (spublish:get-accessable-projects  area)
    (let* ((projects `()))
-     ;  (print "in spublish:get-accessable-projects") 
-        ;(print (spublish:has-permission area))
-        (if (spublish:has-permission area)
+            (if (spublish:has-permission area)
                (set! projects (cons area projects))
                (begin
                  (print "User cannot access area " area "!!")  
                 (exit 1))) 
-       ;  (print "exiting spublish:get-accessable-projects")
     projects))
 
 ;; function to find sheets to which use has access 
@@ -390,8 +365,7 @@ Version: " megatest-fossil-hash)) ;; "
      (set! ret-val #t))
    (else  
     (set! ret-val #f)))
-  ;  (print ret-val)
-     ret-val))
+       ret-val))
 
 (define (is_directory target-path) 
   (let* ((retval #f))
@@ -403,7 +377,9 @@ Version: " megatest-fossil-hash)) ;; "
              ;(print (current-effective-user-id))
      retval)) 
 
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; shell functions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define (spublish:shell-cp src-path target-path)  
   (cond
    ((not (file-exists? target-path))
@@ -415,7 +391,6 @@ Version: " megatest-fossil-hash)) ;; "
         (begin
             (let* ((parent-dir src-path)
                    (start-dir target-path))
-                 ;(print "parent-dir " parent-dir " start-dir " start-dir)   
                  (run (pipe
                    (begin (system (conc "cd " parent-dir " ;tar chf - ." )))
                    (begin (change-directory start-dir)
@@ -469,7 +444,6 @@ Version: " megatest-fossil-hash)) ;; "
                 (if (equal? inl "y")
 	             (let* ((th1         (make-thread
 			     (lambda ()
-                                ;(print "hi")
                                 (if (directory? targ-path)
                                  (delete-directory targ-path #t)     
 			        (delete-file  targ-path ))
@@ -608,6 +582,7 @@ Version: " megatest-fossil-hash)
                                  (if (equal? resolved-path #f)     
                                  (print "Invalid argument " mk-path ".. ")
                                   (begin 
+                                       (print "here")
                                       (spublish:shell-mkdir target-path)   
                                       (sauthorize:do-as-calling-user
                               (lambda ()
@@ -693,14 +668,14 @@ Version: " megatest-fossil-hash)
 ;; MAIN
 ;;======================================================================
 
-(define (spublish:load-config exe-dir exe-name)
-  (let* ((fname   (conc exe-dir "/." exe-name ".config")))
+;(define (spublish:load-config exe-dir exe-name)
+;  (let* ((fname   (conc exe-dir "/." exe-name ".config")))
     ;; (ini:property-separator-patt " *  *")
     ;; (ini:property-separator #\space)
-    (if (file-exists? fname)
-	;; (ini:read-ini fname)
-	(read-config fname #f #t)
-	(make-hash-table))))
+;    (if (file-exists? fname)
+;	;; (ini:read-ini fname)
+;	(read-config fname #f #t)
+;	(make-hash-table))))
 
 (define (spublish:process-action action . args)
   ;(print args)

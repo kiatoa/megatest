@@ -187,10 +187,40 @@ obj))
 (define (get-obj-by-code code )
   (let* ((obj '()))
     (sauthorize:db-do  (lambda (db)
+        (let* ((data-row (query fetch (sql db (conc "SELECT  code, exe_name,  id, basepath, required_grps  FROM  areas where areas.code = '" code "'")))))
+         (set!  obj data-row)
+        )))
+    (if (not (null? obj))
+          (begin
+          (let* ((req-grp (caddr (cddr obj))))
+            (sauthorize:do-as-calling-user
+             (lambda ()
+ (sauth-common:check-user-groups req-grp))))))
+obj))
+
+(define (sauth-common:check-user-groups req-grp)
+(let* ((current-groups  (get-groups) )
+        (req-grp-list (string-split req-grp ",")))
+        ;(print req-grp-list)
+        (for-each (lambda (grp)
+	  (let ((grp-info (group-information grp)))
+               ;(print grp-info " " grp)
+               (if (not (equal? grp-info #f))
+               (begin
+                 (if (not (member  (caddr grp-info) current-groups))
+                  (begin 
+                    (sauth:print-error (conc "Please wash " grp " group in your xterm!! " ))
+                     (exit 1)))))))
+	     req-grp-list)))
+
+(define (get-obj-by-code-no-grp-validation code )
+  (let* ((obj '()))
+    (sauthorize:db-do  (lambda (db)
         (let* ((data-row (query fetch (sql db (conc "SELECT  code, exe_name,  id, basepath  FROM  areas where areas.code = '" code "'")))))
          (set!  obj data-row))))
 ;(print obj)
 obj))
+
 
 
 
@@ -226,14 +256,17 @@ obj))
            	   (target-path (if (null? (cdr resolved-path)) 
                                      base-path 
                                      (conc base-path "/" (string-join (cdr resolved-path) "/")))))
-                   ; (print restricted-areas)     
-                    (if (and (not (equal? restricted-areas "" ))
+                    
+	              
+                           (if (and (not (equal? restricted-areas "" ))
                              (string-match (regexp  restrictions) target-path)) 
-                        (begin
-                          (print "Access denied to " (string-join resolved-path "/"))
-                          ;(exit 1)   
-                         #f)
-                                        target-path)))
+                           (begin
+                              (sauth:print-error "Access denied to " (string-join resolved-path "/"))
+                              ;(exit 1)   
+                            #f)
+                             target-path)
+                            
+))
              #f)))
 
 (define (sauth-common:shell-ls-cmd base-path-list ext-path top-areas base-path tail-cmd-list)
@@ -257,8 +290,10 @@ obj))
                   (else  
                     (run (pipe
       	      	      (ls "-lrt" ,target-path)
-                      (begin (system (string-join (cdr tail-cmd-list))))))
-      )
-)))
-))))))
+                      (begin (system (string-join (cdr tail-cmd-list))))))))))))))))
+
+(define (sauth:print-error msg)
+  (with-output-to-port (current-error-port)
+	(lambda ()
+	       (print (conc "ERROR: " msg)))))
 

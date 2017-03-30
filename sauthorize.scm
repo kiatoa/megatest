@@ -42,8 +42,8 @@
   sauth  list-area-user <area code> 			: list the users that can access the area.
   sauth open <path> --group <grpname>                      : Open up an area. User needs to be the owner of the area to open it. 
               --code <unique short identifier for an area> 
-              --retrieve|--publish 
-  sauth open <area code>  --retrieve|--publish             : update the binaries with the lates changes
+              --retrieve|--publish [--additional-grps <comma separated unix grps requierd to get to the path>]
+  sauth update <area code>  --retrieve|--publish             : update the binaries with the lates changes
   sauth grant <username> --area <area identifier>          : Grant permission to read or write to a area that is alrady opend up.    
              --expiration yyyy/mm/dd --retrieve|--publish 
              [--restrict <comma separated directory names> ]  
@@ -88,6 +88,7 @@ Version: " megatest-fossil-hash)) ;; "
           basepath     TEXT NOT NULL,
           code         TEXT NOT NULL,
           exe_name     TEXT NOT NULL,
+          required_grps TEXT DEFAULT '' NOT NULL,
           datetime     TIMESTAMP DEFAULT (datetime('now','localtime'))
           );" 
          "CREATE TABLE IF NOT EXISTS permissions
@@ -211,10 +212,10 @@ name))
 
 
 ;check if a paths/codes are vaid and if area is alrady open  
-(define (open-area group path code access-type)
+(define (open-area group path code access-type other-grps)
    (let* ((exe-name (get-exe-name path group))
            (path-obj (get-obj-by-path path))
-           (code-obj (get-obj-by-code code)))
+           (code-obj (get-obj-by-code-no-grp-validation code)))
            ;(print path-obj)   
           (cond
             ((not (null? path-obj))
@@ -246,8 +247,8 @@ name))
                 (if (not (exe-exist exe-name  access-type))
                         (copy-exe access-type exe-name group))
                 (sauthorize:db-do   (lambda (db)
-                ;(print (conc "insert into areas (code, basepath, exe_name) values ('" code "', '" path "', '" exe-name "') ")) 
-             (sauthorize:db-qry db (conc "insert into areas (code, basepath, exe_name) values ('" code "', '" path "', '" exe-name "') "))))))))
+               (print conc "insert into areas (code, basepath, exe_name, required_grps) values ('" code "', '" path "', '" exe-name "', '" other-grps "') ") 
+             (sauthorize:db-qry db (conc "insert into areas (code, basepath, exe_name, required_grps) values ('" code "', '" path "', '" exe-name "', '" other-grps "') "))))))))
 
 (define (user-has-open-perm user path access)
   (let* ((has-access #f)
@@ -275,7 +276,7 @@ name))
 		  	(loop (car tal)(cdr tal))))))
 
 ;create executables with appropriate suids
-(define (sauthorize:open user path group code access-type)
+(define (sauthorize:open user path group code access-type other-groups)
    (let* ((gpid (group-information group))
          (req_grpid (if (equal? group "none")
                       group 
@@ -297,7 +298,7 @@ name))
    (if (user-has-open-perm user path access-type)
       (begin 
        ;(print "here")   
-       (open-area group path code access-type)
+       (open-area group path code access-type other-groups)
        (sauthorize:grant user user code "2017/12/25"  "read-admin" "") 
        (sauthorize:db-do   (lambda (db)
              (sauthorize:db-qry db (conc "INSERT INTO actions (cmd,user_id,area_id,action_type ) VALUES ('sauthorize open " path " --code " code " --group " group " --" access-type "'," (car (get-user user)) "," (car (get-area code)) ", 'open' )"))))
@@ -454,9 +455,11 @@ name))
                    (not (exe-exist (cadr code-obj)  "publish")))
               (begin
               (print "Area " area " is not open for writing!!")
-              (exit 1))) 
+              (exit 1)))
+              ;(print "hear") 
               (sauthorize:do-as-calling-user
              (lambda ()
+               ; (print  *exe-path* "/publish/" (cadr code-obj) action area cmd-args  )
                 (run-cmd (conc *exe-path* "/publish/" (cadr code-obj) ) (append (list action area ) cmd-args))))))
       
      ((retrieve)
@@ -473,6 +476,7 @@ name))
               (begin
               (print "Area " area " is not open for reading!!")
               (exit 1))) 
+               (print (conc *exe-path* "/retrieve/" (cadr code-obj) " " action " " area " " (string-join cmd-args)))
               (sauthorize:do-as-calling-user
              (lambda ()
                 (run-cmd (conc *exe-path* "/retrieve/" (cadr code-obj) ) (append (list action area ) cmd-args))))))
@@ -484,11 +488,13 @@ name))
               (begin
               (print "sauthorize open cmd takes 6 arguments!! \n Useage: sauthorize open <path> --group <grpname> --code <unique short identifier for an area> --retrieve|--publish") 
               (exit 1)))
-         (let* ((remargs     (args:get-args args '("--group" "--code") '() args:arg-hash 0))
+         (let* ((remargs     (args:get-args args '("--group" "--code" "--additional-grps") '() args:arg-hash 0))
               (path     (car args))
 	      (group         (or (args:get-arg "--group") ""))
-              (area         (or (args:get-arg "--code") ""))  
+              (area         (or (args:get-arg "--code") ""))
+              (other-grps          (or (args:get-arg "--additional-grps") ""))     
               (access-type (get-access-type remargs)))
+                
               (cond
                 ((equal? path "")
                   (print "path not found!! Try \"sauthorize help\" for useage ")
@@ -503,8 +509,8 @@ name))
                   (not (equal? access-type "retrieve")))
                   (print "Access type can be eiter --retrieve or --publish !! Try \"sauthorize help\" for useage ")
                   (exit 1)))
-                  
-                (sauthorize:open username path group area access-type)))
+                ; (print other-grps) 
+                (sauthorize:open username path group area access-type other-grps)))
          ((update)
             (if (< (length args) 2)
               (begin
