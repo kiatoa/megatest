@@ -675,6 +675,9 @@
 (define (rmt:get-var varname)
   (rmt:send-receive 'get-var #f (list varname)))
 
+(define (rmt:del-var varname)
+  (rmt:send-receive 'del-var #f (list varname)))
+
 (define (rmt:set-var varname value)
   (rmt:send-receive 'set-var #f (list varname value)))
 
