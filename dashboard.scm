@@ -2725,7 +2725,7 @@ Misc
   
 (define *tim* (iup:timer))
 (define *ord* #f)
-(iup:attribute-set! *tim* "TIME" 300 )
+(iup:attribute-set! *tim* "TIME" (or (configf:lookup *configdat* "dashboard" "poll-interval") "1000"))
 (iup:attribute-set! *tim* "RUN" "YES")
 
 (define *last-recalc-ended-time* 0)
