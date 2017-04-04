@@ -212,6 +212,7 @@
 
 (define (db:lock-create-open fname initproc)
   (let* ((parent-dir   (or (pathname-directory fname)(current-directory))) ;; no parent? go local
+         (raw-fname    (pathname-file fname))
 	 (dir-writable (file-write-access? parent-dir))
 	 (file-exists  (file-exists? fname))
 	 (file-write   (if file-exists
@@ -220,34 +221,48 @@
     ;;(mutex-lock! *db-open-mutex*) ;; tried this mutex, not clear it helped.
     (if file-write ;; dir-writable
 	(condition-case
-	    (let ((db      (sqlite3:open-database fname)))
-	      (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-	      (sqlite3:execute db "PRAGMA synchronous = 0;")
-	      (if (not file-exists)
-		  (begin
-		    (if (and (configf:lookup *configdat* "setup" "use-wal")
-			     (string-match "^/tmp/.*" fname)) ;; this is a file in /tmp
-			(sqlite3:execute db "PRAGMA journal_mode=WAL;")
-			(print "Creating " fname " in NON-WAL mode."))
-		    (initproc db)))
-	      db)
-	  (exn (io-error)  (debug:print 0 *default-log-port* "ERROR: i/o error with " fname ". Check permissions, disk space etc. and try again."))
-	  (exn (corrupt)   (debug:print 0 *default-log-port* "ERROR: database " fname " is corrupt. Repair it to proceed."))
-	  (exn (busy)      (debug:print 0 *default-log-port* "ERROR: database " fname " is locked. Try copying to another location, remove original and copy back."))
-	  (exn (permission)(debug:print 0 *default-log-port* "ERROR: database " fname " has some permissions problem."))
-	  (exn () (debug:print 0 *default-log-port* "ERROR: Unknown error with database " fname " message: " ((condition-property-accessor 'exn 'message) exn))))
-
+         (let* ((lockfname   (conc fname ".lock"))
+                (readyfname  (conc parent-dir "/.ready-" raw-fname))
+                (readyexists (file-exists? readyfname)))
+           (if (not readyexists)
+               (common:simple-file-lock-and-wait lockfname))
+           (let ((db      (sqlite3:open-database fname)))
+             (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
+             (sqlite3:execute db "PRAGMA synchronous = 0;")
+             (if (not file-exists)
+                 (begin
+                   (if (and (configf:lookup *configdat* "setup" "use-wal")
+                            (string-match "^/tmp/.*" fname)) ;; this is a file in /tmp
+                       (sqlite3:execute db "PRAGMA journal_mode=WAL;")
+                       (print "Creating " fname " in NON-WAL mode."))
+                   (initproc db)))
+             (if (not readyexists)
+                 (begin
+                   (common:simple-file-release-lock lockfname)
+                   (with-output-to-file
+                       readyfname
+                     (lambda ()
+                       (print "Ready at " 
+                              (seconds->year-work-week/day-time 
+                               (current-seconds)))))))
+             db))
+         (exn (io-error)  (debug:print 0 *default-log-port* "ERROR: i/o error with " fname ". Check permissions, disk space etc. and try again."))
+         (exn (corrupt)   (debug:print 0 *default-log-port* "ERROR: database " fname " is corrupt. Repair it to proceed."))
+         (exn (busy)      (debug:print 0 *default-log-port* "ERROR: database " fname " is locked. Try copying to another location, remove original and copy back."))
+         (exn (permission)(debug:print 0 *default-log-port* "ERROR: database " fname " has some permissions problem."))
+         (exn () (debug:print 0 *default-log-port* "ERROR: Unknown error with database " fname " message: " ((condition-property-accessor 'exn 'message) exn))))
+        
 	(condition-case
-	    (begin
-	      (debug:print 2 *default-log-port* "WARNING: opening db in non-writable dir " fname)
-	      (let ((db (sqlite3:open-database fname)))
-		;;(mutex-unlock! *db-open-mutex*)
-		db))
-	  (exn (io-error)  (debug:print 0 *default-log-port* "ERROR: i/o error with " fname ". Check permissions, disk space etc. and try again."))
-	  (exn (corrupt)   (debug:print 0 *default-log-port* "ERROR: database " fname " is corrupt. Repair it to proceed."))
-	  (exn (busy)      (debug:print 0 *default-log-port* "ERROR: database " fname " is locked. Try copying to another location, remove original and copy back."))
-	  (exn (permission)(debug:print 0 *default-log-port* "ERROR: database " fname " has some permissions problem."))
-	  (exn () (debug:print 0 *default-log-port* "ERROR: Unknown error with database " fname " message: " ((condition-property-accessor 'exn 'message) exn))))
+         (begin
+           (debug:print 2 *default-log-port* "WARNING: opening db in non-writable dir " fname)
+           (let ((db (sqlite3:open-database fname)))
+             ;;(mutex-unlock! *db-open-mutex*)
+             db))
+         (exn (io-error)  (debug:print 0 *default-log-port* "ERROR: i/o error with " fname ". Check permissions, disk space etc. and try again."))
+         (exn (corrupt)   (debug:print 0 *default-log-port* "ERROR: database " fname " is corrupt. Repair it to proceed."))
+         (exn (busy)      (debug:print 0 *default-log-port* "ERROR: database " fname " is locked. Try copying to another location, remove original and copy back."))
+         (exn (permission)(debug:print 0 *default-log-port* "ERROR: database " fname " has some permissions problem."))
+         (exn () (debug:print 0 *default-log-port* "ERROR: Unknown error with database " fname " message: " ((condition-property-accessor 'exn 'message) exn))))
 	)))
 
 
