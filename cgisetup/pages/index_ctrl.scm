@@ -28,6 +28,7 @@
 
 <link rel="stylesheet" type="text/css" href="/css/kickstart.css" media="all" />                  <!-- KICKSTART -->
 <link rel="stylesheet" type="text/css" href="/style.css" media="all" />                          <!-- CUSTOM STYLES -->
+<link rel="stylesheet" type="text/css" href="/css/pjhatwal-modal.css" media="all" />             <!-- Modal -->
 
 <link rel="icon" type="image/x-icon" href="/favicon.ico" />
 <style type="text/css">
@@ -35,6 +36,13 @@
         /* border:1px solid red; */
         padding:0px;
      }
+     a.white{
+        color:white;
+    }
+    th.heading{
+       text-align:-webkit-center;
+       background:rgba(0, 0, 0, 0.21);  
+    }
 
 </style>
 EOF
@@ -58,6 +66,7 @@ EOF
 #<<EOF
 <script type="text/javascript" src="/js/prettify.js"></script>                                   <!-- PRETTIFY -->
 <script type="text/javascript" src="/js/kickstart.js"></script>                                  <!-- KICKSTART -->
+<script type="text/javascript" src="/js/pjhatwal-modal.js "></script>                          <!-- Modal -->
 EOF
 )
 

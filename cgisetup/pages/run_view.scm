@@ -17,8 +17,9 @@
          (target (if (equal? target1 #f)
                      "%"
                     (string-substitute  "_x_"  "/" target1 'all)     
-                    )) 
-         (run-filter (or (s:get "run-name-filter") "%"))  
+                    ))
+         
+         (run-filter (or (or (s:get "run-name-filter") (s:get-param 'run)) "%"))  
          (runs (pgdb:get-runs-by-target dbh target run-filter))
          (ordered-runs (pgdb:runs-to-hash runs)))
    
@@ -66,7 +67,7 @@
                                                       "green"
                                                       "red")))
 				       (s:td 'style (conc "background: " bg )
-					     (s:a 'href (s:link-to "log" 'testid test-id)
+					     (s:a 'class "white" 'href (s:link-to "log" 'testid test-id)
 						  result)))
 				     (s:td ""))))
 			     a-keys)))
