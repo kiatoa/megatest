@@ -616,12 +616,8 @@
 	 (runinf  (hash-table-ref/default runs-ht run-id #f)))
     (if runinf
 	runinf ;; already cached
-	(let* ((keytarg    (string-intersperse (rmt:get-keys) "/")) ;; e.g. version/iteration/platform
-	       (spec-id    (pgdb:get-ttype dbh keytarg))
-	       (target     (if (and (args:get-arg "-sync-to") (args:get-arg "-prefix-target")) (set! target (conc (args:get-arg "-prefix-target") (rmt:get-target run-id))) (rmt:get-target run-id)))                 ;; e.g. v1.63/a3e1/ubuntu
-	       (run-dat    (rmt:get-run-info run-id))               ;; NOTE: get-run-info returns a vector < row header >
+	(let* ((run-dat    (rmt:get-run-info run-id))               ;; NOTE: get-run-info returns a vector < row header >
 	       (run-name   (rmt:get-run-name-from-id run-id))
-	       (new-run-id (pgdb:get-run-id dbh spec-id target run-name))
 	       (row        (db:get-rows run-dat))                   ;; yes, this returns a single row
 	       (header     (db:get-header run-dat))
 	       (state      (db:get-value-by-header row header "state "))
@@ -631,6 +627,14 @@
 	       (comment    (db:get-value-by-header row header "comment"))
 	       (fail-count (db:get-value-by-header row header "fail_count"))
 	       (pass-count (db:get-value-by-header row header "pass_count"))
+	       (contour    (db:get-value-by-header row header "contour"))
+	       (keytarg    (if (and (args:get-arg "-sync-to") (args:get-arg "-prepend-contour")) (conc "MT_CONTOUR/MT_AREA/" (string-intersperse (rmt:get-keys) "/")) (string-intersperse (rmt:get-keys) "/"))) ;; e.g. version/iteration/platform
+	       (target     (if (and (args:get-arg "-sync-to") (args:get-arg "-prepend-contour")) (conc contour "/" (common:get-area-name) "/" (rmt:get-target run-id)) (rmt:get-target run-id)))                 ;; e.g. v1.63/a3e1/ubuntu
+	       (spec-id    (pgdb:get-ttype dbh keytarg))
+	       (new-run-id (pgdb:get-run-id dbh spec-id target run-name))
+
+
+
 	       ;; (area-id    (db:get-value-by-header row header "area_id)"))
 	       )
 	  (if new-run-id
