@@ -301,12 +301,12 @@
         (let* ((dbpath       (db:dbfile-path ))      ;; path to tmp db area
                (dbexists     (file-exists? dbpath))
 	       (tmpdbfname   (conc dbpath "/megatest.db"))
-	       (dbfexists    (file-exists? tmpdbfname)) ;; (conc dbpath "/megatest.db")))
-               (tmpdb        (db:open-megatest-db path: dbpath)) ;; lock-create-open dbpath db:initialize-main-db))
+	       (dbfexists    (file-exists? tmpdbfname))  ;; (conc dbpath "/megatest.db")))
                (mtdbexists   (file-exists? (conc *toppath* "/megatest.db")))
+               
                (mtdb         (db:open-megatest-db))
                (mtdbpath     (db:dbdat-get-path mtdb))
-               
+               (tmpdb        (db:open-megatest-db path: dbpath)) ;; lock-create-open dbpath db:initialize-main-db))
                (refndb       (db:open-megatest-db path: dbpath name: "megatest_ref.db"))
                (write-access (file-write-access? mtdbpath))
 	       (mtdbmodtime  (if mtdbexists (common:lazy-sqlite-db-modification-time mtdbpath)   #f))
@@ -372,7 +372,8 @@
 	 (db           (db:lock-create-open dbpath
 					    (lambda (db)
                                               (db:initialize-main-db db)
-					      (db:initialize-run-id-db db))))
+					      ;;(db:initialize-run-id-db db)
+					      )))
 	 (write-access (file-write-access? dbpath)))
     (debug:print-info 13 *default-log-port* "db:open-megatest-db "dbpath)
     (if (and dbexists (not write-access))
@@ -1202,17 +1203,17 @@
        ;; Must do this *after* running patch db !! No more. 
        ;; cannot use db:set-var since it will deadlock, hardwire the code here
        (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" "MEGATEST_VERSION" (common:version-signature))
-       (debug:print-info 11 *default-log-port* "db:initialize END")))))
+       (debug:print-info 11 *default-log-port* "db:initialize END") ;; ))))
 
-;;======================================================================
-;; R U N   S P E C I F I C   D B 
-;;======================================================================
-
-(define (db:initialize-run-id-db db)
-  (sqlite3:with-transaction 
-   db
-   (lambda ()
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tests 
+       ;;======================================================================
+       ;; R U N   S P E C I F I C   D B 
+       ;;======================================================================
+       
+       ;; (define (db:initialize-run-id-db db)
+       ;;   (sqlite3:with-transaction 
+       ;;    db
+       ;;    (lambda ()
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tests 
                     (id INTEGER PRIMARY KEY,
                      run_id       INTEGER   DEFAULT -1,
                      testname     TEXT      DEFAULT 'noname',
@@ -1236,14 +1237,14 @@
                      archived     INTEGER   DEFAULT 0, -- 0=no, > 1=archive block id where test data can be found
                      last_update  INTEGER DEFAULT (strftime('%s','now')),
                         CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path));")
-     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path, uname);")
-     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_tests_trigger AFTER UPDATE ON tests
+       (sqlite3:execute db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path, uname);")
+       (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_tests_trigger AFTER UPDATE ON tests
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE tests SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
                               (id INTEGER PRIMARY KEY,
                                test_id INTEGER, 
                                stepname TEXT, 
@@ -1254,14 +1255,14 @@
                                logfile TEXT DEFAULT '',
                                last_update  INTEGER DEFAULT (strftime('%s','now')),
                                CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
-     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS teststeps_index ON tests (run_id, testname, item_path);")
-     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_teststeps_trigger AFTER UPDATE ON test_steps
+       (sqlite3:execute db "CREATE INDEX IF NOT EXISTS teststeps_index ON tests (run_id, testname, item_path);")
+       (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_teststeps_trigger AFTER UPDATE ON test_steps
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE test_steps SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
                                 test_id INTEGER,
                                 category TEXT DEFAULT '',
                                 variable TEXT,
@@ -1274,14 +1275,14 @@
                                 type TEXT DEFAULT '',
                                 last_update  INTEGER DEFAULT (strftime('%s','now')),
                               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
-     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS test_data_index ON test_data (test_id);")
-     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_test_data_trigger AFTER UPDATE ON test_data
+       (sqlite3:execute db "CREATE INDEX IF NOT EXISTS test_data_index ON test_data (test_id);")
+       (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_test_data_trigger AFTER UPDATE ON test_data
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE test_data SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_rundat (
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_rundat (
                               id           INTEGER PRIMARY KEY,
                               test_id      INTEGER,
                               update_time  TIMESTAMP,
@@ -1289,7 +1290,7 @@
                               diskfree     INTEGER DEFAULT -1,
                               diskusage    INTGER DEFAULT -1,
                               run_duration INTEGER DEFAULT 0);")
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archives (
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archives (
                               id           INTEGER PRIMARY KEY,
                               test_id      INTEGER,
                               state        TEXT DEFAULT 'new',
@@ -1297,7 +1298,7 @@
                               archive_type TEXT DEFAULT 'bup',
                               du           INTEGER,
                               archive_path TEXT);")))
-  db)
+    db))
 
 ;;======================================================================
 ;; A R C H I V E S

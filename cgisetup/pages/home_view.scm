@@ -12,7 +12,7 @@
 (define (pages:home session db shared)
   (let* ((dbh         (s:db))
 	 (ttypes      (pgdb:get-target-types dbh))
-	 (selected    (string->number (or (s:get "target-type") "0")))
+	 (selected    (string->number (or (s:get "target-type") "-1")))
 	 (curr-trec   (filter (lambda (x)(eq? selected (vector-ref x 0))) ttypes))
 	 (curr-ttype  (if (and selected
 			       (not (null? curr-trec)))
@@ -23,8 +23,11 @@
 	 ;; (target      (s:session-var-get "target"))
 	 ;; (target-patt (or target "%"))
 	 (row-or-col  (string-split (or (s:get "row-or-col") "") ","))
-	 (all-data    (if selected (pgdb:get-stats-given-target dbh selected tfilter)
-			  '()))
+	 (all-data    (if (and selected
+			       (not (eq? selected -1)))
+			  (pgdb:get-stats-given-type-target dbh selected tfilter)
+			  (pgdb:get-stats-given-target dbh tfilter)
+			  ))
 	 ;; (all-data    (pgdb:get-tests dbh tfilter))
 	 (ordered-data (pgdb:coalesce-runs dbh all-data all-parts row-or-col 0)))
     
@@ -32,16 +35,18 @@
 	   (s:fieldset
 	    "Area type and target filter"
 	    (s:form
-	     'action "home.filter" 'method "get"
+	     'action "home.filter" 'method "post"
 	     (s:div 'class "col_12"
 		    (s:div 'class "col_6"
 			   (s:select (map (lambda (x)
-					    (let ((tt-id (vector-ref x 0))
-						  (ttype (vector-ref x 1)))
-					      (if (eq? tt-id selected)
-						  (list ttype tt-id ttype #t)
-						  (list ttype tt-id ttype #f))))
-					  ttypes)
+					    (if x
+						(let ((tt-id (vector-ref x 0))
+						      (ttype (vector-ref x 1)))
+						  (if (eq? tt-id selected)
+						      (list ttype tt-id ttype #t)
+						      (list ttype tt-id ttype #f)))
+						(list "all" -1 "all" (eq? selected -1))))
+					  (cons #f ttypes))
 				     'name 'target-type))
 		    (s:div 'class "col_4"
 			   (s:input-preserve 'name "tfilter" 'placeholder "Filter targets"))

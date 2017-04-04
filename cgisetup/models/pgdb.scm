@@ -169,7 +169,7 @@
      FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
       WHERE r.target LIKE ?;" target-patt))
 
-(define (pgdb:get-stats-given-target dbh ttype-id target-patt)
+(define (pgdb:get-stats-given-type-target dbh ttype-id target-patt)
   (dbi:get-rows
    dbh
    ;;    "SELECT COUNT(t.id),t.status,r.target FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
@@ -181,6 +181,19 @@
             FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
             WHERE t.state='COMPLETED' AND ttype_id=? AND r.target LIKE ? GROUP BY r.target;"
    ttype-id target-patt))
+
+(define (pgdb:get-stats-given-target dbh target-patt)
+  (dbi:get-rows
+   dbh
+   ;;    "SELECT COUNT(t.id),t.status,r.target FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+   ;;         WHERE t.state='COMPLETED' AND ttype_id=? AND r.target LIKE ? GROUP BY r.target,t.status;"
+   "SELECT r.target,COUNT(*) AS total,
+                    SUM(CASE WHEN t.status='PASS' THEN 1 ELSE 0 END) AS pass,
+                    SUM(CASE WHEN t.status='FAIL' THEN 1 ELSE 0 END) AS fail,
+                    SUM(CASE WHEN t.status IN ('PASS','FAIL') THEN 0 ELSE 1 END) AS other
+            FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+            WHERE t.state='COMPLETED' AND r.target LIKE ? GROUP BY r.target;"
+   target-patt))
 
 (define (pgdb:get-target-types dbh)
   (dbi:get-rows dbh "SELECT id,target_spec FROM ttype;"))

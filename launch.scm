@@ -808,8 +808,10 @@
 	(mutex-unlock! *launch-setup-mutex*)
 	res)))
 
-(define (launch:setup-body #!key (force #f) (areapath #f))
-  (if (and (eq? *configstatus* 'fulldata) *toppath*) ;; no need to reprocess
+(define (launch:setup-body #!key (force-reread #f) (areapath #f))
+  (if (and (eq? *configstatus* 'fulldata)
+	   *toppath*
+	   (not force-reread)) ;; no need to reprocess
       *toppath*   ;; return toppath
       (let* ((use-cache (common:use-cache?))
 	     (toppath  (or *toppath* areapath (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
