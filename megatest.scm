@@ -284,12 +284,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-sort"
 			"-target-db"
 			"-source-db"
+			"-prefix-target"
 
                         "-src-target"
                         "-src-runname"
                         "-diff-email"
-			"-sync-to"
-			"-prefix-target"			
+			"-sync-to"			
 			"-pgsync"
                         "-diff-html"
 			)
@@ -313,6 +313,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-no-cache"
 			"-cache-db"
                         "-use-db-cache"
+                        "-prepend-contour"
 			;; misc
 			"-repl"
 			"-lock"
