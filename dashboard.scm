@@ -152,10 +152,15 @@ Misc
 ;; RA => returns the tabdat stored at hashkey passed in commondat-tabdats table (e.g. 0 gives summary)
 ;;
 (define (dboard:common-get-tabdat commondat #!key (tab-num #f))
-  (hash-table-ref/default 
-   (dboard:commondat-tabdats commondat)
-   (or tab-num (dboard:commondat-curr-tab-num commondat)) ;; tab-num value is curr-tab-num value in passed commondat
-   #f))
+  (let* ((tnum (or tab-num
+		   (dboard:commondat-curr-tab-num commondat)
+		   0)) ;; tab-num value is curr-tab-num value in passed commondat
+	 (ht   (dboard:commondat-tabdats commondat))
+	 (res  (hash-table-ref/default ht tnum #f)))
+    (or res
+	(let ((new-tabdat  (dboard:tabdat-make-data)))
+	  (hash-table-set! ht tnum new-tabdat)
+	  new-tabdat))))
 
 ;; RA => sets the tabdat passed to the hashkey at commondat:tabdats hash table
 ;;
@@ -1936,16 +1941,16 @@ Misc
 					   (print-call-chain)
 					   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 					   (debug:print 0 *default-log-port* "ERROR: failed call procedure \"" updater
-							"\", with; tabnum=" tabnum ", view-name=" view-name
+							"\", with; tabnum=" tab-num ", view-name=" view-name
 							", and views-cfgdat and megatest configdat as parameters. To debug try loading in the repl: megatest -repl")
 					   (set! success #f))
 					 (debug:print 4 *default-log-port* "Running updater for tab " view-name " with proc " updater " and tab-num: " tab-num)
 					 ((eval (string->symbol updater)) commondat tabs tab-num view-name views-cfgdat *configdat*)))
 				      tab-num: tab-num))
-    (if success
-	(begin
-	  ;; (iup:attribute-set! tabs (conc "TABTITLE" tab-num) view-name)
-	  (dboard:common-set-tabdat! commondat tab-num (dboard:tabdat-make-data))))
+    ;;(if success
+    ;;	(begin
+    ;;	  ;; (iup:attribute-set! tabs (conc "TABTITLE" tab-num) view-name)
+    ;;	  (dboard:common-set-tabdat! commondat tab-num (dboard:tabdat-make-data))))
     result-child))
 
 

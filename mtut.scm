@@ -30,10 +30,6 @@
 (define *target-mappers*  (make-hash-table)) ;; '())
 (define *runname-mappers* (make-hash-table)) ;; '())
 
-(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.mtutilrc")))
-  (if (file-exists? debugcontrolf)
-      (load debugcontrolf)))
-
 ;; this needs some thought regarding security implications.
 ;;
 ;;   i. Check that owner of the file and calling user are same?
@@ -395,7 +391,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		     ((number? sched-in) sched-in)
 		     (else     (current-seconds))))
 	 (args-data (if args-alist
-			args-alist
+			(if (hash-table? args-alist) ;; seriously?
+			    (hash-table->alist args-alist)
+			    args-alist)
 			(hash-table->alist args:arg-hash))) ;; if no args-alist then we assume this is a call driven directly by commandline
 	 (alldat    (apply append (list 'T "cmd"
 					'a action
@@ -885,6 +883,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(pktsdir   (if pktsdirs (car (string-split pktsdirs " ")) #f)))
     pktsdir))
 
+(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.mtutilrc")))
+  (if (file-exists? debugcontrolf)
+      (load debugcontrolf)))
+
 (if *action*
     (case (string->symbol *action*)
       ((run remove rerun set-ss archive kill)
@@ -939,7 +941,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (stml:main #f)
       (exit)))
-
 
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
