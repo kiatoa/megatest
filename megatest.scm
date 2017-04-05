@@ -284,6 +284,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-sort"
 			"-target-db"
 			"-source-db"
+			"-prefix-target"
 
                         "-src-target"
                         "-src-runname"

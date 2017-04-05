@@ -627,9 +627,11 @@
 	       (comment    (db:get-value-by-header row header "comment"))
 	       (fail-count (db:get-value-by-header row header "fail_count"))
 	       (pass-count (db:get-value-by-header row header "pass_count"))
-	       (contour    (db:get-value-by-header row header "contour"))
-	       (keytarg    (if (and (args:get-arg "-sync-to") (args:get-arg "-prepend-contour")) (conc "MT_CONTOUR/MT_AREA/" (string-intersperse (rmt:get-keys) "/")) (string-intersperse (rmt:get-keys) "/"))) ;; e.g. version/iteration/platform
-	       (target     (if (and (args:get-arg "-sync-to") (args:get-arg "-prepend-contour")) (conc contour "/" (common:get-area-name) "/" (rmt:get-target run-id)) (rmt:get-target run-id)))                 ;; e.g. v1.63/a3e1/ubuntu
+	       (contour    (if (args:get-arg "-prepend-contour") (db:get-value-by-header row header "contour")))
+	       (keytarg    (if (or (args:get-arg "-prepend-contour") (args:get-arg "-prefix-target"))
+	       			(conc "MT_CONTOUR/MT_AREA/" (string-intersperse (rmt:get-keys) "/")) (string-intersperse (rmt:get-keys) "/"))) ;; e.g. version/iteration/platform
+	       (target     (if (or (args:get-arg "-prepend-contour") (args:get-arg "-prefix-target")) 
+	       			(conc (or (args:get-arg "-prefix-target") (conc contour "/" (common:get-area-name) "/")) (rmt:get-target run-id)) (rmt:get-target run-id)))                 ;; e.g. v1.63/a3e1/ubuntu
 	       (spec-id    (pgdb:get-ttype dbh keytarg))
 	       (new-run-id (pgdb:get-run-id dbh spec-id target run-name))
 
