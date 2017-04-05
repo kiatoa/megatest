@@ -76,16 +76,10 @@
 	    ;;
 	    ;; A very basic display
 	    ;;
-            	    (let* ((a-keys (sort (hash-table-keys ordered-data) string>=?))
-		   (b-keys (delete-duplicates(sort (apply
-				  append
-				  (map (lambda (sub-key)
-					 (let ((subdat (hash-table-ref ordered-data sub-key)))
-					   (hash-table-keys subdat)))
-				       a-keys))
-				 string>=?))))
-                  ; (c-keys (delete-duplicates b-keys)))
-               	      (if #f ;; swap rows/cols
+	    (let* ((a-keys (pgdb:ordered-data->a-keys ordered-data))
+		   (b-keys (pgdb:ordered-data->b-keys ordered-data a-keys)))
+	      ;; (c-keys (delete-duplicates b-keys)))
+	      (if #f ;; swap rows/cols
 		  (s:table
 		   (s:tr (s:td "")(map s:tr b-keys))
 		   (map
@@ -100,7 +94,7 @@
 						   "")))))
 			       b-keys))))
 		    a-keys))
-               
+		  
 		  (s:table
 		   (s:tr (s:td "")(map s:td a-keys))
 		   (map
