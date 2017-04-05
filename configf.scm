@@ -66,7 +66,7 @@
 ;;======================================================================
 
 (define configf:include-rx (regexp "^\\[include\\s+(.*)\\]\\s*$"))
-(define configf:script-rx  (regexp "^\\[scriptinc\\s+(.*)\\]\\s*$")) ;; include output from a script
+(define configf:script-rx  (regexp "^\\[scriptinc\\s+(\\S+)([^\\]]*)\\]\\s*$")) ;; include output from a script
 (define configf:section-rx (regexp "^\\[(.*)\\]\\s*$"))
 (define configf:blank-l-rx (regexp "^\\s*$"))
 (define configf:key-sys-pr (regexp "^(\\S+)\\s+\\[system\\s+(\\S+.*)\\]\\s*$"))
@@ -294,13 +294,13 @@
 							      (debug:print '(2 9) #f "INFO: include file " include-file " not found (called from " path ")")
 							      (debug:print 2 *default-log-port* "        " full-conf)
 							      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f)))))
-	       (configf:script-rx ( x include-script );; handle-exceptions
-						      ;;    exn
-						      ;;    (begin
-						      ;;      (debug:print '(0 2 9) #f "INFO: include from script " include-script " failed.")
-						      ;;      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
+	       (configf:script-rx ( x include-script params);; handle-exceptions
+                                  ;;    exn
+                                  ;;    (begin
+                                  ;;      (debug:print '(0 2 9) #f "INFO: include from script " include-script " failed.")
+                                  ;;      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
 							 (if (and (file-exists? include-script)(file-execute-access? include-script))
-							     (let* ((new-inp-port (open-input-pipe include-script)))
+							     (let* ((new-inp-port (open-input-pipe (conc include-script " " params))))
 							       (debug:print '(2 9) *default-log-port* "Including from script output: " include-script)
 							      ;;  (print "We got here, calling read-config next. Port is: " new-inp-port)
 							       (read-config new-inp-port res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections settings: settings keep-filenames: keep-filenames)
