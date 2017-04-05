@@ -2256,7 +2256,7 @@
   ;;    (hash-table-ref *run-info-cache* run-id)
   (let* ((res       (vector #f #f #f #f))
 	 (keys      (db:get-keys dbstruct))
-	 (remfields (list "id" "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count")) ;;  "area_id"))
+	 (remfields (list "id" "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count" "contour")) ;;  "area_id"))
 	 (header    (append keys remfields))
 	 (keystr    (conc (keys->keystr keys) ","
 			  (string-intersperse remfields ","))))
