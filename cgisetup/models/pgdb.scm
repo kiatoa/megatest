@@ -27,8 +27,13 @@
 
 ;; given a configdat lookup the connection info and open the db
 ;;
-(define (pgdb:open configdat #!key (dbname #f))  
-  (let ((pgconf (or (args:get-arg "-pgsync") (configf:lookup configdat "ext-sync" (or dbname "pgdb")))))
+(define (pgdb:open configdat #!key (dbname #f)(dbispec #f))  
+  (let ((pgconf (or dbispec
+		    (args:get-arg "-pgsync")
+		    (if configdat
+			(configf:lookup configdat "ext-sync" (or dbname "pgdb"))
+			#f)
+		    )))
     (if pgconf
 	(let* ((confdat (map (lambda (conf-item)
 			       (let ((parts (string-split conf-item ":")))
@@ -254,6 +259,23 @@
 	 (hash-table-set! coldat rest run)))
      runs)
     data))
+
+;; given ordered data hash return a-keys
+;;
+(define (pgdb:ordered-data->a-keys ordered-data)
+  (sort (hash-table-keys ordered-data) string>=?))
+
+;; given ordered data hash return b-keys
+;;
+(define (pgdb:ordered-data->b-keys ordered-data a-keys)
+  (delete-duplicates
+   (sort (apply
+	  append
+	  (map (lambda (sub-key)
+		 (let ((subdat (hash-table-ref ordered-data sub-key)))
+		   (hash-table-keys subdat)))
+	       a-keys))
+	 string>=?)))
 
 (define (pgdb:runs-to-hash runs )
   (let* ((data  (make-hash-table)))
