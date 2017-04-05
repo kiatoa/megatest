@@ -3336,22 +3336,26 @@
                                                                          (not (member (dbr:counts-status x)
                                                                                       *common:not-started-ok-statuses*))))
 								  state-status-counts)))
-                            (all-curr-states   (common:special-sort  ;; worst -> best (sort of)
-                                                (delete-duplicates
-                                                 (cons state (map dbr:counts-state state-status-counts)))
-                                                *common:std-states* >))
-                            (all-curr-statuses (common:special-sort  ;; worst -> best
-                                                (delete-duplicates
-                                                 (cons status (map dbr:counts-status state-status-counts)))
-                                                *common:std-statuses* >))
-                            (newstate          (if (> running 0)
-                                                   "RUNNING"
-                                                   (if (> bad-not-started 0)
-                                                       "COMPLETED"
-                                                       (car all-curr-states))))
-                            (newstatus         (if (> bad-not-started 0)
-                                                   "CHECK"
-                                                   (car all-curr-statuses))))
+                            ;; (non-completes        (filter (lambda (x)
+                            ;;                                 (not (equal? (dbr:counts-state x) "COMPLETED")))
+                            ;;                               state-status-counts))
+                            (all-curr-states      (common:special-sort  ;; worst -> best (sort of)
+                                                   (delete-duplicates
+                                                    (cons state (map dbr:counts-state state-status-counts)))
+                                                   *common:std-states* >))
+                            (all-curr-statuses    (common:special-sort  ;; worst -> best
+                                                   (delete-duplicates
+                                                    (cons status (map dbr:counts-status state-status-counts)))
+                                                   *common:std-statuses* >))
+                            (newstate             (if (> running 0)
+                                                      "RUNNING"
+                                                      (if (> bad-not-started 0)
+                                                          "COMPLETED"
+                                                          (car all-curr-states))))
+                            (newstatus            (if (> bad-not-started 0)
+                                                      "CHECK"
+                                                      (car all-curr-statuses))))
+                       ;; (print "bad-not-supported: " bad-not-support " all-curr-states: " all-curr-states " all-curr-statuses: " all-curr-states)
                        ;; NB// Pass the db so it is part of the transaction
                        (db:test-set-state-status db run-id tl-test-id newstate newstatus #f)))))))
          (mutex-unlock! *db-transaction-mutex*)
