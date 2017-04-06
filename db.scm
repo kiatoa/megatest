@@ -3325,7 +3325,7 @@
                db
                (lambda ()
                  ;; NB// Pass the db so it is part fo the transaction
-                 (db:test-set-state-status db run-id test-id state status comment)
+                 (db:test-set-state-status db run-id test-id state status comment) ;; this call sets the item state/status
                  (if (not (equal? item-path "")) ;; only roll up IF incoming test is an item
                      (let* ((state-status-counts  (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path)) ;; item-path is used to exclude current state/status of THIS test
                             (running              (length (filter (lambda (x)
@@ -3344,14 +3344,24 @@
                                                 (delete-duplicates
                                                  (cons status (map dbr:counts-status state-status-counts)))
                                                 *common:std-statuses* >))
-                            (newstate          (if (> running 0)
-                                                   "RUNNING"
-                                                   (if (> bad-not-started 0)
-                                                       "COMPLETED"
-                                                       (car all-curr-states))))
+			    (non-completes     (filter (lambda (x)
+							 (not (equal? x "COMPLETED")))
+						       all-curr-states))
+                            (newstate          (cond
+						((> (length non-completes) 0) ;;
+						 (car non-completes))  ;;  (remove (lambda (x)(equal? "COMPLETED" x)) all-curr-states)))
+						(else
+						 (car all-curr-states))))
+			                       ;; (if (> running 0)
+                                               ;;     "RUNNING"
+                                               ;;     (if (> bad-not-started 0)
+                                               ;;         "COMPLETED"
+                                               ;;         (car all-curr-states))))
                             (newstatus         (if (> bad-not-started 0)
                                                    "CHECK"
                                                    (car all-curr-statuses))))
+		       (print "running: " running " bad-not-started: " bad-not-started " all-curr-states: " all-curr-states " non-completes: " non-completes " state-status-counts: " state-status-counts
+			      " newstate: " newstate " newstatus: " newstatus)
                        ;; NB// Pass the db so it is part of the transaction
                        (db:test-set-state-status db run-id tl-test-id newstate newstatus #f)))))))
          (mutex-unlock! *db-transaction-mutex*)
