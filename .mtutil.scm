@@ -63,5 +63,5 @@
 		 (lambda (target run-name area area-path reason contour mode-patt)
 		   "auto-eh"))
 
-(print "Got here!")
+;; (print "Got here!")
 
