@@ -324,6 +324,23 @@
 	       a-keys))
 	 string>=?)))
 
+;; given ordered data hash return a-keys
+;;
+(define (pgdb:ordered-data->a-keys ordered-data)
+  (sort (hash-table-keys ordered-data) string>=?))
+
+;; given ordered data hash return b-keys
+;;
+(define (pgdb:ordered-data->b-keys ordered-data a-keys)
+  (delete-duplicates
+   (sort (apply
+	  append
+	  (map (lambda (sub-key)
+		 (let ((subdat (hash-table-ref ordered-data sub-key)))
+		   (hash-table-keys subdat)))
+	       a-keys))
+	 string>=?)))
+
 (define (pgdb:coalesce-runs-by-slice runs slice)
   (let* ((data  (make-hash-table)))
       (for-each
