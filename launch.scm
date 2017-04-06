@@ -815,13 +815,16 @@
       *toppath*   ;; return toppath
       (let* ((use-cache (common:use-cache?))
 	     (toppath  (or *toppath* areapath (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
+	     
 	     (runname  (common:args-get-runname))
 	     (target   (common:args-get-target))
 	     (linktree (common:get-linktree))
 	     (contour  #f) ;; NOT READY FOR THIS (args:get-arg "-contour"))
 	     (sections (if target (list "default" target) #f)) ;; for runconfigs
 	     (mtconfig (or (args:get-arg "-config") "megatest.config")) ;; allow overriding megatest.config 
-	     (rundir   (if (and runname target linktree)(conc linktree (if contour (conc "/" contour) "") "/" target "/" runname) #f))
+	     (rundir   (if (and runname target linktree)
+			   (conc linktree (if contour (conc "/" contour) "") "/" target "/" runname)
+			   #f))
              
 	     (mtcachef (and rundir (conc rundir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	     (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
