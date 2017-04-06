@@ -284,12 +284,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-sort"
 			"-target-db"
 			"-source-db"
+			"-prefix-target"
 
                         "-src-target"
                         "-src-runname"
                         "-diff-email"
-			"-sync-to"
-			"-prefix-target"			
+			"-sync-to"			
 			"-pgsync"
                         "-diff-html"
 			)
@@ -313,6 +313,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-no-cache"
 			"-cache-db"
                         "-use-db-cache"
+                        "-prepend-contour"
 			;; misc
 			"-repl"
 			"-lock"
@@ -859,7 +860,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   (directory-exists? rundir)
 		   (file-write-access? rundir))
 	      (begin
-		(configf:write-alist data cfgf)
+                (if (not (common:in-running-test?))
+                    (configf:write-alist data cfgf))
 		;; force re-read of megatest.config - this resolves circular references between megatest.config
 		(launch:setup force: #t)
 		(launch:cache-config))) ;; we can safely cache megatest.config since we have a valid runconfig

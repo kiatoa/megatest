@@ -1203,7 +1203,8 @@ EOF
 			 (file-write-access? cache-path))
 		    (let ((tpath (conc cache-path "/.testconfig")))
 		      (debug:print-info 1 *default-log-port* "Caching testconfig for " test-name " in " tpath)
-		      (configf:write-alist tcfg tpath)))
+                      (if (not (common:in-running-test?))
+                          (configf:write-alist tcfg tpath))))
 		tcfg))))))
   
 ;; sort tests by priority and waiton

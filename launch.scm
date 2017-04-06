@@ -1,5 +1,5 @@
 
-;; Copyright 2006-2013, Matthew Welland.
+;; Copyright 2006-2017, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -402,10 +402,12 @@
 		  (loop (calc-minutes) (or new-cpu-load cpu-load) (or new-disk-free disk-free)))))))
     (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f))) ;; NOTE: Checking twice for keep-going is intentional
 
+
 (define (launch:execute encoded-cmd)
   (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
 	 (tconfigreg #f))
     (setenv "MT_CMDINFO" encoded-cmd)
+    ;;(bb-check-path msg: "launch:execute incoming")
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
 	(let* ((testpath  (assoc/default 'testpath  cmdinfo))  ;; testpath is the test spec area
@@ -593,6 +595,7 @@
 					  (debug:print-error 0 *default-log-port* "bad variable spec, " var "=" val))))
 				  (configf:get-section rconfig section)))
 		      (list "default" target)))
+          ;;(bb-check-path msg: "launch:execute post block 1")
 
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
@@ -603,7 +606,7 @@
 		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " work-area " not found")
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
-
+          ;;(bb-check-path msg: "launch:execute post block 1.5")
 	  ;; (change-directory work-area) 
 	  (set! keyvals    (keys:target->keyval keys target))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
@@ -619,6 +622,7 @@
 			       (debug:print 1 *default-log-port* "Adding pre-var/val " var " = " val " to the environment")
 			       (setenv var val)))))
 		     varpairs)))
+          ;;(bb-check-path msg: "launch:execute post block 2")
 	  (for-each
 	   (lambda (varval)
 	     (let ((var (car varval))
@@ -638,8 +642,10 @@
 	      (list  "MT_TARGET"    target)
 	      (list  "MT_LINKTREE"  (common:get-linktree)) ;; (configf:lookup *configdat* "setup" "linktree"))
 	      (list  "MT_TESTSUITENAME" (common:get-testsuite-name))))
+          ;;(bb-check-path msg: "launch:execute post block 3")
 
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
+          ;;(bb-check-path msg: "launch:execute post block 4")
 	  ;; (change-directory top-path)
 	  ;; Can setup as client for server mode now
 	  ;; (client:setup)
@@ -647,9 +653,13 @@
 	  
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
+          ;;(bb-check-path msg: "launch:execute post block 41")
 	  (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals)
+          ;;(bb-check-path msg: "launch:execute post block 42")
 	  (set-item-env-vars itemdat)
+          ;;(bb-check-path msg: "launch:execute post block 43")
 	  (save-environment-as-files "megatest")
+          ;;(bb-check-path msg: "launch:execute post block 44")
 	  ;; open-run-close not needed for test-set-meta-info
 	  ;; (tests:set-full-meta-info #f test-id run-id 0 work-area)
 	  ;; (tests:set-full-meta-info test-id run-id 0 work-area)
@@ -764,7 +774,8 @@
 		    (if (file-exists? rconfig) ;; only cache megatest.config AFTER runconfigs has been cached
 			(begin
 			  (debug:print-info 0 *default-log-port* "Caching megatest.config in " tmpfile)
-			  (configf:write-alist *configdat* tmpfile)
+                          (if (not (common:in-running-test?))
+                              (configf:write-alist *configdat* tmpfile))
 			  (system (conc "ln -sf " tmpfile " " targfile))))
 		    )))
 	    (debug:print-info 1 *default-log-port* "No linktree yet, no caching configs.")))))
@@ -797,21 +808,27 @@
 	(mutex-unlock! *launch-setup-mutex*)
 	res)))
 
-(define (launch:setup-body #!key (force #f) (areapath #f))
-  (if (and (eq? *configstatus* 'fulldata) *toppath*) ;; no need to reprocess
+(define (launch:setup-body #!key (force-reread #f) (areapath #f))
+  (if (and (eq? *configstatus* 'fulldata)
+	   *toppath*
+	   (not force-reread)) ;; no need to reprocess
       *toppath*   ;; return toppath
       (let* ((use-cache (common:use-cache?))
 	     (toppath  (or *toppath* areapath (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
+	     
 	     (runname  (common:args-get-runname))
 	     (target   (common:args-get-target))
 	     (linktree (common:get-linktree))
 	     (contour  #f) ;; NOT READY FOR THIS (args:get-arg "-contour"))
 	     (sections (if target (list "default" target) #f)) ;; for runconfigs
 	     (mtconfig (or (args:get-arg "-config") "megatest.config")) ;; allow overriding megatest.config 
-	     (rundir   (if (and runname target linktree)(conc linktree (if contour (conc "/" contour) "") "/" target "/" runname) #f))
+	     (rundir   (if (and runname target linktree)
+			   (conc linktree (if contour (conc "/" contour) "") "/" target "/" runname)
+			   #f))
+             
 	     (mtcachef (and rundir (conc rundir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	     (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
-	     (cancreate (and rundir (common:file-exists? rundir)(file-write-access? rundir))))
+	     (cancreate (and rundir (common:file-exists? rundir)(file-write-access? rundir) (not (common:in-running-test?)))))
 	;; (cxt       (hash-table-ref/default *contexts* toppath #f)))
 
 	;; create our cxt for this area if it doesn't already exist

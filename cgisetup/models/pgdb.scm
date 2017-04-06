@@ -27,8 +27,13 @@
 
 ;; given a configdat lookup the connection info and open the db
 ;;
-(define (pgdb:open configdat #!key (dbname #f))  
-  (let ((pgconf (or (args:get-arg "-pgsync") (configf:lookup configdat "ext-sync" (or dbname "pgdb")))))
+(define (pgdb:open configdat #!key (dbname #f)(dbispec #f))  
+  (let ((pgconf (or dbispec
+		    (args:get-arg "-pgsync")
+		    (if configdat
+			(configf:lookup configdat "ext-sync" (or dbname "pgdb"))
+			#f)
+		    )))
     (if pgconf
 	(let* ((confdat (map (lambda (conf-item)
 			       (let ((parts (string-split conf-item ":")))
@@ -169,7 +174,7 @@
      FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
       WHERE r.target LIKE ?;" target-patt))
 
-(define (pgdb:get-stats-given-target dbh ttype-id target-patt)
+(define (pgdb:get-stats-given-type-target dbh ttype-id target-patt)
   (dbi:get-rows
    dbh
    ;;    "SELECT COUNT(t.id),t.status,r.target FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
@@ -182,8 +187,68 @@
             WHERE t.state='COMPLETED' AND ttype_id=? AND r.target LIKE ? GROUP BY r.target;"
    ttype-id target-patt))
 
+(define (pgdb:get-stats-given-target dbh target-patt)
+  (dbi:get-rows
+   dbh
+   ;;    "SELECT COUNT(t.id),t.status,r.target FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+   ;;         WHERE t.state='COMPLETED' AND ttype_id=? AND r.target LIKE ? GROUP BY r.target,t.status;"
+   "SELECT r.target,COUNT(*) AS total,
+                    SUM(CASE WHEN t.status='PASS' THEN 1 ELSE 0 END) AS pass,
+                    SUM(CASE WHEN t.status='FAIL' THEN 1 ELSE 0 END) AS fail,
+                    SUM(CASE WHEN t.status IN ('PASS','FAIL') THEN 0 ELSE 1 END) AS other
+            FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+            WHERE t.state='COMPLETED' AND r.target LIKE ? GROUP BY r.target;"
+   target-patt))
+
+(define (pgdb:get-latest-run-stats-given-target dbh ttype-id target-patt)
+  (dbi:get-rows
+   dbh
+   ;;    "SELECT COUNT(t.id),t.status,r.target FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+   ;;         WHERE t.state='COMPLETED' AND ttype_id=? AND r.target LIKE ? GROUP BY r.target,t.status;"
+   "SELECT r.target,COUNT(*) AS total,
+                    SUM(CASE WHEN t.status='PASS' THEN 1 ELSE 0 END) AS pass,
+                    SUM(CASE WHEN t.status='FAIL' THEN 1 ELSE 0 END) AS fail,
+                    SUM(CASE WHEN t.status IN ('PASS','FAIL') THEN 0 ELSE 1 END) AS other, r.id
+            FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+            WHERE t.state like '%'  AND ttype_id=? AND r.target LIKE ? 
+                 and r.id in 
+(SELECT DISTINCT on (target) id from runs where target like ? AND ttype_id=? order by target,event_time desc) GROUP BY r.target,r.id;"
+   ttype-id target-patt target-patt ttype-id))
+
+(define (pgdb:get-run-stats-history-given-target dbh ttype-id target-patt)
+  (dbi:get-rows
+   dbh
+   ;;    "SELECT COUNT(t.id),t.status,r.target FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+   ;;         WHERE t.state='COMPLETED' AND ttype_id=? AND r.target LIKE ? GROUP BY r.target,t.status;"
+   "SELECT r.run_name,COUNT(*) AS total,
+                    SUM(CASE WHEN t.status='PASS' THEN 1 ELSE 0 END) AS pass,
+                    SUM(CASE WHEN t.status='FAIL' THEN 1 ELSE 0 END) AS fail,
+                    SUM(CASE WHEN t.status IN ('PASS','FAIL') THEN 0 ELSE 1 END) AS other
+            FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+            WHERE t.state like '%'  AND ttype_id=? AND r.target LIKE ? 
+                 GROUP BY r.run_name;"
+   ttype-id target-patt ))
+
+(define (pgdb:get-all-run-stats-target-slice dbh target-patt)
+(dbi:get-rows
+   dbh
+   "SELECT  r.target, r.run_name,r.event_time, COUNT(*) AS total,
+                    SUM(CASE WHEN t.status='PASS' THEN 1 ELSE 0 END) AS pass,
+                    SUM(CASE WHEN t.status='FAIL' THEN 1 ELSE 0 END) AS fail,
+                    SUM(CASE WHEN t.status IN ('PASS','FAIL') THEN 0 ELSE 1 END) AS other
+            FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+            WHERE r.target LIKE ? 
+             
+            GROUP BY r.target,r.run_name, r.event_time;"
+    target-patt))
+
+
 (define (pgdb:get-target-types dbh)
   (dbi:get-rows dbh "SELECT id,target_spec FROM ttype;"))
+ 
+ (define (pgdb:get-distict-target-slice dbh)
+  (dbi:get-rows dbh " select distinct on (split_part (target, '/', 1)) (split_part (target, '/', 1)) from runs;"))
+
 
 ;; 
 (define (pgdb:get-targets dbh target-patt)
@@ -242,6 +307,58 @@
      runs)
     data))
 
+;; given ordered data hash return a-keys
+;;
+(define (pgdb:ordered-data->a-keys ordered-data)
+  (sort (hash-table-keys ordered-data) string>=?))
+
+;; given ordered data hash return b-keys
+;;
+(define (pgdb:ordered-data->b-keys ordered-data a-keys)
+  (delete-duplicates
+   (sort (apply
+	  append
+	  (map (lambda (sub-key)
+		 (let ((subdat (hash-table-ref ordered-data sub-key)))
+		   (hash-table-keys subdat)))
+	       a-keys))
+	 string>=?)))
+
+;; given ordered data hash return a-keys
+;;
+(define (pgdb:ordered-data->a-keys ordered-data)
+  (sort (hash-table-keys ordered-data) string>=?))
+
+;; given ordered data hash return b-keys
+;;
+(define (pgdb:ordered-data->b-keys ordered-data a-keys)
+  (delete-duplicates
+   (sort (apply
+	  append
+	  (map (lambda (sub-key)
+		 (let ((subdat (hash-table-ref ordered-data sub-key)))
+		   (hash-table-keys subdat)))
+	       a-keys))
+	 string>=?)))
+
+(define (pgdb:coalesce-runs-by-slice runs slice)
+  (let* ((data  (make-hash-table)))
+      (for-each
+     (lambda (run)
+       (let* ((target (vector-ref run 0))
+              (run-name (vector-ref run 1))    
+	      (parts  (string-split target "/"))
+	      (first  (car parts))
+	      (rest   (string-intersperse (cdr parts) "/"))
+	      (coldat (hash-table-ref/default data rest #f)))
+	 (if (not coldat)(let ((newht (make-hash-table)))
+			   (hash-table-set! data rest newht)
+			   (set! coldat newht)))
+	 (hash-table-set! coldat run-name run)))
+     runs)
+    data))
+
+
 (define (pgdb:runs-to-hash runs )
   (let* ((data  (make-hash-table)))
     (for-each
@@ -253,5 +370,14 @@
 			   (hash-table-set! data run-name newht)
 			   (set! coldat newht)))
 	 (hash-table-set! coldat test run)))
+     runs)
+    data))
+
+(define (pgdb:get-history-hash runs)
+  (let* ((data  (make-hash-table)))
+     (for-each
+     (lambda (run)
+       (let* ((run-name (vector-ref run 0)))
+	 (hash-table-set! data run-name run)))
      runs)
     data))

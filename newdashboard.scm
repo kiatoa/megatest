@@ -31,15 +31,15 @@
      (prefix dbi dbi:))
 
 (declare (uses common))
+(declare (uses megatest-version))
+(declare (uses margs))
 
-;; (declare (uses margs))
 ;; (declare (uses launch))
-;; (declare (uses megatest-version))
 ;; (declare (uses gutils))
 ;; (declare (uses db))
 ;; (declare (uses server))
 ;; (declare (uses synchash))
-;; (declare (uses dcommon))
+(declare (uses dcommon))
 ;; (declare (uses tree))
 ;; 
 ;; (include "common_records.scm")
@@ -125,13 +125,125 @@ Misc
 (define (update-search x val)
   (hash-table-set! *searchpatts* x val))
 
+
+;; data for each specific tab goes here
+;;
+(defstruct dboard:tabdat 
+  ;; runs
+  ((allruns         '())                 : list)        ;; list of dboard:rundat records
+  ((allruns-by-id    (make-hash-table))  : hash-table)  ;; hash of run-id -> dboard:rundat records
+  ((done-runs       '())                 : list)        ;; list of runs already drawn
+  ((not-done-runs   '())                 : list)        ;; list of runs not yet drawn
+  (header            #f)                                ;; header for decoding the run records
+  (keys              #f)                                ;; keys for this run (i.e. target components)
+  ((numruns          (string->number (or (args:get-arg "-cols") "10")))                 : number)      ;; 
+  ((tot-runs          0)                 : number)
+  ((last-data-update  0)                 : number)      ;; last time the data in allruns was updated
+  ((last-runs-update  0)                 : number)      ;; last time we pulled the runs info to update the tree
+  (runs-mutex         (make-mutex))                     ;; use to prevent parallel access to draw objects
+  ((run-update-times  (make-hash-table)) : hash-table)  ;; update times indexed by run-id
+  ((last-test-dat      (make-hash-table)) : hash-table)  ;; cache last tests dat by run-id
+  ((run-db-paths      (make-hash-table)) : hash-table)  ;; cache the paths to the run db files
+
+  ;; Runs view
+  ((buttondat         (make-hash-table)) : hash-table)  ;;     
+  ((item-test-names  '())                : list)        ;; list of itemized tests
+  ((run-keys          (make-hash-table)) : hash-table)
+  (runs-matrix        #f)                               ;; used in newdashboard
+  ((start-run-offset   0)                : number)      ;; left-right slider value
+  ((start-test-offset  0)                : number)      ;; up-down slider value
+  ((runs-btn-height    (or (configf:lookup *configdat* "dashboard" "btn-height") "x16")) : string)  ;; was 12
+  ((runs-btn-fontsz    (or (configf:lookup *configdat* "dashboard" "btn-fontsz") "10")) : string)   ;; was 8
+  ((runs-cell-width    (or (configf:lookup *configdat* "dashboard" "cell-width") "60")) : string)   ;; was 50
+  ((all-test-names     '())              : list)
+  
+  ;; Canvas and drawing data
+  (cnv                #f)
+  (cnv-obj            #f)
+  (drawing            #f)
+  ((run-start-row     0)                 : number)
+  ((max-row           0)                 : number)
+  ((running-layout    #f)                : boolean)
+  (originx            #f)
+  (originy            #f)
+  ((layout-update-ok  #t)                : boolean)
+  ((compact-layout    #t)                : boolean)
+
+  ;; Run times layout
+  ;; (graph-button-box #f) ;; RA => Think it is not referenced anywhere
+  (graph-matrix     #f)
+  ((graph-matrix-table (make-hash-table)) : hash-table) ;; graph-dats referenced thru graph name info
+  ((graph-cell-table (make-hash-table)) : hash-table) ;; graph-dats referenced thru matrix cell info
+  ((graph-matrix-row 1) : number)
+  ((graph-matrix-col 1) : number)
+
+  ;; Controls used to launch runs etc.
+  ((command          "")                 : string)      ;; for run control this is the command being built up
+  (command-tb        #f)	                        ;; widget for the type of command; run, remove-runs etc.
+  (test-patterns-textbox #f)                            ;; text box widget for editing a list of test patterns
+  (key-listboxes     #f)			         
+  (key-lbs           #f)			         
+  run-name                                              ;; from run name setting widget
+  states                                                ;; states for -state s1,s2 ...
+  statuses                                              ;; statuses for -status s1,s2 ...
+						         
+  ;; Selector variables				         
+  curr-run-id                                           ;; current row to display in Run summary view
+  prev-run-id                                           ;; previous runid selected before current runid was selected (used in xor-two-runs runs summary mode
+  curr-test-ids                                         ;; used only in dcommon:run-update which is used in newdashboard
+  ((filters-changed  #t)                  : boolean)    ;; to indicate that the user changed filters for this tab
+  ((last-filter-str  "")                  : string)      ;; conc the target runname and testpatt for a signature of changed filters
+  ((hide-empty-runs  #f)                  : boolean)     
+  ((hide-not-hide    #t)                  : boolean)     ;; toggle for hide/not hide empty runs
+  (hide-not-hide-button #f)
+  ((searchpatts        (make-hash-table)) : hash-table)  ;;
+  ((state-ignore-hash  (make-hash-table)) : hash-table)  ;; hash of  STATE => #t/#f for display control
+  ((status-ignore-hash (make-hash-table)) : hash-table)  ;; hash of STATUS => #t/#f
+  (target              #f)
+  (test-patts          #f)
+
+  ;; db info to file the .db files for the area
+  (access-mode        (db:get-access-mode))             ;; use cached db or not
+  (dbdir               #f)
+  (dbfpath             #f)
+  (dbkeys              #f)
+  ((last-db-update     (make-hash-table)) : hash-table) ;; last db file timestamp
+  (monitor-db-path     #f)                              ;; where to find monitor.db
+  ro                                                    ;; is the database read-only?
+
+  ;; tests data
+  ((num-tests          10)               : number)      ;; total number of tests to show (used in the old runs display)
+
+  ;; runs tree
+  ((path-run-ids       (make-hash-table)) : hash-table) ;; path (target / runname) => id
+  (runs-tree           #f)
+  ((runs-tree-ht       (make-hash-table)) : hash-table) ;; track which targets added to tree (merge functionality with path-run-ids?)
+
+  ;; tab data
+  ((view-changed       #t)                : boolean)   
+  ((xadj               0)                 : number)     ;; x slider number (if using canvas)
+  ((yadj               0)                 : number)     ;; y slider number (if using canvas)
+  ;; runs-summary tab state
+  ((runs-summary-modes '((one-run . "Show One Run") (xor-two-runs . "XOR Two Runs") (xor-two-runs-hide-clean . "XOR; Hide Clean")) )   : list)
+  ((runs-summary-mode-buttons '())               : list)
+  ((runs-summary-mode  'one-run)            : symbol)
+  ((runs-summary-mode-change-callbacks '()) : list)
+  (runs-summary-source-runname-label #f)
+  (runs-summary-dest-runname-label #f)
+  ;; runs summary view
+  
+  tests-tree       ;; used in newdashboard
+  )
+
+
+
 ;; mtest is actually the megatest.config file
 ;;
 (define (mtest toppath window-id)
   (let* ((curr-row-num     0)
-	 (rawconfig        (read-config (conc toppath "/megatest.config") #f 'return-string))
-	 (keys-matrix      (dcommon:keys-matrix rawconfig))
-	 (setup-matrix     (dcommon:section-matrix rawconfig "setup" "Varname" "Value"))
+	 ;; (rawconfig        (read-config (conc toppath "/megatest.config") #f 'return-string))
+	 (keys-matrix      (iup:matrix)) ;; (dcommon:keys-matrix rawconfig))
+	 (setup-matrix     (iup:matrix)) ;; (dcommon:section-matrix rawconfig "setup" "Varname" "Value"))
 	 (jobtools-matrix  (iup:matrix
 			    #:expand "YES"
 			    #:numcol 1
@@ -172,9 +284,9 @@ Misc
        (for-each
 	(lambda (var)
 	  (iup:attribute-set! mat (conc curr-row-num ":0") var)
-	  (iup:attribute-set! mat (conc curr-row-num ":1") (config-lookup rawconfig fname var))
+	  ;; (iup:attribute-set! mat (conc curr-row-num ":1") (config-lookup rawconfig fname var))
 	  (set! curr-row-num (+ curr-row-num 1)))
-	(configf:section-vars rawconfig fname)))
+	'()));; (configf:section-vars rawconfig fname)))
      (list setup-matrix jobtools-matrix validvals-matrix envovrd-matrix disks-matrix)
      (list "setup"      "jobtools"      "validvalues"      "env-override" "disks"))
 
@@ -343,7 +455,7 @@ Misc
 			     (test-update window-id testdat run-info-matrix test-info-matrix test-run-matrix meta-dat-matrix steps-matrix data-matrix))))
 
     ;; Set the updater in updaters
-    (hash-table-set! (dboard:data-updaters *data*) window-id updater)
+    ;; (hash-table-set! (dboard:data-updaters *data*) window-id updater)
     ;; 
     (for-each
      (lambda (mat)
@@ -444,14 +556,14 @@ Misc
 		      ;; (print "obj: " obj ", id: " id ", state: " state)
 		      (let* ((run-path (tree:node->path obj id))
 			     (test-id  (tree-path->test-id (cdr run-path))))
-			(if test-id
-			    (hash-table-set! (dboard:data-curr-test-ids *data*)
-					     window-id test-id))
+			;; (if test-id
+			;;     (hash-table-set! (dboard:data-curr-test-ids *data*)
+			;; 		     window-id test-id))
 			(print "path: " (tree:node->path obj id) " test-id: " test-id))))))
      (iup:attribute-set! tb "VALUE" "0")
      (iup:attribute-set! tb "NAME" "Runs")
      ;;(iup:attribute-set! tb "ADDEXPANDED" "NO")
-     (dboard:data-tests-tree-set! *data* tb)
+     ;; (dboard:data-tests-tree-set! *data* tb)
      tb)
    (test-panel window-id)))
 
@@ -460,7 +572,7 @@ Misc
   ;; get test-id
   ;; then get test record
   (if testdat
-      (let* ((test-id      (hash-table-ref/default (dboard:data-curr-test-ids *data*) window-id #f))
+      (let* ((test-id      0) ;; (hash-table-ref/default (dboard:data-curr-test-ids *data*) window-id #f))
 	     (test-data    (hash-table-ref/default testdat test-id #f))
 	     (run-id       (db:test-get-run_id test-data))
 	     (targ/runname (hash-table-ref/default (dboard:data-run-keys *data*) 
@@ -560,7 +672,7 @@ Misc
     (iup:attribute-set! runs-matrix "RESIZEMATRIX" "YES")
     (iup:attribute-set! runs-matrix "WIDTH0" "100")
 
-    (dboard:data-runs-matrix-set! *data* runs-matrix)
+    ;; (dboard:data-runs-matrix-set! *data* runs-matrix)
     (iup:hbox
      (iup:frame 
       #:title "Runs browser"
@@ -600,16 +712,16 @@ Misc
 
 (define (newdashboard dbstruct)
   (let* ((data     (make-hash-table))
-	 (keys     (db:get-keys dbstruct))
+	 (keys     '()) ;; (db:get-keys dbstruct))
 	 (runname  "%")
 	 (testpatt "%")
-	 (keypatts (map (lambda (k)(list k "%")) keys))
-	 (states   '())
+	 (keypatts '()) ;; (map (lambda (k)(list k "%")) keys))
+         (states   '())
 	 (statuses '())
 	 (nextmintime (current-milliseconds))
 	 (my-window-id *current-window-id*))
     (set! *current-window-id* (+ 1 *current-window-id*))
-    (dboard:data-runs-set! *data* data) ;; make this data available to the rest of the application
+   ;; (dboard:data-runs-set! *data* data) ;; make this data available to the rest of the application
     (iup:show (main-panel my-window-id))
     ;; Yes, running iup:show will pop up a new panel
     ;; (iup:show (main-panel my-window-id))
@@ -626,6 +738,6 @@ Misc
 			       (debug:print 11 *default-log-port* "CHANGE(S): " (car changes) "..."))
 			     (debug:print-info 11 *default-log-port* "Server overloaded"))))))
 
-(dboard:data-updaters-set! *data* (make-hash-table))
-(newdashboard *dbstruct-local*)    
+;; (dboard:data-updaters-set! *data* (make-hash-table))
+(newdashboard #f) ;; *dbstruct-local*)    
 (iup:main-loop)
