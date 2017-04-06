@@ -1685,8 +1685,16 @@
 ;;======================================================================
 ;; E N V I R O N M E N T   V A R S
 ;;======================================================================
+(define (bb-check-path #!key (msg "check-path: "))
+  (let ((path (or (get-environment-variable "PATH") "none")))
+    (debug:print-info 0 *default-log-port* (conc msg" : $PATH="path))
+    (if (string-match "^.*/isoenv-core/.*" path)
+        (debug:print-error 0 *default-log-port* (conc msg" : !!ISOENV PRESENT!!")) ;; remove for prod
+        (debug:print-info 0 *default-log-port* (conc msg" : **no isoenv present**")))))
+
 	      
 (define (save-environment-as-files fname #!key (ignorevars (list "USER" "HOME" "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR" "MAKEFLAGS" "MAKEF" "MAKEOVERRIDES")))
+  (bb-check-path msg: "save-environment-as-files entry")
   (let ((envvars (get-environment-variables))
         (whitesp (regexp "[^a-zA-Z0-9_\\-:,.\\/%$]"))
 	(mungeval (lambda (val)
@@ -1694,7 +1702,7 @@
 		     ((eq? val #t) "") ;; convert #t to empty string
 		     ((eq? val #f) #f) ;; convert #f to itself (still thinking about this one
 		     (else val)))))
-     (with-output-to-file (conc fname ".csh")
+    (with-output-to-file (conc fname ".csh")
        (lambda ()
           (for-each (lambda (keyval)
 		      (let* ((key   (car keyval))
@@ -2084,6 +2092,24 @@
         (map string->number
              (string-split instr)))
    "/"))
+
+(define (common:faux-lock keyname)
+  (if (rmt:get-var keyname)
+      #f
+      (begin
+        (rmt:set-var keyname (conc (current-process-id)))
+        (equal? (conc (current-process-id)) (conc (rmt:get-var keyname))))))
+
+(define (common:faux-unlock keyname #!key (force #f))
+  (if (or force (equal? (conc (current-process-id)) (conc (rmt:get-var keyname))))
+      (begin
+        (if (rmt:get-var keyname) (rmt:del-var keyname))
+        #t)
+      #f))
+
+  
+(define (common:in-running-test?)
+  (and (args:get-arg "-execute") (get-environment-variable "MT_CMDINFO")))
 
 (define (common:get-color-from-status status)
   (cond

@@ -212,6 +212,7 @@
 
 (define (db:lock-create-open fname initproc)
   (let* ((parent-dir   (or (pathname-directory fname)(current-directory))) ;; no parent? go local
+         (raw-fname    (pathname-file fname))
 	 (dir-writable (file-write-access? parent-dir))
 	 (file-exists  (file-exists? fname))
 	 (file-write   (if file-exists
@@ -220,34 +221,48 @@
     ;;(mutex-lock! *db-open-mutex*) ;; tried this mutex, not clear it helped.
     (if file-write ;; dir-writable
 	(condition-case
-	    (let ((db      (sqlite3:open-database fname)))
-	      (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-	      (sqlite3:execute db "PRAGMA synchronous = 0;")
-	      (if (not file-exists)
-		  (begin
-		    (if (and (configf:lookup *configdat* "setup" "use-wal")
-			     (string-match "^/tmp/.*" fname)) ;; this is a file in /tmp
-			(sqlite3:execute db "PRAGMA journal_mode=WAL;")
-			(print "Creating " fname " in NON-WAL mode."))
-		    (initproc db)))
-	      db)
-	  (exn (io-error)  (debug:print 0 *default-log-port* "ERROR: i/o error with " fname ". Check permissions, disk space etc. and try again."))
-	  (exn (corrupt)   (debug:print 0 *default-log-port* "ERROR: database " fname " is corrupt. Repair it to proceed."))
-	  (exn (busy)      (debug:print 0 *default-log-port* "ERROR: database " fname " is locked. Try copying to another location, remove original and copy back."))
-	  (exn (permission)(debug:print 0 *default-log-port* "ERROR: database " fname " has some permissions problem."))
-	  (exn () (debug:print 0 *default-log-port* "ERROR: Unknown error with database " fname " message: " ((condition-property-accessor 'exn 'message) exn))))
-
+         (let* ((lockfname   (conc fname ".lock"))
+                (readyfname  (conc parent-dir "/.ready-" raw-fname))
+                (readyexists (file-exists? readyfname)))
+           (if (not readyexists)
+               (common:simple-file-lock-and-wait lockfname))
+           (let ((db      (sqlite3:open-database fname)))
+             (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
+             (sqlite3:execute db "PRAGMA synchronous = 0;")
+             (if (not file-exists)
+                 (begin
+                   (if (and (configf:lookup *configdat* "setup" "use-wal")
+                            (string-match "^/tmp/.*" fname)) ;; this is a file in /tmp
+                       (sqlite3:execute db "PRAGMA journal_mode=WAL;")
+                       (print "Creating " fname " in NON-WAL mode."))
+                   (initproc db)))
+             (if (not readyexists)
+                 (begin
+                   (common:simple-file-release-lock lockfname)
+                   (with-output-to-file
+                       readyfname
+                     (lambda ()
+                       (print "Ready at " 
+                              (seconds->year-work-week/day-time 
+                               (current-seconds)))))))
+             db))
+         (exn (io-error)  (debug:print 0 *default-log-port* "ERROR: i/o error with " fname ". Check permissions, disk space etc. and try again."))
+         (exn (corrupt)   (debug:print 0 *default-log-port* "ERROR: database " fname " is corrupt. Repair it to proceed."))
+         (exn (busy)      (debug:print 0 *default-log-port* "ERROR: database " fname " is locked. Try copying to another location, remove original and copy back."))
+         (exn (permission)(debug:print 0 *default-log-port* "ERROR: database " fname " has some permissions problem."))
+         (exn () (debug:print 0 *default-log-port* "ERROR: Unknown error with database " fname " message: " ((condition-property-accessor 'exn 'message) exn))))
+        
 	(condition-case
-	    (begin
-	      (debug:print 2 *default-log-port* "WARNING: opening db in non-writable dir " fname)
-	      (let ((db (sqlite3:open-database fname)))
-		;;(mutex-unlock! *db-open-mutex*)
-		db))
-	  (exn (io-error)  (debug:print 0 *default-log-port* "ERROR: i/o error with " fname ". Check permissions, disk space etc. and try again."))
-	  (exn (corrupt)   (debug:print 0 *default-log-port* "ERROR: database " fname " is corrupt. Repair it to proceed."))
-	  (exn (busy)      (debug:print 0 *default-log-port* "ERROR: database " fname " is locked. Try copying to another location, remove original and copy back."))
-	  (exn (permission)(debug:print 0 *default-log-port* "ERROR: database " fname " has some permissions problem."))
-	  (exn () (debug:print 0 *default-log-port* "ERROR: Unknown error with database " fname " message: " ((condition-property-accessor 'exn 'message) exn))))
+         (begin
+           (debug:print 2 *default-log-port* "WARNING: opening db in non-writable dir " fname)
+           (let ((db (sqlite3:open-database fname)))
+             ;;(mutex-unlock! *db-open-mutex*)
+             db))
+         (exn (io-error)  (debug:print 0 *default-log-port* "ERROR: i/o error with " fname ". Check permissions, disk space etc. and try again."))
+         (exn (corrupt)   (debug:print 0 *default-log-port* "ERROR: database " fname " is corrupt. Repair it to proceed."))
+         (exn (busy)      (debug:print 0 *default-log-port* "ERROR: database " fname " is locked. Try copying to another location, remove original and copy back."))
+         (exn (permission)(debug:print 0 *default-log-port* "ERROR: database " fname " has some permissions problem."))
+         (exn () (debug:print 0 *default-log-port* "ERROR: Unknown error with database " fname " message: " ((condition-property-accessor 'exn 'message) exn))))
 	)))
 
 
@@ -301,12 +316,12 @@
         (let* ((dbpath       (db:dbfile-path ))      ;; path to tmp db area
                (dbexists     (file-exists? dbpath))
 	       (tmpdbfname   (conc dbpath "/megatest.db"))
-	       (dbfexists    (file-exists? tmpdbfname)) ;; (conc dbpath "/megatest.db")))
-               (tmpdb        (db:open-megatest-db path: dbpath)) ;; lock-create-open dbpath db:initialize-main-db))
+	       (dbfexists    (file-exists? tmpdbfname))  ;; (conc dbpath "/megatest.db")))
                (mtdbexists   (file-exists? (conc *toppath* "/megatest.db")))
+               
                (mtdb         (db:open-megatest-db))
                (mtdbpath     (db:dbdat-get-path mtdb))
-               
+               (tmpdb        (db:open-megatest-db path: dbpath)) ;; lock-create-open dbpath db:initialize-main-db))
                (refndb       (db:open-megatest-db path: dbpath name: "megatest_ref.db"))
                (write-access (file-write-access? mtdbpath))
 	       (mtdbmodtime  (if mtdbexists (common:lazy-sqlite-db-modification-time mtdbpath)   #f))
@@ -372,7 +387,8 @@
 	 (db           (db:lock-create-open dbpath
 					    (lambda (db)
                                               (db:initialize-main-db db)
-					      (db:initialize-run-id-db db))))
+					      ;;(db:initialize-run-id-db db)
+					      )))
 	 (write-access (file-write-access? dbpath)))
     (debug:print-info 13 *default-log-port* "db:open-megatest-db "dbpath)
     (if (and dbexists (not write-access))
@@ -1202,17 +1218,17 @@
        ;; Must do this *after* running patch db !! No more. 
        ;; cannot use db:set-var since it will deadlock, hardwire the code here
        (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" "MEGATEST_VERSION" (common:version-signature))
-       (debug:print-info 11 *default-log-port* "db:initialize END")))))
+       (debug:print-info 11 *default-log-port* "db:initialize END") ;; ))))
 
-;;======================================================================
-;; R U N   S P E C I F I C   D B 
-;;======================================================================
-
-(define (db:initialize-run-id-db db)
-  (sqlite3:with-transaction 
-   db
-   (lambda ()
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tests 
+       ;;======================================================================
+       ;; R U N   S P E C I F I C   D B 
+       ;;======================================================================
+       
+       ;; (define (db:initialize-run-id-db db)
+       ;;   (sqlite3:with-transaction 
+       ;;    db
+       ;;    (lambda ()
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tests 
                     (id INTEGER PRIMARY KEY,
                      run_id       INTEGER   DEFAULT -1,
                      testname     TEXT      DEFAULT 'noname',
@@ -1236,14 +1252,14 @@
                      archived     INTEGER   DEFAULT 0, -- 0=no, > 1=archive block id where test data can be found
                      last_update  INTEGER DEFAULT (strftime('%s','now')),
                         CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path));")
-     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path, uname);")
-     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_tests_trigger AFTER UPDATE ON tests
+       (sqlite3:execute db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path, uname);")
+       (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_tests_trigger AFTER UPDATE ON tests
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE tests SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
                               (id INTEGER PRIMARY KEY,
                                test_id INTEGER, 
                                stepname TEXT, 
@@ -1254,14 +1270,14 @@
                                logfile TEXT DEFAULT '',
                                last_update  INTEGER DEFAULT (strftime('%s','now')),
                                CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
-     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS teststeps_index ON tests (run_id, testname, item_path);")
-     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_teststeps_trigger AFTER UPDATE ON test_steps
+       (sqlite3:execute db "CREATE INDEX IF NOT EXISTS teststeps_index ON tests (run_id, testname, item_path);")
+       (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_teststeps_trigger AFTER UPDATE ON test_steps
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE test_steps SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
                                 test_id INTEGER,
                                 category TEXT DEFAULT '',
                                 variable TEXT,
@@ -1274,14 +1290,14 @@
                                 type TEXT DEFAULT '',
                                 last_update  INTEGER DEFAULT (strftime('%s','now')),
                               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
-     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS test_data_index ON test_data (test_id);")
-     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_test_data_trigger AFTER UPDATE ON test_data
+       (sqlite3:execute db "CREATE INDEX IF NOT EXISTS test_data_index ON test_data (test_id);")
+       (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_test_data_trigger AFTER UPDATE ON test_data
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE test_data SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_rundat (
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_rundat (
                               id           INTEGER PRIMARY KEY,
                               test_id      INTEGER,
                               update_time  TIMESTAMP,
@@ -1289,7 +1305,7 @@
                               diskfree     INTEGER DEFAULT -1,
                               diskusage    INTGER DEFAULT -1,
                               run_duration INTEGER DEFAULT 0);")
-     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archives (
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archives (
                               id           INTEGER PRIMARY KEY,
                               test_id      INTEGER,
                               state        TEXT DEFAULT 'new',
@@ -1297,7 +1313,7 @@
                               archive_type TEXT DEFAULT 'bup',
                               du           INTEGER,
                               archive_path TEXT);")))
-  db)
+    db))
 
 ;;======================================================================
 ;; A R C H I V E S
@@ -2240,7 +2256,7 @@
   ;;    (hash-table-ref *run-info-cache* run-id)
   (let* ((res       (vector #f #f #f #f))
 	 (keys      (db:get-keys dbstruct))
-	 (remfields (list "id" "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count")) ;;  "area_id"))
+	 (remfields (list "id" "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count" "contour")) ;;  "area_id"))
 	 (header    (append keys remfields))
 	 (keystr    (conc (keys->keystr keys) ","
 			  (string-intersperse remfields ","))))
@@ -3309,7 +3325,7 @@
                db
                (lambda ()
                  ;; NB// Pass the db so it is part fo the transaction
-                 (db:test-set-state-status db run-id test-id state status comment)
+                 (db:test-set-state-status db run-id test-id state status comment) ;; this call sets the item state/status
                  (if (not (equal? item-path "")) ;; only roll up IF incoming test is an item
                      (let* ((state-status-counts  (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path)) ;; item-path is used to exclude current state/status of THIS test
                             (running              (length (filter (lambda (x)
@@ -3328,14 +3344,24 @@
                                                 (delete-duplicates
                                                  (cons status (map dbr:counts-status state-status-counts)))
                                                 *common:std-statuses* >))
-                            (newstate          (if (> running 0)
-                                                   "RUNNING"
-                                                   (if (> bad-not-started 0)
-                                                       "COMPLETED"
-                                                       (car all-curr-states))))
+			    (non-completes     (filter (lambda (x)
+							 (not (equal? x "COMPLETED")))
+						       all-curr-states))
+                            (newstate          (cond
+						((> (length non-completes) 0) ;;
+						 (car non-completes))  ;;  (remove (lambda (x)(equal? "COMPLETED" x)) all-curr-states)))
+						(else
+						 (car all-curr-states))))
+			                       ;; (if (> running 0)
+                                               ;;     "RUNNING"
+                                               ;;     (if (> bad-not-started 0)
+                                               ;;         "COMPLETED"
+                                               ;;         (car all-curr-states))))
                             (newstatus         (if (> bad-not-started 0)
                                                    "CHECK"
                                                    (car all-curr-statuses))))
+		       (print "running: " running " bad-not-started: " bad-not-started " all-curr-states: " all-curr-states " non-completes: " non-completes " state-status-counts: " state-status-counts
+			      " newstate: " newstate " newstatus: " newstatus)
                        ;; NB// Pass the db so it is part of the transaction
                        (db:test-set-state-status db run-id tl-test-id newstate newstatus #f)))))))
          (mutex-unlock! *db-transaction-mutex*)

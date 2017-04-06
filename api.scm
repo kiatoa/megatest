@@ -171,6 +171,7 @@
                    ((update-run-event_time)        (apply db:update-run-event_time dbstruct params))
                    ((update-run-stats)             (apply db:update-run-stats dbstruct params))
                    ((set-var)                      (apply db:set-var dbstruct params))
+                   ((del-var)                      (apply db:del-var dbstruct params))
 
                    ;; STEPS
                    ((teststep-set-status!)         (apply db:teststep-set-status! dbstruct params))
