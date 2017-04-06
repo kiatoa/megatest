@@ -407,7 +407,7 @@
   (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
 	 (tconfigreg #f))
     (setenv "MT_CMDINFO" encoded-cmd)
-    ;;(bb-check-path msg: "launch:execute incoming")
+    (bb-check-path msg: "launch:execute incoming")
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
 	(let* ((testpath  (assoc/default 'testpath  cmdinfo))  ;; testpath is the test spec area
@@ -595,8 +595,8 @@
 					  (debug:print-error 0 *default-log-port* "bad variable spec, " var "=" val))))
 				  (configf:get-section rconfig section)))
 		      (list "default" target)))
-          ;;(bb-check-path msg: "launch:execute post block 1")
-
+          (bb-check-path msg: "launch:execute post block 1")
+          
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
 	    (if (or (file-exists? work-area)
@@ -606,7 +606,7 @@
 		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " work-area " not found")
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
-          ;;(bb-check-path msg: "launch:execute post block 1.5")
+          (bb-check-path msg: "launch:execute post block 1.5")
 	  ;; (change-directory work-area) 
 	  (set! keyvals    (keys:target->keyval keys target))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
@@ -642,10 +642,9 @@
 	      (list  "MT_TARGET"    target)
 	      (list  "MT_LINKTREE"  (common:get-linktree)) ;; (configf:lookup *configdat* "setup" "linktree"))
 	      (list  "MT_TESTSUITENAME" (common:get-testsuite-name))))
-          ;;(bb-check-path msg: "launch:execute post block 3")
-
+          (bb-check-path msg: "launch:execute post block 3")
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
-          ;;(bb-check-path msg: "launch:execute post block 4")
+          (bb-check-path msg: "launch:execute post block 4")
 	  ;; (change-directory top-path)
 	  ;; Can setup as client for server mode now
 	  ;; (client:setup)
@@ -653,13 +652,13 @@
 	  
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
-          ;;(bb-check-path msg: "launch:execute post block 41")
+          (bb-check-path msg: "launch:execute post block 411")
 	  (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals)
-          ;;(bb-check-path msg: "launch:execute post block 42")
+          (bb-check-path msg: "launch:execute post block 42")
 	  (set-item-env-vars itemdat)
-          ;;(bb-check-path msg: "launch:execute post block 43")
+          (bb-check-path msg: "launch:execute post block 42")
 	  (save-environment-as-files "megatest")
-          ;;(bb-check-path msg: "launch:execute post block 44")
+          (bb-check-path msg: "launch:execute post block 44")
 	  ;; open-run-close not needed for test-set-meta-info
 	  ;; (tests:set-full-meta-info #f test-id run-id 0 work-area)
 	  ;; (tests:set-full-meta-info test-id run-id 0 work-area)

@@ -1690,11 +1690,11 @@
     (debug:print-info 0 *default-log-port* (conc msg" : $PATH="path))
     (if (string-match "^.*/isoenv-core/.*" path)
         (debug:print-error 0 *default-log-port* (conc msg" : !!ISOENV PRESENT!!")) ;; remove for prod
-        (debug:print-info 1 *default-log-port* (conc msg" : **no isoenv present**")))))
+        (debug:print-info 0 *default-log-port* (conc msg" : **no isoenv present**")))))
 
 	      
 (define (save-environment-as-files fname #!key (ignorevars (list "USER" "HOME" "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR" "MAKEFLAGS" "MAKEF" "MAKEOVERRIDES")))
-  ;;(bb-check-path msg: "save-environment-as-files entry")
+  (bb-check-path msg: "save-environment-as-files entry")
   (let ((envvars (get-environment-variables))
         (whitesp (regexp "[^a-zA-Z0-9_\\-:,.\\/%$]"))
 	(mungeval (lambda (val)
