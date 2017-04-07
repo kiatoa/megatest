@@ -17,7 +17,7 @@
      (let ((target-type   (s:get-input 'target-type))
 	   (target-filter (s:get-input 'tfilter))
 	   (target        (s:get-input 'target))
-	   (row-or-col    (s:get-input 'row-or-col)))
+           (row-or-col    (s:get-input 'row-or-col)))
        ;;
        ;; s:set! is a page local var. Better than s:session-var-set! but still not a good idea.
        ;;
@@ -27,14 +27,18 @@
        (s:set! "target-type" target-type)
        (s:set! "tfilter" target-filter)
        (s:set! "target"  target)
-       (s:set! "target-filter" target-filter)))
+       (s:set! "target-filter" target-filter)
+       ))
 ((filter2)
      (let ((tslice-select   (s:get-input 'tslice-select))
+           (page (s:get-input 'page)) 
 	   (t-slice-filter (s:get-input 't-slice-filter)))
        ;;
        ;; s:set! is a page local var. Better than s:session-var-set! but still not a good idea.
        ;;
+        ;(s:set! "var" "xyz")
        (s:set! "tslice" tslice-select)
+       (s:set! "page"  page)
        (s:set! "t-slice-patt" t-slice-filter)))
 ))
 
