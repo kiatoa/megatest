@@ -11,24 +11,48 @@
 
 (define (pages:home session db shared)
   (let* ((dbh         (s:db))
+         (tab2-limit 15)
+         (tab2-page   (if (or (equal? (s:get-param "page") "") (equal? (s:get-param "page") #f))
+                      1
+                        (string->number (s:get-param "page"))))
+         
+         (tab2-offset (- (* tab2-limit  tab2-page) tab2-limit))      
 	 (ttypes      (pgdb:get-target-types dbh))
 	 (selected    (string->number (or (s:get "target-type") "-1")))
          (target-slice (pgdb:get-distict-target-slice dbh)) 
-         (selected-slice (or (s:get "tslice") ""))  
+         (selected-slice (if (s:get "tslice") 
+                              (s:get "tslice")
+                              (if  (s:get-param "tslice")
+                                     (s:get-param "tslice")
+                                   "")))  
 	 (curr-trec   (filter (lambda (x)(eq? selected (vector-ref x 0))) ttypes))
 	 (curr-ttype  (if (and selected
 			       (not (null? curr-trec)))
 			  (vector-ref (car curr-trec) 1) #f))
 	 (all-parts   (if curr-ttype (append (string-split curr-ttype "/") '("runname" "testname")) '()))
+          
 	 (tfilter     (or (s:get "target-filter") "%"))
-         (tslice-filter     (or (s:get "t-slice-patt") ""))
+         (tslice-filter    (if (s:get "t-slice-patt") 
+                                  (s:get "t-slice-patt")
+                                 (if (s:get-param "patt") 
+                                 (string-substitute  "x_x" "%"   (s:get-param "patt") 'all) 
+                                  "%")
+                                 ))
          (target-patt   (if (or (equal? selected-slice "") (equal? tslice-filter "" ))
                              "" 
                            (conc selected-slice "/" tslice-filter )))
          (tab2-data (if (equal? target-patt "")
                          `()
-                         (pgdb:get-all-run-stats-target-slice dbh target-patt)))
+                         (pgdb:get-all-run-stats-target-slice dbh target-patt  tab2-limit tab2-offset)))
+         (tab2-cnt (if (equal? target-patt "")
+                         0
+                         (pgdb:get-slice-cnt dbh target-patt)))
+
+         (tab2-pages (round (/ tab2-cnt  tab2-limit))) 
+         (tab2-page-lst (pgdb:get-pg-lst tab2-pages))
+                       
          (tab2-ordered-data (pgdb:coalesce-runs-by-slice tab2-data selected-slice))  
+ 
 	 (targets     (pgdb:get-targets-of-type dbh selected tfilter))
 	 (row-or-col  (string-split (or (s:get "row-or-col") "") ","))
 	 (all-data    (if (and selected
@@ -47,7 +71,7 @@
       (s:div 'class "col_11" 
       (s:fieldset    "Filter Targets by slice"
 	    (s:form
-	     'action "home.filter2" 'method "post"
+	     'action "home.filter2" 'method "post" 'name "form1"
 	     (s:div 'class "col_12"
 		    (s:div 'class "col_6"
 			   (s:select (map (lambda (x)
@@ -58,10 +82,16 @@
 					  target-slice)
 				     'name 'tslice-select))
 		    (s:div 'class "col_4"
-			   (s:input-preserve 'name "t-slice-filter" 'placeholder "Filter remainder target"))
+			   (s:input 'type "text" 'name "t-slice-filter" 'value tslice-filter))
 		    (s:div 'class "col_2"
 			   (s:input 'type "submit" 'name "set-filter-vals" 'value "Submit")))))
-      (s:br) 
+      (s:br)
+     ;  (s:p (conc tslice-filter selected-slice  tab2-page))   
+      (s:p (map
+            (lambda (i) 
+          (s:span (s:a 'href (s:link-to "home" 'page i 'patt (string-substitute "%" "x_x" tslice-filter 'all)  'tslice selected-slice) "PAGE " i  )"&nbsp;|&nbsp;"))  
+          tab2-page-lst))
+         
       (s:p "&nbsp;&nbsp;Result Format: &nbsp;&nbsp;total / pass / fail / other")
       (s:fieldset	    (conc "Runs data for " target-patt) 
           (let* ((target-keys (hash-table-keys tab2-ordered-data))

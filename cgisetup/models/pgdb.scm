@@ -200,6 +200,7 @@
             WHERE t.state='COMPLETED' AND r.target LIKE ? GROUP BY r.target;"
    target-patt))
 
+
 (define (pgdb:get-latest-run-stats-given-target dbh ttype-id target-patt)
   (dbi:get-rows
    dbh
@@ -229,19 +230,42 @@
                  GROUP BY r.run_name;"
    ttype-id target-patt ))
 
-(define (pgdb:get-all-run-stats-target-slice dbh target-patt)
-(dbi:get-rows
-   dbh
-   "SELECT  r.target, r.run_name,r.event_time, COUNT(*) AS total,
+(define (pgdb:get-all-run-stats-target-slice dbh target-patt limit offset)
+    (dbi:get-rows
+    dbh
+    "SELECT  r.target, r.run_name,r.event_time, COUNT(*) AS total,
                     SUM(CASE WHEN t.status='PASS' THEN 1 ELSE 0 END) AS pass,
                     SUM(CASE WHEN t.status='FAIL' THEN 1 ELSE 0 END) AS fail,
                     SUM(CASE WHEN t.status IN ('PASS','FAIL') THEN 0 ELSE 1 END) AS other
             FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
             WHERE r.target LIKE ? 
-             
-            GROUP BY r.target,r.run_name, r.event_time;"
+            GROUP BY r.target,r.run_name, r.event_time
+             order by r.target,r.event_time desc limit  ? offset ?   ;"
+    target-patt limit offset))
+     
+
+(define (pgdb:get-count-data-stats-target-slice dbh target-patt)
+  (dbi:get-rows
+   dbh
+    "SELECT count(*)  from (SELECT  r.target, r.run_name,r.event_time, COUNT(*) AS total
+            FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+            WHERE r.target LIKE ?
+            GROUP BY r.target,r.run_name, r.event_time 
+          ) as x;" 
     target-patt))
 
+(define  (pgdb:get-slice-cnt dbh target-patt)
+  (let* ((cnt-result (pgdb:get-count-data-stats-target-slice dbh target-patt))
+         ;(cnt-row (car (cnt-result)))
+         (cnt 0) 
+       )
+    (for-each
+     (lambda (row)
+      (set! cnt  (vector-ref row 0 ))) 
+     cnt-result)
+
+cnt))
+   
 
 (define (pgdb:get-target-types dbh)
   (dbi:get-rows dbh "SELECT id,target_spec FROM ttype;"))
@@ -381,3 +405,13 @@
 	 (hash-table-set! data run-name run)))
      runs)
     data))
+
+(define (pgdb:get-pg-lst tab2-pages)
+    (let loop ((i 1)
+             (lst `()))
+                       (cond
+                        ((> i tab2-pages )
+                        lst) 
+                      (else 
+		  	(loop (+ i 1) (append   lst (list i)))))))
+
