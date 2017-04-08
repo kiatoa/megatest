@@ -43,37 +43,38 @@
 	 (end-flag   #f))
     ;; now we have all needed data as a list of alists in time order, extract the
     ;; messages for given branch starting at start-tag and ending at end-tag
-    (filter
-     (lambda (x) x)
-     (map
-      (lambda (entry)
-	(let ((tags (aref entry "tags")))
-	  (if (or (not tags) ;; eh?
-		  (not (list? tags)))
-	      (begin
-		;; (with-output-to-port (current-error-port)
-		;;   (lambda ()
-		;;     (print "ERROR: bad entry. tags: " tags)))
-		#f)
-	      (let* ((btag (car tags))  ;; first tag is the primary branch
-		     (tags (cdr tags))  ;; remainder are actual tags
-		     (cmt  (aref entry "comment"))
-		     (usr  (aref entry "user"))
-		     (tms  (aref entry "timestamp")))
-		;; (print "btag: " btag " tags: " tags " usr: " usr)
-		(if (equal? btag branch) ;; we are on the branch
-		    (begin
-		      (if (member start-tag tags)(set! start-flag #t))
-		      (let ((res (if (and start-flag
-					  (not end-flag))
-				     `(,usr
-				       ,(time->string (seconds->local-time tms) "WW%U.%w %H:%M")
-				       ,cmt)
-				     #f)))
-			(if (member end-tag tags)(set! end-flag #t))
-			res))
-		    #f)))))
-      (reverse timeline)))))
+    (reverse ;; return results oldest to newest
+     (filter
+      (lambda (x) x)
+      (map
+       (lambda (entry)
+	 (let ((tags (aref entry "tags")))
+	   (if (or (not tags) ;; eh?
+		   (not (list? tags)))
+	       (begin
+		 ;; (with-output-to-port (current-error-port)
+		 ;;   (lambda ()
+		 ;;     (print "ERROR: bad entry. tags: " tags)))
+		 #f)
+	       (let* ((btag (car tags))  ;; first tag is the primary branch
+		      (tags (cdr tags))  ;; remainder are actual tags
+		      (cmt  (aref entry "comment"))
+		      (usr  (aref entry "user"))
+		      (tms  (aref entry "timestamp")))
+		 ;; (print "btag: " btag " tags: " tags " usr: " usr)
+		 (if (equal? btag branch) ;; we are on the branch
+		     (begin
+		       (if (member start-tag tags)(set! start-flag #t))
+		       (let ((res (if (and start-flag
+					   (not end-flag))
+				      `(,usr
+					,(time->string (seconds->local-time tms) "WW%U.%w %H:%M")
+					,cmt)
+				      #f)))
+			 (if (member end-tag tags)(set! end-flag #t))
+			 res))
+		     #f)))))
+       (reverse timeline))))))
 
 (define (process-fossil branch start-tag end-tag)
   (print-rows
