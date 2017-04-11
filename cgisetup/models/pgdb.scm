@@ -201,20 +201,88 @@
    target-patt))
 
 
-(define (pgdb:get-latest-run-stats-given-target dbh ttype-id target-patt)
+(define (pgdb:get-latest-run-stats-given-target dbh ttype-id target-patt limit offset)
   (dbi:get-rows
    dbh
    ;;    "SELECT COUNT(t.id),t.status,r.target FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
    ;;         WHERE t.state='COMPLETED' AND ttype_id=? AND r.target LIKE ? GROUP BY r.target,t.status;"
-   "SELECT r.target,COUNT(*) AS total,
+   "SELECT r.target, r.event_time, COUNT(*) AS total,
                     SUM(CASE WHEN t.status='PASS' THEN 1 ELSE 0 END) AS pass,
                     SUM(CASE WHEN t.status='FAIL' THEN 1 ELSE 0 END) AS fail,
                     SUM(CASE WHEN t.status IN ('PASS','FAIL') THEN 0 ELSE 1 END) AS other, r.id
             FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
             WHERE t.state like '%'  AND ttype_id=? AND r.target LIKE ? 
                  and r.id in 
-(SELECT DISTINCT on (target) id from runs where target like ? AND ttype_id=? order by target,event_time desc) GROUP BY r.target,r.id;"
-   ttype-id target-patt target-patt ttype-id))
+           (SELECT DISTINCT on (target) id from runs where target like ? AND ttype_id=? order by target,event_time desc) 
+          GROUP BY r.target,r.id 
+          order by r.event_time desc limit ? offset ? ;"
+   ttype-id target-patt target-patt ttype-id limit offset))
+
+(define (pgdb:get-latest-run-stats-given-pattern dbh patt limit offset)
+  (dbi:get-rows
+   dbh
+   ;;    "SELECT COUNT(t.id),t.status,r.target FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+   ;;         WHERE t.state='COMPLETED' AND ttype_id=? AND r.target LIKE ? GROUP BY r.target,t.status;"
+   "SELECT r.target, r.event_time, COUNT(*) AS total,
+                    SUM(CASE WHEN t.status='PASS' THEN 1 ELSE 0 END) AS pass,
+                    SUM(CASE WHEN t.status='FAIL' THEN 1 ELSE 0 END) AS fail,
+                    SUM(CASE WHEN t.status IN ('PASS','FAIL') THEN 0 ELSE 1 END) AS other, r.id
+            FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+            WHERE t.state like '%'  AND r.target LIKE ? 
+                 and r.id in 
+           (SELECT DISTINCT on (target) id from runs where target like ?  order by target,event_time desc) 
+          GROUP BY r.target,r.id 
+          order by r.event_time desc limit ? offset ? ;"
+   patt patt  limit offset))
+
+
+(define (pgdb:get-count-data-stats-target-latest dbh ttype-id target-patt)
+  (dbi:get-rows
+   dbh
+    "SELECT count(*)  from 
+          (SELECT DISTINCT on (target) id 
+		from runs where target like ? AND ttype_id = ? 
+		order by target, event_time desc
+          ) as x;" 
+    target-patt ttype-id))
+
+(define  (pgdb:get-latest-run-cnt dbh ttype-id target-patt)
+  (let* ((cnt-result (pgdb:get-count-data-stats-target-latest dbh ttype-id target-patt))
+         ;(cnt-row (car (cnt-result)))
+         (cnt 0) 
+       )
+    (for-each
+     (lambda (row)
+      (set! cnt  (vector-ref row 0 ))) 
+     cnt-result)
+
+cnt))
+
+(define (pgdb:get-count-data-stats-latest-pattern dbh patt)
+  (dbi:get-rows
+   dbh
+    "SELECT count(*)  from 
+          (SELECT DISTINCT on (target) id 
+		from runs where target like ?  
+		order by target, event_time desc
+          ) as x;" 
+    patt))
+
+(define  (pgdb:get-latest-run-cnt-by-pattern dbh target-patt)
+  (let* ((cnt-result (pgdb:get-count-data-stats-latest-pattern dbh target-patt))
+         ;(cnt-row (car (cnt-result)))
+         (cnt 0) 
+       )
+    (for-each
+     (lambda (row)
+      (set! cnt  (vector-ref row 0 ))) 
+     cnt-result)
+
+cnt))
+
+
+
+
 
 (define (pgdb:get-run-stats-history-given-target dbh ttype-id target-patt)
   (dbi:get-rows
@@ -273,7 +341,8 @@ cnt))
  (define (pgdb:get-distict-target-slice dbh)
   (dbi:get-rows dbh " select distinct on (split_part (target, '/', 1)) (split_part (target, '/', 1)) from runs;"))
 
-
+  (define (pgdb:get-distict-target-slice3 dbh)
+  (dbi:get-rows dbh " select distinct on (split_part (target, '/', 3)) (split_part (target, '/', 3)) from runs;"))
 ;; 
 (define (pgdb:get-targets dbh target-patt)
   (let ((ttypes (pgdb:get-target-types dbh)))
@@ -313,13 +382,44 @@ cnt))
 ;;
 ;; fnum is the field number in the tuples to be split
 ;;
+
+(define (pgdb:mk-pattern  dot type bp rel)
+  (let* ((typ (if (equal? type "all")
+               "%"
+                type))
+        (dotprocess (if (equal? dot "all")
+                      "%"
+                     dot))
+        (rel-num (if (equal? rel "")
+                      "%"
+                     rel))
+        (pattern  (conc "%/" bp "/" dotprocess "/" typ "_" rel-num)))
+pattern))
+
 (define (pgdb:coalesce-runs dbh runs all-parts row-or-col fnum)
   (let* ((data  (make-hash-table)))
-    ;;	 (rnums (
-    ;; for now just do first => remainder
+    
     (for-each
      (lambda (run)
        (let* ((target (vector-ref run fnum))
+	      (parts  (string-split target "/"))
+	      (first  (car parts))
+	      (rest   (string-intersperse (cdr parts) "/"))
+	      (coldat (hash-table-ref/default data first #f)))
+	 (if (not coldat)(let ((newht (make-hash-table)))
+			   (hash-table-set! data first newht)
+			   (set! coldat newht)))
+	 (hash-table-set! coldat rest run)))
+     runs)
+    data))
+
+
+(define (pgdb:coalesce-runs1 runs  )
+  (let* ((data  (make-hash-table)))
+    
+    (for-each
+     (lambda (run)
+       (let* ((target (vector-ref run 0))
 	      (parts  (string-split target "/"))
 	      (first  (car parts))
 	      (rest   (string-intersperse (cdr parts) "/"))
