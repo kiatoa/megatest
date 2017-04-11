@@ -52,6 +52,7 @@
          (ordered-data (pgdb:coalesce-runs1 all-data)))
    (s:div 'class "col_12" 
         (s:ul 'class "tabs left"
+          
         (map (lambda (x)
             	(s:li (s:a 'href (conc "#" x) x)))
 	  *process*))
@@ -86,6 +87,8 @@
           (s:span (s:a 'href (s:link-to "home" 'pg i ) "PAGE " i  )"&nbsp;|&nbsp;"))  
           page-lst))
            (s:p "&nbsp;&nbsp;Result Format: &nbsp;&nbsp;total / pass / fail / other")
+            (if (equal? x bp)
+             (begin 
            (s:fieldset	    (conc "Runs data for " pattern)
 	      (let* ((a-keys (pgdb:ordered-data->a-keys ordered-data))
 		   (b-keys (pgdb:ordered-data->b-keys ordered-data a-keys)))
@@ -143,5 +146,7 @@
 				     (s:td ""))))
 			     a-keys)))
 		    b-keys))))
-)))
+)
+(begin 
+(s:p ""))))))
  *process*))))
