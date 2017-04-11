@@ -113,37 +113,40 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; args and pkt key specs
 ;;
 (define *arg-keys*
-  '(("-area"       . G) ;; maps to group
-    ("-target"     . t)
-    ("-run-name"   . n)
-    ("-state"      . e)
-    ("-status"     . s)
-    ("-contour"    . c)
-    ("-test-patt"  . p)  ;; idea, enhance margs ("-test-patt" "-testpatt") => yields one value in "-test-patt"
-    ("-mode-patt"  . o)
-    ("-tag-expr"   . x)
-    ("-item-patt"  . i)
-    ("-sync-to"    . k)
-    ("-append-config" . d)
+  '(
+    ("-area"            . G) ;; maps to group
+    ("-contour"         . c)
+    ("-append-config"   . d)
+    ("-state"           . e)
+    ("-item-patt"       . i)
+    ("-sync-to"         . k)
+    ("-run-name"        . n)
+    ("-mode-patt"       . o)
+    ("-test-patt"       . p)  ;; idea, enhance margs ("-test-patt" "-testpatt") => yields one value in "-test-patt"
+    ("-status"          . s)
+    ("-target"          . t)
+    ("-tag-expr"        . x)
     ;; misc
-    ("-start-dir"  . S)
-    ("-msg"        . M)
-    ("-set-vars"   . v)
-    ("-debug"      . #f)  ;; for *verbosity* > 2
-    ("-load"       . #f)  ;; load and exectute a scheme file
-    ("-log"        . #f)
+    ("-debug"           . #f)  ;; for *verbosity* > 2
+    ("-load"            . #f)  ;; load and exectute a scheme file
+    ("-log"             . #f)
+    ("-msg"             . M)
+    ("-start-dir"       . S)
+    ("-set-vars"        . v)
     ))
 (define *switch-keys*
-  '(("-h"          . #f)
-    ("-help"       . #f)
-    ("--help"      . #f)
-    ("-manual"     . #f)
-    ("-version"    . #f)
-    ;; misc
-    ("-repl"       . #f)
-    ("-immediate"  . I)
-    ("-preclean"   . r)
-    ("-rerun-all"  . u)
+  '(
+    ("-h"               . #f)
+    ("-help"            . #f)
+    ("--help"           . #f)
+    ("-manual"          . #f)
+    ("-version"         . #f)
+    ;; misc	        
+    ("-repl"            . #f)
+    ("-immediate"       . I)
+    ("-preclean"        . r)
+    ("-rerun-all"       . u)
+    ("-prepend-contour" . w)
     ))
 
 ;; alist to map actions to old megatest commands
@@ -487,16 +490,21 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			       (begin
 				 (print "ERROR: Failed to find named target translator " xlatr-key ", using original target.")
 				 runkey)))
-			 runkey)))
+			 runkey))
+	 (actual-action  (if action
+			     (if (equal? action "sync-prepend")
+				 "sync"
+				 action)
+			     "run"))) ;; this has gotten a bit ugly. Need a function to handle actions processing.
     ;; some hacks to remove switches not needed in certain cases
     (case (string->symbol (or action "run"))
-      ((sync)
+      ((sync sync-prepend)
        (set! new-target #f)
        (set! runame     #f)))
     (print "area-path: " area-path " area-xlatr: " area-xlatr " orig-target: " runkey " new-target: " new-target)
     (let-values (((uuid pkt)
 		  (command-line->pkt
-		   (if action action "run")
+		   actual-action
 		   (append 
 		    `(("-start-dir"  . ,area-path)
 		      ("-msg"        . ,reason)
@@ -507,6 +515,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (if (good-val tag-expr)    `(("-tag-expr"      . ,tag-expr))    '())
 		    (if (good-val dbdest)      `(("-sync-to"       . ,dbdest))      '())
 		    (if (good-val append-conf) `(("-append-config" . ,append-conf)) '())
+		    (if (equal? action "sync-prepend") '(("-prepend-contour" . " "))   '())
 		    (if (not (or mode-patt tag-expr))
 			`(("-testpatt"  . "%"))
 			'())
@@ -602,7 +611,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    ;; (print "last-run: " last-run " need-run: " need-run)
 			    ;; (if need-run
 			    (case (string->symbol action)
-			      ((sync)
+			      ((sync sync-prepend)
 			       (if (common:extended-cron crontab #f last-sync)
 				   (push-run-spec torun contour runkey
 						  `((message . ,(conc ruletype ":sync-" cron-safe-string))
@@ -788,7 +797,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			   (if (case (or (and action (string->symbol action)) 'noaction)  ;; ensure we have the needed data to run this action
 				 ((noaction) #f)
 				 ((run)      (and runname reason))
-				 ((sync)     (and reason dbdest))
+				 ((sync sync-prepend)     (and reason dbdest))
 				 (else       #f))
 			       ;; instead of unwrapping the runkeydat alist, pass it directly to create-run-pkt
 			       (create-run-pkt mtconf action area runkey runname mode-patt tag-expr pktsdir reason contour sched dbdest append runtrans) 
