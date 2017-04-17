@@ -568,7 +568,7 @@
 	  (set! keys       (rmt:get-keys))
 	  ;; (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals) ;; these may be needed by the launching process
 	  ;; one of these is defunct/redundant ...
-	  (if (not (launch:setup force: #t))
+	  (if (not (launch:setup force-reread: #t))
 	      (begin
 		(debug:print 0 *default-log-port* "Failed to setup, exiting") 
 		;; (sqlite3:finalize! db)
@@ -796,15 +796,15 @@
 ;;           *runconfigdat* (runconfigs.config info)
 ;;           *configstatus* (status of the read data)
 ;;
-(define (launch:setup #!key (force #f) (areapath #f))
+(define (launch:setup #!key (force-reread #f) (areapath #f))
   (mutex-lock! *launch-setup-mutex*)
   (if (and *toppath*
 	   (eq? *configstatus* 'fulldata)) ;; got it all
       (begin
-	(debug:print 0 *default-log-port* "NOTE: skipping launch:setup-body call since we have fulldata")
+	(debug:print 2 *default-log-port* "NOTE: skipping launch:setup-body call since we have fulldata")
 	(mutex-unlock! *launch-setup-mutex*)
 	*toppath*)
-      (let ((res (launch:setup-body force: force areapath: areapath)))
+      (let ((res (launch:setup-body force-reread: force-reread areapath: areapath)))
 	(mutex-unlock! *launch-setup-mutex*)
 	res)))
 
