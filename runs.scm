@@ -220,7 +220,45 @@
 				 (else #f))))
 	  (list (not can-not-run-more) num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)))))
 
-
+(define (runs:run-pre-hook run-id)
+    (let* ((run-pre-hook   (configf:lookup *configdat* "runs" "pre-hook"))
+           (existing-tests (if run-pre-hook
+                               (rmt:get-tests-for-run run-id "%" '() '() ;; run-id testpatt states statuses
+                                                      #f #f ;; offset limit
+                                                      #f ;; not-in
+                                                      #f ;; sort-by
+                                                      #f ;; sort-order
+                                                      #f ;; get full data (not 'shortlist)
+                                                      0 ;; (runs:gendat-inc-results-last-update *runs:general-data*) ;; last update time
+                                                      'dashboard)
+                               '()))
+           (log-dir         (conc *toppath* "/logs"))
+           (log-file        (conc "pre-hook-" (string-translate (getenv "MT_TARGET") "/" "-") "-" (getenv "MT_RUNNAME") ".log"))
+           (full-log-fname  (conc log-dir "/" log-file)))
+      (if run-pre-hook
+          (if (null? existing-tests)
+              (let* ((use-log-dir (if (not (directory-exists? log-dir))
+                                      (handle-exceptions
+                                       exn
+                                       (begin
+                                         (debug:print 0 *default-log-port* "WARNING: Failed to create " log-dir)
+                                         #f)
+                                       (create-directory log-dir #t)
+                                       #t)
+                                      #t))
+                     (start-time   (current-seconds))
+                     (actual-logf  (if use-log-dir full-log-fname log-file)))
+                (handle-exceptions
+                 exn
+                 (begin
+                   (print-call-chain *default-log-port*)
+                   (debug:print 0 *default-log-port* "Message: " ((condition-property-accessor 'exn 'message) exn))
+                   (debug:print 0 *default-log-port* "ERROR: failed to run pre-hook " run-pre-hook ", check the log " log-file))
+                 (debug:print-info 0 *default-log-port* "running run-pre-hook: \"" run-pre-hook "\", log is " actual-logf)
+                 (system (conc run-pre-hook " >> " actual-logf " 2>&1"))
+                 (debug:print-info 0 *default-log-port* "pre-hook \"" run-pre-hook "\" took " (- (current-seconds) start-time) " seconds to run.")))
+              (debug:print 0 *default-log-port* "Skipping pre-hook call \"" run-pre-hook "\" as there are existing tests for this run.")))))
+    
 ;;  test-names: Comma separated patterns same as test-patts but used in selection 
 ;;              of tests to run. The item portions are not respected.
 ;;              FIXME: error out if /patt specified
@@ -369,6 +407,10 @@
     ;; Ensure all tests are registered in the test_meta table
     (runs:update-all-test_meta #f)
 
+    ;; run the run prehook if there are no tests yet run for this run:
+    ;;
+    (runs:run-pre-hook run-id)
+    
     ;; now add non-directly referenced dependencies (i.e. waiton)
     ;;======================================================================
     ;; refactoring this block into tests:get-full-data
