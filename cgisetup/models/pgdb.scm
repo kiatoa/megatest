@@ -222,15 +222,15 @@
   (dbi:get-rows
    dbh
    ;;    "SELECT COUNT(t.id),t.status,r.target FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
-   ;;         WHERE t.state='COMPLETED' AND ttype_id=? AND r.target LIKE ? GROUP BY r.target,t.status;"
+   ;;         WHERE t.state='COMPLETED' AND ttype_id=? AND r.target ILIKE ? GROUP BY r.target,t.status;"
    "SELECT r.target, r.event_time, COUNT(*) AS total,
                     SUM(CASE WHEN t.status='PASS' THEN 1 ELSE 0 END) AS pass,
                     SUM(CASE WHEN t.status='FAIL' THEN 1 ELSE 0 END) AS fail,
                     SUM(CASE WHEN t.status IN ('PASS','FAIL') THEN 0 ELSE 1 END) AS other, r.id
             FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
-            WHERE t.state like '%'  AND r.target LIKE ? 
+            WHERE t.state like '%'  AND r.target ILIKE ? 
                  and r.id in 
-           (SELECT DISTINCT on (target) id from runs where target like ?  order by target,event_time desc) 
+           (SELECT DISTINCT on (target) id from runs where target ilike ?  order by target,event_time desc) 
           GROUP BY r.target,r.id 
           order by r.event_time desc limit ? offset ? ;"
    patt patt  limit offset))
@@ -263,7 +263,7 @@ cnt))
    dbh
     "SELECT count(*)  from 
           (SELECT DISTINCT on (target) id 
-		from runs where target like ?  
+		from runs where target ilike ?  
 		order by target, event_time desc
           ) as x;" 
     patt))
