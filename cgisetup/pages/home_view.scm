@@ -49,7 +49,10 @@
          (cnt     (pgdb:get-latest-run-cnt-by-pattern dbh pattern))
          (total-pages (ceiling (/ cnt  limit))) 
          (page-lst (pgdb:get-pg-lst total-pages))
-         (ordered-data (pgdb:coalesce-runs1 all-data)))
+         (ordered-data (pgdb:coalesce-runs1 all-data))
+         (rel-val (if (equal? rel "")
+                       "%"
+                        rel)))
    (s:div 'class "col_12" 
         (s:ul 'class "tabs left"
           
@@ -57,7 +60,7 @@
             	(s:li (s:a 'href (conc "#" x) x)))
 	  *process*))
        (map (lambda (x)
-
+        
        (s:div 'id  x 'class "tab-content"
       (s:div 'class "col_11"
 	   (s:fieldset    "Area type and target filter"
@@ -66,22 +69,26 @@
 	     (s:div 'class "col_12"
                         (s:div 'class "col_3"
 			   (s:label "Release Type") (s:select (map (lambda (x)
-                                            (list x ))
+                                           (if (equal?  x type)  
+                                            (list x x x #t)
+                                            (list x x x #f)) )
 					  *kit-types*)
 				     'name "kit-type"))
                    (s:div 'class "col_3"
 			   (s:label "Dot") (s:select (map (lambda (x)
-                                            (list x ))
+                                            (if (equal?  x dot)  
+                                            (list x x x #t)
+                                            (list x x x #f)))
 					  *dots*)
 				     'name "dot"))
 
 		   (s:div 'class "col_3"
                             (s:input 'type "hidden" 'value x 'name "bp")
-			   (s:label "Release #") (s:input 'list "suggestions" 'name "rel-num"))
+			   (s:label "Release #") (s:input 'type "text" 'name "rel-num" 'value rel-val))
 		    (s:div 'class "col_2"
 			   (s:input 'type "submit" 'name "set-filter-vals" 'value "Submit")))))
            (s:br)
-          ; (s:p (conc bp (s:get-param "bp") (s:get "bp"))) 
+           ;(s:p (conc dot(string? dot) )) 
              (s:p (map
             (lambda (i) 
           (s:span (s:a 'href (s:link-to "home" 'pg i ) "PAGE " i  )"&nbsp;|&nbsp;"))  
