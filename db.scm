@@ -3351,6 +3351,10 @@
 							 (not (equal? x "COMPLETED")))
 						       all-curr-states))
                             (newstate          (cond
+						((> running 0)
+						 "RUNNING") ;; anything running, call the situation running
+						((> bad-not-started 0)  ;; we have an ugly situation, it is completed in the sense we cannot do more.
+						 "COMPLETED") 
 						((> (length non-completes) 0) ;;
 						 (car non-completes))  ;;  (remove (lambda (x)(equal? "COMPLETED" x)) all-curr-states)))
 						(else
