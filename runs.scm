@@ -294,6 +294,12 @@
 
     (if (not test-patts) ;; first time in - adjust testpatt
 	(set! test-patts (common:args-get-testpatt runconf)))
+    ;; if test-patts is #f at this point there is something wrong and we need to bail out
+    (if (not test-patts)
+	(begin
+	  (debug:print 0 *default-log-port* "WARNING: there is no test pattern for this run. Exiting now.")
+	  (exit 0)))
+    
     (if (args:get-arg "-tagexpr")
 	(begin
 	  (set! allowed-tests (string-join (runs:get-tests-matching-tags (args:get-arg "-tagexpr")) ","))
@@ -1705,7 +1711,6 @@
                  (member action write-access-actions))
         (debug:print-error 0 *default-log-port* "megatest.db is readonly.  Cannot proceed with action ["action"] in which write-access isrequired .")
         (exit 1)))
-
     
     (debug:print-info 4 *default-log-port* "runs:operate-on => Header: " header " action: " action " new-state-status: " new-state-status)
     (if (> 2 (length state-status))

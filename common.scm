@@ -971,6 +971,10 @@
          (args-testpatt (or (args:get-arg "-testpatt") (args:get-arg "-runtests") "%"))
          (rtestpatt     (if rconf (runconfigs-get rconf testpatt-key) #f)))
     (cond
+     ((args:get-arg "--modepatt") ;; modepatt is a forced setting, when set it MUST refer to an existing PATT in the runconfig
+      (if rconf
+	  (runconfigs-get rconf testpatt-key)
+	  #f))     ;; We do NOT fall back to "%"
      ;; (tags-testpatt
      ;;  (debug:print-info 0 *default-log-port* "-tagexpr "tagexpr" selects testpatt "tags-testpatt)
      ;;  tags-testpatt)
