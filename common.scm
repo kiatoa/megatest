@@ -1006,6 +1006,18 @@
                              message: (conc "Unable to access path: " path-string)
                              ))
 
+;; does the directory exist and do we have write access?
+;;
+;;    returns the directory or #f
+;;
+(define (common:directory-writable? path-string)
+  (handle-exceptions
+   exn
+   #f
+   (if (and (directory-exists? path-string)
+            (file-write-access? path-string))
+       path-string
+       #f)))
 
 (define (common:get-linktree)
   (or (getenv "MT_LINKTREE")
@@ -1047,6 +1059,16 @@
 	      (if exit-if-bad (exit 1))
 	      #f)
 	    #f))))
+
+;; looking only (at least for now) at the MT_ variables craft the full testname
+;;
+(define (common:get-full-test-name)
+  (if (getenv "MT_TEST_NAME")
+      (if (and (getenv "MT_ITEMPATH")
+               (not (equal? (getenv "MT_ITEMPATH") "")))
+          (getenv "MT_TEST_NAME")
+          (conc (getenv "MT_TEST_NAME") "/" (getenv "MT_ITEMPATH")))
+      #f))
 
 ;; logic for getting homehost. Returns (host . at-home)
 ;; IF *toppath* is not set, wait up to five seconds trying every two seconds
@@ -1113,7 +1135,7 @@
 ;; do we honor the caches of the config files?
 ;;
 (define (common:use-cache?)
-  (let ((res #f)) ;; priority by order of evaluation
+  (let ((res #t)) ;; priority by order of evaluation
     (if *configdat*
 	(if (equal? (configf:lookup *configdat* "setup" "use-cache") "no")
 	    (set! res #f)
