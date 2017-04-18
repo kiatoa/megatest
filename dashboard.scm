@@ -1087,6 +1087,7 @@ Misc
 (define (update-search commondat tabdat x val)
   (hash-table-set! (dboard:tabdat-searchpatts tabdat) x val)
   (dboard:tabdat-filters-changed-set! tabdat #t)
+  (mark-for-update tabdat)
   (set-bg-on-filter commondat tabdat))
 
 ;; force ALL updates to zero (effectively)
