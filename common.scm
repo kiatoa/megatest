@@ -1113,10 +1113,20 @@
 ;; do we honor the caches of the config files?
 ;;
 (define (common:use-cache?)
-  (not (or (args:get-arg "-no-cache")
-	   (and *configdat*
-		(equal? (configf:lookup *configdat* "setup" "use-cache") "no")))))
-
+  (let ((res #f)) ;; priority by order of evaluation
+    (if *configdat*
+	(if (equal? (configf:lookup *configdat* "setup" "use-cache") "no")
+	    (set! res #f)
+	    (if (equal? (configf:lookup *configdat* "setup" "use-cache") "yes")
+		(set! res #t))))
+    (if (args:get-arg "-no-cache")(set! res #f)) ;; overrides setting in "setup"
+    (if (getenv "MT_USE_CACHE")
+	(if (equal? (getenv "MT_USE_CACHE") "yes")
+	    (set! res #t)
+	    (if (equal? (getenv "MT_USE_CACHE") "no")
+		(set! res #f))))    ;; overrides -no-cache switch
+    res))
+  
 ;; force use of server?
 ;;
 (define (common:force-server?)
@@ -1136,13 +1146,6 @@
 	  (debug:print-info 0 *default-log-port* "forcing use of server, force setting is \"" force-setting "\".")
 	  #t)
 	#f)))
-
-;; do we honor the caches of the config files?
-;;
-(define (common:use-cache?)
-  (not (or (args:get-arg "-no-cache")
-	   (and *configdat*
-		(equal? (configf:lookup *configdat* "setup" "use-cache") "no")))))
 
 ;;======================================================================
 ;; M I S C   L I S T S
