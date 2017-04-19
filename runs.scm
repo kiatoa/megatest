@@ -103,7 +103,12 @@
 		  (debug:print 0 *default-log-port* "FATAL: *configdat* was inaccessible! This should never happen. Retried " count " times. Message: " msg)
 		  (debug:print 0 *default-log-port* "Call chain:")
 		  (with-output-to-port *default-log-port*
-		    (lambda ()(pp call-chain)))
+
+                    (lambda ()
+                      (print "*configdat* is >>"*configdat*"<<")
+                      (pp *configdat*)
+                      (pp call-chain)))
+                  
 		  (exit 1))))
           ;;(bb-check-path msg: "runs:set-megatest-env-vars block 1.5")
           (alist->env-vars (hash-table-ref/default *configdat* "env-override" '())))) ;;;; environment is tainted HERE in this let block.
