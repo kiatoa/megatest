@@ -800,7 +800,7 @@
 (define (launch:setup #!key (force-reread #f) (areapath #f))
   (mutex-lock! *launch-setup-mutex*)
   (if (and *toppath*
-	   (eq? *configstatus* 'fulldata)) ;; got it all
+	   (eq? *configstatus* 'fulldata) (not force-reread)) ;; got it all
       (begin
 	(debug:print 2 *default-log-port* "NOTE: skipping launch:setup-body call since we have fulldata")
 	(mutex-unlock! *launch-setup-mutex*)
