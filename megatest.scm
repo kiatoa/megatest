@@ -135,7 +135,7 @@ Queries
   -list-db-targets        : list the target combinations used in the db
   -show-config            : dump the internal representation of the megatest.config file
   -show-runconfig         : dump the internal representation of the runconfigs.config file
-  -dumpmode MODE          : dump in MODE format instead of sexpr, MODE=json,ini,sexp etc.
+  -dumpmode MODE          : dump in MODE format instead of sexpr, MODE=json,ini,sexp etc. (add -debug 0,9 to see which file contributes each line)
   -show-cmdinfo           : dump the command info for a test (run in test environment)
   -section sectionName
   -var varName            : for config and runconfig lookup value for sectionName varName
