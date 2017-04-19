@@ -148,7 +148,13 @@
 ;; returns waitons waitors tconfigdat
 ;;
 (define (tests:get-waitons test-name all-tests-registry)
-   (let* ((config  (tests:get-testconfig test-name #f all-tests-registry 'return-procs)))
+  (let* ((config  (tests:get-testconfig test-name #f all-tests-registry 'return-procs))
+	 (extras  (configf:get-section *configdat* "waitons"))
+	 (ewaits  (if extras (alist-ref test-name extras string=?) #f))
+	 (ewaitlst (if (and ewaits (not (null? ewaits)))
+		       (string-split (car ewaits))
+		       '()))
+	 )
      (let ((instr (if config 
 		      (config-lookup config "requirements" "waiton")
 		      (begin ;; No config means this is a non-existant test
@@ -186,7 +192,7 @@
 			(begin
 			  (debug:print-error 0 *default-log-port* "test " test-name " has unrecognised waiton testname " x)
 			  #f)))
-		  newwaitons)
+		  (append newwaitons ewaitlst))
 	  (filter (lambda (x)
 		    (if (hash-table-ref/default all-tests-registry x #f)
 			#t
