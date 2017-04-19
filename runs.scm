@@ -98,7 +98,7 @@
 		(begin ;; this call is colliding, do some crude stuff to fix it.
 		  (debug:print 0 *default-log-port* "ERROR: *configdat* was inaccessible! This should never happen. Retry #" count)
 		  (launch:setup force-reread: #t)
-		  (fatal-loop (+ count 1)))
+		  (fatal-loop (+ count 1))) ;; BB: no escape from fatality!
 		(begin
 		  (debug:print 0 *default-log-port* "FATAL: *configdat* was inaccessible! This should never happen. Retried " count " times. Message: " msg)
 		  (debug:print 0 *default-log-port* "Call chain:")
