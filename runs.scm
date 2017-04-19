@@ -98,7 +98,7 @@
 		(begin ;; this call is colliding, do some crude stuff to fix it.
 		  (debug:print 0 *default-log-port* "ERROR: *configdat* was inaccessible! This should never happen. Retry #" count)
 		  (launch:setup force-reread: #t)
-		  (fatal-loop (+ count 1))) ;; BB: no escape from fatality!
+		  (fatal-loop (+ count 1))) 
 		(begin
 		  (debug:print 0 *default-log-port* "FATAL: *configdat* was inaccessible! This should never happen. Retried " count " times. Message: " msg)
 		  (debug:print 0 *default-log-port* "Call chain:")
@@ -111,8 +111,10 @@
                   
 		  (exit 1))))
           ;;(bb-check-path msg: "runs:set-megatest-env-vars block 1.5")
-          (if (or (not *configdat*) (not (hash-table? *configdat*)))
-              (BB> "ERROR: *configdat* was inaccessible! This should never happen.  Brute force reread.")
+          (when (or (not *configdat*) (not (hash-table? *configdat*)))
+              (debug:print 0 *default-log-port* "WARNING: *configdat* was inaccessible! This should never happen.  Brute force reread.")
+              ;;(BB> "ERROR: *configdat* was inaccessible! This should never happen.  Brute force reread.")
+              (thread-sleep! 2) ;; assuming nfs lag.
               (launch:setup force-reread: #t))
           (alist->env-vars (hash-table-ref/default *configdat* "env-override" '())))) ;;;; environment is tainted HERE in this let block.
     ;;(bb-check-path msg: "runs:set-megatest-env-vars block 2")
