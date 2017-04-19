@@ -743,7 +743,8 @@
 	    (debug:print 2 *default-log-port* "Output from running " fullrunscript ", pid " (launch:einf-pid exit-info) " in work area " 
 			 work-area ":\n====\n exit code " (launch:einf-exit-code exit-info) "\n" "====\n")
 	    (if (not (launch:einf-exit-status exit-info))
-		(exit 4)))))))
+		(exit 4))))
+        )))
 
 (define (launch:cache-config)
   ;; if we have a linktree and -runtests and -target and the directory exists dump the config
@@ -840,7 +841,7 @@
 	   *toppath*
 	   (not force-reread)) ;; no need to reprocess
       *toppath*   ;; return toppath
-      (let* ((use-cache (common:use-cache?))
+      (let* ((use-cache (common:use-cache?)) ;; BB- use-cache checks *configdat* for use-cache setting.  We do not have *configdat*.  Bootstrapping problem here.
 	     (toppath  (or *toppath* areapath (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
 	     (target   (common:args-get-target))
 	     (sections (if target (list "default" target) #f)) ;; for runconfigs
@@ -850,17 +851,21 @@
 	     (rccachef   (cdr cachefiles)) ;; (and cachedir (conc cachedir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
 	     ) ;; (cancreate (and cachedir (common:file-exists? cachedir)(file-write-access? cachedir) (not (common:in-running-test?)))))
 	(set! *toppath* toppath) ;; This is needed when we are running as a test using CMDINFO as a datasource
+        (BB> "launch:setup-body -- cachefiles="cachefiles)
 	(cond
 	 ;; if mtcachef exists just read it, however we need to assume toppath is available in $MT_RUN_AREA_HOME
-	 ((and mtcachef (common:file-exists? mtcachef) (get-environment-variable "MT_RUN_AREA_HOME") use-cache)
-	  (set! *configdat*    (configf:read-alist mtcachef))
+	 ((and (not force-reread) mtcachef (common:file-exists? mtcachef) (get-environment-variable "MT_RUN_AREA_HOME") use-cache)
+          (BB> "launch:setup-body -- cond branch 1 - use-cache")
+          (set! *configdat*    (configf:read-alist mtcachef))
+          (BB> "launch:setup-body -- 1 set! *configdat*="*configdat*)
 	  (set! *runconfigdat* (configf:read-alist rccachef))
 	  (set! *configinfo*   (list *configdat*  (get-environment-variable "MT_RUN_AREA_HOME")))
 	  (set! *configstatus* 'fulldata)
 	  (set! *toppath*      (get-environment-variable "MT_RUN_AREA_HOME"))
 	  *toppath*)
 	 ;; we have all the info needed to fully process runconfigs and megatest.config
-	 (mtcachef              
+	 ((and (not force-reread) mtcachef) ;; BB- why are we doing this without asking if caching is desired?
+          (BB> "launch:setup-body -- cond branch 2")
 	  (let* ((first-pass    (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect
 				 mtconfig
 				 environ-patt: "env-override"
@@ -879,7 +884,9 @@
 	    (set! *runconfigdat* first-rundat)
 	    (if first-pass  ;; 
 		(begin
+                  (BB> "launch:setup-body -- \"first-pass\"=first-pass")
 		  (set! *configdat*  (car first-pass))
+                  (BB> "launch:setup-body -- 2 set! *configdat*="*configdat*)
 		  (set! *configinfo* first-pass)
 		  (set! *toppath*    (or toppath (cadr first-pass))) ;; use the gathered data unless already have it
 		  (set! toppath      *toppath*)
@@ -914,10 +921,13 @@
 		    (if mtcachef (configf:write-alist *configdat* mtcachef))
 		    (if (and rccachef mtcachef) (set! *configstatus* 'fulldata))))
 		;; no configs found? should not happen but let's try to recover gracefully, return an empty hash-table
-		(set! *configdat* (make-hash-table))
+		(begin (set! *configdat* (make-hash-table))
+                       (BB> "launch:setup-body -- 3 set! *configdat*="*configdat*)
+                       )
 		)))
 	 ;; else read what you can and set the flag accordingly
 	 (else
+          (BB> "launch:setup-body -- cond branch 3 - else")
 	  (let* ((cfgdat   (find-and-read-config 
 			    (or (args:get-arg "-config") "megatest.config")
 			    environ-patt: "env-override"
