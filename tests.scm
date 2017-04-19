@@ -144,22 +144,31 @@
       (items:get-items-from-config tconfig))
      (else #f))))                           ;; not iterated
 
-
 ;; returns waitons waitors tconfigdat
 ;;
-(define (tests:get-waitons test-name all-tests-registry)
-  (let* ((config  (tests:get-testconfig test-name #f all-tests-registry 'return-procs))
-	 (extras  (configf:get-section *configdat* "waitons"))
-	 (ewaits  (if extras (alist-ref test-name extras string=?) #f))
-	 (ewaitlst (if (and ewaits (not (null? ewaits)))
+;;  firm-require forces that the test be referred to in all-tests-registry
+;;
+(define (tests:get-waitons test-name all-tests-registry #!key (in-tconfig #f)(firm-require #t))
+  (let* ((config   (or in-tconfig (tests:get-testconfig test-name #f all-tests-registry 'return-procs)))
+	 (extras   (configf:get-section *configdat* "waitons"))
+	 (ewaits   (if extras (alist-ref test-name extras string=?) #f))
+	 (ewlst    (if (and ewaits (not (null? ewaits)))
 		       (string-split (car ewaits))
 		       '()))
-	 )
+         (ewadd    (if (null? ewlst)
+                       #t
+                       (equal? (car ewlst) "+"))) ;; signal for add
+         (ewaitlst (if (null? ewlst)
+                       ewlst
+                       (if ewadd
+                           (cdr ewlst)
+                           ewlst))))
      (let ((instr (if config 
 		      (config-lookup config "requirements" "waiton")
-		      (begin ;; No config means this is a non-existant test
+		      (if firm-require ;; begin ;; No config means this is a non-existant test
 			(debug:print-error 0 *default-log-port* "non-existent required test \"" test-name "\"")
-			(exit 1))))
+			;; (exit 1)
+                        )))
 	   (instr2 (if config
 		       (config-lookup config "requirements" "waitor")
 		       "")))
@@ -187,20 +196,31 @@
 	 (values
 	  ;; the waitons
 	  (filter (lambda (x)
-		    (if (hash-table-ref/default all-tests-registry x #f)
+		    (if (or (not firm-require)
+                            (hash-table-ref/default all-tests-registry x #f))
 			#t
 			(begin
 			  (debug:print-error 0 *default-log-port* "test " test-name " has unrecognised waiton testname " x)
 			  #f)))
-		  (append newwaitons ewaitlst))
+		  (if ewadd ;; area we adding or replacing the waitons
+                      (append newwaitons ewaitlst)
+                      ewaitlst))
 	  (filter (lambda (x)
-		    (if (hash-table-ref/default all-tests-registry x #f)
+		    (if (or (not firm-require)
+                            (hash-table-ref/default all-tests-registry x #f))
 			#t
 			(begin
-			  (debug:print-error 0 *default-log-port* "test " test-name " has unrecognised waiton testname " x)
+			  (debug:print-error 0 *default-log-port* "test " test-name " has unrecognised waitor testname " x)
 			  #f)))
 		  newwaitors)
 	  config)))))
+
+;; seems like often we just want the waitons. Maybe time to get rid of the waitors concept?
+;;
+(define (tests:just-get-waitons test-name tests-registry #!key (in-tconfig #f)(firm-require #t))
+  (let-values (((waitons waitors tconfig)
+                (tests:get-waitons test-name tests-registry in-tconfig: in-tconfig firm-require: firm-require)))
+    waitons))
 					     
 ;; given waiting-test that is waiting on waiton-test extend test-patt appropriately
 ;;
@@ -1228,17 +1248,17 @@ EOF
 	     (all-waited-on  (let loop ((hed (car all-tests))
 					(tal (cdr all-tests))
 					(res '()))
-			       (let* ((trec    (hash-table-ref test-records hed))
-				      (waitons (or (tests:testqueue-get-waitons trec) '())))
-				 (if (null? tal)
+			       (let* (;; (trec    (hash-table-ref test-records hed))
+				      (waitons (tests:just-get-waitons hed test-records firm-require: #f))) ;; (or (tests:testqueue-get-waitons trec) '())))
+                                 (if (null? tal)
 				     (append res waitons)
 				     (loop (car tal)(cdr tal)(append res waitons))))))
 	     (sort-fn1 
 	      (lambda (a b)
 		(let* ((a-record   (hash-table-ref test-records a))
 		       (b-record   (hash-table-ref test-records b))
-		       (a-waitons  (or (tests:testqueue-get-waitons a-record) '()))
-		       (b-waitons  (or (tests:testqueue-get-waitons b-record) '()))
+		       (a-waitons  (tests:just-get-waitons a test-records firm-require: #f)) ;; (or (tests:testqueue-get-waitons a-record) '()))
+		       (b-waitons  (tests:just-get-waitons b test-records firm-require: #f)) ;; (or (tests:testqueue-get-waitons b-record) '()))
 		       (a-config   (tests:testqueue-get-testconfig  a-record))
 		       (b-config   (tests:testqueue-get-testconfig  b-record))
 		       (a-raw-pri  (config-lookup a-config "requirements" "priority"))
@@ -1298,8 +1318,8 @@ EOF
       ;; (format temp-port "   splines=none\n")
       (for-each
        (lambda (testname)
-	 (let* ((testrec (hash-table-ref test-records testname))
-		(waitons (or (tests:testqueue-get-waitons testrec) '())))
+	 (let* (;; (testrec (hash-table-ref test-records testname))
+		(waitons (tests:just-get-waitons testname test-records firm-require: #f))) ;; (or (tests:testqueue-get-waitons testrec) '())))
 	   (for-each
 	    (lambda (waiton)
 	      (format temp-port (conc "   " waiton " -> " testname " [splines=ortho]\n")))
@@ -1330,8 +1350,8 @@ EOF
 			      (conc " size=\"" (or sizex 11) "," (or sizey 11) "\";")
 			      " ratio=0.95;"
 			      )))
-	  (let* ((testrec (hash-table-ref test-records hed))
-		 (waitons (or (tests:testqueue-get-waitons testrec) '()))
+	  (let* (;; (testrec (hash-table-ref test-records hed))
+		 (waitons (tests:just-get-waitons hed test-records firm-require: #f)) ;; (or (tests:testqueue-get-waitons testrec) '()))
 		 (newres  (append res
 				  (if (null? waitons)
 				      (list (conc "   \"" hed "\" [shape=box];"))
@@ -1388,7 +1408,7 @@ EOF
 	      (test-name   (tests:testqueue-get-testname  test-record))
 	      (itemdat     (tests:testqueue-get-itemdat   test-record))
 	      (item-path   (tests:testqueue-get-item_path test-record))
-	      (waitons     (tests:testqueue-get-waitons   test-record))
+	      (waitons     (tests:just-get-waitons test-name testrecordshash)) ;; (tests:testqueue-get-waitons   test-record))
 	      (keep-test   #t)
 	      (test-id     (rmt:get-test-id run-id test-name item-path))
 	      (tdat        (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
@@ -1435,21 +1455,24 @@ EOF
 	(debug:print-info 4 *default-log-port* "hed=" hed " at top of loop")
         ;; don't know item-path at this time, let the testconfig get the top level testconfig
 	(let* ((config  (tests:get-testconfig hed #f all-tests-registry 'return-procs))
-	       (waitons (let ((instr (if config 
-					 (config-lookup config "requirements" "waiton")
-					 (begin ;; No config means this is a non-existant test
-					   (debug:print-error 0 *default-log-port* "non-existent required test \"" hed "\", grep through your testconfigs to find and remove or create the test. Discarding and continuing.")
-					     ""))))
-			  (debug:print-info 8 *default-log-port* "waitons string is " instr)
-			  (string-split (cond
-					 ((procedure? instr)
-					  (let ((res (instr)))
-					    (debug:print-info 8 *default-log-port* "waiton procedure results in string " res " for test " hed)
-					    res))
-					 ((string? instr)     instr)
-					 (else 
-					  ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print-error 0 *default-log-port* "something went wrong in processing waitons for test " hed)
-					  ""))))))
+	       (waitons (let-values (((waitons waitors tconfigdat)
+                                      (tests:get-waitons hed all-tests-registry)))
+                          waitons)))
+                        ;; (let ((instr (if config 
+			;; 		 (config-lookup config "requirements" "waiton")
+			;; 		 (begin ;; No config means this is a non-existant test
+			;; 		   (debug:print-error 0 *default-log-port* "non-existent required test \"" hed "\", grep through your testconfigs to find and remove or create the test. Discarding and continuing.")
+			;; 		     ""))))
+			;;   (debug:print-info 8 *default-log-port* "waitons string is " instr)
+			;;   (string-split (cond
+			;; 		 ((procedure? instr)
+			;; 		  (let ((res (instr)))
+			;; 		    (debug:print-info 8 *default-log-port* "waiton procedure results in string " res " for test " hed)
+			;; 		    res))
+			;; 		 ((string? instr)     instr)
+			;; 		 (else 
+			;; 		  ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print-error 0 *default-log-port* "something went wrong in processing waitons for test " hed)
+			;; 		  ""))))))
 	  (if (not config) ;; this is a non-existant test called in a waiton. 
 	      (if (null? tal)
 		  test-records

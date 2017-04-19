@@ -1231,7 +1231,7 @@
 	     (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
 			    (if m (map string->symbol (string-split m)) '(normal))))
 	     (itemmaps    (tests:get-itemmaps tconfig)) ;;  (configf:lookup tconfig "requirements" "itemmap"))
-	     (waitons     (tests:testqueue-get-waitons    test-record))
+	     (waitons     (tests:just-get-waitons test-name test-records)) ;; (tests:testqueue-get-waitons    test-record))
 	     (priority    (tests:testqueue-get-priority   test-record))
 	     (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f
 	     (items       (tests:testqueue-get-items      test-record))
@@ -1503,7 +1503,7 @@
 (define (run:test run-id run-info keyvals runname test-record flags parent-test test-registry all-tests-registry)
   ;; All these vars might be referenced by the testconfig file reader
   (let* ((test-name    (tests:testqueue-get-testname   test-record))
-	 (test-waitons (tests:testqueue-get-waitons    test-record))
+	 (test-waitons (tests:just-get-waitons test-name all-tests-registry)) ;; (tests:testqueue-get-waitons    test-record))
 	 (test-conf    (tests:testqueue-get-testconfig test-record))
 	 (itemdat      (tests:testqueue-get-itemdat    test-record))
 	 (test-path    (hash-table-ref all-tests-registry test-name)) ;; (conc *toppath* "/tests/" test-name)) ;; could use tests:get-testconfig here ...
