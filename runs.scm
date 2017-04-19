@@ -111,6 +111,9 @@
                   
 		  (exit 1))))
           ;;(bb-check-path msg: "runs:set-megatest-env-vars block 1.5")
+          (if (or (not *configdat*) (not (hash-table? *configdat*)))
+              (BB> "ERROR: *configdat* was inaccessible! This should never happen.  Brute force reread.")
+              (launch:setup force-reread: #t))
           (alist->env-vars (hash-table-ref/default *configdat* "env-override" '())))) ;;;; environment is tainted HERE in this let block.
     ;;(bb-check-path msg: "runs:set-megatest-env-vars block 2")
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
