@@ -480,10 +480,10 @@
   '(;; (0 "DELETED")
     (1 "n/a")
     (2 "PASS")
-    (3 "CHECK")
-    (4 "SKIP")
-    (5 "WARN")
-    (6 "WAIVED")
+    (3 "SKIP")
+    (4 "WARN")
+    (5 "WAIVED")
+    (6 "CHECK")
     (7 "STUCK/DEAD")
     (8 "FAIL")
     (9 "ABORT")))
@@ -971,6 +971,10 @@
          (args-testpatt (or (args:get-arg "-testpatt") (args:get-arg "-runtests") "%"))
          (rtestpatt     (if rconf (runconfigs-get rconf testpatt-key) #f)))
     (cond
+     ((args:get-arg "--modepatt") ;; modepatt is a forced setting, when set it MUST refer to an existing PATT in the runconfig
+      (if rconf
+	  (runconfigs-get rconf testpatt-key)
+	  #f))     ;; We do NOT fall back to "%"
      ;; (tags-testpatt
      ;;  (debug:print-info 0 *default-log-port* "-tagexpr "tagexpr" selects testpatt "tags-testpatt)
      ;;  tags-testpatt)
@@ -1002,6 +1006,18 @@
                              message: (conc "Unable to access path: " path-string)
                              ))
 
+;; does the directory exist and do we have write access?
+;;
+;;    returns the directory or #f
+;;
+(define (common:directory-writable? path-string)
+  (handle-exceptions
+   exn
+   #f
+   (if (and (directory-exists? path-string)
+            (file-write-access? path-string))
+       path-string
+       #f)))
 
 (define (common:get-linktree)
   (or (getenv "MT_LINKTREE")
@@ -1043,6 +1059,16 @@
 	      (if exit-if-bad (exit 1))
 	      #f)
 	    #f))))
+
+;; looking only (at least for now) at the MT_ variables craft the full testname
+;;
+(define (common:get-full-test-name)
+  (if (getenv "MT_TEST_NAME")
+      (if (and (getenv "MT_ITEMPATH")
+               (not (equal? (getenv "MT_ITEMPATH") "")))
+          (getenv "MT_TEST_NAME")
+          (conc (getenv "MT_TEST_NAME") "/" (getenv "MT_ITEMPATH")))
+      #f))
 
 ;; logic for getting homehost. Returns (host . at-home)
 ;; IF *toppath* is not set, wait up to five seconds trying every two seconds
@@ -1109,10 +1135,20 @@
 ;; do we honor the caches of the config files?
 ;;
 (define (common:use-cache?)
-  (not (or (args:get-arg "-no-cache")
-	   (and *configdat*
-		(equal? (configf:lookup *configdat* "setup" "use-cache") "no")))))
-
+  (let ((res #t)) ;; priority by order of evaluation
+    (if *configdat*
+	(if (equal? (configf:lookup *configdat* "setup" "use-cache") "no")
+	    (set! res #f)
+	    (if (equal? (configf:lookup *configdat* "setup" "use-cache") "yes")
+		(set! res #t))))
+    (if (args:get-arg "-no-cache")(set! res #f)) ;; overrides setting in "setup"
+    (if (getenv "MT_USE_CACHE")
+	(if (equal? (getenv "MT_USE_CACHE") "yes")
+	    (set! res #t)
+	    (if (equal? (getenv "MT_USE_CACHE") "no")
+		(set! res #f))))    ;; overrides -no-cache switch
+    res))
+  
 ;; force use of server?
 ;;
 (define (common:force-server?)
@@ -1132,13 +1168,6 @@
 	  (debug:print-info 0 *default-log-port* "forcing use of server, force setting is \"" force-setting "\".")
 	  #t)
 	#f)))
-
-;; do we honor the caches of the config files?
-;;
-(define (common:use-cache?)
-  (not (or (args:get-arg "-no-cache")
-	   (and *configdat*
-		(equal? (configf:lookup *configdat* "setup" "use-cache") "no")))))
 
 ;;======================================================================
 ;; M I S C   L I S T S

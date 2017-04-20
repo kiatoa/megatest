@@ -1087,6 +1087,7 @@ Misc
 (define (update-search commondat tabdat x val)
   (hash-table-set! (dboard:tabdat-searchpatts tabdat) x val)
   (dboard:tabdat-filters-changed-set! tabdat #t)
+  (mark-for-update tabdat)
   (set-bg-on-filter commondat tabdat))
 
 ;; force ALL updates to zero (effectively)
@@ -1399,10 +1400,16 @@ Misc
  ;;	 (dboard:tabdat-logs-textbox-set! tabdat logs-tb)
  ;;	 logs-tb))
 
+;; browse runs as a tree. Used in both "Runs" tab and
+;; in the runs control panel.
+;;
 (define (dboard:runs-tree-browser commondat tabdat)
-  (let* ((txtbox (iup:textbox #:action (lambda (val a b)
+  (let* (
+	 (txtbox (iup:textbox #:action (lambda (val a b)
 					 (debug:catch-and-dump
 					  (lambda ()
+					    ;; for the Runs view we put the list of keyvals into tabdat target
+					    ;; for the Run Controls we put then update the run-command
 					    (if b (dboard:tabdat-target-set! tabdat (string-split b "/")))
 					    (dashboard:update-run-command tabdat))
 					  "command-testname-selector tb action"))
@@ -2508,6 +2515,9 @@ Misc
 							   (iup:label x #:size (conc 40 btn-height) #:fontsize btn-fontsz #:expand "NO") ;; "HORIZONTAL")
 							   (iup:textbox #:size (conc 35 btn-height) #:fontsize btn-fontsz #:value "%" #:expand "NO" ;; "HORIZONTAL"
 									#:action (lambda (obj unk val)
+										   ;; each field (field name is "x" var) live updates
+										   ;; the search filter as it is typed
+										   (dboard:tabdat-target-set! runs-dat #f) ;; ensure the fields text boxes are used and not the info from the tree
 										   (mark-for-update runs-dat)
 										   (update-search commondat runs-dat x val))))))
 					(set! i (+ i 1))

@@ -135,7 +135,7 @@ Queries
   -list-db-targets        : list the target combinations used in the db
   -show-config            : dump the internal representation of the megatest.config file
   -show-runconfig         : dump the internal representation of the runconfigs.config file
-  -dumpmode MODE          : dump in MODE format instead of sexpr, MODE=json,ini,sexp etc.
+  -dumpmode MODE          : dump in MODE format instead of sexpr, MODE=json,ini,sexp etc. (add -debug 0,9 to see which file contributes each line)
   -show-cmdinfo           : dump the command info for a test (run in test environment)
   -section sectionName
   -var varName            : for config and runconfig lookup value for sectionName varName
@@ -863,7 +863,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
                 (if (not (common:in-running-test?))
                     (configf:write-alist data cfgf))
 		;; force re-read of megatest.config - this resolves circular references between megatest.config
-		(launch:setup force: #t)
+		(launch:setup force-reread: #t)
 		(launch:cache-config))) ;; we can safely cache megatest.config since we have a valid runconfig
 	  data))))
 
@@ -1405,57 +1405,59 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(args:get-arg "-rerun-clean")
 	(args:get-arg "-rerun-all")
 	(args:get-arg "-runtests"))
-    (general-run-call 
-     "-runall"
-     "run all tests"
-     (lambda (target runname keys keyvals)
-       (if (args:get-arg "-rerun-clean") ;; first set states/statuses correct
-	   (let ((states   (or (configf:lookup *configdat* "validvalues" "cleanrerun-states")
-			       "KILLREQ,KILLED,UNKNOWN,INCOMPLETE,STUCK,NOT_STARTED"))
-		 (statuses (or (configf:lookup *configdat* "validvalues" "cleanrerun-statuses")
-			       "FAIL,INCOMPLETE,ABORT,CHECK")))
-	     (hash-table-set! args:arg-hash "-preclean" #t)
-	     (runs:operate-on 'set-state-status
-			      target
-			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
-			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
-			      state:  states
-			      ;; status: statuses
-			      new-state-status: "NOT_STARTED,n/a")
-	     (runs:clean-cache target runname *toppath*)
-	     (runs:operate-on 'set-state-status
-			      target
-			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
-			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
-			      ;; state:  states
-			      status: statuses
-			      new-state-status: "NOT_STARTED,n/a")))
-       ;; RERUN ALL
-       (if (args:get-arg "-rerun-all") ;; first set states/statuses correct
-	   (begin
-	     (hash-table-set! args:arg-hash "-preclean" #t)
-	     (runs:operate-on 'set-state-status
-			      target
-			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
-			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
-			      state:  #f
-			      ;; status: statuses
-			      new-state-status: "NOT_STARTED,n/a")
-	     (runs:clean-cache target runname *toppath*)
-	     (runs:operate-on 'set-state-status
-			      target
-			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
-			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
-			      ;; state:  states
-			      status: #f
-			      new-state-status: "NOT_STARTED,n/a")))
-       (runs:run-tests target
-		       runname
-		       #f ;; (common:args-get-testpatt #f)
-		       ;; (or (args:get-arg "-testpatt")
-		       ;;     "%")
-		       user
-		       args:arg-hash))))
+    (let ((need-clean (or (args:get-arg "-rerun-clean")
+                          (args:get-arg "-rerun-all"))))
+      (general-run-call 
+       "-runall"
+       "run all tests"
+       (lambda (target runname keys keyvals)
+         (if (args:get-arg "-rerun-clean") ;; first set states/statuses correct
+             (let ((states   (or (configf:lookup *configdat* "validvalues" "cleanrerun-states")
+                                 "KILLREQ,KILLED,UNKNOWN,INCOMPLETE,STUCK,NOT_STARTED"))
+                   (statuses (or (configf:lookup *configdat* "validvalues" "cleanrerun-statuses")
+                                 "FAIL,INCOMPLETE,ABORT,CHECK")))
+               (hash-table-set! args:arg-hash "-preclean" #t)
+               (runs:operate-on 'set-state-status
+                                target
+                                (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+                                "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+                                state:  states
+                                ;; status: statuses
+                                new-state-status: "NOT_STARTED,n/a")
+               (runs:clean-cache target runname *toppath*)
+               (runs:operate-on 'set-state-status
+                                target
+                                (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+                                "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+                                ;; state:  states
+                                status: statuses
+                                new-state-status: "NOT_STARTED,n/a")))
+         ;; RERUN ALL
+         (if (args:get-arg "-rerun-all") ;; first set states/statuses correct
+             (begin
+               (hash-table-set! args:arg-hash "-preclean" #t)
+               (runs:operate-on 'set-state-status
+                                target
+                                (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+                                "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+                                state:  #f
+                                ;; status: statuses
+                                new-state-status: "NOT_STARTED,n/a")
+               (runs:clean-cache target runname *toppath*)
+               (runs:operate-on 'set-state-status
+                                target
+                                (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+                                "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+                                ;; state:  states
+                                status: #f
+                                new-state-status: "NOT_STARTED,n/a")))
+         (runs:run-tests target
+                         runname
+                         #f ;; (common:args-get-testpatt #f)
+                         ;; (or (args:get-arg "-testpatt")
+                         ;;     "%")
+                         user
+                         args:arg-hash)))))
 
 ;;======================================================================
 ;; run one test

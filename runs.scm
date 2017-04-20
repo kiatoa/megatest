@@ -98,14 +98,24 @@
 		(begin ;; this call is colliding, do some crude stuff to fix it.
 		  (debug:print 0 *default-log-port* "ERROR: *configdat* was inaccessible! This should never happen. Retry #" count)
 		  (launch:setup force-reread: #t)
-		  (fatal-loop (+ count 1)))
+		  (fatal-loop (+ count 1))) 
 		(begin
 		  (debug:print 0 *default-log-port* "FATAL: *configdat* was inaccessible! This should never happen. Retried " count " times. Message: " msg)
 		  (debug:print 0 *default-log-port* "Call chain:")
 		  (with-output-to-port *default-log-port*
-		    (lambda ()(pp call-chain)))
+
+                    (lambda ()
+                      (print "*configdat* is >>"*configdat*"<<")
+                      (pp *configdat*)
+                      (pp call-chain)))
+                  
 		  (exit 1))))
           ;;(bb-check-path msg: "runs:set-megatest-env-vars block 1.5")
+          (when (or (not *configdat*) (not (hash-table? *configdat*)))
+              (debug:print 0 *default-log-port* "WARNING: *configdat* was inaccessible! This should never happen.  Brute force reread.")
+              ;;(BB> "ERROR: *configdat* was inaccessible! This should never happen.  Brute force reread.")
+              (thread-sleep! 2) ;; assuming nfs lag.
+              (launch:setup force-reread: #t))
           (alist->env-vars (hash-table-ref/default *configdat* "env-override" '())))) ;;;; environment is tainted HERE in this let block.
     ;;(bb-check-path msg: "runs:set-megatest-env-vars block 2")
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
@@ -220,7 +230,45 @@
 				 (else #f))))
 	  (list (not can-not-run-more) num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)))))
 
-
+(define (runs:run-pre-hook run-id)
+    (let* ((run-pre-hook   (configf:lookup *configdat* "runs" "pre-hook"))
+           (existing-tests (if run-pre-hook
+                               (rmt:get-tests-for-run run-id "%" '() '() ;; run-id testpatt states statuses
+                                                      #f #f ;; offset limit
+                                                      #f ;; not-in
+                                                      #f ;; sort-by
+                                                      #f ;; sort-order
+                                                      #f ;; get full data (not 'shortlist)
+                                                      0 ;; (runs:gendat-inc-results-last-update *runs:general-data*) ;; last update time
+                                                      'dashboard)
+                               '()))
+           (log-dir         (conc *toppath* "/logs"))
+           (log-file        (conc "pre-hook-" (string-translate (getenv "MT_TARGET") "/" "-") "-" (getenv "MT_RUNNAME") ".log"))
+           (full-log-fname  (conc log-dir "/" log-file)))
+      (if run-pre-hook
+          (if (null? existing-tests)
+              (let* ((use-log-dir (if (not (directory-exists? log-dir))
+                                      (handle-exceptions
+                                       exn
+                                       (begin
+                                         (debug:print 0 *default-log-port* "WARNING: Failed to create " log-dir)
+                                         #f)
+                                       (create-directory log-dir #t)
+                                       #t)
+                                      #t))
+                     (start-time   (current-seconds))
+                     (actual-logf  (if use-log-dir full-log-fname log-file)))
+                (handle-exceptions
+                 exn
+                 (begin
+                   (print-call-chain *default-log-port*)
+                   (debug:print 0 *default-log-port* "Message: " ((condition-property-accessor 'exn 'message) exn))
+                   (debug:print 0 *default-log-port* "ERROR: failed to run pre-hook " run-pre-hook ", check the log " log-file))
+                 (debug:print-info 0 *default-log-port* "running run-pre-hook: \"" run-pre-hook "\", log is " actual-logf)
+                 (system (conc run-pre-hook " >> " actual-logf " 2>&1"))
+                 (debug:print-info 0 *default-log-port* "pre-hook \"" run-pre-hook "\" took " (- (current-seconds) start-time) " seconds to run.")))
+              (debug:print 0 *default-log-port* "Skipping pre-hook call \"" run-pre-hook "\" as there are existing tests for this run.")))))
+    
 ;;  test-names: Comma separated patterns same as test-patts but used in selection 
 ;;              of tests to run. The item portions are not respected.
 ;;              FIXME: error out if /patt specified
@@ -294,6 +342,12 @@
 
     (if (not test-patts) ;; first time in - adjust testpatt
 	(set! test-patts (common:args-get-testpatt runconf)))
+    ;; if test-patts is #f at this point there is something wrong and we need to bail out
+    (if (not test-patts)
+	(begin
+	  (debug:print 0 *default-log-port* "WARNING: there is no test pattern for this run. Exiting now.")
+	  (exit 0)))
+    
     (if (args:get-arg "-tagexpr")
 	(begin
 	  (set! allowed-tests (string-join (runs:get-tests-matching-tags (args:get-arg "-tagexpr")) ","))
@@ -363,6 +417,10 @@
     ;; Ensure all tests are registered in the test_meta table
     (runs:update-all-test_meta #f)
 
+    ;; run the run prehook if there are no tests yet run for this run:
+    ;;
+    (runs:run-pre-hook run-id)
+    
     ;; now add non-directly referenced dependencies (i.e. waiton)
     ;;======================================================================
     ;; refactoring this block into tests:get-full-data
@@ -1705,7 +1763,6 @@
                  (member action write-access-actions))
         (debug:print-error 0 *default-log-port* "megatest.db is readonly.  Cannot proceed with action ["action"] in which write-access isrequired .")
         (exit 1)))
-
     
     (debug:print-info 4 *default-log-port* "runs:operate-on => Header: " header " action: " action " new-state-status: " new-state-status)
     (if (> 2 (length state-status))
