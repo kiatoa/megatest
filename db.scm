@@ -234,7 +234,7 @@
                    (if (and (configf:lookup *configdat* "setup" "use-wal")
                             (string-match "^/tmp/.*" fname)) ;; this is a file in /tmp
                        (sqlite3:execute db "PRAGMA journal_mode=WAL;")
-                       (print "Creating " fname " in NON-WAL mode."))
+                       (debug:print 2 *default-log-port* "Creating " fname " in NON-WAL mode."))
                    (initproc db)))
              (if (not readyexists)
                  (begin
@@ -3351,6 +3351,10 @@
 							 (not (equal? x "COMPLETED")))
 						       all-curr-states))
                             (newstate          (cond
+						((> running 0)
+						 "RUNNING") ;; anything running, call the situation running
+						((> bad-not-started 0)  ;; we have an ugly situation, it is completed in the sense we cannot do more.
+						 "COMPLETED") 
 						((> (length non-completes) 0) ;;
 						 (car non-completes))  ;;  (remove (lambda (x)(equal? "COMPLETED" x)) all-curr-states)))
 						(else

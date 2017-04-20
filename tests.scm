@@ -1148,10 +1148,11 @@ EOF
       (conc (getenv "MT_LINKTREE")  "/"
 	    (getenv "MT_TARGET")    "/"
 	    (getenv "MT_RUNNAME")   "/"
-	    (getenv "MT_TEST_NAME") "/"
-	    (if (or (getenv "MT_ITEMPATH")
-		    (not (string=? "" (getenv "MT_ITEMPATH"))))
-		(conc "/" (getenv "MT_ITEMPATH"))))
+	    (getenv "MT_TEST_NAME")
+	    (if (and (getenv "MT_ITEMPATH")
+                     (not (string=? "" (getenv "MT_ITEMPATH"))))
+		(conc "/" (getenv "MT_ITEMPATH"))
+                ""))
       #f))
 
 ;; if .testconfig exists in test directory read and return it
