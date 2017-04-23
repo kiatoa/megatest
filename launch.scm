@@ -797,7 +797,7 @@
 ;;           *runconfigdat* (runconfigs.config info)
 ;;           *configstatus* (status of the read data)
 ;;
-(define (launch:setup #!key (force-reread #f) (areapath #f))
+(define (launch:setup #!key (force-reread #f) (areapath #f)(exit-if-non-megatest-area #t))
   (mutex-lock! *launch-setup-mutex*)
   (if (and *toppath*
 	   (eq? *configstatus* 'fulldata) (not force-reread)) ;; got it all
@@ -805,7 +805,7 @@
 	(debug:print 2 *default-log-port* "NOTE: skipping launch:setup-body call since we have fulldata")
 	(mutex-unlock! *launch-setup-mutex*)
 	*toppath*)
-      (let ((res (launch:setup-body force-reread: force-reread areapath: areapath)))
+      (let ((res (launch:setup-body force-reread: force-reread areapath: areapath exit-if-non-megatest-area: exit-if-non-megatest-area)))
 	(mutex-unlock! *launch-setup-mutex*)
 	res)))
 
@@ -836,7 +836,7 @@
                       "\n  rccachef=" rccachef)
     (cons mtcachef rccachef)))
 
-(define (launch:setup-body #!key (force-reread #f) (areapath #f))
+(define (launch:setup-body #!key (force-reread #f) (areapath #f)(exit-if-non-megatest-area #t))
   (if (and (eq? *configstatus* 'fulldata)
 	   *toppath*
 	   (not force-reread)) ;; no need to reprocess
@@ -861,8 +861,7 @@
 	  (set! *runconfigdat* (configf:read-alist rccachef))
 	  (set! *configinfo*   (list *configdat*  (get-environment-variable "MT_RUN_AREA_HOME")))
 	  (set! *configstatus* 'fulldata)
-	  (set! *toppath*      (get-environment-variable "MT_RUN_AREA_HOME"))
-	  *toppath*)
+	  (set! *toppath*      (get-environment-variable "MT_RUN_AREA_HOME"))) ;; NOTE: the cond does NOT return the final result
 	 ;; we have all the info needed to fully process runconfigs and megatest.config
 	 ((and (not force-reread) mtcachef) ;; BB- why are we doing this without asking if caching is desired?
           ;;(BB> "launch:setup-body -- cond branch 2")
@@ -921,10 +920,9 @@
 		    (if mtcachef (configf:write-alist *configdat* mtcachef))
 		    (if (and rccachef mtcachef) (set! *configstatus* 'fulldata))))
 		;; no configs found? should not happen but let's try to recover gracefully, return an empty hash-table
-		(begin (set! *configdat* (make-hash-table))
-                       ;;(BB> "launch:setup-body -- 3 set! *configdat*="*configdat*)
-                       )
-		)))
+		(if exit-if-non-megatest-area  ;; second pass, exit or set configdat to dummy hashtable
+		    (exit 1)
+		    (set! *configdat* (make-hash-table))))))
 	 ;; else read what you can and set the flag accordingly
 	 (else
           ;;(BB> "launch:setup-body -- cond branch 3 - else")
@@ -978,8 +976,9 @@
 	      (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")
 	      ;;(exit 1)
 	      (set! *toppath* #f) ;; force it to be false so we return #f
-	      #f
-	      ))
+	      (if exit-if-non-megatest-area
+		  (exit 1)
+		  #f)))
         ;; one more attempt to cache the configs for future reading
         (let* ((cachefiles   (launch:get-cache-file-paths areapath toppath target mtconfig))
                (mtcachef     (car cachefiles))
@@ -994,6 +993,11 @@
 	  (if (and cfname
 		   (file-read-access? cfname))
 	      (read-config cfname *configdat* #t))) ;; values are added to the hash, no need to do anything special.
+	(if (and (not *toppath*)
+		 exit-if-non-megatest-area)
+	    (begin
+	      (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")
+	      (exit 1)))
 	*toppath*)))
 
 (define (get-best-disk confdat testconfig)
