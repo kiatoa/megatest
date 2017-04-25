@@ -426,14 +426,17 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
         (define *didsomething* #t)  
         (exit 1))))
 
-    
+;; this segment will run launch:setup only if -log is not set. This is fairly safe as servers are not
+;; manually started and thus should never be started in a non-megatest area. Thus no need to handle situation
+;; where (launch:setup) returns #f?
+;;
 (if (or (args:get-arg "-log")(args:get-arg "-server")) ;; redirect the log always when a server
     (handle-exceptions
 	exn
 	(begin
 	  (print "ERROR: Failed to switch to log output. " ((conition-property-accessor 'exn 'message) exn))
 	  )
-      (let* ((tl   (or (args:get-arg "-log")(launch:setup)))   ;; run launch:setup if -server
+      (let* ((tl   (or (args:get-arg "-log")(launch:setup)))   ;; run launch:setup if -server, ensure we do NOT run launch:setup if -log specified
 	     (logf (or (args:get-arg "-log") ;; use -log unless we are a server, then craft a logfile name
 		       (conc tl "/logs/server-" (current-process-id) "-" (get-host-name) ".log")))
 	     (oup  (open-logfile logf)))
