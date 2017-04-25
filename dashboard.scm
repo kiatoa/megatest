@@ -1425,7 +1425,7 @@ Misc
            #:value 0
            #:name "Runs"
            #:expand "YES"
-           #:addexpanded "NO"
+           #:addexpanded "YES"
            #:size "10x"
            #:selection-cb
            (lambda (obj id state)
@@ -1520,7 +1520,7 @@ Misc
        #:orientation "HORIZONTAL"
        #:value 800
       (let* ((cnv-obj (iup:canvas 
-		       ;; #:size "500x400"
+		       ;; #:size "250x250" ;; "500x400"
 		       #:expand "YES"
 		       #:scrollbar "YES"
 		       #:posx "0.5"
@@ -1565,11 +1565,11 @@ Misc
              (changed #f)
              (graph-matrix (iup:matrix
                            #:alignment1 "ALEFT"
-                           #:expand "YES" ;; "HORIZONTAL"
+                           ;; #:expand "YES" ;; "HORIZONTAL"
                            #:scrollbar "YES"
                            #:numcol 10
                            #:numlin 20
-                           #:numcol-visible (min 8)
+                           #:numcol-visible 5 ;; (min 8)
                            #:numlin-visible 1
                            #:click-cb
                            (lambda (obj row col status)
@@ -1876,7 +1876,7 @@ Misc
 	 (changed          #f))
     (iup:vbox
      (iup:split
-      #:value 500
+      #:value 300
       (iup:frame 
        #:title "General Info"
        (iup:vbox
@@ -2059,7 +2059,7 @@ Misc
 		   #:value 0
 		   #:name "Runs"
 		   #:expand "YES"
-		   #:addexpanded "NO"
+		   #:addexpanded "YES"
 		   #:selection-cb
 		   (lambda (obj id state)
 		     (debug:catch-and-dump
@@ -2170,6 +2170,24 @@ Misc
 ;; R U N S 
 ;;======================================================================
 
+(define (dboard:squarify toggles size)
+  (let loop ((hed (car toggles))
+	     (tal (cdr toggles))
+	     (cur '())
+	     (res '()))
+    (let* ((ovrflo (>= (length cur) size))
+	   (newcur (if ovrflo
+		       (list hed)
+		       (cons hed cur)))
+	   (newres (if ovrflo
+		       (cons cur res)
+		       res)))
+      (if (null? tal)
+	  (if ovrflo
+	      newres
+	      (cons newcur res))
+	  (loop (car tal)(cdr tal) newcur newres)))))
+
 (define (dboard:make-controls commondat tabdat #!key (extra-widget #f) )
   (let ((btn-fontsz  (dboard:tabdat-runs-btn-fontsz tabdat)))
     (iup:hbox
@@ -2274,54 +2292,76 @@ Misc
         
         )))
 
-     (let ((status-toggles 	(map (lambda (status)
-				       (iup:toggle (conc status)
-						   #:fontsize btn-fontsz ;; "10"
-						   #:expand "HORIZONTAL"
-						   #:action   (lambda (obj val)
-								(mark-for-update tabdat)
-								(if (eq? val 1)
-								    (hash-table-set! (dboard:tabdat-status-ignore-hash tabdat) status #t)
-								    (hash-table-delete! (dboard:tabdat-status-ignore-hash tabdat) status))
-								(set-bg-on-filter commondat tabdat))))
-				     (map cadr *common:std-statuses*))) ;; '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
-	   (state-toggles       	(map (lambda (state)
-					       (iup:toggle (conc state)
-							   #:fontsize btn-fontsz
-							   #:expand "HORIZONTAL"
-							   #:action   (lambda (obj val)
-									(mark-for-update tabdat)
-									(if (eq? val 1)
-									    (hash-table-set! (dboard:tabdat-state-ignore-hash tabdat) state #t)
-									    (hash-table-delete! (dboard:tabdat-state-ignore-hash tabdat) state))
-									(set-bg-on-filter commondat tabdat))))
-					     (map cadr *common:std-states*)))) ;; '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
-       (iup:frame 
-	#:title "state/status filter"
-	(iup:vbox
-	 (apply
-	  iup:hbox
-	  (map
-	   (lambda (status-toggle state-toggle)
-	     (iup:vbox
-	      status-toggle
-	      state-toggle))
-	   status-toggles state-toggles))
-	 (iup:valuator #:valuechanged_cb (lambda (obj)
-					   (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))
-						 (oldmax   (string->number (iup:attribute obj "MAX")))
-						 (maxruns  (dboard:tabdat-tot-runs tabdat)))
-					     (dboard:tabdat-start-run-offset-set! tabdat val)
-					     (mark-for-update tabdat)
-					     (debug:print 6 *default-log-port* "(dboard:tabdat-start-run-offset tabdat) " (dboard:tabdat-start-run-offset tabdat) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
-					     (iup:attribute-set! obj "MAX" (* maxruns 10))))
-		       #:expand "HORIZONTAL"
-		       #:max (* 10 (max (hash-table-size (dboard:tabdat-allruns-by-id tabdat)) 10))
-		       #:min 0
-		       #:step 0.01))))
-     ;;(iup:button "inc rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (+ (dboard:tabdat-num-tests tabdat) 1))))
-					;(iup:button "dec rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (if (> (dboard:tabdat-num-tests tabdat) 0)(- (dboard:tabdat-num-tests tabdat) 1) 0))))
-     )))
+     (let* ((status-toggles (map (lambda (status)
+				   (iup:toggle (conc status)
+					       #:fontsize 8 ;; btn-fontsz ;; "10"
+					       ;; #:expand "HORIZONTAL"
+					       #:action   (lambda (obj val)
+							    (mark-for-update tabdat)
+							    (if (eq? val 1)
+								(hash-table-set! (dboard:tabdat-status-ignore-hash tabdat) status #t)
+								(hash-table-delete! (dboard:tabdat-status-ignore-hash tabdat) status))
+							    (set-bg-on-filter commondat tabdat))))
+				 (map cadr *common:std-statuses*))) ;; '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
+	    (state-toggles  (map (lambda (state)
+				   (iup:toggle (conc state)
+					       #:fontsize 8 ;; btn-fontsz
+					       ;; #:expand "HORIZONTAL"
+					       #:action   (lambda (obj val)
+							    (mark-for-update tabdat)
+							    (if (eq? val 1)
+								(hash-table-set! (dboard:tabdat-state-ignore-hash tabdat) state #t)
+								(hash-table-delete! (dboard:tabdat-state-ignore-hash tabdat) state))
+							    (set-bg-on-filter commondat tabdat))))
+				 (map cadr *common:std-states*))) ;; '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
+	    (num-toggle-cols (inexact->exact (round (/ (max (length status-toggles)(length state-toggles)) 3)))))
+       (iup:vbox
+	(iup:hbox
+	 (iup:frame
+	  #:title "states"
+	  (apply
+	   iup:hbox
+	   (map (lambda (colgrp)
+		  (apply iup:vbox colgrp))
+		(dboard:squarify state-toggles 3))))
+	 (iup:frame
+	  #:title "statuses"
+	  (apply
+	   iup:hbox
+	   (map (lambda (colgrp)
+		  (apply iup:vbox colgrp))
+		(dboard:squarify status-toggles 3)))))
+	;; 
+	;; (iup:frame 
+	;; 	#:title "state/status filter"
+	;; 	(iup:vbox
+	;; 	 (apply
+	;; 	  iup:hbox
+	;; 	  (map
+	;; 	   (lambda (status-toggle state-toggle)
+	;; 	     (iup:vbox
+	;; 	      status-toggle
+	;; 	      state-toggle))
+	;; 	   status-toggles state-toggles))
+
+	;; horizontal slider was here
+	
+	)))))
+
+(define (dashboard:runs-horizontal-slider tabdat )
+  (iup:valuator #:valuechanged_cb (lambda (obj)
+				    (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))
+					  (oldmax   (string->number (iup:attribute obj "MAX")))
+					  (maxruns  (dboard:tabdat-tot-runs tabdat)))
+				      (dboard:tabdat-start-run-offset-set! tabdat val)
+				      (mark-for-update tabdat)
+				      (debug:print 6 *default-log-port* "(dboard:tabdat-start-run-offset tabdat) " (dboard:tabdat-start-run-offset tabdat) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
+				      (iup:attribute-set! obj "MAX" (* maxruns 10))))
+		#:expand "HORIZONTAL"
+		#:max (* 10 (max (hash-table-size (dboard:tabdat-allruns-by-id tabdat)) 10))
+		#:min 0
+		#:step 0.01))
+
 
 (define (dashboard:popup-menu  run-id test-id target runname test-name testpatt item-test-path test-info)
   (iup:menu 
@@ -2648,16 +2688,19 @@ Misc
       (let* ((runs-view (iup:vbox
 			 (iup:split
 			  #:orientation "VERTICAL" ;; "HORIZONTAL"
-			  #:value 150
+			  #:value 100
 			  (dboard:runs-tree-browser commondat runs-dat)
 			  (iup:split
+			   #:value 100
 			   ;; left most block, including row names
 			   (apply iup:vbox lftlst)
 			   ;; right hand block, including cells
 			   (iup:vbox
+			    #:expand "YES"
 			    ;; the header
 			    (apply iup:hbox (reverse hdrlst))
-			    (apply iup:hbox (reverse bdylst)))))
+			    (apply iup:hbox (reverse bdylst))
+			    (dashboard:runs-horizontal-slider runs-dat))))
 			 controls
 			 ))
 	     (views-cfgdat (common:load-views-config))
@@ -2706,6 +2749,7 @@ Misc
 			  ;; (dashboard:new-view db data new-view-dat tab-num: 3)
 			  (dashboard:run-controls commondat runcontrols-dat tab-num: 3)
 			  (dashboard:run-times commondat runtimes-dat tab-num: 4)
+			  ;; (dashboard:runs-summary commondat onerun-dat tab-num: 4)
 			  additional-views)))
 	;; (set! (iup:callback tabs tabchange-cb:) (lambda (a b c)(print "SWITCHED TO TAB: " a " " b " " c)))
 	(iup:attribute-set! tabs "TABTITLE0" "Summary")
