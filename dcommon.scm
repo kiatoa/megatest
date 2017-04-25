@@ -493,7 +493,7 @@
          (key-vals        (configf:section-vars rawconfig sectionname))
          (section-matrix  (iup:matrix
                            #:alignment1 "ALEFT"
-                           #:expand "YES" ;; "HORIZONTAL"
+                           ;; #:expand "YES" ;; "HORIZONTAL"
                            #:numcol 1
                            #:numlin (length key-vals)
                            #:numcol-visible 1
@@ -1187,7 +1187,7 @@
 				      (if the-cnv
 					  (dashboard:draw-tests the-cnv last-xadj last-yadj tests-draw-state sorted-testnames test-records))
 				      ))
-		       ;; #:size "50x50"
+		       ;; #:size "250x250"
 		       #:expand "YES"
 		       #:scrollbar "YES"
 		       #:posx "0.5"
