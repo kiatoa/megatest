@@ -206,7 +206,9 @@ Misc
   ((not-done-runs   '())                 : list)        ;; list of runs not yet drawn
   (header            #f)                                ;; header for decoding the run records
   (keys              #f)                                ;; keys for this run (i.e. target components)
-  ((numruns          (string->number (or (args:get-arg "-cols") "10")))                 : number)      ;; 
+  ((numruns          (string->number (or (args:get-arg "-cols")
+					 (configf:lookup *configdat* "dashboard" "cols")
+					 "8")))                 : number)      ;; 
   ((tot-runs          0)                 : number)
   ((last-data-update  0)                 : number)      ;; last time the data in allruns was updated
   ((last-runs-update  0)                 : number)      ;; last time we pulled the runs info to update the tree
@@ -224,7 +226,7 @@ Misc
   ((start-test-offset  0)                : number)      ;; up-down slider value
   ((runs-btn-height    (or (configf:lookup *configdat* "dashboard" "btn-height") "x16")) : string)  ;; was 12
   ((runs-btn-fontsz    (or (configf:lookup *configdat* "dashboard" "btn-fontsz") "10")) : string)   ;; was 8
-  ((runs-cell-width    (or (configf:lookup *configdat* "dashboard" "cell-width") "60")) : string)   ;; was 50
+  ((runs-cell-width    (or (configf:lookup *configdat* "dashboard" "cell-width") "50")) : string)   ;; was 50
   ((all-test-names     '())              : list)
   
   ;; Canvas and drawing data
@@ -2232,13 +2234,13 @@ Misc
                 
 	   (iuplistbox-fill-list sort-lb cmds-list selected-item: default-cmd)
 	   
-	   (set! hide-empty (iup:button "HideEmpty"
-					;; #:expand HORIZONTAL"
-					#:expand "NO" #:size "80x15"
-					#:action (lambda (obj)
-						   (dboard:tabdat-hide-empty-runs-set! tabdat (not (dboard:tabdat-hide-empty-runs tabdat)))
-						   (iup:attribute-set! obj "TITLE" (if (dboard:tabdat-hide-empty-runs tabdat) "+HideE" "-HideE"))
-						   (mark-for-update tabdat))))
+	   ;; (set! hide-empty (iup:button "HideEmpty"
+	   ;; 				;; #:expand HORIZONTAL"
+	   ;; 				#:expand "NO" #:size "80x15"
+	   ;; 				#:action (lambda (obj)
+	   ;; 					   (dboard:tabdat-hide-empty-runs-set! tabdat (not (dboard:tabdat-hide-empty-runs tabdat)))
+	   ;; 					   (iup:attribute-set! obj "TITLE" (if (dboard:tabdat-hide-empty-runs tabdat) "+HideE" "-HideE"))
+	   ;; 					   (mark-for-update tabdat))))
 	   (set! hide (iup:button "Hide"
 				  #:expand "NO" #:size "40x15" ;; #:expand "HORIZONTAL"
 				  #:action (lambda (obj)
@@ -2272,47 +2274,51 @@ Misc
         
         )))
 
-     (iup:frame 
-      #:title "state/status filter"
-      (iup:vbox
-       (apply 
-	iup:hbox
-	(map (lambda (status)
-	       (iup:toggle (conc status "  ")
-			   #:fontsize btn-fontsz ;; "10"
-			   #:expand "HORIZONTAL"
-			   #:action   (lambda (obj val)
-					(mark-for-update tabdat)
-					(if (eq? val 1)
-					    (hash-table-set! (dboard:tabdat-status-ignore-hash tabdat) status #t)
-					    (hash-table-delete! (dboard:tabdat-status-ignore-hash tabdat) status))
-					(set-bg-on-filter commondat tabdat))))
-	     (map cadr *common:std-statuses*))) ;; '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
-       (apply 
-	iup:hbox
-	(map (lambda (state)
-	       (iup:toggle (conc state "  ")
-			   #:fontsize btn-fontsz
-			   #:expand "HORIZONTAL"
-			   #:action   (lambda (obj val)
-					(mark-for-update tabdat)
-					(if (eq? val 1)
-					    (hash-table-set! (dboard:tabdat-state-ignore-hash tabdat) state #t)
-					    (hash-table-delete! (dboard:tabdat-state-ignore-hash tabdat) state))
-					(set-bg-on-filter commondat tabdat))))
-	     (map cadr *common:std-states*))) ;; '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
-       (iup:valuator #:valuechanged_cb (lambda (obj)
-					 (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))
-					       (oldmax   (string->number (iup:attribute obj "MAX")))
-					       (maxruns  (dboard:tabdat-tot-runs tabdat)))
-					   (dboard:tabdat-start-run-offset-set! tabdat val)
-					   (mark-for-update tabdat)
-					   (debug:print 6 *default-log-port* "(dboard:tabdat-start-run-offset tabdat) " (dboard:tabdat-start-run-offset tabdat) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
-					   (iup:attribute-set! obj "MAX" (* maxruns 10))))
-		     #:expand "HORIZONTAL"
-		     #:max (* 10 (max (hash-table-size (dboard:tabdat-allruns-by-id tabdat)) 10))
-		     #:min 0
-		     #:step 0.01)))
+     (let ((status-toggles 	(map (lambda (status)
+				       (iup:toggle (conc status)
+						   #:fontsize btn-fontsz ;; "10"
+						   #:expand "HORIZONTAL"
+						   #:action   (lambda (obj val)
+								(mark-for-update tabdat)
+								(if (eq? val 1)
+								    (hash-table-set! (dboard:tabdat-status-ignore-hash tabdat) status #t)
+								    (hash-table-delete! (dboard:tabdat-status-ignore-hash tabdat) status))
+								(set-bg-on-filter commondat tabdat))))
+				     (map cadr *common:std-statuses*))) ;; '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
+	   (state-toggles       	(map (lambda (state)
+					       (iup:toggle (conc state)
+							   #:fontsize btn-fontsz
+							   #:expand "HORIZONTAL"
+							   #:action   (lambda (obj val)
+									(mark-for-update tabdat)
+									(if (eq? val 1)
+									    (hash-table-set! (dboard:tabdat-state-ignore-hash tabdat) state #t)
+									    (hash-table-delete! (dboard:tabdat-state-ignore-hash tabdat) state))
+									(set-bg-on-filter commondat tabdat))))
+					     (map cadr *common:std-states*)))) ;; '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
+       (iup:frame 
+	#:title "state/status filter"
+	(iup:vbox
+	 (apply
+	  iup:hbox
+	  (map
+	   (lambda (status-toggle state-toggle)
+	     (iup:vbox
+	      status-toggle
+	      state-toggle))
+	   status-toggles state-toggles))
+	 (iup:valuator #:valuechanged_cb (lambda (obj)
+					   (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))
+						 (oldmax   (string->number (iup:attribute obj "MAX")))
+						 (maxruns  (dboard:tabdat-tot-runs tabdat)))
+					     (dboard:tabdat-start-run-offset-set! tabdat val)
+					     (mark-for-update tabdat)
+					     (debug:print 6 *default-log-port* "(dboard:tabdat-start-run-offset tabdat) " (dboard:tabdat-start-run-offset tabdat) " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
+					     (iup:attribute-set! obj "MAX" (* maxruns 10))))
+		       #:expand "HORIZONTAL"
+		       #:max (* 10 (max (hash-table-size (dboard:tabdat-allruns-by-id tabdat)) 10))
+		       #:min 0
+		       #:step 0.01))))
      ;;(iup:button "inc rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (+ (dboard:tabdat-num-tests tabdat) 1))))
 					;(iup:button "dec rows" #:action (lambda (obj)(dboard:tabdat-num-tests-set! tabdat (if (> (dboard:tabdat-num-tests tabdat) 0)(- (dboard:tabdat-num-tests tabdat) 1) 0))))
      )))
