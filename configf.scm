@@ -322,6 +322,7 @@
                                                         ;; after gathering the vars for a section and if apply-wildcards is true and if there is a wildcard in the section name process wildcards
                                                         ;; NOTE: we are processing the curr-section-name, NOT section-name.
                                                         (process-wildcards res curr-section-name)
+							(if (not (hash-table-ref/default res section-name #f))(hash-table-set! res section-name '())) ;; ensure that mere mention of a section is not lost
 							(loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings)
 							      ;; if we have the sections list then force all settings into "" and delete it later?
 							      ;; (if (or (not sections) 
