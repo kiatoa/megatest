@@ -98,14 +98,24 @@
 		(begin ;; this call is colliding, do some crude stuff to fix it.
 		  (debug:print 0 *default-log-port* "ERROR: *configdat* was inaccessible! This should never happen. Retry #" count)
 		  (launch:setup force-reread: #t)
-		  (fatal-loop (+ count 1)))
+		  (fatal-loop (+ count 1))) 
 		(begin
 		  (debug:print 0 *default-log-port* "FATAL: *configdat* was inaccessible! This should never happen. Retried " count " times. Message: " msg)
 		  (debug:print 0 *default-log-port* "Call chain:")
 		  (with-output-to-port *default-log-port*
-		    (lambda ()(pp call-chain)))
+
+                    (lambda ()
+                      (print "*configdat* is >>"*configdat*"<<")
+                      (pp *configdat*)
+                      (pp call-chain)))
+                  
 		  (exit 1))))
           ;;(bb-check-path msg: "runs:set-megatest-env-vars block 1.5")
+          (when (or (not *configdat*) (not (hash-table? *configdat*)))
+              (debug:print 0 *default-log-port* "WARNING: *configdat* was inaccessible! This should never happen.  Brute force reread.")
+              ;;(BB> "ERROR: *configdat* was inaccessible! This should never happen.  Brute force reread.")
+              (thread-sleep! 2) ;; assuming nfs lag.
+              (launch:setup force-reread: #t))
           (alist->env-vars (hash-table-ref/default *configdat* "env-override" '())))) ;;;; environment is tainted HERE in this let block.
     ;;(bb-check-path msg: "runs:set-megatest-env-vars block 2")
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
