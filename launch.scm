@@ -933,7 +933,8 @@
 			    environ-patt: "env-override"
 			    given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
 			    pathenvvar: "MT_RUN_AREA_HOME")))
-	    (if cfgdat
+
+            (if (and cfgdat (list? cfgdat) (> (length cfgdat) 0) (hash-table? (car cfgdat)))
 		(let* ((toppath  (or (get-environment-variable "MT_RUN_AREA_HOME")(cadr cfgdat)))
 		       (rdat     (read-config (conc toppath  ;; convert this to use runconfig:read!
 						    "/runconfigs.config") *runconfigdat* #t sections: sections)))
