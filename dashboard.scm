@@ -1381,7 +1381,7 @@ Misc
 	     (iup:vbox
 	      ;; Command to run, placed over the top of the canvas
 	      (dcommon:command-action-selector commondat tabdat tab-num: tab-num)
-	      (dboard:runs-tree-browser commondat tabdat)
+              (dboard:runs-tree-browser commondat tabdat)
 	      (dcommon:command-runname-selector commondat tabdat tab-num: tab-num)
 	      (dcommon:command-testname-selector commondat tabdat update-keyvals))
 	     ;;  key-listboxes))
@@ -1451,7 +1451,10 @@ Misc
            ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
            )))
     (dboard:tabdat-runs-tree-set! tabdat tb)
-    (iup:vbox tb txtbox)))
+    (iup:detachbox
+     (iup:vbox 
+      tb
+      txtbox))))
 
 ;;======================================================================
 ;; R U N   C O N T R O L S
