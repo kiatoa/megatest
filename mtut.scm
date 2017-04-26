@@ -385,7 +385,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; sched => force the run start time to be recorded as sched Unix
 ;; epoch. This aligns times properly for triggers in some cases.
 ;;
-(define (command-line->pkt action args-alist sched-in)
+(define (command-line->pkt action args-alist sched-in #!key (extra-dat '()))
   (let* ((sched     (cond
 		     ((vector? sched-in)(local-time->seconds sched-in)) ;; we recieved a time
 		     ((number? sched-in) sched-in)
@@ -399,6 +399,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					'a action
 					'U (current-user-name)
 					'D sched)
+                           extra-dat
 			   (map (lambda (x)
 				  (let* ((param (car x))
 					 (value (cdr x))
@@ -516,7 +517,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  ("-rerun-all" . " "))      ;; if run we *always* want preclean set, use single space as placeholder
 			'())
 		    )
-		   sched)))
+		   sched
+                   extra-dat: `((a . ,runkey))  ;; we need the run key for marking the run as launched
+                   )))
       (with-output-to-file
 	  (conc pktsdir "/" uuid ".pkt")
 	(lambda ()
