@@ -30,6 +30,7 @@
        ((PASS)        (list "70  249 73" status))
        ((WARN WAIVED) (list "255 172 13" status))
        ((SKIP)        (list "230 230 0" status))
+       ((ABORT)       (list "198 36 166" status))
        (else (list "253 33 49" status))))
     ((ARCHIVED)
      (case (string->symbol status)
