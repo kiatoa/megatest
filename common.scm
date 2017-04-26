@@ -19,7 +19,6 @@
 (import (prefix base64 base64:))
 
 (declare (unit common))
-(declare (uses keys))
 
 (include "common_records.scm")
 
@@ -1021,13 +1020,11 @@
 
 (define (common:get-linktree)
   (or (getenv "MT_LINKTREE")
-      (or (and *configdat*
-	       (configf:lookup *configdat* "setup" "linktree"))
+      (if *configdat*
+	  (configf:lookup *configdat* "setup" "linktree")
 	  (if *toppath*
 	      (conc *toppath* "/lt")
-	      (if (file-exists? "megatest.config") ;; we are in the toppath (new area, mtutils compatible)
-		  (conc (current-directory) "/lt")
-		  #f)))))
+	      #f))))
 
 (define (common:args-get-runname)
   (let ((res (or (args:get-arg "-runname")
