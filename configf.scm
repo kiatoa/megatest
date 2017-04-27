@@ -403,7 +403,7 @@
 	 (toppath    (car configinfo))
 	 (configfile (cadr configinfo))
 	 (set-fields (lambda (curr-section next-section ht path)
-		       (let ((field-names (if ht (keys:config-get-fields ht) '()))
+		       (let ((field-names (if ht (common:get-fields ht) '()))
 			     (target      (or (getenv "MT_TARGET")(args:get-arg "-reqtarg")(args:get-arg "-target"))))
 			 (debug:print-info 9 *default-log-port* "set-fields with field-names=" field-names " target=" target " curr-section=" curr-section " next-section=" next-section " path=" path " ht=" ht)
 			 (if (not (null? field-names))(keys:target-set-args field-names target #f))))))
