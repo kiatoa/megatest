@@ -14,7 +14,7 @@
 (define (toplevel-command . a) #f)
 
 (use srfi-1 posix srfi-69 readline ;;  regex regex-case srfi-69 apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
-     srfi-18 extras format pkts pkts regex regex-case
+     srfi-18 extras format pkts regex regex-case
      (prefix dbi dbi:)) ;;  zmq extras)
 
 (declare (uses common))
@@ -325,9 +325,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (print "ERROR: settings are missing in your megatest.config for area management.")
 	  (print "  you need to have pktsdir in the [setup] section."))
 	(let* ((pdb  (open-queue-db pdbpath "pkts.db"
-				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))))
-	  (proc pktsdirs pktsdir pdb)
-	  (dbi:close pdb)))))
+				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));")))
+	       (res  (proc pktsdirs pktsdir pdb)))
+	  (dbi:close pdb)
+	  res
+	  ))))
 
 (define (load-pkts-to-db mtconf)
   (with-queue-db
@@ -348,8 +350,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				       (with-input-from-file pkt read-lines)
 				       "\n"))
 			      (apkt   (pkt->alist pktdat))
-			      (ptype  (alist-ref 'T apkt)))
-			 (add-to-queue pdb pktdat uuid (or ptype 'cmd) #f 0)
+			      (ptype  (alist-ref 'T apkt))
+			      (parent (alist-ref 'P apkt)))
+			 (add-to-queue pdb pktdat uuid (or ptype 'cmd) parent 0)
 			 (debug:print 4 *default-log-port* "Added " uuid " of type " ptype " to queue"))
 		       (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
 		       )))
@@ -962,7 +965,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (with-queue-db
 	  mtconf
 	  (lambda (pktsdirs pktsdir conn)
-	    (make-report "out.dot" conn (make-hash-table))))))
+	    (make-report "out.dot" conn '())))))
       ((db)
        (if (null? remargs)
 	   (print "ERROR: missing sub command for db command")
@@ -1003,3 +1006,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (if (args:get-arg "-repl")
 	  (repl)
 	  (load (args:get-arg "-load")))))
+
+#|
+(define mtconf (car (simple-setup #f)))
+(define dat (with-queue-db mtconf (lambda (conn)(get-pkts conn '()))))
+(pp (pkts#flatten-all dat '((cmd . ((parent . P)(url . M)))(runtype . ((parent . P)))) 'id 'group-id 'uuid 'parent 'pkt-type 'pkt 'processed))
+|#
