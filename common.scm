@@ -19,7 +19,6 @@
 (import (prefix base64 base64:))
 
 (declare (unit common))
-(declare (uses keys))
 
 (include "common_records.scm")
 
@@ -1021,13 +1020,11 @@
 
 (define (common:get-linktree)
   (or (getenv "MT_LINKTREE")
-      (or (and *configdat*
-	       (configf:lookup *configdat* "setup" "linktree"))
+      (if *configdat*
+	  (configf:lookup *configdat* "setup" "linktree")
 	  (if *toppath*
 	      (conc *toppath* "/lt")
-	      (if (file-exists? "megatest.config") ;; we are in the toppath (new area, mtutils compatible)
-		  (conc (current-directory) "/lt")
-		  #f)))))
+	      #f))))
 
 (define (common:args-get-runname)
   (let ((res (or (args:get-arg "-runname")
@@ -1036,8 +1033,12 @@
     ;; (if res (set-environment-variable "MT_RUNNAME" res)) ;; not sure if this is a good idea. side effect and all ...
     res))
 
+(define (common:get-fields cfgdat)
+  (let ((fields (hash-table-ref/default cfgdat "fields" '())))
+    (map car fields)))
+
 (define (common:args-get-target #!key (split #f)(exit-if-bad #f))
-  (let* ((keys    (if (hash-table? *configdat*) (keys:config-get-fields *configdat*) '()))
+  (let* ((keys    (if (hash-table? *configdat*) (common:get-fields *configdat*) '()))
 	 (numkeys (length keys))
 	 (target  (or (args:get-arg "-reqtarg")
 		      (args:get-arg "-target")
