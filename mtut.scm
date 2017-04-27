@@ -14,7 +14,7 @@
 (define (toplevel-command . a) #f)
 
 (use srfi-1 posix srfi-69 readline ;;  regex regex-case srfi-69 apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
-     srfi-18 extras format pkts pkts regex regex-case
+     srfi-18 extras format pkts regex regex-case
      (prefix dbi dbi:)) ;;  zmq extras)
 
 (declare (uses common))
@@ -58,51 +58,52 @@ mtutil, part of the Megatest tool suite, documentation at http://www.kiatoa.com/
   license GPL, Copyright Matt Welland 2006-2017
 
 Usage: mtutil action [options]
-  -h                       : this help
-  -manual                  : show the Megatest user manual
-  -version                 : print megatest version (currently " megatest-version ")
-
-Actions:
-   run                     : initiate runs
-   remove                  : remove runs
-   rerun                   : register action for processing
-   set-ss                  : set state/status
-   archive                 : compress and move test data to archive disk
-   kill                    : stop tests or entire runs
-   db                      : database utilities
+  -h                         : this help
+  -manual                    : show the Megatest user manual
+  -version                   : print megatest version (currently " megatest-version ")
+			     
+Actions:		     
+   run                       : initiate runs
+   remove                    : remove runs
+   rerun                     : register action for processing
+   set-ss                    : set state/status
+   archive                   : compress and move test data to archive disk
+   kill                      : stop tests or entire runs
+   db                        : database utilities
+   areas, contours, setup    : show areas, contours or setup section from megatest.config
 
 Contour actions:
-   process                 : runs import, rungen and dispatch 
-
-Selectors 
-  -immediate               : apply this action immediately, default is to queue up actions
-  -area areapatt1,area2... : apply this action only to the specified areas
-  -target key1/key2/...    : run for key1, key2, etc.
-  -test-patt p1/p2,p3/...  : % is wildcard
-  -run-name                : required, name for this particular test run
-  -contour contourname     : run all targets for contourname, requires -run-name, -target
-  -state-status c/p,c/f    : Specify a list of state and status patterns
-  -tag-expr tag1,tag2%,..  : select tests with tags matching expression
-  -mode-patt key           : load testpatt from <key> in runconfigs instead of default TESTPATT
-                             if -testpatt and -tagexpr are not specified
-  -new state/status        : specify new state/status for set-ss
-
-Misc 
-  -start-dir path          : switch to this directory before running mtutil
-  -set-vars V1=1,V2=2      : Add environment variables to a run NB// these are
-                                 overwritten by values set in config files.
-  -log logfile             : send stdout and stderr to logfile
-  -repl                    : start a repl (useful for extending megatest)
-  -load file.scm           : load and run file.scm
-  -debug N|N,M,O...        : enable debug messages 0-N or N and M and O ...
-
-Utility
- db pgschema               : emit postgresql schema; do \"mtutil db pgschema | psql -d mydb\"
+   process                   : runs import, rungen and dispatch 
+			     
+Selectors 		     
+  -immediate                 : apply this action immediately, default is to queue up actions
+  -area areapatt1,area2...   : apply this action only to the specified areas
+  -target key1/key2/...      : run for key1, key2, etc.
+  -test-patt p1/p2,p3/...    : % is wildcard
+  -run-name                  : required, name for this particular test run
+  -contour contourname       : run all targets for contourname, requires -run-name, -target
+  -state-status c/p,c/f      : Specify a list of state and status patterns
+  -tag-expr tag1,tag2%,..    : select tests with tags matching expression
+  -mode-patt key             : load testpatt from <key> in runconfigs instead of default TESTPATT
+                               if -testpatt and -tagexpr are not specified
+  -new state/status          : specify new state/status for set-ss
+			     
+Misc 			     
+  -start-dir path            : switch to this directory before running mtutil
+  -set-vars V1=1,V2=2        : Add environment variables to a run NB// these are
+                                   overwritten by values set in config files.
+  -log logfile               : send stdout and stderr to logfile
+  -repl                      : start a repl (useful for extending megatest)
+  -load file.scm             : load and run file.scm
+  -debug N|N,M,O...          : enable debug messages 0-N or N and M and O ...
+			     
+Utility			     
+ db pgschema                 : emit postgresql schema; do \"mtutil db pgschema | psql -d mydb\"
 
 Examples:
 
 # Start a megatest run in the area \"mytests\"
-mtutil -area mytests -action run -target v1.63/aa3e -mode-patt MYPATT -tag-expr quick
+mtutil run -area mytests -target v1.63/aa3e -mode-patt MYPATT -tag-expr quick
 
 # Start a contour
 mtutil run -contour quick -target v1.63/aa3e 
@@ -303,6 +304,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (args:get-arg "-envcap")
 	       (args:get-arg "-envdelta")
 	       (member *action* '("db"))   ;; very loose checks on db.
+	       (equal? *action* "show")    ;; just keep going if list
 	       )))
     (debug:print-error 0 *default-log-port* "Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
@@ -326,9 +328,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (print "ERROR: settings are missing in your megatest.config for area management.")
 	  (print "  you need to have pktsdir in the [setup] section."))
 	(let* ((pdb  (open-queue-db pdbpath "pkts.db"
-				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))))
-	  (proc pktsdirs pktsdir pdb)
-	  (dbi:close pdb)))))
+				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));")))
+	       (res  (proc pktsdirs pktsdir pdb)))
+	  (dbi:close pdb)
+	  res
+	  ))))
 
 (define (load-pkts-to-db mtconf)
   (with-queue-db
@@ -349,8 +353,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				       (with-input-from-file pkt read-lines)
 				       "\n"))
 			      (apkt   (pkt->alist pktdat))
-			      (ptype  (alist-ref 'T apkt)))
-			 (add-to-queue pdb pktdat uuid (or ptype 'cmd) #f 0)
+			      (ptype  (alist-ref 'T apkt))
+			      (parent (alist-ref 'P apkt)))
+			 (add-to-queue pdb pktdat uuid (or ptype 'cmd) parent 0)
 			 (debug:print 4 *default-log-port* "Added " uuid " of type " ptype " to queue"))
 		       (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
 		       )))
@@ -388,7 +393,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; sched => force the run start time to be recorded as sched Unix
 ;; epoch. This aligns times properly for triggers in some cases.
 ;;
-(define (command-line->pkt action args-alist sched-in)
+(define (command-line->pkt action args-alist sched-in #!key (extra-dat '()))
   (let* ((sched     (cond
 		     ((vector? sched-in)(local-time->seconds sched-in)) ;; we recieved a time
 		     ((number? sched-in) sched-in)
@@ -402,6 +407,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					'a action
 					'U (current-user-name)
 					'D sched)
+                           extra-dat
 			   (map (lambda (x)
 				  (let* ((param (car x))
 					 (value (cdr x))
@@ -525,7 +531,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  ("-rerun-all" . " "))      ;; if run we *always* want preclean set, use single space as placeholder
 			'())
 		    )
-		   sched)))
+		   sched
+                   extra-dat: `((a . ,runkey))  ;; we need the run key for marking the run as launched
+                   )))
       (with-output-to-file
 	  (conc pktsdir "/" uuid ".pkt")
 	(lambda ()
@@ -918,7 +926,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if *action*
     (case (string->symbol *action*)
-      ((run remove rerun set-ss archive kill)
+      ((run remove rerun set-ss archive kill list)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
 	      (mtconf    (car mtconfdat))
 	      (pktsdirs  (configf:lookup mtconf "setup" "pktsdirs"))
@@ -945,6 +953,28 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   ((import)   (load-pkts-to-db mtconf)) ;; import pkts
 	   ((rungen)   (generate-run-pkts mtconf toppath))
 	   ((dispatch) (dispatch-commands mtconf toppath)))))
+      ;; misc
+      ((show)
+       (if (> (length remargs) 0)
+	   (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
+		  (mtconf    (car mtconfdat))
+		  (sect-dat (configf:get-section mtconf (car remargs))))
+	     (if sect-dat
+		 (for-each
+		  (lambda (entry)
+		    (if (> (length entry) 1)
+			(print (car entry) "   " (cadr entry))
+			(print (car entry))))
+		  sect-dat)
+		 (print "No section \"" (car remargs) "\" found")))
+	   (print "ERROR: list requires section parameter; areas, setup or contours")))
+      ((gendot)
+       (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
+	      (mtconf    (car mtconfdat)))
+	 (with-queue-db
+	  mtconf
+	  (lambda (pktsdirs pktsdir conn)
+	    (make-report "out.dot" conn '())))))
       ((db)
        (if (null? remargs)
 	   (print "ERROR: missing sub command for db command")
@@ -985,3 +1015,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (if (args:get-arg "-repl")
 	  (repl)
 	  (load (args:get-arg "-load")))))
+
+#|
+(define mtconf (car (simple-setup #f)))
+(define dat (with-queue-db mtconf (lambda (conn)(get-pkts conn '()))))
+(pp (pkts#flatten-all dat '((cmd . ((parent . P)(url . M)))(runtype . ((parent . P)))) 'id 'group-id 'uuid 'parent 'pkt-type 'pkt 'processed))
+|#
