@@ -23,7 +23,6 @@
 (declare (uses server))
 (declare (uses mt))
 (declare (uses archive))
-(declare (uses keys))
 ;; (declare (uses filedb))
 
 (include "common_records.scm")

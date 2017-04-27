@@ -66,7 +66,4 @@
 ;; config file related routines
 ;;======================================================================
 
-(define (keys:config-get-fields confdat)
-  (let ((fields (hash-table-ref/default confdat "fields" '())))
-    (map car fields)))
-
+(define keys:config-get-fields common:get-fields)

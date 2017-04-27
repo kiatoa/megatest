@@ -322,6 +322,7 @@
                                                         ;; after gathering the vars for a section and if apply-wildcards is true and if there is a wildcard in the section name process wildcards
                                                         ;; NOTE: we are processing the curr-section-name, NOT section-name.
                                                         (process-wildcards res curr-section-name)
+							(if (not (hash-table-ref/default res section-name #f))(hash-table-set! res section-name '())) ;; ensure that mere mention of a section is not lost
 							(loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings)
 							      ;; if we have the sections list then force all settings into "" and delete it later?
 							      ;; (if (or (not sections) 
@@ -402,7 +403,7 @@
 	 (toppath    (car configinfo))
 	 (configfile (cadr configinfo))
 	 (set-fields (lambda (curr-section next-section ht path)
-		       (let ((field-names (if ht (keys:config-get-fields ht) '()))
+		       (let ((field-names (if ht (common:get-fields ht) '()))
 			     (target      (or (getenv "MT_TARGET")(args:get-arg "-reqtarg")(args:get-arg "-target"))))
 			 (debug:print-info 9 *default-log-port* "set-fields with field-names=" field-names " target=" target " curr-section=" curr-section " next-section=" next-section " path=" path " ht=" ht)
 			 (if (not (null? field-names))(keys:target-set-args field-names target #f))))))
