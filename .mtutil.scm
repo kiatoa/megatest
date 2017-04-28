@@ -62,7 +62,7 @@
 ;; run only areas where first letter of area name is "a"
 ;;
 (add-area-checker 'first-letter-a
-		 (lambda (area runkey)
-		   (string-match "^a.*$" area)))
+                  (lambda (area target contour)
+                    (string-match "^a.*$" area)))
 
 
