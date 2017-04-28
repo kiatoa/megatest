@@ -27,8 +27,19 @@
 
 (require-library stml)
 
-(define *target-mappers*  (make-hash-table)) ;; '())
-(define *runname-mappers* (make-hash-table)) ;; '())
+;; stuff for the mapper and checker functions
+;;
+(define *target-mappers*  (make-hash-table)) 
+(define *runname-mappers* (make-hash-table)) 
+(define *area-checkers*   (make-hash-table)) 
+
+;; helpers for mappers/checkers
+(define (add-target-mapper name proc)
+  (hash-table-set! *target-mappers* name proc))
+(define (add-runname-mapper name proc)
+  (hash-table-set! *runname-mappers* name proc))
+(define (add-area-checker name proc)
+  (hash-table-set! *area-checkers* name proc))
 
 ;; this needs some thought regarding security implications.
 ;;
@@ -407,7 +418,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					'a action
 					'U (current-user-name)
 					'D sched)
-                           extra-dat
+                           (if (null? extra-dat)
+			       '()
+			       (list (car extra-dat)(cdr extra-dat)))
 			   (map (lambda (x)
 				  (let* ((param (car x))
 					 (value (cdr x))
@@ -420,8 +433,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					(list meta value)
 					'())))
 				(filter cdr args-data)))))
-;; (print  "Alldat: " alldat
-;;         " args-data: " args-data)
+    (print  "Alldat: " alldat
+	    " args-data: " args-data)
     (add-z-card
      (apply construct-sdat alldat))))
 
@@ -539,14 +552,25 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(lambda ()
 	  (print pkt))))))
 
-
+;; look for areas=a1,a2,a3 OR areafn=somefuncname
+;;
 (define (val-alist->areas val-alist)
-  (string-split (or (alist-ref 'areas val-alist) "") ","))
+  (let ((areas-string   (alist-ref 'areas  val-alist))
+	(areas-procname (alist-ref 'areafn val-alist)))
+    (if areas-procname ;; areas-procname take precedence
+	areas-procname
+	(string-split (or areas-string "") ","))))
 
-(define (area-allowed? area areas)
-  (or (not areas)
-      (null? areas)
-      (member area areas)))
+(define (area-allowed? area areas runkey)
+  (cond
+   ((not areas) #t) ;; no spec
+   ((string? areas) ;; 
+    (let ((check-fn (hash-table-ref/default *area-checkers* areas #f)))
+      (if check-fn
+	  (check-fn area runkey)
+	  #f)))
+   ((list? areas)(member area areas))
+   (else #f))) ;; shouldn't get here 
 
 ;; (use trace)(trace create-run-pkt)
 
@@ -583,22 +607,31 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			(val-alist  (val->alist val))
 			(runname    (make-runname "" ""))
 			(runtrans   (alist-ref 'runtrans val-alist))
+
+			;; these may or may not be defined and not all are used in each handler type in the case below
+			(run-name   (alist-ref 'run-name val-alist))
+			(target     (alist-ref 'target   val-alist))
+			(crontab    (alist-ref 'cron     val-alist))
+			(areas      (val-alist->areas    val-alist)) ;; areas can be a single string (a reference to call an areas function), or a list of area names.
+			(dbdest     (alist-ref 'dbdest   val-alist))
+			(appendconf (alist-ref 'appendconf val-alist))
+			(file-globs (alist-ref 'glob val-alist))
 			
 			(runstarts  (find-pkts pdb '(runstart) `((o . ,contour)
 								 (t . ,runkey))))
 			(rspkts     (get-pkt-alists runstarts))
 			;; starttimes is for run start times and is used to know when the last run was launched
 			(starttimes (get-pkt-times rspkts)) ;; sort by age (youngest first) and delete duplicates by target
-			(last-run (if (null? starttimes) ;; if '() then it has never been run, else get the max
-				      0
-				      (apply max (map cdr starttimes))))
+			(last-run   (if (null? starttimes) ;; if '() then it has never been run, else get the max
+					0
+					(apply max (map cdr starttimes))))
 			;; synctimes is for figuring out the last time a sync was done
-			(syncstarts   (find-pkts pdb '(syncstart) '())) ;; no qualifiers, a sync does all tarets etc.
-			(sspkts       (get-pkt-alists syncstarts))
-			(synctimes    (get-pkt-times  sspkts))
-			(last-sync (if (null? synctimes) ;; if '() then it has never been run, else get the max
-				      0
-				      (apply max (map cdr synctimes))))
+			(syncstarts (find-pkts pdb '(syncstart) '())) ;; no qualifiers, a sync does all tarets etc.
+			(sspkts     (get-pkt-alists syncstarts))
+			(synctimes  (get-pkt-times  sspkts))
+			(last-sync  (if (null? synctimes) ;; if '() then it has never been run, else get the max
+					0
+					(apply max (map cdr synctimes))))
 			)
 
 		   (let ((delta (lambda (x)
@@ -616,15 +649,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 		     ((no-such-rule) (print "ERROR: no such rule for " sense))
 
+		     ;; Handle crontab like rules
+		     ;;
 		     ((scheduled)
 		      (if (not (alist-ref 'cron val-alist)) ;; gotta have cron spec
 			  (print "ERROR: bad sense spec \"" (string-intersperse sense " ") "\" params: " val-alist)
-			  (let* ((run-name (alist-ref 'run-name val-alist))
-				 (target   (alist-ref 'target   val-alist))
-				 (crontab  (alist-ref 'cron     val-alist))
-                                 (areas    (val-alist->areas val-alist))
+			  (let* (
 				 ;; (action   (alist-ref 'action   val-alist))
-				 (cron-safe-string (string-translate (string-intersperse (string-split (alist-ref 'cron val-alist)) "-") "*" "X"))
+				 (cron-safe-string (string-translate (string-intersperse (string-split crontab) "-") "*" "X"))
 				 (runname  std-runname)) ;; (conc "sched" (time->string (seconds->local-time (current-seconds)) "%M%H%d")))))
 			    ;; (print "last-run: " last-run " need-run: " need-run)
 			    ;; (if need-run
@@ -634,27 +666,32 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				   (push-run-spec torun contour runkey
 						  `((message . ,(conc ruletype ":sync-" cron-safe-string))
 						    (action  . ,action)
-						    (dbdest  . ,(alist-ref 'dbdest val-alist))
-						    (append  . ,(alist-ref 'appendconf val-alist))))))
+						    (dbdest  . ,dbdest)
+						    (append  . ,appendconf)
+						    (areas   . ,areas)))))
 			      ((run)
 			       (if (common:extended-cron crontab #f last-run)
 				   (push-run-spec torun contour runkey
-						  `((message . ,(conc ruletype ":" cron-safe-string))
-						    (runname . ,runname)
+						  `((message  . ,(conc ruletype ":" cron-safe-string))
+						    (runname  . ,runname)
 						    (runtrans . ,runtrans)
-						    (action  . ,action)
-						    (target  . ,target)))))
+						    (action   . ,action)
+						    (areas    . ,areas)
+						    (target   . ,target)))))
                               ((remove)
                                (push-run-spec torun contour runkey
-						  `((message . ,(conc ruletype ":" cron-safe-string))
-						    (runname . ,runname)
+						  `((message  . ,(conc ruletype ":" cron-safe-string))
+						    (runname  . ,runname)
 						    (runtrans . ,runtrans)
-						    (action  . ,action)
-						    (target  . ,target))))
+						    (action   . ,action)
+						    (areas    . ,areas)
+						    (target   . ,target))))
 			      (else
 			       (print "ERROR: action \"" action "\" has no scheduled handler")
 			       )))))
 
+		     ;; script based sensors
+		     ;;
 		     ((script)
 		      ;; syntax is a little different here. It is a list of commands to run, "scriptname = extra_parameters;scriptname = ..."
 		      ;; where scriptname may be repeated multiple times. The script must return unix-epoch of last change, new-target-name and new-run-name
@@ -691,6 +728,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 							  (runname  . ,runname)
 							  (runtrans . ,runtrans)
 							  (action   . ,action)
+							  (areas    . ,areas)
 							  (target   . ,new-target))))
 				       (print "key-msg: " key-msg)
 				       (push-run-spec torun contour
@@ -700,6 +738,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 						      key-msg)))))))
 		       val-alist)) ;; iterate over the param split by ;\s*
 
+		     ;; fossil scm based triggers
+		     ;;
 		     ((fossil)
 		      (for-each
 		       (lambda (fspec)
@@ -715,32 +755,35 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					 (fossil:last-change-node-and-time fdir fname branch)))
 			     (if (null? starttimes)
 				 (push-run-spec torun contour runkey
-						`((message . ,(conc "fossil:" branch "-neverrun"))
-						  (runname . ,(conc runname "-" node))
+						`((message  . ,(conc "fossil:" branch "-neverrun"))
+						  (runname  . ,(conc runname "-" node))
 						  (runtrans . ,runtrans)
-						  (target  . ,runkey)))
+						  (areas    . ,areas)
+						  (target   . ,runkey)))
 				 (if (> datetime last-run) ;; change time is greater than last-run time
 				     (push-run-spec torun contour runkey
-						    `((message . ,(conc "fossil:" branch "-" node))
-						      (runname . ,(conc runname "-" node))
+						    `((message  . ,(conc "fossil:" branch "-" node))
+						      (runname  . ,(conc runname "-" node))
 						      (runtrans . ,runtrans)
-						      (target  . ,runkey)))))
+						      (areas    . ,areas)
+						      (target   . ,runkey)))))
 			     (print "Got datetime=" datetime " node=" node))))
 		       val-alist))
-		     
+
+		     ;; sensor looking for one or more files newer than reference
+		     ;;
 		     ((file file-or) ;; one or more files must be newer than the reference
-		      (let* ((file-globs  (alist-ref 'glob val-alist))
-                             (areas       (val-alist->areas val-alist))
-			     (youngestdat (common:get-youngest (common:bash-glob file-globs)))
+		      (let* ((youngestdat (common:get-youngest (common:bash-glob file-globs)))
 			     (youngestmod (car youngestdat)))
 			;; (print "youngestmod: " youngestmod " starttimes: " starttimes)
 			(if (null? starttimes) ;; this target has never been run
 			    (push-run-spec torun contour runkey
-					   `((message . "file:neverrun")
-					     (action  . ,action)
+					   `((message  . "file:neverrun")
+					     (action   . ,action)
 					     (runtrans . ,runtrans)
-					     (target  . ,runkey)
-					     (runname . ,runname)))
+					     (target   . ,runkey)
+					     (areas    . ,areas)
+					     (runname  . ,runname)))
 			;; (for-each
 			;;  (lambda (starttime) ;; look at the time the last run was kicked off for this contour
 			;;    (if (> youngestmod (cdr starttime))
@@ -748,29 +791,31 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			;; 	     (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
 			    (if (> youngestmod last-run)
 				(push-run-spec torun contour runkey
-					       `((message . ,(conc ruletype ":" (cadr youngestdat)))
-						 (action  . ,action)
-						 (target  . ,runkey)
+					       `((message  . ,(conc ruletype ":" (cadr youngestdat)))
+						 (action   . ,action)
+						 (target   . ,runkey)
 						 (runtrans . ,runtrans)
-						 (runname . ,runname)
+						 (areas    . ,areas)
+						 (runname  . ,runname)
 						 ))))))
-		      ;; starttimes))
 
+		     ;; all globbed files must be newer than the reference
+		     ;;
 		     ((file-and) ;; all files must be newer than the reference
-		      (let* ((file-globs  (alist-ref 'glob val-alist))
-			     (youngestdat (common:get-youngest file-globs))
+		      (let* ((youngestdat (common:get-youngest file-globs))
 			     (youngestmod (car youngestdat))
 			     (success     #t)) ;; any cases of not true, set flag to #f for AND
 			;; (print "youngestmod: " youngestmod " starttimes: " starttimes)
 			(if (null? starttimes) ;; this target has never been run
 			    (push-run-spec torun contour runkey
-					   `((message . "file:neverrun")
-					     (runname . ,runname)
+					   `((message  . "file:neverrun")
+					     (runname  . ,runname)
 					     (runtrans . ,runtrans)
-					     (target  . ,runkey)
-					     (action  . ,action)))
+					     (areas    . ,areas)
+					     (target   . ,runkey)
+					     (action   . ,action)))
 			    ;; NB// I think this is wrong. It should be looking at last-run only.
-			    (if (> youngestmod last-run)
+			    (if (> youngestmod last-run) ;; WAIT!! Shouldn't file-and be looking at the *oldest* file (thus all are younger than ...)
 				
 				;; 			    (for-each
 				;; 			     (lambda (starttime) ;; look at the time the last run was kicked off for this contour
@@ -781,11 +826,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				;; 			    (begin
 				;; 			      (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
 				(push-run-spec torun contour runkey
-					       `((message . ,(conc ruletype ":" (cadr youngestdat)))
-						 (runname . ,runname)
+					       `((message  . ,(conc ruletype ":" (cadr youngestdat)))
+						 (runname  . ,runname)
 						 (runtrans . ,runtrans)
-						 (target  . ,runkey)
-						 (action  . ,action)
+						 (target   . ,runkey)
+						 (areas    . ,areas)
+						 (action   . ,action)
 						 ))))))
 		     (else (print "ERROR: unrecognised rule \"" ruletype)))))
 	       keydats))) ;; sense rules
@@ -796,7 +842,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (lambda (contour)
 	    (print "contour: " contour)
 	    (let* ((val       (or (configf:lookup mtconf "contours" contour) ""))
-		   (val-alist (val->alist val))
+		   (val-alist (val->alist val))                     ;; BEWARE ... NOT the same val-alist as above!
 		   (areas     (val-alist->areas val-alist))
 		   (selector  (alist-ref 'selector val-alist))
 		   (mode-tag  (and selector (string-split-fields "/" selector #:infix)))
@@ -811,15 +857,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (lambda (runkeydat)
 		      (for-each
 		       (lambda (area)
-                         (if (area-allowed? area areas) ;; is this area to be handled (from areas=a,b,c ...)
+			 (if (area-allowed? area areas runkey) ;; is this area to be handled (from areas=a,b,c OR using areafn=abcfn and *area-checks* ...)
                              (let ((runname (alist-ref 'runname runkeydat))
                                    (runtrans (alist-ref 'runtrans runkeydat))
-                                   (reason  (alist-ref 'message runkeydat))
-                                   (sched   (alist-ref 'sched   runkeydat))
-                                   (action  (alist-ref 'action  runkeydat))
-                                   (dbdest  (alist-ref 'dbdest  runkeydat))
-                                   (append  (alist-ref 'append  runkeydat))
-                                   (target  (or (alist-ref 'target  runkeydat) runkey))) ;; override with target if forced
+				   
+                                   (reason   (alist-ref 'message runkeydat))
+                                   (sched    (alist-ref 'sched   runkeydat))
+                                   (action   (alist-ref 'action  runkeydat))
+                                   (dbdest   (alist-ref 'dbdest  runkeydat))
+                                   (append   (alist-ref 'append  runkeydat))
+                                   (target   (or (alist-ref 'target  runkeydat) runkey))) ;; override with target if forced
+
+			       ;; NEED TO EXPAND RUNKEY => ALL TARGETS MAPPED AND THEN FOREACH .... 
+			       
                                (print "Have: runkey=" runkey " contour=" contour " area=" area " action=" action " tag-expr=" tag-expr " mode-patt=" mode-patt " target=" target)
                                (if (case (or (and action (string->symbol action)) 'noaction)  ;; ensure we have the needed data to run this action
                                      ((noaction) #f)
