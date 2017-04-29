@@ -500,6 +500,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:any? "-run" "-runall" "-remove-runs" "-set-state-status")
     (debug:print 0 *default-log-port* (string-intersperse (argv) " ")))
 
+;; some switches imply homehost. Exit here if not on homehost
+;;
+(let ((homehost-required  (list "-cleanup-db" "-server")))
+  (if (apply args:any? homehost-required)
+      (if (not (common:on-homehost?))
+	  (for-each
+	   (lambda (switch)
+	     (if (args:get-arg switch)
+		 (begin
+		   (debug:print 0 *default-log-port* "ERROR: you must be on the homehost to run with " switch
+				", you can move homehost by removing the .homehost file but this will disrupt any runs in progress.")
+		   (exit 1))))
+	   homehost-required))))
+
 ;;======================================================================
 ;; Misc setup stuff
 ;;======================================================================
