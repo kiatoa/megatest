@@ -239,7 +239,7 @@
    ;; 'new2old
    'killservers
    'dejunk
-   ;; 'adj-testids
+   'adj-target
    ;; 'old2new
    'new2old
    'schema)
