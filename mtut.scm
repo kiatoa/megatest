@@ -541,7 +541,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (case callname
 			      ((auto) runname)
 			      (else   runtrans)))))
-;;	 (new-targets    (map-targets xlatr-key runkey area contour))
+	 (new-target     target) ;; I believe we will want target manipulation here .. (map-targets xlatr-key runkey area contour))
 	 (actual-action  (if action
 			     (if (equal? action "sync-prepend")
 				 "sync"
@@ -552,7 +552,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ((sync sync-prepend)
        (set! new-target #f)
        (set! runame     #f)))
-    (print "area-path: " area-path " orig-target: " runkey " new-target: " new-target)
+    ;; (print "area-path: " area-path " orig-target: " runkey " new-target: " new-target)
     (let-values (((uuid pkt)
 		  (command-line->pkt
 		   actual-action
@@ -875,7 +875,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 ;; now have to run populated
 	 (for-each
 	  (lambda (contour)
-	    (print "contour: " contour)
 	    (let* ((cval       (or (configf:lookup mtconf "contours" contour) ""))
 		   (cval-alist (val->alist cval))                     ;; BEWARE ... NOT the same val-alist as above!
 		   (areas      (val-alist->areas cval-alist))
@@ -883,6 +882,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   (mode-tag   (and selector (string-split-fields "/" selector #:infix)))
 		   (mode-patt  (and mode-tag (if (eq? (length mode-tag) 2)(cadr mode-tag) #f)))
 		   (tag-expr   (and mode-tag (if (null? mode-tag) #f (car mode-tag)))))
+	      (print "contour: " contour " areas=" areas " cval=" cval)
 	      (for-each
 	       (lambda (runkeydatset)
 		 ;; (print "runkeydatset: ")(pp runkeydatset)
@@ -921,7 +921,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
                                       (print "ERROR: Missing info to make a " action " call: runkey=" runkey " contour=" contour " area=" area  " tag-expr=" tag-expr " mode-patt=" mode-patt " dbdest=" dbdest)
                                       ))
                                 targets))
-                             (print "NOTE: skipping " runkeydat " for area, not in " areas)))
+                             (print "NOTE: skipping " runkeydat " for area \"" area "\", not in " areas)))
                        all-areas))
 		    runkeydats)))
 	       (let ((res (configf:get-section torun contour))) ;; each contour / target
