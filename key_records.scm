@@ -12,9 +12,9 @@
 (define-inline (keys->valslots keys) ;; => ?,?,? ....
   (string-intersperse (map (lambda (x) "?") keys) ","))
 
-(define-inline (keys->key/field keys . additional)
-  (string-join (map (lambda (k)(conc k " TEXT"))
-		    (append keys additional)) ","))
+;; (define-inline (keys->key/field keys . additional)
+;;   (string-join (map (lambda (k)(conc k " TEXT"))
+;; 		    (append keys additional)) ","))
 
 (define-inline (item-list->path itemdat)
   (if (list? itemdat)

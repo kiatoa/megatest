@@ -838,6 +838,36 @@
                                    WHERE id=old.id;
                                END;"))
 
+(define (db:adj-target db)
+  (let ((fields    (configf:get-section *configdat* "fields"))
+	(field-num 0))
+    ;; because we will be refreshing the keys table it is best to clear it here
+    (sqlite3:execute db "DELETE FROM keys;")
+    (for-each
+     (lambda (field)
+       (let ((column (car field))
+	     (spec   (cadr field)))
+	 (handle-exceptions
+	  exn
+	  (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
+	      (debug:print 0 *default-log-port* "Target field " column " already exists in the runs table")
+	      (db:general-sqlite-error-dump exn "alter table runs ..." #f "none"))
+	  ;; Add the column if needed
+	  (sqlite3:execute
+	   db
+	   (conc "ALTER TABLE runs ADD COLUMN " column " " spec)))
+	 ;; correct the entry in the keys column
+	 (sqlite3:execute
+	  db
+	  "INSERT INTO keys (id,fieldname,fieldtype) VALUES (?,?,?);"
+	  field-num column spec)
+	 ;; fill in blanks (not allowed as it would be part of the path
+	 (sqlite3:execute
+	  db
+	  (conc "UPDATE runs SET " column "='x' WHERE " column "='';"))
+	 (set! field-num (+ field-num 1))))
+     fields)))
+  
 (define *global-db-store* (make-hash-table))
 
 (define (db:get-access-mode)
@@ -925,134 +955,58 @@
 	     (allow-cleanup #t) ;; (if run-ids #f #t))
 	     (servers (server:get-list *toppath*)) ;; (tasks:get-all-servers (db:delay-if-busy tdbdat)))
 	     (data-synced 0)) ;; count of changed records (I hope)
-    
-	;; kill servers
-	(if (member 'killservers options)
-	    (for-each
-	     (lambda (server)
-	       (match-let (((mod-time host port start-time pid) server))
-		 (if (and host pid)
-		     (tasks:kill-server host pid))))
-	     servers))
 
-	;; clear out junk records
-	;;
-	(if (member 'dejunk options)
-	    (begin
+	(for-each
+	 (lambda (option)
+
+	   (case option
+	     ;; kill servers
+	     ((killservers)
+	      (for-each
+	       (lambda (server)
+		 (match-let (((mod-time host port start-time pid) server))
+			    (if (and host pid)
+				(tasks:kill-server host pid))))
+	       servers))
+
+	     ;; clear out junk records
+	     ;;
+	     ((dejunk)
 	      (db:delay-if-busy mtdb) ;; ok to delay on mtdb
 	      (db:clean-up mtdb)
 	      (db:clean-up tmpdb)
-              (db:clean-up refndb)))
+              (db:clean-up refndb))
 
-	;; adjust test-ids to fit into proper range
-	;;
-	;; (if (member 'adj-testids options)
-	;;     (begin
-	;;       (db:delay-if-busy mtdb)
-	;;       (db:prep-megatest.db-for-migration mtdb)))
+	     ;; sync runs, test_meta etc.
+	     ;;
+	     ((old2new)
+	      (set! data-synced
+		    (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb tmpdb refndb)
+		       data-synced)))
+	     
+	     ;; now ensure all newdb data are synced to megatest.db
+	     ;; do not use the run-ids list passed in to the function
+	     ;;
+	     ((new2old)
+	      (set! data-synced
+		    (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb refndb mtdb)
+		       data-synced)))
 
-	;; sync runs, test_meta etc.
-	;;
-	(if (member 'old2new options)
-	    ;; (begin
-            (set! data-synced
-                  (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb tmpdb refndb)
-                     data-synced)))
-			      ;; (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
-;; 	      (for-each 
-;; 	       (lambda (run-id)
-;; 		 (db:delay-if-busy mtdb)
-;; 		 (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id)))
-;; ;;		       (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
-;; 		   (debug:print 0 *default-log-port* "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
-;; 		   (db:replace-test-records dbstruct run-id testrecs)
-;; 		   (sqlite3:finalize! (db:dbdat-get-db (dbr:dbstruct-rundb dbstruct)))))
-;; 	       run-ids)))
-
-	;; now ensure all newdb data are synced to megatest.db
-	;; do not use the run-ids list passed in to the function
-	;;
-	(if (member 'new2old options)
-	    (set! data-synced
-		  (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb refndb mtdb)
-		      data-synced)))
-
-
-
-        (if (member 'schema options)
-            (begin
+	     ((adj-target)
+	      (db:adj-target (db:dbdat-get-db mtdb))
+	      (db:adj-target (db:dbdat-get-db tmpdb))
+	      (db:adj-target (db:dbdat-get-db refndb)))
+	   
+	     ((schema)
               (db:patch-schema-maindb (db:dbdat-get-db mtdb))
               (db:patch-schema-maindb (db:dbdat-get-db tmpdb))
               (db:patch-schema-maindb (db:dbdat-get-db refndb))
               (db:patch-schema-rundb  (db:dbdat-get-db mtdb))
               (db:patch-schema-rundb  (db:dbdat-get-db tmpdb))
               (db:patch-schema-rundb  (db:dbdat-get-db refndb))))
-              
-	;; (let* ((maindb      (make-dbr:dbstruct path: toppath local: #t))
-	;; 	   (src-run-ids (if run-ids run-ids (db:get-all-run-ids (db:dbdat-get-db (db:get-db maindb 0)))))
-	;; 	   (all-run-ids (sort (delete-duplicates (cons 0 src-run-ids)) <))
-	;; 	   (count       1)
-	;; 	   (total       (length all-run-ids))
-	;; 	   (dead-runs  '()))
-	;;   ;; first fix schema if needed
-	;;   (map
-	;;    (lambda (th)
-	;; 	 (thread-join! th))
-	;;    (map
-	;; 	(lambda (run-id)
-	;; 	  (thread-start! 
-	;; 	   (make-thread
-	;; 	    (lambda ()
-	;; 	      (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
-;;                    (if (member 'schema options)
-	;; 		(if (eq? run-id 0)
-	;; 		    (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
-	;; 		      (db:patch-schema-maindb run-id maindb))
-	;; 		    (db:patch-schema-rundb run-id frundb)))
-	;; 	      (set! count (+ count 1))
-	;; 	      (debug:print 0 *default-log-port* "Finished patching schema for " (if (eq? run-id 0) " main.db " (conc run-id ".db")) ", " count " of " total)))))
-	;; 	all-run-ids))
-	;;   ;; Then sync and fix db's
-	;;   (set! count 0)
-	;;   (process-fork
-	;;    (lambda ()
-	;; 	 (map
-	;; 	  (lambda (th)
-	;; 	    (thread-join! th))
-	;; 	  (map
-	;; 	   (lambda (run-id)
-	;; 	     (thread-start! 
-	;; 	      (make-thread
-	;; 	       (lambda ()
-	;; 		 (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
-	;; 			(frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
-	;; 		   (if (eq? run-id 0)
-	;; 		       (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
-;;                             (db:sync-tables (db:sync-main-list dbstruct) #f (db:get-db fromdb #f) mtdb)
-	;; 			 (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f))))
-	;; 		       (begin
-	;; 			 ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
-;;                             (db:sync-tables db:sync-tests-only #f (db:get-db fromdb run-id) mtdb)
-	;; 			 (db:clean-up-rundb (db:get-db fromdb run-id)))))
-	;; 		 (set! count (+ count 1))
-	;; 		 (debug:print 0 *default-log-port* "Finished clean up of "
-	;; 			      (if (eq? run-id 0)
-	;; 				  " main.db " (conc run-id ".db")) ", " count " of " total)))))
-	;; 	   all-run-ids))))
-
-	;; removed deleted runs
-;; (let ((dbdir (tasks:get-task-db-path)))
-;;   (for-each (lambda (run-id)
-;; 	      (let ((fullname (conc dbdir "/" run-id ".db")))
-;; 		(if (file-exists? fullname)
-;; 		    (begin
-;; 		      (debug:print 0 *default-log-port* "Removing database file for deleted run " fullname)
-;; 		      (delete-file fullname)))))
-;; 	    dead-runs))))
-;; 
-	;; (db:close-all dbstruct)
-	;; (sqlite3:finalize! mdb)
-        (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb)
+	
+	   (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb))
+	 options)
 	data-synced)))
 
 ;; keeping it around for debugging purposes only
@@ -1107,13 +1061,13 @@
 	 (keys     (keys:config-get-fields configdat))
 	 (havekeys (> (length keys) 0))
 	 (keystr   (keys->keystr keys))
-	 (fieldstr (keys->key/field keys))
+	 (fieldstr (keys:make-key/field-string configdat))
 	 (db       (db:dbdat-get-db dbdat)))
     (for-each (lambda (key)
 		(let ((keyn key))
 		  (if (member (string-downcase keyn)
 			      (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count"
-				    "pass_count"))
+				    "pass_count" "contour"))
 		      (begin
 			(print "ERROR: your key cannot be named " keyn " as this conflicts with the same named field in the runs table, you must remove your megatest.db and <linktree>/.db before trying again.")
 			(exit 1)))))
