@@ -67,3 +67,10 @@
 ;;======================================================================
 
 (define keys:config-get-fields common:get-fields)
+(define (keys:make-key/field-string confdat)
+  (let ((fields (configf:get-section confdat "fields")))
+    (string-join
+     (map (lambda (field)(conc (car field) " " (cadr field)))
+	  fields)
+     ",")))
+
