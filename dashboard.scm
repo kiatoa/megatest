@@ -87,6 +87,7 @@ Misc
 			"-use-db-cache"
 			"-skip-version-check"
 			"-repl"
+                        "-rh5.8" ;; fix to allow running on rh5.8
 			)
 		 args:arg-hash
 		 0))
@@ -100,6 +101,9 @@ Misc
     (begin
       (print help)
       (exit)))
+
+(if (args:get-arg "-rh5.8")
+    (set! iup:detachbox iup:vbox))
 
 ;; TODO: Move this inside (main)
 ;;
