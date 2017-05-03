@@ -111,7 +111,10 @@
 ;; This is recursively run by http-transport:run until sucessful
 ;;
 (define (http-transport:try-start-server ipaddrstr portnum)
-  (let ((config-hostname (configf:lookup *configdat* "server" "hostname")))
+  (let ((config-hostname (configf:lookup *configdat* "server" "hostname"))
+	(config-use-proxy (equal? (configf:lookup *configdat* "client" "use-http_proxy") "yes")))
+    (if (not config-use-proxy)
+	(determine-proxy (constantly #f)))
     (debug:print-info 0 *default-log-port* "http-transport:try-start-server time=" (seconds->time-string (current-seconds)) " ipaddrsstr=" ipaddrstr " portnum=" portnum " config-hostname=" config-hostname)
     (handle-exceptions
 	exn
