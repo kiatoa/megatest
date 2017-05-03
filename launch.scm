@@ -1208,7 +1208,7 @@
   (let* ((item-path       (item-list->path itemdat))
 	 (contour         #f)) ;; NOT READY FOR THIS (args:get-arg "-contour")))
     (let loop ((delta        (- (current-seconds) *last-launch*))
-	       (launch-delay (string->number (or (configf:lookup *configdat* "setup" "launch-delay") "5"))))
+	       (launch-delay (string->number (or (configf:lookup *configdat* "setup" "launch-delay") "0"))))
       (if (> launch-delay delta)
 	  (begin
 	    (debug:print-info 0 *default-log-port* "Delaying launch of " test-name " for " (- launch-delay delta) " seconds")
