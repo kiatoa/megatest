@@ -809,7 +809,7 @@
 	  ;; NB// Was this for the test or for the parent in an iterated test?
 	  (rmt:general-call 'test-set-rundir-shortdir run-id lnkpath 
 			    (if (file-exists? lnkpath)
-				(resolve-pathname lnkpath)
+				lnkpath ;; (resolve-pathname lnkpath)
 				lnkpath)
 			    testname "")
 	  ;; (rmt:general-call 'test-set-rundir run-id lnkpath testname "") ;; toptest-path)
