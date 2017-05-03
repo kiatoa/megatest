@@ -309,7 +309,7 @@
 
 ;; This routine creates the db if not already present. It is only called if the db is not already opened
 ;;
-(define (db:open-db dbstruct #!key (areapath #f)) ;; TODO: actually use areapath
+(define (db:open-db dbstruct #!key (areapath #f)(do-sync #t)) ;; TODO: actually use areapath
   (let ((tmpdb-stack (dbr:dbstruct-dbstack dbstruct))) ;; RA => Returns the first reference in dbstruct
     (if (stack? tmpdb-stack)
 	(db:get-db tmpdb-stack) ;; get previously opened db (will create new db handle if all in the stack are already used
@@ -339,9 +339,10 @@
           (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb) ;; olddb is already a (cons db path)
           (dbr:dbstruct-refndb-set! dbstruct refndb)
           ;;	    (mutex-unlock! *rundb-mutex*)
-          (if (or (not dbfexists)
-                  (and modtimedelta
-                       (> modtimedelta 10))) ;; if db in tmp is over ten seconds older than the file in MTRA then do a sync back
+          (if (and  (or (not dbfexists)
+			(and modtimedelta
+			     (> modtimedelta 10))) ;; if db in tmp is over ten seconds older than the file in MTRA then do a sync back
+		    do-sync)
 	      (begin
 		(debug:print 4 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data \n    from " (db:dbdat-get-path mtdb) " mod time delta: " modtimedelta)
 		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb)
@@ -355,9 +356,8 @@
 ;;
 ;; called in http-transport and replicated in rmt.scm for *local* access. 
 ;;
-(define (db:setup #!key (areapath #f))
+(define (db:setup do-sync #!key (areapath #f))
   ;;
-
   (cond
    (*dbstruct-db* *dbstruct-db*);; TODO: when multiple areas are supported, this optimization will be a hazard
    (else ;;(common:on-homehost?)
@@ -367,7 +367,7 @@
         (debug:print-info 13 *default-log-port* "in db:setup, *toppath* not set; calling launch:setup")
         (launch:setup areapath: areapath))
       (debug:print-info 13 *default-log-port* "Begin db:open-db")
-      (db:open-db dbstruct areapath: areapath)
+      (db:open-db dbstruct areapath: areapath do-sync: do-sync)
       (debug:print-info 13 *default-log-port* "Done db:open-db")
       (set! *dbstruct-db* dbstruct)
       ;;(debug:print-info 13 *default-log-port* "new dbstruct = "(dbr:dbstruct->alist dbstruct))

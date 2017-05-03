@@ -385,7 +385,7 @@
       (if (not server-going) ;; *dbstruct-db* 
 	  (begin
 	    (debug:print 0 *default-log-port* "SERVER: dbprep")
-	    (set! *dbstruct-db*  (db:setup)) ;;  run-id))
+	    (set! *dbstruct-db*  (db:setup #t)) ;;  run-id))
 	    (set! server-going #t)
 	    (debug:print 0 *default-log-port* "SERVER: running, megatest version: " (common:get-full-version)) ;; NOTE: the server is NOT yet marked as running in the log. We do that in the keep-running routine.
 	    (thread-start! *watchdog*)))
