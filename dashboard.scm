@@ -87,7 +87,7 @@ Misc
 			"-use-db-cache"
 			"-skip-version-check"
 			"-repl"
-                        "-rh5.8" ;; fix to allow running on rh5.8
+                        "-rh5.11" ;; fix to allow running on rh5.11
 			)
 		 args:arg-hash
 		 0))
@@ -102,15 +102,19 @@ Misc
       (print help)
       (exit)))
 
-(if (args:get-arg "-rh5.8")
-    (set! iup:detachbox iup:vbox))
-
 ;; TODO: Move this inside (main)
 ;;
 (if (not (launch:setup))
     (begin
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
+
+;; deal with RH 5.11 gtk lib or iup lib missing detachbox feature
+;; first check for the switch
+;;
+(if (or (args:get-arg "-rh5.11")
+	(configf:lookup *configdat* "dashboard" "no-detachbox"))
+    (set! iup:detachbox iup:vbox))
 
 (if (not (common:on-homehost?))
     (begin
