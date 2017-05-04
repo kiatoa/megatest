@@ -435,7 +435,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (handle-exceptions
 	exn
 	(begin
-	  (print "ERROR: Failed to switch to log output. " ((conition-property-accessor 'exn 'message) exn))
+	  (print "ERROR: Failed to switch to log output. " ((condition-property-accessor 'exn 'message) exn))
 	  )
       (let* ((tl   (or (args:get-arg "-log")(launch:setup)))   ;; run launch:setup if -server, ensure we do NOT run launch:setup if -log specified
 	     (logf (or (args:get-arg "-log") ;; use -log unless we are a server, then craft a logfile name
