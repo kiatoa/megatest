@@ -23,9 +23,6 @@
 (declare (uses common))
 (declare (uses configf))
 (declare (uses db))
-;; (declare (uses sdb))
-(declare (uses tdb))
-;; (declare (uses filedb))
 
 (include "common_records.scm")
 (include "key_records.scm")
