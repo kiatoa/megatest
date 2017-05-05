@@ -17,8 +17,7 @@
 ;;
 ;;======================================================================
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking format)
-(import (prefix sqlite3 sqlite3:))
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 format)
 
 (declare (unit mlaunch))
 (declare (uses db))
