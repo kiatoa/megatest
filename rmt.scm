@@ -13,9 +13,7 @@
 
 (declare (unit rmt))
 (declare (uses api))
-(declare (uses tdb))
 (declare (uses http-transport))
-;;(declare (uses nmsg-transport))
 (include "common_records.scm")
 
 ;;
@@ -277,7 +275,7 @@
 (define (rmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
   (let* ((qry-is-write   (not (member cmd api:read-only-queries)))
 	 (db-file-path   (db:dbfile-path)) ;;  0))
-	 (dbstruct-local (db:setup))  ;; make-dbr:dbstruct path:  dbdir local: #t)))
+	 (dbstruct-local (db:setup #t))  ;; make-dbr:dbstruct path:  dbdir local: #t)))
 	 (read-only      (not (file-write-access? db-file-path)))
 	 (start          (current-milliseconds))
 	 (resdat         (if (not (and read-only qry-is-write))
@@ -757,10 +755,6 @@
 
 (define (rmt:read-test-data run-id test-id categorypatt #!key (work-area #f)) 
   (rmt:send-receive 'read-test-data run-id (list run-id test-id categorypatt)))
-;;   (let ((tdb  (rmt:open-test-db-by-test-id run-id test-id work-area: work-area)))
-;;     (if tdb
-;; 	(tdb:read-test-data tdb test-id categorypatt)
-;; 	'())))
 
 (define (rmt:testmeta-add-record testname)
   (rmt:send-receive 'testmeta-add-record #f (list testname)))

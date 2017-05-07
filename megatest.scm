@@ -13,16 +13,14 @@
 ;; fake out readline usage of toplevel-command
 (define (toplevel-command . a) #f)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
-     http-client srfi-18 extras format) ;;  zmq extras)
+(use (prefix sqlite3 sqlite3:) srfi-1 posix regex regex-case srfi-69 (prefix base64 base64:)
+     readline apropos json http-client directory-utils typed-records
+     http-client srfi-18 extras format)
 
 ;; Added for csv stuff - will be removed
 ;;
 (use sparse-vectors)
 
-(import (prefix sqlite3 sqlite3:))
-(import (prefix base64 base64:))
-(import (prefix rpc rpc:))
 (require-library mutils)
 
 ;; (use zmq)
@@ -405,7 +403,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
          ;;"-list-db-targets"
          "-show-runconfig"
          "-show-config"
-         "-show-cmdinfo"))
+         "-show-cmdinfo"
+	 "-cleanup-db"))
        (no-watchdog-args-vals (filter (lambda (x) x)
                                       (map args:get-arg no-watchdog-args)))
        (start-watchdog (null? no-watchdog-args-vals)))
@@ -434,7 +433,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (handle-exceptions
 	exn
 	(begin
-	  (print "ERROR: Failed to switch to log output. " ((conition-property-accessor 'exn 'message) exn))
+	  (print "ERROR: Failed to switch to log output. " ((condition-property-accessor 'exn 'message) exn))
 	  )
       (let* ((tl   (or (args:get-arg "-log")(launch:setup)))   ;; run launch:setup if -server, ensure we do NOT run launch:setup if -log specified
 	     (logf (or (args:get-arg "-log") ;; use -log unless we are a server, then craft a logfile name
@@ -499,6 +498,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (if (args:any? "-run" "-runall" "-remove-runs" "-set-state-status")
     (debug:print 0 *default-log-port* (string-intersperse (argv) " ")))
+
+;; some switches imply homehost. Exit here if not on homehost
+;;
+(let ((homehost-required  (list "-cleanup-db" "-server")))
+  (if (apply args:any? homehost-required)
+      (if (not (common:on-homehost?))
+	  (for-each
+	   (lambda (switch)
+	     (if (args:get-arg switch)
+		 (begin
+		   (debug:print 0 *default-log-port* "ERROR: you must be on the homehost to run with " switch
+				", you can move homehost by removing the .homehost file but this will disrupt any runs in progress.")
+		   (exit 1))))
+	   homehost-required))))
 
 ;;======================================================================
 ;; Misc setup stuff
@@ -1865,7 +1878,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
-      (let ((dbstruct (db:setup *toppath*)))
+      (let ((dbstruct (db:setup #f areapath: *toppath*)))
         (common:cleanup-db dbstruct))
       (set! *didsomething* #t)))
 
@@ -1924,7 +1937,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (let* ((toppath (launch:setup))
 	   (dbstruct (if (and toppath
                               (common:on-homehost?))
-                         (db:setup)
+                         (db:setup #t)
                          #f))) ;; make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
       (if *toppath*
 	  (cond
@@ -2013,7 +2026,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-import-megatest.db")
     (begin
       (db:multi-db-sync 
-       (db:setup)
+       (db:setup #f)
        'killservers
        'dejunk
        'adj-testids
@@ -2025,7 +2038,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-sync-to-megatest.db")
     (begin
       (db:multi-db-sync 
-       (db:setup)
+       (db:setup #f)
        'new2old
        )
       (set! *didsomething* #t)))
