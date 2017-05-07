@@ -403,7 +403,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
          ;;"-list-db-targets"
          "-show-runconfig"
          "-show-config"
-         "-show-cmdinfo"))
+         "-show-cmdinfo"
+	 "-cleanup-db"))
        (no-watchdog-args-vals (filter (lambda (x) x)
                                       (map args:get-arg no-watchdog-args)))
        (start-watchdog (null? no-watchdog-args-vals)))
@@ -432,7 +433,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (handle-exceptions
 	exn
 	(begin
-	  (print "ERROR: Failed to switch to log output. " ((conition-property-accessor 'exn 'message) exn))
+	  (print "ERROR: Failed to switch to log output. " ((condition-property-accessor 'exn 'message) exn))
 	  )
       (let* ((tl   (or (args:get-arg "-log")(launch:setup)))   ;; run launch:setup if -server, ensure we do NOT run launch:setup if -log specified
 	     (logf (or (args:get-arg "-log") ;; use -log unless we are a server, then craft a logfile name
@@ -1877,7 +1878,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
-      (let ((dbstruct (db:setup *toppath*)))
+      (let ((dbstruct (db:setup #f areapath: *toppath*)))
         (common:cleanup-db dbstruct))
       (set! *didsomething* #t)))
 
@@ -1936,7 +1937,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (let* ((toppath (launch:setup))
 	   (dbstruct (if (and toppath
                               (common:on-homehost?))
-                         (db:setup)
+                         (db:setup #t)
                          #f))) ;; make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
       (if *toppath*
 	  (cond
@@ -2025,7 +2026,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-import-megatest.db")
     (begin
       (db:multi-db-sync 
-       (db:setup)
+       (db:setup #f)
        'killservers
        'dejunk
        'adj-testids
@@ -2037,7 +2038,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-sync-to-megatest.db")
     (begin
       (db:multi-db-sync 
-       (db:setup)
+       (db:setup #f)
        'new2old
        )
       (set! *didsomething* #t)))
