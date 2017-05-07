@@ -10,8 +10,7 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use  srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest posix-extras) ;; sqlite3
-;; (import (prefix sqlite3 sqlite3:))
+(use  srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest posix-extras)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars intarweb spiffy-directory-listing)
 

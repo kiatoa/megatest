@@ -10,10 +10,7 @@
 ;;======================================================================
 
 (use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
-     matchable)
-(require-extension regex posix)
-
-(require-extension (srfi 18) extras tcp rpc)
+     matchable regex posix srfi-18 extras)
 
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
@@ -2153,89 +2150,77 @@
    ((equal? status "ABORT")   "brown")
    (else "black")))
 
-;;======================================================================
-;; N A N O M S G   C L I E N T
-;;======================================================================
-
-(define (server:get-best-guess-address hostname)
-  (let ((res #f))
-    (for-each 
-     (lambda (adr)
-       (if (not (eq? (u8vector-ref adr 0) 127))
-	   (set! res adr)))
-     ;; NOTE: This can fail when there is no mention of the host in /etc/hosts. FIXME
-     (vector->list (hostinfo-addresses (hostname->hostinfo hostname))))
-    (string-intersperse 
-     (map number->string
-	  (u8vector->list
-	   (if res res (hostname->ip hostname)))) ".")))
-
-
-(define (common:send-dboard-main-changed)
-  (let* ((dashboard-ips (mddb:get-dashboards)))
-    (for-each
-     (lambda (ipadr)
-       (let* ((soc (common:open-nm-req (conc "tcp://" ipadr)))
-	      (msg (conc "main " *toppath*))
-	      (res (common:nm-send-receive-timeout soc msg)))
-	 (if (not res) ;; couldn't reach that dashboard - remove it from db
-	     (print "ERROR: couldn't reach dashboard " ipadr))
-	 res))
-     dashboard-ips)))
-    
-    
-;;======================================================================
-;; D A S H B O A R D   D B 
-;;======================================================================
-
-(define (mddb:open-db)
-  (let* ((db (open-database (conc (get-environment-variable "HOME") "/.dashboard.db"))))
-    (set-busy-handler! db (busy-timeout 10000))
-    (for-each
-     (lambda (qry)
-       (exec (sql db qry)))
-     (list 
-      "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
-      "CREATE TABLE IF NOT EXISTS dashboards (
-          id         INTEGER PRIMARY KEY,
-          pid        INTEGER,
-          username   TEXT,
-          hostname   TEXT,
-          ipaddr     TEXT,
-          portnum    INTEGER,
-          start_time TIMESTAMP DEFAULT (strftime('%s','now')),
-             CONSTRAINT hostport UNIQUE (hostname,portnum)
-        );"
-      ))
-    db))
-
-;; register a dashboard 
-;;
-(define (mddb:register-dashboard port)
-  (let* ((pid      (current-process-id))
-	 (hostname (get-host-name))
-	 (ipaddr   (server:get-best-guess-address hostname))
-	 (username (current-user-name)) ;; (car userinfo)))
-	 (db      (mddb:open-db)))
-    (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
-    (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,username,hostname,ipaddr,portnum) VALUES (?,?,?,?,?);")
-	   pid username hostname ipaddr port)
-    (close-database db)))
-
-;; unregister a monitor
-;;
-(define (mddb:unregister-dashboard host port)
-  (let* ((db      (mddb:open-db)))
-    (print "Register unregister monitor, host:port=" host ":" port)
-    (exec (sql db "DELETE FROM dashboards WHERE hostname=? AND portnum=?;") host port)
-    (close-database db)))
-
-;; get registered dashboards
-;;
-(define (mddb:get-dashboards)
-  (let ((db (mddb:open-db)))
-    (query fetch-column
-	   (sql db "SELECT ipaddr || ':' || portnum FROM dashboards;"))))
+;; ;;======================================================================
+;; ;; N A N O M S G   C L I E N T
+;; ;;======================================================================
+;; 
+;; 
+;; 
+;; (define (common:send-dboard-main-changed)
+;;   (let* ((dashboard-ips (mddb:get-dashboards)))
+;;     (for-each
+;;      (lambda (ipadr)
+;;        (let* ((soc (common:open-nm-req (conc "tcp://" ipadr)))
+;; 	      (msg (conc "main " *toppath*))
+;; 	      (res (common:nm-send-receive-timeout soc msg)))
+;; 	 (if (not res) ;; couldn't reach that dashboard - remove it from db
+;; 	     (print "ERROR: couldn't reach dashboard " ipadr))
+;; 	 res))
+;;      dashboard-ips)))
+;;     
+;;     
+;; ;;======================================================================
+;; ;; D A S H B O A R D   D B 
+;; ;;======================================================================
+;; 
+;; (define (mddb:open-db)
+;;   (let* ((db (open-database (conc (get-environment-variable "HOME") "/.dashboard.db"))))
+;;     (set-busy-handler! db (busy-timeout 10000))
+;;     (for-each
+;;      (lambda (qry)
+;;        (exec (sql db qry)))
+;;      (list 
+;;       "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
+;;       "CREATE TABLE IF NOT EXISTS dashboards (
+;;           id         INTEGER PRIMARY KEY,
+;;           pid        INTEGER,
+;;           username   TEXT,
+;;           hostname   TEXT,
+;;           ipaddr     TEXT,
+;;           portnum    INTEGER,
+;;           start_time TIMESTAMP DEFAULT (strftime('%s','now')),
+;;              CONSTRAINT hostport UNIQUE (hostname,portnum)
+;;         );"
+;;       ))
+;;     db))
+;; 
+;; ;; register a dashboard 
+;; ;;
+;; (define (mddb:register-dashboard port)
+;;   (let* ((pid      (current-process-id))
+;; 	 (hostname (get-host-name))
+;; 	 (ipaddr   (server:get-best-guess-address hostname))
+;; 	 (username (current-user-name)) ;; (car userinfo)))
+;; 	 (db      (mddb:open-db)))
+;;     (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
+;;     (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,username,hostname,ipaddr,portnum) VALUES (?,?,?,?,?);")
+;; 	   pid username hostname ipaddr port)
+;;     (close-database db)))
+;; 
+;; ;; unregister a monitor
+;; ;;
+;; (define (mddb:unregister-dashboard host port)
+;;   (let* ((db      (mddb:open-db)))
+;;     (print "Register unregister monitor, host:port=" host ":" port)
+;;     (exec (sql db "DELETE FROM dashboards WHERE hostname=? AND portnum=?;") host port)
+;;     (close-database db)))
+;; 
+;; ;; get registered dashboards
+;; ;;
+;; (define (mddb:get-dashboards)
+;;   (let ((db (mddb:open-db)))
+;;     (query fetch-column
+;; 	   (sql db "SELECT ipaddr || ':' || portnum FROM dashboards;"))))
     
 ;;======================================================================
 ;;  T E S T   L A U N C H I N G   P E R   I T E M   W I T H   H O S T   T Y P E S
