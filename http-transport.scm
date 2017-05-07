@@ -111,7 +111,10 @@
 ;; This is recursively run by http-transport:run until sucessful
 ;;
 (define (http-transport:try-start-server ipaddrstr portnum)
-  (let ((config-hostname (configf:lookup *configdat* "server" "hostname")))
+  (let ((config-hostname (configf:lookup *configdat* "server" "hostname"))
+	(config-use-proxy (equal? (configf:lookup *configdat* "client" "use-http_proxy") "yes")))
+    (if (not config-use-proxy)
+	(determine-proxy (constantly #f)))
     (debug:print-info 0 *default-log-port* "http-transport:try-start-server time=" (seconds->time-string (current-seconds)) " ipaddrsstr=" ipaddrstr " portnum=" portnum " config-hostname=" config-hostname)
     (handle-exceptions
 	exn
@@ -382,7 +385,7 @@
       (if (not server-going) ;; *dbstruct-db* 
 	  (begin
 	    (debug:print 0 *default-log-port* "SERVER: dbprep")
-	    (set! *dbstruct-db*  (db:setup)) ;;  run-id))
+	    (set! *dbstruct-db*  (db:setup #t)) ;;  run-id))
 	    (set! server-going #t)
 	    (debug:print 0 *default-log-port* "SERVER: running, megatest version: " (common:get-full-version)) ;; NOTE: the server is NOT yet marked as running in the log. We do that in the keep-running routine.
 	    (thread-start! *watchdog*)))
