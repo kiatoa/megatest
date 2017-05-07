@@ -233,13 +233,14 @@
 (define (common:cleanup-db dbstruct)
   (db:multi-db-sync 
    dbstruct
+   'schema
    ;; 'new2old
    'killservers
    'dejunk
    'adj-target
    ;; 'old2new
    'new2old
-   'schema)
+   )
   (if (common:version-changed?)
       (common:set-last-run-version)))
 
@@ -287,7 +288,7 @@
 	  (let* ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config"))
                 (dbfile (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.db"))
                 (read-only (not (file-write-access? dbfile)))
-                (dbstruct (db:setup)))
+                (dbstruct (db:setup #t)))
 	    (debug:print 0 *default-log-port*
 			 "WARNING: Version mismatch!\n"
 			 "   expected: " (common:version-signature) "\n"
@@ -740,7 +741,7 @@
 (define (common:watchdog)
   (debug:print-info 13 *default-log-port* "common:watchdog entered.")
   (if (common:on-homehost?)
-      (let ((dbstruct (db:setup)))
+      (let ((dbstruct (db:setup #t)))
 	(debug:print-info 13 *default-log-port* "after db:setup with dbstruct="dbstruct)
 	(cond
 	 ((dbr:dbstruct-read-only dbstruct)
