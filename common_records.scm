@@ -28,9 +28,23 @@
     ((_ (name arg ...) body ...)
      (define-syntax name (syntax-rules () ((name arg ...) (begin body ...)))))))
 
+;; (define-syntax common:handle-exceptions
+;;   (syntax-rules ()
+;;     ((_ exn-in errstmt ...)(handle-exceptions exn-in errstmt ...))))
+
+(define-syntax common:debug-handle-exceptions
+  (syntax-rules ()
+    ((_ debug exn errstmt body ...)
+     (if debug
+	 (begin body ...)
+	 (handle-exceptions exn errstmt body ...)))))
+
 (define-syntax common:handle-exceptions
   (syntax-rules ()
-    ((_ exn-in errstmt ...)(handle-exceptions exn-in errstmt ...))))
+    ((_ exn errstmt body ...)
+     (begin body ...))))
+
+;; (define handle-exceptions common:handle-exceptions)
 
 ;; iup callbacks are not dumping the stack, this is a work-around
 ;;
@@ -99,7 +113,7 @@
    ((and (number? *verbosity*)
 	 (list? n))
     (member *verbosity* n))))
-      
+
 (define (debug:setup)
   (let ((debugstr (or (args:get-arg "-debug")
 		      (getenv "MT_DEBUG_MODE"))))
@@ -126,15 +140,20 @@
 (define *BB-process-starttime* (current-milliseconds))
 (define (BB> . in-args)
   (let* ((stack (get-call-chain))
-         (location #f))
+         (location "??"))
     (for-each
      (lambda (frame)
        (let* ((this-loc (vector-ref frame 0))
-              (this-func (cadr (string-split this-loc " "))))
+              (temp     (string-split (->string this-loc) " "))
+              (this-func (if (and (list? temp) (> (length temp) 1)) (cadr temp) "???")))
          (if (equal? this-func "BB>")
              (set! location this-loc))))
      stack)
-    (let ((dp-args (append (list 0 *default-log-port* (conc location "@"(/ (- (current-milliseconds) *BB-process-starttime*) 1000)"   ")  ) in-args)))
+    (let ((dp-args
+           (append
+            (list 0 *default-log-port*
+                  (conc location "@"(/ (- (current-milliseconds) *BB-process-starttime*) 1000)"   ")  )
+            in-args)))
       (apply debug:print dp-args))))
 
 (define *BBpp_custom_expanders_list* (make-hash-table))
@@ -187,7 +206,7 @@
 (define (debug:print-error n e . params)
   ;; normal print
   (if (debug:debug-mode n)
-      (with-output-to-port (or e (current-error-port))
+      (with-output-to-port (if (port? e) e (current-error-port))
 	(lambda ()
 	  (if *logging*
 	      (db:log-event (apply conc params))
@@ -203,7 +222,7 @@
 
 (define (debug:print-info n e . params)
   (if (debug:debug-mode n)
-      (with-output-to-port (or e (current-error-port))
+      (with-output-to-port (if (port? e) e (current-error-port))
 	(lambda ()
 	  (if *logging*
 	      (let ((res (format#format #f "INFO: (~a) ~a" n (apply conc params))))
@@ -211,6 +230,8 @@
 	      ;; (apply print "pid:" (current-process-id) " " "INFO: (" n ") " params) ;; res)
 	      (apply print "INFO: (" n ") " params) ;; res)
 	      )))))
+
+
 
 ;; if a value is printable (i.e. string or number) return the value
 ;; else return an empty string

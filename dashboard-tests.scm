@@ -47,7 +47,7 @@
 
 (define (dtests:get-post-command #!key (default-override #f))
   (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "post-command")))
-    (or cfg-ovrd default-override ""))) ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+    (or cfg-ovrd default-override " &"))) ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
 
 
 (define (test-info-panel testdat store-label widgets)
@@ -339,12 +339,6 @@
 			       btns)))
 	       btns))))))
 
-(define (dashboard-tests:run-html-viewer lfilename)
-  (let ((htmlviewercmd (configf:lookup *configdat* "setup" "htmlviewercmd")))
-    (if htmlviewercmd
-	(system (conc "(" htmlviewercmd " " lfilename " ) &")) 
-	(iup:send-url lfilename))))
-
 (define (dashboard-tests:run-a-step info)
   #t)
 
@@ -406,7 +400,7 @@
 						   (string-match wregx comment))
 					       (begin
 						 ;; (rmt:test-set-state-status-by-id run-id test-id #f "WAIVED" comment)
-						 (rmt:test-set-state-status-by run-id test-id #f "WAIVED" comment)
+						 (rmt:test-set-state-status run-id test-id #f "WAIVED" comment)
 						 (db:test-set-status! testdat "WAIVED")
 						 (cmtcmd comment)
 						 (iup:destroy! dlog))))))
@@ -465,7 +459,7 @@
 	       (item-path  (db:test-get-item-path testdat))
 	       ;; this next block was added to fix a bug where variables were
                ;; needed. Revisit this.
-	       (runconfig  (let ((runconfigf (conc  *toppath* "/runconfigs.config")))
+	       (runconfig  (let ((runconfigf (conc  *toppath* "/runconfigs.config"))) ;; no rush but it would be good to convert this call to use runconfig:read
 	 		     (if (file-exists? runconfigf)
 	 			 (handle-exceptions
                                    exn
@@ -476,20 +470,20 @@
 				;; (runs:set-megatest-env-vars run-id inrunname: runname testname: test-name itempath: item-path)
 				(runs:set-megatest-env-vars run-id inkeyvals: keydat inrunname: runname intarget: keystring testname: testname itempath: item-path) ;; these may be needed by the launching process
 				(handle-exceptions
-				 exn
+				 exn  ;; NOTE: I've no idea why this was written this way. Research, study and fix needed!
 				 (tests:get-testconfig (db:test-get-testname testdat) (db:test-get-item-path testdat) test-registry #f)
-				 (tests:get-testconfig (db:test-get-testname testdat) test-registry #t))))
+				 (tests:get-testconfig (db:test-get-testname testdat) item-path test-registry #t))))
 	       (viewlog    (lambda (x)
 			     (if (file-exists? logfile)
 					;(system (conc "firefox " logfile "&"))
-				 (dashboard-tests:run-html-viewer logfile)
+				 (dcommon:run-html-viewer logfile)
 				 (message-window (conc "File " logfile " not found")))))
 	       (view-a-log (lambda (lfile) 
 			     (let ((lfilename (conc rundir "/" lfile)))
 			       ;; (print "lfilename: " lfilename)
 			       (if (file-exists? lfilename)
 					;(system (conc "firefox " logfile "&"))
-				   (dashboard-tests:run-html-viewer lfilename)
+				   (dcommon:run-html-viewer lfilename)
 				   (message-window (conc "File " lfilename " not found"))))))
 	       (xterm      (lambda (x)
 			     (if (directory-exists? rundir)

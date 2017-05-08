@@ -6,7 +6,7 @@ banner $1
 
 # put megatest on path from correct location
 mtbindir=$(readlink -f ../bin)
-
+ 
 export PATH="${mtbindir}:$PATH"
 
 # Clean setup

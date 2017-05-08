@@ -9,10 +9,8 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack)
-(require-extension regex posix)
-
-(require-extension (srfi 18) extras tcp rpc)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
+     matchable regex posix srfi-18 extras)
 
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
@@ -33,12 +31,15 @@
 
 (define getenv get-environment-variable)
 (define (safe-setenv key val)
-  (if (and (string? val)(string? key))
-      (handle-exceptions
-       exn
-       (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val)
-       (setenv key val))
-      (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val)))
+  (if (substring-index ":" key) ;; variables containing : are for internal use and cannot be environment variables.
+      (debug:print-error 4 *default-log-port* "skip setting internal use only variables containing \":\"")
+      (if (and (string? val)
+	       (string? key))
+	  (handle-exceptions
+	      exn
+	      (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val)
+	    (setenv key val))
+	  (debug:print-error 0 *default-log-port* "bad value for setenv, key=" key ", value=" val))))
 
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
@@ -49,23 +50,28 @@
 (defstruct cxt
   (taskdb #f)
   (cmutex (make-mutex)))
-(define *contexts* (make-hash-table))
-(define *context-mutex* (make-mutex))
+;; (define *contexts* (make-hash-table))
+;; (define *context-mutex* (make-mutex))
 
-;; safe method for accessing a context given a toppath
-;;
-(define (common:with-cxt toppath proc)
-  (mutex-lock! *context-mutex*)
-  (let ((cxt (hash-table-ref/default *contexts* toppath #f)))
-    (if (not cxt)
-        (set! cxt (let ((x (make-cxt)))(hash-table-set! *contexts* toppath x) x)))
-    (let ((cxt-mutex (cxt-mutex cxt)))
-      (mutex-unlock! *context-mutex*)
-      (mutex-lock! cxt-mutex)
-      (let ((res (proc cxt)))
-        (mutex-unlock! cxt-mutex)
-        res))))
+;; ;; safe method for accessing a context given a toppath
+;; ;;
+;; (define (common:with-cxt toppath proc)
+;;   (mutex-lock! *context-mutex*)
+;;   (let ((cxt (hash-table-ref/default *contexts* toppath #f)))
+;;     (if (not cxt)
+;;         (set! cxt (let ((x (make-cxt)))(hash-table-set! *contexts* toppath x) x)))
+;;     (let ((cxt-mutex (cxt-mutex cxt)))
+;;       (mutex-unlock! *context-mutex*)
+;;       (mutex-lock! cxt-mutex)
+;;       (let ((res (proc cxt)))
+;;         (mutex-unlock! cxt-mutex)
+;;         res))))
         
+;; A hash table that can be accessed by #{scheme ...} calls in
+;; config files. Allows communicating between confgs
+;;
+(define *user-hash-data* (make-hash-table))
+
 (define *db-keys* #f)
 
 (define *configinfo*   #f)   ;; raw results from setup, includes toppath and table from megatest.config
@@ -78,7 +84,7 @@
 (define *test-meta-updated* (make-hash-table))
 (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
 (define *passnum*           0) ;; when running track calls to run-tests or similar
-(define *alt-log-file* #f)  ;; used by -log
+;; (define *alt-log-file* #f)  ;; used by -log
 (define *common:denoise*    (make-hash-table)) ;; for low noise printing
 (define *default-log-port*  (current-error-port))
 (define *time-zero* (current-seconds)) ;; for the watchdog
@@ -108,16 +114,16 @@
 (define *my-client-signature* #f)
 (define *transport-type*    'http)             ;; override with [server] transport http|rpc|nmsg
 (define *runremote*         #f)                ;; if set up for server communication this will hold <host port>
-(define *max-cache-size*    0)
+;; (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))
-(define *server-id*         #f)
-(define *server-info*       #f)
+;; (define *server-id*         #f)
+(define *server-info*       #f)  ;; good candidate for easily convert to non-global
 (define *time-to-exit*      #f)
 (define *server-run*        #t)
 (define *run-id*            #f)
 (define *server-kind-run*   (make-hash-table))
 (define *home-host*         #f)
-(define *total-non-write-delay* 0)
+;; (define *total-non-write-delay* 0)
 (define *heartbeat-mutex*   (make-mutex))
 (define *api-process-request-count* 0)
 (define *max-api-process-requests* 0)
@@ -147,7 +153,10 @@
   (last-server-check 0)  ;; last time we checked to see if the server was alive
   (conndat           #f)
   (transport         *transport-type*)
-  (server-timeout    (or (server:get-timeout) 100))) ;; default to 100 seconds
+  (server-timeout    (server:get-timeout)) ;; default from server:get-timeout
+  (force-server      #f)
+  (ro-mode           #f)  
+  (ro-mode-checked   #f)) ;; flag that indicates we have checked for ro-mode
 
 ;; launching and hosts
 (defstruct host
@@ -224,13 +233,14 @@
 (define (common:cleanup-db dbstruct)
   (db:multi-db-sync 
    dbstruct
+   'schema
    ;; 'new2old
    'killservers
    'dejunk
-   ;; 'adj-testids
+   'adj-target
    ;; 'old2new
    'new2old
-   'schema)
+   )
   (if (common:version-changed?)
       (common:set-last-run-version)))
 
@@ -270,34 +280,50 @@
    "logs"))
 
 ;; Force a megatest cleanup-db if version is changed and skip-version-check not specified
+;; Do NOT check if not on homehost!
 ;;
 (define (common:exit-on-version-changed)
-  (if (common:version-changed?)
-      (if (common:on-homehost?)
-	  (let ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config"))
-		(dbstruct (db:setup)))
+  (if (common:on-homehost?)
+      (if (common:version-changed?)
+	  (let* ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config"))
+                (dbfile (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.db"))
+                (read-only (not (file-write-access? dbfile)))
+                (dbstruct (db:setup #t)))
 	    (debug:print 0 *default-log-port*
 			 "WARNING: Version mismatch!\n"
 			 "   expected: " (common:version-signature) "\n"
 			 "   got:      " (common:get-last-run-version))
-	    (if (and (file-exists? mtconf)
-		     (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
-		(begin
-		  (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
-		  (handle-exceptions
-		   exn
-		   (begin
-		     (debug:print 0 *default-log-port* "Failed to switch versions.")
-		     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-		     (print-call-chain (current-error-port))
-		     (exit 1))
-		   (common:cleanup-db dbstruct)))
-		(begin
-		  (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
-		  (exit 1))))
-	  (begin
-	    (debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
-	    (exit 1)))))
+            (cond
+             ((get-environment-variable "MT_SKIP_DB_MIGRATE") #t)
+             ((and (file-exists? mtconf) (file-exists? dbfile) (not read-only)
+                   (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
+              (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
+              (handle-exceptions
+               exn
+               (begin
+                 (debug:print 0 *default-log-port* "Failed to switch versions.")
+                 (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+                 (print-call-chain (current-error-port))
+                 (exit 1))
+               (common:cleanup-db dbstruct)))
+             ((not (file-exists? mtconf))
+              (debug:print 0 *default-log-port* "   megatest.config does not exist in this area.  Cannot proceed with megatest version migration.")
+              (exit 1))
+             ((not (file-exists? dbfile))
+              (debug:print 0 *default-log-port* "   megatest.db does not exist in this area.  Cannot proceed with megatest version migration.")
+              (exit 1))
+             ((not (eq? (current-user-id)(file-owner mtconf)))
+              (debug:print 0 *default-log-port* "   You do not own megatest.db in this area.  Cannot proceed with megatest version migration.")
+              (exit 1))
+             (read-only
+              (debug:print 0 *default-log-port* "   You have read-only access to this area.  Cannot proceed with megatest version migration.")
+              (exit 1))
+             (else
+              (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
+              (exit 1)))))
+      (begin
+	(debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
+	(exit 1))))
 
 ;;======================================================================
 ;; S P A R S E   A R R A Y S
@@ -394,25 +420,42 @@
 ;; to get the lock
 ;;
 (define (common:simple-file-lock fname #!key (expire-time 300))
-  (if (file-exists? fname)
-      (if (> (- (current-seconds)(file-modification-time fname)) expire-time)
-	  (begin
-	    (delete-file* fname)
-	    (common:simple-file-lock fname expire-time: expire-time))
-	  #f)
-      (let ((key-string (conc (get-host-name) "-" (current-process-id))))
-	(with-output-to-file fname
-	  (lambda ()
-	    (print key-string)))
-	(thread-sleep! 0.25)
-	(if (file-exists? fname)
-	    (with-input-from-file fname
-	      (lambda ()
-		(equal? key-string (read-line))))
-	    #f))))
-	
+  (handle-exceptions
+      exn
+      #f ;; don't really care what went wrong right now. NOTE: I have not seen this one actually fail.
+    (if (file-exists? fname)
+	(if (> (- (current-seconds)(file-modification-time fname)) expire-time)
+	    (begin
+	      (delete-file* fname)
+	      (common:simple-file-lock fname expire-time: expire-time))
+	    #f)
+	(let ((key-string (conc (get-host-name) "-" (current-process-id))))
+	  (with-output-to-file fname
+	    (lambda ()
+	      (print key-string)))
+	  (thread-sleep! 0.25)
+	  (if (file-exists? fname)
+	      (with-input-from-file fname
+		(lambda ()
+		  (equal? key-string (read-line))))
+	      #f)))))
+
+(define (common:simple-file-lock-and-wait fname #!key (expire-time 300))
+  (let ((end-time (+ expire-time (current-seconds))))
+    (let loop ((got-lock (common:simple-file-lock fname expire-time: expire-time)))
+      (if got-lock
+	  #t
+	  (if (> end-time (current-seconds))
+	      (begin
+		(thread-sleep! 3)
+		(loop (common:simple-file-lock fname expire-time: expire-time)))
+	      #f)))))
+
 (define (common:simple-file-release-lock fname)
-  (delete-file* fname))
+  (handle-exceptions
+      exn
+      #f ;; I don't really care why this failed (at least for now)
+    (delete-file* fname)))
 
 ;;======================================================================
 ;; S T A T E S   A N D   S T A T U S E S
@@ -434,10 +477,10 @@
   '(;; (0 "DELETED")
     (1 "n/a")
     (2 "PASS")
-    (3 "CHECK")
-    (4 "SKIP")
-    (5 "WARN")
-    (6 "WAIVED")
+    (3 "SKIP")
+    (4 "WARN")
+    (5 "WAIVED")
+    (6 "CHECK")
     (7 "STUCK/DEAD")
     (8 "FAIL")
     (9 "ABORT")))
@@ -535,23 +578,32 @@
     (if res (cadr res)(if (null? default) #f (car default)))))
 
 (define (common:get-testsuite-name)
-  (or (configf:lookup *configdat* "setup" "testsuite" )
-      (if *toppath* 
+  (or (configf:lookup *configdat* "setup" "area-name") ;; megatest is a flexible tool, testsuite is too limiting a description.
+      (configf:lookup *configdat* "setup" "testsuite" )
+      (getenv "MT_TESTSUITE_NAME")
+      (if (string? *toppath* )
           (pathname-file *toppath*)
-          (pathname-file (current-directory)))))
+          #f))) ;; (pathname-file (current-directory)))))
+
+(define common:get-area-name common:get-testsuite-name)
 
 (define (common:get-db-tmp-area)
   (if *db-cache-path*
       *db-cache-path*
-      (let ((dbpath (create-directory (conc "/tmp/" (current-user-name)
-					    "/megatest_localdb/"
-					    (common:get-testsuite-name) "/"
-					    (string-translate *toppath* "/" ".")) #t)))
-	(set! *db-cache-path* dbpath)
-	dbpath)))
+      (if *toppath*
+	  (let ((dbpath (create-directory (conc "/tmp/" (current-user-name)
+						"/megatest_localdb/"
+						(common:get-testsuite-name) "/"
+						(string-translate *toppath* "/" ".")) #t)))
+	    (set! *db-cache-path* dbpath)
+	    dbpath)
+	  #f)))
 
 (define (common:get-area-path-signature)
   (message-digest-string (md5-primitive) *toppath*))
+
+(define (common:get-signature str)
+  (message-digest-string (md5-primitive) str))
 
 ;;======================================================================
 ;; E X I T   H A N D L I N G
@@ -586,15 +638,47 @@
 ;; currently the primary job of the watchdog is to run the sync back to megatest.db from the db in /tmp
 ;; if we are on the homehost and we are a server (by definition we are on the homehost if we are a server)
 ;;
-(define (common:watchdog)
+
+
+(define (common:readonly-watchdog dbstruct)
+  (thread-sleep! 0.05) ;; delay for startup
+  (debug:print-info 13 *default-log-port* "common:readonly-watchdog entered.")
+  ;; sync megatest.db to /tmp/.../megatst.db
+  (let* ((sync-cool-off-duration   3)
+        (golden-mtdb     (dbr:dbstruct-mtdb dbstruct))
+        (golden-mtpath   (db:dbdat-get-path golden-mtdb))
+        (tmp-mtdb        (dbr:dbstruct-tmpdb dbstruct))
+        (tmp-mtpath      (db:dbdat-get-path tmp-mtdb)))
+    (debug:print-info 0 *default-log-port* "Read-only periodic sync thread started.")
+    (let loop ((last-sync-time 0))
+      (debug:print-info 13 *default-log-port* "loop top tmp-mtpath="tmp-mtpath" golden-mtpath="golden-mtpath)
+      (let* ((duration-since-last-sync (- (current-seconds) last-sync-time)))
+        (debug:print-info 13 *default-log-port* "duration-since-last-sync="duration-since-last-sync)
+        (if (and (not *time-to-exit*)
+                 (< duration-since-last-sync sync-cool-off-duration))
+            (thread-sleep! (- sync-cool-off-duration duration-since-last-sync)))
+        (if (not *time-to-exit*)
+            (let ((golden-mtdb-mtime (file-modification-time golden-mtpath))
+                  (tmp-mtdb-mtime    (file-modification-time tmp-mtpath)))
+              (if (> golden-mtdb-mtime tmp-mtdb-mtime)
+                  (let ((res (db:multi-db-sync dbstruct 'old2new)))
+                    (debug:print-info 13 *default-log-port* "rosync called, " res " records transferred.")))
+              (loop (current-seconds)))
+            #t)))
+    (debug:print-info 0 *default-log-port* "Exiting readonly-watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" mtpath="golden-mtpath)))
+
+
+        
+(define (common:writable-watchdog dbstruct)
   (thread-sleep! 0.05) ;; delay for startup
   (let ((legacy-sync (common:run-sync?))
 	(debug-mode  (debug:debug-mode 1))
 	(last-time   (current-seconds))
         (this-wd-num     (begin (mutex-lock! *wdnum*mutex) (let ((x *wdnum*)) (set! *wdnum* (add1 *wdnum*)) (mutex-unlock! *wdnum*mutex) x))))
+    (debug:print-info 2 *default-log-port* "Periodic sync thread started.")
     (debug:print-info 3 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id)" this-wd-num="this-wd-num)
     (if (and legacy-sync (not *time-to-exit*))
-	(let* ((dbstruct (db:setup))
+	(let* (;;(dbstruct (db:setup))
 	       (mtdb     (dbr:dbstruct-mtdb dbstruct))
 	       (mtpath   (db:dbdat-get-path mtdb)))
 	  (debug:print-info 0 *default-log-port* "Server running, periodic sync started.")
@@ -608,10 +692,11 @@
                                           (> (- (current-seconds) *db-last-sync*) 5))) ;; sync every five seconds minimum
 		   (start-time       (current-seconds))
 		   (mt-mod-time      (file-modification-time mtpath))
-		   (recently-synced  (> (- start-time mt-mod-time) 4))
+		   (recently-synced  (< (- start-time mt-mod-time) 4))
 		   (will-sync        (and (or need-sync should-sync)
 					  (not sync-in-progress)
 					  (not recently-synced))))
+              (debug:print-info 13 *default-log-port* "WD writable-watchdog top of loop.  need-sync="need-sync" sync-in-progress="sync-in-progress" should-sync="should-sync" start-time="start-time" mt-mod-time="mt-mod-time" recently-synced="recently-synced" will-sync="will-sync)
 	      ;; (if recently-synced (debug:print-info 0 *default-log-port* "Skipping sync due to recently-synced flag=" recently-synced))
 	      ;; (debug:print-info 0 *default-log-port* "need-sync: " need-sync " sync-in-progress: " sync-in-progress " should-sync: " should-sync " will-sync: " will-sync)
 	      (if will-sync (set! *db-sync-in-progress* #t))
@@ -641,7 +726,7 @@
 	    ;;
 	    (if (not *time-to-exit*)
 		(let delay-loop ((count 0))
-                  ;;(BB> "delay-loop top; count="count" pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
+                  ;;(debug:print-info 13 *default-log-port* "delay-loop top; count="count" pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
                                                             
 		  (if (and (not *time-to-exit*)
 			   (< count 4)) ;; was 11, changing to 4. 
@@ -652,9 +737,26 @@
 	    (if (common:low-noise-print 30)
 		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" this-wd-num="this-wd-num)))))))
 
+;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
+(define (common:watchdog)
+  (debug:print-info 13 *default-log-port* "common:watchdog entered.")
+  (if (common:on-homehost?)
+      (let ((dbstruct (db:setup #t)))
+	(debug:print-info 13 *default-log-port* "after db:setup with dbstruct="dbstruct)
+	(cond
+	 ((dbr:dbstruct-read-only dbstruct)
+	  (debug:print-info 13 *default-log-port* "loading read-only watchdog")
+	  (common:readonly-watchdog dbstruct))
+	 (else
+	  (debug:print-info 13 *default-log-port* "loading writable-watchdog.")
+	  (common:writable-watchdog dbstruct)))
+	(debug:print-info 13 *default-log-port* "watchdog done."))
+      (debug:print-info 13 *default-log-port* "no need for watchdog on non-homehost")))
+
+
 (define (std-exit-procedure)
   (on-exit (lambda () 0))
-  ;;(BB> "std-exit-procedure called; *time-to-exit*="*time-to-exit*)
+  ;;(debug:print-info 13 *default-log-port* "std-exit-procedure called; *time-to-exit*="*time-to-exit*)
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
 		       #f
 		       (begin
@@ -701,7 +803,7 @@
 (define (std-signal-handler signum)
   ;; (signal-mask! signum)
   (set! *time-to-exit* #t)
-  ;;(BB> "got signal "signum)
+  ;;(debug:print-info 13 *default-log-port* "got signal "signum)
   (debug:print-error 0 *default-log-port* "Received signal " signum " exiting promptly")
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))
@@ -713,15 +815,6 @@
 ;;======================================================================
 ;; M I S C   U T I L S
 ;;======================================================================
-
-;; one-of args defined
-(define (args-defined? . param)
-  (let ((res #f))
-    (for-each 
-     (lambda (arg)
-       (if (args:get-arg arg)(set! res #t)))
-     param)
-    res))
 
 ;; convert stuff to a number if possible
 (define (any->number val)
@@ -748,21 +841,6 @@
 	 (string-split patts ","))
 	res)
       #t))
-
-;; (map print (map car (hash-table->alist (read-config "runconfigs.config" #f #t))))
-(define (common:get-runconfig-targets #!key (configf #f))
-  (let ((targs       (sort (map car (hash-table->alist
-				     (or configf
-					 (read-config (conc *toppath* "/runconfigs.config")
-						      #f #t)
-					 (make-hash-table))))
-			   string<?))
-	(target-patt (args:get-arg "-target")))
-    (if target-patt
-	(filter (lambda (x)
-		  (patt-list-match x target-patt))
-		targs)
-	targs)))
 
 ;; '(print (string-intersperse (map cadr (hash-table-ref/default (read-config "megatest.config" \#f \#t) "disks" '"'"'("none" ""))) "\n"))'
 (define (common:get-disks #!key (configf #f))
@@ -816,13 +894,60 @@
 	      (if (null? tal)
 		  #f
 		  (loop (car tal)(cdr tal))))))))
+
+;; return the youngest timestamp . filename
+;;
+(define (common:get-youngest glob-list)
+  (let ((all-files (apply append
+			  (map (lambda (patt)
+				 (handle-exceptions
+				     exn
+				     '()
+				   (glob patt)))
+			       glob-list))))
+    (fold (lambda (fname res)
+	    (let ((last-mod (car res))
+		  (curmod   (handle-exceptions
+				exn
+				0
+			      (file-modification-time fname))))
+	      (if (> curmod last-mod)
+		  (list curmod fname)
+		  res)))
+	  '(0 "n/a")
+	  all-files)))
+
+;; use bash to expand a glob. Does NOT handle paths with spaces!
+;;
+(define (common:bash-glob instr)
+  (string-split
+   (with-input-from-pipe
+       (conc "/bin/bash -c \"echo " instr "\"")
+     read-line)))
   
 ;;======================================================================
 ;; T A R G E T S  ,   S T A T E ,   S T A T U S ,   
 ;;                    R U N N A M E    A N D   T E S T P A T T
 ;;======================================================================
 
+;; (map print (map car (hash-table->alist (read-config "runconfigs.config" #f #t))))
+;;
+(define (common:get-runconfig-targets #!key (configf #f))
+  (let ((targs       (sort (map car (hash-table->alist
+				     (or configf ;; NOTE: There is no value in using runconfig:read here.
+					 (read-config (conc *toppath* "/runconfigs.config")
+						      #f #t)
+					 (make-hash-table))))
+			   string<?))
+	(target-patt (args:get-arg "-target")))
+    (if target-patt
+	(filter (lambda (x)
+		  (patt-list-match x target-patt))
+		targs)
+	targs)))
+
 ;; Lookup a value in runconfigs based on -reqtarg or -target
+;; 
 (define (runconfigs-get config var)
   (let ((targ (common:args-get-target))) ;; (or (args:get-arg "-reqtarg")(args:get-arg "-target")(getenv "MT_TARGET"))))
     (if targ
@@ -837,24 +962,67 @@
   (or (args:get-arg "-status")(args:get-arg ":status")))
 
 (define (common:args-get-testpatt rconf)
-  (let* ((tagexpr (args:get-arg "-tagexpr"))
-         (tags-testpatt (if tagexpr (string-join (runs:get-tests-matching-tags tagexpr) ",") #f))
+  (let* (;; (tagexpr       (args:get-arg "-tagexpr"))
+         ;; (tags-testpatt (if tagexpr (string-join (runs:get-tests-matching-tags tagexpr) ",") #f))
          (testpatt-key  (if (args:get-arg "--modepatt") (args:get-arg "--modepatt") "TESTPATT"))
          (args-testpatt (or (args:get-arg "-testpatt") (args:get-arg "-runtests") "%"))
          (rtestpatt     (if rconf (runconfigs-get rconf testpatt-key) #f)))
     (cond
-     (tags-testpatt
-      (debug:print-info 0 *default-log-port* "-tagexpr "tagexpr" selects testpatt "tags-testpatt)
-      tags-testpatt)
+     ((args:get-arg "--modepatt") ;; modepatt is a forced setting, when set it MUST refer to an existing PATT in the runconfig
+      (if rconf
+	  (runconfigs-get rconf testpatt-key)
+	  #f))     ;; We do NOT fall back to "%"
+     ;; (tags-testpatt
+     ;;  (debug:print-info 0 *default-log-port* "-tagexpr "tagexpr" selects testpatt "tags-testpatt)
+     ;;  tags-testpatt)
      ((and (equal? args-testpatt "%") rtestpatt)
       (debug:print-info 0 *default-log-port* "testpatt defined in "testpatt-key" from runconfigs: " rtestpatt)
       rtestpatt)
      (else args-testpatt))))
-     
+
+
+
+(define (common:false-on-exception thunk #!key (message #f))
+  (handle-exceptions exn
+                     (begin
+                       (if message
+                           (debug:print-info 0 *default-log-port* message))
+                       #f) (thunk) ))
+
+(define (common:file-exists? path-string)
+  ;; this avoids stack dumps in the case where 
+
+  ;;;; TODO: catch permission denied exceptions and emit appropriate warnings, eg:  system error while trying to access file: "/nfs/pdx/disks/icf_env_disk001/bjbarcla/gwa/issues/mtdev/randy-slow/reproduce/q...
+  (common:false-on-exception (lambda () (file-exists? path-string))
+                             message: (conc "Unable to access path: " path-string)
+                             ))
+
+(define (common:directory-exists? path-string)
+  ;;;; TODO: catch permission denied exceptions and emit appropriate warnings, eg:  system error while trying to access file: "/nfs/pdx/disks/icf_env_disk001/bjbarcla/gwa/issues/mtdev/randy-slow/reproduce/q...
+  (common:false-on-exception (lambda () (directory-exists? path-string))
+                             message: (conc "Unable to access path: " path-string)
+                             ))
+
+;; does the directory exist and do we have write access?
+;;
+;;    returns the directory or #f
+;;
+(define (common:directory-writable? path-string)
+  (handle-exceptions
+   exn
+   #f
+   (if (and (directory-exists? path-string)
+            (file-write-access? path-string))
+       path-string
+       #f)))
+
 (define (common:get-linktree)
   (or (getenv "MT_LINKTREE")
       (if *configdat*
-	  (configf:lookup *configdat* "setup" "linktree"))))
+	  (configf:lookup *configdat* "setup" "linktree")
+	  (if *toppath*
+	      (conc *toppath* "/lt")
+	      #f))))
 
 (define (common:args-get-runname)
   (let ((res (or (args:get-arg "-runname")
@@ -863,8 +1031,12 @@
     ;; (if res (set-environment-variable "MT_RUNNAME" res)) ;; not sure if this is a good idea. side effect and all ...
     res))
 
-(define (common:args-get-target #!key (split #f))
-  (let* ((keys    (if (hash-table? *configdat*) (keys:config-get-fields *configdat*) '()))
+(define (common:get-fields cfgdat)
+  (let ((fields (hash-table-ref/default cfgdat "fields" '())))
+    (map car fields)))
+
+(define (common:args-get-target #!key (split #f)(exit-if-bad #f))
+  (let* ((keys    (if (hash-table? *configdat*) (common:get-fields *configdat*) '()))
 	 (numkeys (length keys))
 	 (target  (or (args:get-arg "-reqtarg")
 		      (args:get-arg "-target")
@@ -883,8 +1055,19 @@
 	(if target
 	    (begin
 	      (debug:print-error 0 *default-log-port* "Invalid target, spaces or blanks not allowed \"" target "\", target should be: " (string-intersperse keys "/") ", have " tlist " for elements")
+	      (if exit-if-bad (exit 1))
 	      #f)
 	    #f))))
+
+;; looking only (at least for now) at the MT_ variables craft the full testname
+;;
+(define (common:get-full-test-name)
+  (if (getenv "MT_TEST_NAME")
+      (if (and (getenv "MT_ITEMPATH")
+               (not (equal? (getenv "MT_ITEMPATH") "")))
+          (getenv "MT_TEST_NAME")
+          (conc (getenv "MT_TEST_NAME") "/" (getenv "MT_ITEMPATH")))
+      #f))
 
 ;; logic for getting homehost. Returns (host . at-home)
 ;; IF *toppath* is not set, wait up to five seconds trying every two seconds
@@ -910,18 +1093,30 @@
 	   (bestadrs (server:get-best-guess-address currhost))
 	   ;; first look in config, then look in file .homehost, create it if not found
 	   (homehost (or (configf:lookup *configdat* "server" "homehost" )
-			 (let ((hhf (conc *toppath* "/.homehost")))
-			   (if (file-exists? hhf)
-			       (with-input-from-file hhf read-line)
-			       (if (file-write-access? *toppath*)
-				   (begin
-				     (with-output-to-file hhf
-				       (lambda ()
-					 (print bestadrs)))
+			 (handle-exceptions
+			     exn
+			     (if (> trynum 0)
+				 (let ((delay-time (* (- 5 trynum) 5)))
+				   (mutex-unlock! *homehost-mutex*)
+				   (debug:print 0 *default-log-port* "ERROR: Failed to read .homehost file, delaying " delay-time " seconds and trying again, message: "  ((condition-property-accessor 'exn 'message) exn))
+				   (thread-sleep! delay-time)
+				   (common:get-homehost trynum: (- trynum 1)))
+				 (begin
+				   (mutex-unlock! *homehost-mutex*)
+				   (debug:print 0 *default-log-port* "ERROR: Failed to read .homehost file after trying five times. Giving up and exiting, message: "  ((condition-property-accessor 'exn 'message) exn))
+				   (exit 1)))
+			   (let ((hhf (conc *toppath* "/.homehost")))
+			     (if (file-exists? hhf)
+				 (with-input-from-file hhf read-line)
+				 (if (file-write-access? *toppath*)
 				     (begin
-				       (mutex-unlock! *homehost-mutex*)
-				       (car (common:get-homehost))))
-				   #f)))))
+				       (with-output-to-file hhf
+					 (lambda ()
+					   (print bestadrs)))
+				       (begin
+					 (mutex-unlock! *homehost-mutex*)
+					 (car (common:get-homehost))))
+				     #f))))))
 	   (at-home  (or (equal? homehost currhost)
 			 (equal? homehost bestadrs))))
       (set! *home-host* (cons homehost at-home))
@@ -934,6 +1129,43 @@
   (let ((hh (common:get-homehost)))
     (if hh
 	(cdr hh)
+	#f)))
+
+;; do we honor the caches of the config files?
+;;
+(define (common:use-cache?)
+  (let ((res #t)) ;; priority by order of evaluation
+    (if *configdat*
+	(if (equal? (configf:lookup *configdat* "setup" "use-cache") "no")
+	    (set! res #f)
+	    (if (equal? (configf:lookup *configdat* "setup" "use-cache") "yes")
+		(set! res #t))))
+    (if (args:get-arg "-no-cache")(set! res #f)) ;; overrides setting in "setup"
+    (if (getenv "MT_USE_CACHE")
+	(if (equal? (getenv "MT_USE_CACHE") "yes")
+	    (set! res #t)
+	    (if (equal? (getenv "MT_USE_CACHE") "no")
+		(set! res #f))))    ;; overrides -no-cache switch
+    res))
+  
+;; force use of server?
+;;
+(define (common:force-server?)
+  (let* ((force-setting (configf:lookup *configdat* "server" "force"))
+	 (force-type    (if force-setting (string->symbol force-setting) #f))
+	 (force-result  (case force-type
+			  ((#f)     #f)
+			  ((always) #t)
+			  ((test)   (if (args:get-arg "-execute") ;; we are in a test
+					#t
+					#f))
+			  (else
+			   (debug:print 0 *default-log-port* "ERROR: Bad server force setting " force-setting ", forcing server.")
+			   #t)))) ;; default to requiring server
+    (if force-result
+	(begin
+	  (debug:print-info 0 *default-log-port* "forcing use of server, force setting is \"" force-setting "\".")
+	  #t)
 	#f)))
 
 ;;======================================================================
@@ -1102,19 +1334,19 @@
 ;;
 (define (common:lazy-modification-time fpath)
   (handle-exceptions
-   exn
-   0
-   (file-modification-time fpath)))
+      exn
+      0
+    (file-modification-time fpath)))
 
 ;; find timestamp of newest file associated with a sqlite db file
 (define (common:lazy-sqlite-db-modification-time fpath)
   (let* ((glob-list (handle-exceptions
-                    exn
-                    '("/no/such/file")
-                    (glob (conc fpath "*"))))
+			exn
+			`(,(conc "/no/such/file, message: " ((condition-property-accessor 'exn 'message) exn)))
+		      (glob (conc fpath "*"))))
          (file-list (if (eq? 0 (length glob-list))
-                        '("/no/such/file")
-                        glob-list)))
+			'("/no/such/file")
+			glob-list)))
   (apply max
    (map
     common:lazy-modification-time 
@@ -1481,8 +1713,16 @@
 ;;======================================================================
 ;; E N V I R O N M E N T   V A R S
 ;;======================================================================
+(define (bb-check-path #!key (msg "check-path: "))
+  (let ((path (or (get-environment-variable "PATH") "none")))
+    (debug:print-info 0 *default-log-port* (conc msg" : $PATH="path))
+    (if (string-match "^.*/isoenv-core/.*" path)
+        (debug:print-error 0 *default-log-port* (conc msg" : !!ISOENV PRESENT!!")) ;; remove for prod
+        (debug:print-info 1 *default-log-port* (conc msg" : **no isoenv present**")))))
+
 	      
 (define (save-environment-as-files fname #!key (ignorevars (list "USER" "HOME" "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR" "MAKEFLAGS" "MAKEF" "MAKEOVERRIDES")))
+  ;;(bb-check-path msg: "save-environment-as-files entry")
   (let ((envvars (get-environment-variables))
         (whitesp (regexp "[^a-zA-Z0-9_\\-:,.\\/%$]"))
 	(mungeval (lambda (val)
@@ -1490,7 +1730,7 @@
 		     ((eq? val #t) "") ;; convert #t to empty string
 		     ((eq? val #f) #f) ;; convert #f to itself (still thinking about this one
 		     (else val)))))
-     (with-output-to-file (conc fname ".csh")
+    (with-output-to-file (conc fname ".csh")
        (lambda ()
           (for-each (lambda (keyval)
 		      (let* ((key   (car keyval))
@@ -1511,7 +1751,8 @@
 			     (delim (if (string-search whitesp val) 
 					"\""
 					"")))
-			(print (if (member key ignorevars)
+			(print (if (or (member key ignorevars)
+				       (string-search ":" key)) ;; internal only values to be skipped.
 				   "# export "
 				   "export ")
 			       key "=" delim (mungeval val) delim)))
@@ -1640,6 +1881,11 @@
     ((10 11 12) 4)
     (else #f)))
 
+;; basic ISO8601 format (e.g. "2017-02-28 06:02:54") date time => Unix epoch
+;;
+(define (common:date-time->seconds datetime)
+  (local-time->seconds (string->time datetime "%Y-%m-%d %H:%M:%S")))
+
 ;; given span of seconds tstart to tend
 ;; find start time to mark and mark delta
 ;;
@@ -1673,8 +1919,171 @@
     (if values
 	(apply values result)
 	(values 0 day 1 0 'd))))
+
+;; given x y lim return the cron expansion
+;;
+(define (common:expand-cron-slash x y lim)
+  (let loop ((curr x)
+	     (res  `()))
+    (if (< curr lim)
+	(loop (+ curr y) (cons curr res))
+	(reverse res))))
+
+;; expand a complex cron string to a list of cron strings
+;;
+;;  x/y   => x, x+y, x+2y, x+3y while x+Ny<max_for_field
+;;  a,b,c => a, b ,c
+;;
+;;   NOTE: with flatten a lot of the crud below can be factored down.
+;;
+(define (common:cron-expand cron-str)
+  (if (list? cron-str)
+      (flatten
+       (fold (lambda (x res)
+	       (if (list? x)
+		   (let ((newres (map common:cron-expand x)))
+		     (append x newres))
+		   (cons x res)))
+	     '()
+	     cron-str)) ;; (map common:cron-expand cron-str))
+      (let ((cron-items (string-split cron-str))
+	    (slash-rx   (regexp "(\\d+)/(\\d+)"))
+	    (comma-rx   (regexp ".*,.*"))
+	    (max-vals   '((min        . 60)
+			  (hour       . 24)
+			  (dayofmonth . 28) ;;; BUG!!!! This will be a bug for some combinations
+			  (month      . 12)
+			  (dayofweek  . 7))))
+	(if (< (length cron-items) 5) ;; bad spec
+	    cron-str ;; `(,cron-str)              ;; just return the string, something downstream will fix it
+	    (let loop ((hed  (car cron-items))
+		       (tal  (cdr cron-items))
+		       (type 'min)
+		       (type-tal '(hour dayofmonth month dayofweek))
+		       (res  '()))
+	      (regex-case
+		  hed
+		(slash-rx ( _ base incr ) (let* ((basen          (string->number base))
+						 (incrn          (string->number incr))
+						 (expanded-vals  (common:expand-cron-slash basen incrn (alist-ref type max-vals)))
+						 (new-list-crons (fold (lambda (x myres)
+									 (cons (conc (if (null? res)
+											 ""
+											 (conc (string-intersperse res " ") " "))
+										     x " " (string-intersperse tal " "))
+									       myres))
+								       '() expanded-vals)))
+					    ;; (print "new-list-crons: " new-list-crons)
+					    ;; (fold (lambda (x res)
+					    ;; 	    (if (list? x)
+					    ;; 		(let ((newres (map common:cron-expand x)))
+					    ;; 		  (append x newres))
+					    ;; 		(cons x res)))
+					    ;; 	  '()
+					    (flatten (map common:cron-expand new-list-crons))))
+		;;					    (map common:cron-expand (map common:cron-expand new-list-crons))))
+		(else (if (null? tal)
+			  cron-str
+			  (loop (car tal)(cdr tal)(car type-tal)(cdr type-tal)(append res (list hed)))))))))))
+		      
 	    
-	  
+;; given a cron string and the last time event was processed return #t to run or #f to not run
+;;
+;;  min    hour   dayofmonth month  dayofweek
+;; 0-59    0-23   1-31       1-12   0-6          ### NOTE: dayofweek does not include 7
+;;
+;;  #t => yes, run the job
+;;  #f => no, do not run the job
+;;
+(define (common:cron-event cron-str now-seconds-in last-done) ;; ref-seconds = #f is NOW.
+  (let* ((cron-items     (map string->number (string-split cron-str)))
+	 (now-seconds    (or now-seconds-in (current-seconds)))
+	 (now-time       (seconds->local-time now-seconds))
+	 (last-done-time (seconds->local-time last-done))
+	 (all-times      (make-hash-table)))
+    ;; (print "cron-items: " cron-items "(length cron-items): " (length cron-items))
+    (if (not (eq? (length cron-items) 5)) ;; don't even try to figure out junk strings
+	#f
+	(match-let (((     cmin chour cdayofmonth cmonth    cdayofweek)
+		     cron-items)
+		    ;; 0     1    2        3         4    5      6
+		    ((nsec nmin nhour ndayofmonth nmonth nyr ndayofweek n7 n8 n9)
+		     (vector->list now-time))
+		    ((lsec lmin lhour ldayofmonth lmonth lyr ldayofweek l7 l8 l9)
+		     (vector->list last-done-time)))
+	  ;; create all possible time slots
+	  ;; remove invalid slots due to (for example) day of week
+	  ;; get the start and end entries for the ref-seconds (current) time
+	  ;; if last-done > ref-seconds => this is an ERROR!
+	  ;; does the last-done time fall in the legit region?
+	  ;;    yes => #f  do not run again this command
+	  ;;    no  => #t  ok to run the command
+	  (for-each ;; month
+	   (lambda (month)
+	     (for-each ;; dayofmonth
+	      (lambda (dom)
+		(for-each
+		 (lambda (hr) ;; hour
+		   (for-each
+		    (lambda (minute) ;; minute
+		      (let ((copy-now (apply vector (vector->list now-time))))
+			(vector-set! copy-now 0 0) ;; force seconds to zero
+			(vector-set! copy-now 1 minute)
+			(vector-set! copy-now 2 hr)
+			(vector-set! copy-now 3 dom)  ;; dom is already corrected for zero referenced
+			(vector-set! copy-now 4 month)
+			(let* ((copy-now-secs (local-time->seconds copy-now))
+			       (new-copy      (seconds->local-time copy-now-secs))) ;; remake the time vector
+			  (if (or (not cdayofweek)
+				  (equal? (vector-ref new-copy 6)
+					  cdayofweek)) ;; if the day is specified and a match OR if the day is NOT specified
+			      (if (or (not cdayofmonth)
+				      (equal? (vector-ref new-copy 3)
+					      (+ 1 cdayofmonth))) ;; if the month is specified and a match OR if the month is NOT specified
+				  (hash-table-set! all-times copy-now-secs new-copy))))))
+		    (if cmin
+			`(,cmin)  ;; if given cmin, have to use it
+			(list (- nmin 1) nmin (+ nmin 1))))) ;; minute
+		 (if chour
+		     `(,chour)
+		     (list (- nhour 1) nhour (+ nhour 1))))) ;; hour
+	      (if cdayofmonth
+		  `(,cdayofmonth)
+		  (list (- ndayofmonth 1) ndayofmonth (+ ndayofmonth 1)))))
+	   (if cmonth
+	       `(,cmonth)
+	       (list (- nmonth 1) nmonth (+ nmonth 1))))
+	  (let ((before #f)
+		(is-in  #f))
+	    (for-each
+	     (lambda (moment)
+	       (if (and before
+			(<= before now-seconds)
+			(>= moment now-seconds))
+		   (begin
+		     ;; (print)
+		     ;; (print "Before: " (time->string (seconds->local-time before)))
+		     ;; (print "Now:    " (time->string (seconds->local-time now-seconds)))
+		     ;; (print "After:  " (time->string (seconds->local-time moment)))
+		     ;; (print "Last:   " (time->string (seconds->local-time last-done)))
+		     (if (<  last-done before)
+			 (set! is-in before))
+		     ))
+	       (set! before moment))
+	     (sort (hash-table-keys all-times) <))
+	    is-in)))))
+
+(define (common:extended-cron  cron-str now-seconds-in last-done)
+  (let ((expanded-cron (common:cron-expand cron-str)))
+    (if (string? expanded-cron)
+	(common:cron-event expanded-cron now-seconds-in last-done)
+	(let loop ((hed (car expanded-cron))
+		   (tal (cdr expanded-cron)))
+	  (if (common:cron-event hed now-seconds-in last-done)
+	      #t
+	      (if (null? tal)
+		  #f
+		  (loop (car tal)(cdr tal))))))))
 
 ;;======================================================================
 ;; C O L O R S
@@ -1712,6 +2121,24 @@
              (string-split instr)))
    "/"))
 
+(define (common:faux-lock keyname)
+  (if (rmt:get-var keyname)
+      #f
+      (begin
+        (rmt:set-var keyname (conc (current-process-id)))
+        (equal? (conc (current-process-id)) (conc (rmt:get-var keyname))))))
+
+(define (common:faux-unlock keyname #!key (force #f))
+  (if (or force (equal? (conc (current-process-id)) (conc (rmt:get-var keyname))))
+      (begin
+        (if (rmt:get-var keyname) (rmt:del-var keyname))
+        #t)
+      #f))
+
+  
+(define (common:in-running-test?)
+  (and (args:get-arg "-execute") (get-environment-variable "MT_CMDINFO")))
+
 (define (common:get-color-from-status status)
   (cond
    ((equal? status "PASS")    "green")
@@ -1723,89 +2150,77 @@
    ((equal? status "ABORT")   "brown")
    (else "black")))
 
-;;======================================================================
-;; N A N O M S G   C L I E N T
-;;======================================================================
-
-(define (server:get-best-guess-address hostname)
-  (let ((res #f))
-    (for-each 
-     (lambda (adr)
-       (if (not (eq? (u8vector-ref adr 0) 127))
-	   (set! res adr)))
-     ;; NOTE: This can fail when there is no mention of the host in /etc/hosts. FIXME
-     (vector->list (hostinfo-addresses (hostname->hostinfo hostname))))
-    (string-intersperse 
-     (map number->string
-	  (u8vector->list
-	   (if res res (hostname->ip hostname)))) ".")))
-
-
-(define (common:send-dboard-main-changed)
-  (let* ((dashboard-ips (mddb:get-dashboards)))
-    (for-each
-     (lambda (ipadr)
-       (let* ((soc (common:open-nm-req (conc "tcp://" ipadr)))
-	      (msg (conc "main " *toppath*))
-	      (res (common:nm-send-receive-timeout soc msg)))
-	 (if (not res) ;; couldn't reach that dashboard - remove it from db
-	     (print "ERROR: couldn't reach dashboard " ipadr))
-	 res))
-     dashboard-ips)))
-    
-    
-;;======================================================================
-;; D A S H B O A R D   D B 
-;;======================================================================
-
-(define (mddb:open-db)
-  (let* ((db (open-database (conc (get-environment-variable "HOME") "/.dashboard.db"))))
-    (set-busy-handler! db (busy-timeout 10000))
-    (for-each
-     (lambda (qry)
-       (exec (sql db qry)))
-     (list 
-      "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
-      "CREATE TABLE IF NOT EXISTS dashboards (
-          id         INTEGER PRIMARY KEY,
-          pid        INTEGER,
-          username   TEXT,
-          hostname   TEXT,
-          ipaddr     TEXT,
-          portnum    INTEGER,
-          start_time TIMESTAMP DEFAULT (strftime('%s','now')),
-             CONSTRAINT hostport UNIQUE (hostname,portnum)
-        );"
-      ))
-    db))
-
-;; register a dashboard 
-;;
-(define (mddb:register-dashboard port)
-  (let* ((pid      (current-process-id))
-	 (hostname (get-host-name))
-	 (ipaddr   (server:get-best-guess-address hostname))
-	 (username (current-user-name)) ;; (car userinfo)))
-	 (db      (mddb:open-db)))
-    (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
-    (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,username,hostname,ipaddr,portnum) VALUES (?,?,?,?,?);")
-	   pid username hostname ipaddr port)
-    (close-database db)))
-
-;; unregister a monitor
-;;
-(define (mddb:unregister-dashboard host port)
-  (let* ((db      (mddb:open-db)))
-    (print "Register unregister monitor, host:port=" host ":" port)
-    (exec (sql db "DELETE FROM dashboards WHERE hostname=? AND portnum=?;") host port)
-    (close-database db)))
-
-;; get registered dashboards
-;;
-(define (mddb:get-dashboards)
-  (let ((db (mddb:open-db)))
-    (query fetch-column
-	   (sql db "SELECT ipaddr || ':' || portnum FROM dashboards;"))))
+;; ;;======================================================================
+;; ;; N A N O M S G   C L I E N T
+;; ;;======================================================================
+;; 
+;; 
+;; 
+;; (define (common:send-dboard-main-changed)
+;;   (let* ((dashboard-ips (mddb:get-dashboards)))
+;;     (for-each
+;;      (lambda (ipadr)
+;;        (let* ((soc (common:open-nm-req (conc "tcp://" ipadr)))
+;; 	      (msg (conc "main " *toppath*))
+;; 	      (res (common:nm-send-receive-timeout soc msg)))
+;; 	 (if (not res) ;; couldn't reach that dashboard - remove it from db
+;; 	     (print "ERROR: couldn't reach dashboard " ipadr))
+;; 	 res))
+;;      dashboard-ips)))
+;;     
+;;     
+;; ;;======================================================================
+;; ;; D A S H B O A R D   D B 
+;; ;;======================================================================
+;; 
+;; (define (mddb:open-db)
+;;   (let* ((db (open-database (conc (get-environment-variable "HOME") "/.dashboard.db"))))
+;;     (set-busy-handler! db (busy-timeout 10000))
+;;     (for-each
+;;      (lambda (qry)
+;;        (exec (sql db qry)))
+;;      (list 
+;;       "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
+;;       "CREATE TABLE IF NOT EXISTS dashboards (
+;;           id         INTEGER PRIMARY KEY,
+;;           pid        INTEGER,
+;;           username   TEXT,
+;;           hostname   TEXT,
+;;           ipaddr     TEXT,
+;;           portnum    INTEGER,
+;;           start_time TIMESTAMP DEFAULT (strftime('%s','now')),
+;;              CONSTRAINT hostport UNIQUE (hostname,portnum)
+;;         );"
+;;       ))
+;;     db))
+;; 
+;; ;; register a dashboard 
+;; ;;
+;; (define (mddb:register-dashboard port)
+;;   (let* ((pid      (current-process-id))
+;; 	 (hostname (get-host-name))
+;; 	 (ipaddr   (server:get-best-guess-address hostname))
+;; 	 (username (current-user-name)) ;; (car userinfo)))
+;; 	 (db      (mddb:open-db)))
+;;     (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
+;;     (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,username,hostname,ipaddr,portnum) VALUES (?,?,?,?,?);")
+;; 	   pid username hostname ipaddr port)
+;;     (close-database db)))
+;; 
+;; ;; unregister a monitor
+;; ;;
+;; (define (mddb:unregister-dashboard host port)
+;;   (let* ((db      (mddb:open-db)))
+;;     (print "Register unregister monitor, host:port=" host ":" port)
+;;     (exec (sql db "DELETE FROM dashboards WHERE hostname=? AND portnum=?;") host port)
+;;     (close-database db)))
+;; 
+;; ;; get registered dashboards
+;; ;;
+;; (define (mddb:get-dashboards)
+;;   (let ((db (mddb:open-db)))
+;;     (query fetch-column
+;; 	   (sql db "SELECT ipaddr || ':' || portnum FROM dashboards;"))))
     
 ;;======================================================================
 ;;  T E S T   L A U N C H I N G   P E R   I T E M   W I T H   H O S T   T Y P E S

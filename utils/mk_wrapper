@@ -3,9 +3,9 @@
 prefix=$1
 cmd=$2
 target=$3
+cfgfile="$prefix/bin/.$(lsb_release -sr)/cfg.sh"
 
 if [ "$LD_LIBRARY_PATH" != "" ];then
-  cfgfile="$prefix/bin/.$(lsb_release -sr)/cfg.sh"
   echo "INFO: Using LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >&2
 ( cat << __EOF
 if [ "\$LD_LIBRARY_PATH" != "" ];then
@@ -20,11 +20,6 @@ else
   echo "INFO: LD_LIBRARY_PATH not set" >&2
 fi
 
-# echo "#!/bin/bash" > $target
-# if [ "$LD_LIBRARY_PATH" != "" ];then
-#   echo "source $prefix/bin/.\$(lsb_release -sr)/cfg.sh" >> $target
-# fi
-# echo "exec $prefix/bin/.\$(lsb_release -sr)/$cmd \"\$@\"" >> $target
 echo "#!/bin/bash" > $target
 
 if [[ $cmd =~ dboard ]]; then
@@ -59,6 +54,13 @@ EOF
 
 fi
 
+# echo "#!/bin/bash" > $target
+# echo "exec $prefix/bin/.\$(lsb_release -sr)/$cmd \"\$@\"" >> $target
+
 echo "lsbr=\$(lsb_release -sr)" >> $target
-echo "if [[ -e \$lsbr ]];then source \$lsbr;fi" >> $target
+if [ "$LD_LIBRARY_PATH" != "" ];then
+  echo "source $prefix/bin/.\$lsbr/cfg.sh" >> $target
+fi
+
+# echo "if [[ -e \$lsbr ]];then source \$lsbr;fi" >> $target
 echo "exec $prefix/bin/.\$lsbr/$cmd \"\$@\"" >> $target

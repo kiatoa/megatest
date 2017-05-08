@@ -493,7 +493,7 @@
          (key-vals        (configf:section-vars rawconfig sectionname))
          (section-matrix  (iup:matrix
                            #:alignment1 "ALEFT"
-                           #:expand "YES" ;; "HORIZONTAL"
+                           ;; #:expand "YES" ;; "HORIZONTAL"
                            #:numcol 1
                            #:numlin (length key-vals)
                            #:numcol-visible 1
@@ -611,8 +611,7 @@
      stats-matrix)))
 
 (define (dcommon:servers-table commondat tabdat)
-  (let* ((tdbdat         (tasks:open-db))
-	 (colnum         0)
+  (let* ((colnum         0)
 	 (rownum         0)
 	 (servers-matrix (iup:matrix #:expand "YES"
 				     #:numcol 7
@@ -623,7 +622,6 @@
 	 (updater        (lambda ()
 			   (if (dashboard:monitor-changed? commondat tabdat)
 			       (let ((servers  (server:get-list *toppath* limit: 10)))
-				 ;; (tasks:get-all-servers (db:delay-if-busy tdbdat))))
 				 (iup:attribute-set! servers-matrix "NUMLIN" (length servers))
 				 ;; (set! colnum 0)
 				 ;; (for-each (lambda (colname)
@@ -1189,7 +1187,7 @@
 				      (if the-cnv
 					  (dashboard:draw-tests the-cnv last-xadj last-yadj tests-draw-state sorted-testnames test-records))
 				      ))
-		       ;; #:size "50x50"
+		       ;; #:size "250x250"
 		       #:expand "YES"
 		       #:scrollbar "YES"
 		       #:posx "0.5"
@@ -1284,3 +1282,14 @@
 		      (if deleted (loop next-row next-col #f)) ;; exit on this not met
 		      (loop next-row next-col deleted)))))
 	  (iup:attribute-set! steps-matrix "REDRAW" "ALL")))))
+
+;;======================================================================
+;; U T I L I T I E S
+;;======================================================================
+
+(define (dcommon:run-html-viewer lfilename)
+  (let ((htmlviewercmd (configf:lookup *configdat* "setup" "htmlviewercmd")))
+    (if htmlviewercmd
+	(system (conc "(" htmlviewercmd " " lfilename " ) &")) 
+	(iup:send-url lfilename))))
+

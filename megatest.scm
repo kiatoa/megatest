@@ -1,4 +1,4 @@
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2017, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -13,16 +13,14 @@
 ;; fake out readline usage of toplevel-command
 (define (toplevel-command . a) #f)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
-     http-client srfi-18 extras format) ;;  zmq extras)
+(use (prefix sqlite3 sqlite3:) srfi-1 posix regex regex-case srfi-69 (prefix base64 base64:)
+     readline apropos json http-client directory-utils typed-records
+     http-client srfi-18 extras format)
 
 ;; Added for csv stuff - will be removed
 ;;
 (use sparse-vectors)
 
-(import (prefix sqlite3 sqlite3:))
-(import (prefix base64 base64:))
-(import (prefix rpc rpc:))
 (require-library mutils)
 
 ;; (use zmq)
@@ -62,6 +60,7 @@
 ;; Disabled help items
 ;;  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
 ;;                            from prior runs with same keys
+;;  -daemonize              : fork into background and disconnect from stdin/out
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -74,7 +73,7 @@ Usage: megatest [options]
   -version                : print megatest version (currently " megatest-version ")
 
 Launching and managing runs
-  -runall                 : run all tests or as specified by -testpatt
+  -run                    : run all tests or as specified by -testpatt
   -remove-runs            : remove the data for a run, requires -runname and -testpatt
                             Optionally use :state and :status
   -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
@@ -88,11 +87,12 @@ Launching and managing runs
   -get-run-status         : gets status for run specified by target and runname
   -run-wait               : wait on run specified by target and runname
   -preclean               : remove the existing test directory before running the test
-  -clean-cache            : remove the cached megatest.config and runconfig.config files
+  -clean-cache            : remove the cached megatest.config and runconfigs.config files
+  -no-cache               : do not use the cached config files. 
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
-  -reqtarg key1/key2/...  : run for key1, key2, etc. but key1/key2 must be in runconfig
+  -reqtarg key1/key2/...  : run for key1, key2, etc. but key1/key2 must be in runconfigs
   -testpatt patt1/patt2,patt3/...  : % is wildcard
   -runname                : required, name for this particular test run
   -state                  : Applies to runs, tests or steps depending on context
@@ -133,7 +133,7 @@ Queries
   -list-db-targets        : list the target combinations used in the db
   -show-config            : dump the internal representation of the megatest.config file
   -show-runconfig         : dump the internal representation of the runconfigs.config file
-  -dumpmode MODE          : dump in MODE format instead of sexpr, MODE=json,ini,sexp etc.
+  -dumpmode MODE          : dump in MODE format instead of sexpr, MODE=json,ini,sexp etc. (add -debug 0,9 to see which file contributes each line)
   -show-cmdinfo           : dump the command info for a test (run in test environment)
   -section sectionName
   -var varName            : for config and runconfig lookup value for sectionName varName
@@ -143,32 +143,36 @@ Queries
 
 Misc 
   -start-dir path         : switch to this directory before running megatest
+  -contour cname          : add a level of hierarcy to the linktree and run paths
   -rebuild-db             : bring the database schema up to date
   -cleanup-db             : remove any orphan records, vacuum the db
-  -import-megatest.db     : migrate a database from v1.55 series to v1.60 series
-  -sync-to-megatest.db    : migrate data back to megatest.db
-  -use-db-cache           : use cached access to db to reduce load
+  -import-megatest.db     : push data from megatest.db to cache db files in /tmp/$USER
+  -sync-to-megatest.db    : pull data from cache files in /tmp/$USER to megatest.db
+  -sync-to dest           : sync to new postgresql central style database
   -update-meta            : update the tests metadata for all tests
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
   -transport http|rpc     : use http or rpc for transport (default is http) 
-  -daemonize              : fork into background and disconnect from stdin/out
   -log logfile            : send stdout and stderr to logfile
   -list-servers           : list the servers 
-  -stop-server id         : stop server specified by id (see output of -list-servers), use
-                            0 to kill all
+  -kill-servers           : kill all servers
   -repl                   : start a repl (useful for extending megatest)
   -load file.scm          : load and run file.scm
   -mark-incompletes       : find and mark incomplete tests
   -ping run-id|host:port  : ping server, exit with 0 if found
   -debug N|N,M,O...       : enable debug 0-N or N and M and O ...
+  -config fname           : override the megatest.config file with fname
+  -append-config fname    : append fname to the megatest.config file
 
 Utilities
   -env2file fname         : write the environment to fname.csh and fname.sh
-  -envcap fname=context   : save current variables labeled as context in file fname
-  -refdb2dat refdb        : convert refdb to sexp or to format specified by -dumpmode
+  -envcap a               : save current variables labeled as context 'a' in file envdat.db
+  -envdelta a-b           : output enviroment delta from context a to context b to -o fname
+                            set the output mode with -dumpmode csh, bash or ini
+                            note: ini format will use calls to use curr and minimize path
+  -refdb2dat refdb        : convert refdb to sexp or to format specified by s-dumpmode
                             formats: perl, ruby, sqlite3, csv (for csv the -o param
                             will substitute %s for the sheet name in generating 
                             multiple sheets)
@@ -205,13 +209,14 @@ Called as " (string-intersperse (argv) " ") "
 Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;;  -gui                    : start a gui interface
-;;  -config fname           : override the runconfig file with fname
+;;  -config fname           : override the runconfigs file with fname
 
 ;; process args
 (define remargs (args:get-args 
 		 (argv)
 		 (list  "-runtests"  ;; run a specific test
 			"-config"    ;; override the config file name
+			"-append-config"
 			"-execute"   ;; run the command encoded in the base64 parameter
 			"-step"
 			"-target"
@@ -245,10 +250,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			":units"
 			;; misc
 			"-start-dir"
+			"-contour"
 			"-server"
-			"-stop-server"
 			"-transport"
-			"-kill-server"
 			"-port"
 			"-extract-ods"
 			"-pathmod"
@@ -278,10 +282,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-sort"
 			"-target-db"
 			"-source-db"
+			"-prefix-target"
 
                         "-src-target"
                         "-src-runname"
                         "-diff-email"
+			"-sync-to"			
+			"-pgsync"
                         "-diff-html"
 			)
  		 (list  "-h" "-help" "--help"
@@ -301,13 +308,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-rerun-clean"
 			"-rerun-all"
 			"-clean-cache"
+			"-no-cache"
 			"-cache-db"
                         "-use-db-cache"
+                        "-prepend-contour"
 			;; misc
 			"-repl"
 			"-lock"
 			"-unlock"
 			"-list-servers"
+			"-kill-servers"
                         "-run-wait"      ;; wait on a run to complete (i.e. no RUNNING)
 			"-local"         ;; run some commands using local db access
                         "-generate-html"
@@ -338,7 +348,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-convert-to-old"
 			"-import-megatest.db"
 			"-sync-to-megatest.db"
-
+			
 			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
@@ -359,6 +369,17 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      ))
     (debug:print-error 0 *default-log-port* "Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
+;; before doing anything else change to the start-dir if provided
+;;
+(if (args:get-arg "-start-dir")
+    (if (file-exists? (args:get-arg "-start-dir"))
+        (let ((fullpath (common:real-path (args:get-arg "-start-dir"))))
+          (setenv "PWD" fullpath)
+          (change-directory fullpath))
+	(begin
+	  (debug:print-error 0 *default-log-port* "non-existant start dir " (args:get-arg "-start-dir") " specified, exiting.")
+	  (exit 1))))
+
 ;; immediately set MT_TARGET if -reqtarg or -target are available
 ;;
 (let ((targ (or (args:get-arg "-reqtarg")(args:get-arg "-target"))))
@@ -366,10 +387,31 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; The watchdog is to keep an eye on things like db sync etc.
 ;;
+
+;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
 (define *watchdog* (make-thread common:watchdog "Watchdog thread"))
 
-(if (not (args:get-arg "-server"))
-    (thread-start! *watchdog*)) ;; if starting a server; wait till we get to running state before kicking off watchdog
+;;(if (not (args:get-arg "-server"))
+;;    (thread-start! *watchdog*)) ;; if starting a server; wait till we get to running state before kicking off watchdog
+(let* ((no-watchdog-args
+       '("-list-runs"
+         "-list-servers"
+         "-server"
+         "-list-disks"
+         "-list-targets"
+         "-show-runconfig"
+         ;;"-list-db-targets"
+         "-show-runconfig"
+         "-show-config"
+         "-show-cmdinfo"
+	 "-cleanup-db"))
+       (no-watchdog-args-vals (filter (lambda (x) x)
+                                      (map args:get-arg no-watchdog-args)))
+       (start-watchdog (null? no-watchdog-args-vals)))
+  ;;(BB> "no-watchdog-args="no-watchdog-args "no-watchdog-args-vals="no-watchdog-args-vals) 
+  (if start-watchdog
+      (thread-start! *watchdog*)))
+
 
 ;; bracket open-output-file with code to make leading directory if it does not exist and handle exceptions
 (define (open-logfile logpath)
@@ -383,16 +425,24 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
         (define *didsomething* #t)  
         (exit 1))))
 
-    
+;; this segment will run launch:setup only if -log is not set. This is fairly safe as servers are not
+;; manually started and thus should never be started in a non-megatest area. Thus no need to handle situation
+;; where (launch:setup) returns #f?
+;;
 (if (or (args:get-arg "-log")(args:get-arg "-server")) ;; redirect the log always when a server
-    (let* ((tl   (or (args:get-arg "-log")(launch:setup)))   ;; run launch:setup if -server
-	   (logf (or (args:get-arg "-log") ;; use -log unless we are a server, then craft a logfile name
-		     (conc tl "/logs/server-" (current-process-id) "-" (get-host-name) ".log")))
-	   (oup  (open-logfile logf)))
-      (if (not (args:get-arg "-log"))
-	  (hash-table-set! args:arg-hash "-log" logf)) ;; fake out future queries of -log
-      (debug:print-info 0 *default-log-port* "Sending log output to " logf)
-      (set! *default-log-port* oup)))
+    (handle-exceptions
+	exn
+	(begin
+	  (print "ERROR: Failed to switch to log output. " ((condition-property-accessor 'exn 'message) exn))
+	  )
+      (let* ((tl   (or (args:get-arg "-log")(launch:setup)))   ;; run launch:setup if -server, ensure we do NOT run launch:setup if -log specified
+	     (logf (or (args:get-arg "-log") ;; use -log unless we are a server, then craft a logfile name
+		       (conc tl "/logs/server-" (current-process-id) "-" (get-host-name) ".log")))
+	     (oup  (open-logfile logf)))
+	(if (not (args:get-arg "-log"))
+	    (hash-table-set! args:arg-hash "-log" logf)) ;; fake out future queries of -log
+	(debug:print-info 0 *default-log-port* "Sending log output to " logf)
+	(set! *default-log-port* oup))))
 
 (if (or (args:get-arg "-h")
 	(args:get-arg "-help")
@@ -412,13 +462,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (system (conc "(" htmlviewercmd " http://www.kiatoa.com/cgi-bin/fossils/megatest/doc/tip/docs/manual/megatest_manual.html ) &")))
       (exit)))
 
-(if (args:get-arg "-start-dir")
-    (if (file-exists? (args:get-arg "-start-dir"))
-	(change-directory (args:get-arg "-start-dir"))
-	(begin
-	  (debug:print-error 0 *default-log-port* "non-existant start dir " (args:get-arg "-start-dir") " specified, exiting.")
-	  (exit 1))))
-
 (if (args:get-arg "-version")
     (begin
       (print (common:version-signature)) ;; (print megatest-version)
@@ -436,7 +479,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (let ((original-exit (exit-handler)))
       (exit-handler (lambda (#!optional (exit-code 0))
 		      (printf "Preparing to exit with exit code ~A ...\n" exit-code)
-		      (for-each 
+		      (for-each
+		       
 		       (lambda (pid)
 			 (handle-exceptions
 			  exn
@@ -449,6 +493,25 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					    (process-signal pid signal/term))))))
 		       (process:children #f))
 		      (original-exit exit-code)))))
+
+;; for some switches always print the command to stderr
+;;
+(if (args:any? "-run" "-runall" "-remove-runs" "-set-state-status")
+    (debug:print 0 *default-log-port* (string-intersperse (argv) " ")))
+
+;; some switches imply homehost. Exit here if not on homehost
+;;
+(let ((homehost-required  (list "-cleanup-db" "-server")))
+  (if (apply args:any? homehost-required)
+      (if (not (common:on-homehost?))
+	  (for-each
+	   (lambda (switch)
+	     (if (args:get-arg switch)
+		 (begin
+		   (debug:print 0 *default-log-port* "ERROR: you must be on the homehost to run with " switch
+				", you can move homehost by removing the .homehost file but this will disrupt any runs in progress.")
+		   (exit 1))))
+	   homehost-required))))
 
 ;;======================================================================
 ;; Misc setup stuff
@@ -487,31 +550,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; handle a clean-cache request as early as possible
 ;;
 (if (args:get-arg "-clean-cache")
-    (begin
+    (let ((toppath  (launch:setup)))
       (set! *didsomething* #t) ;; suppress the help output.
-      (if (getenv "MT_TARGET") ;; no point in trying if no target
-	  (if (args:get-arg "-runname")
-	      (let* ((toppath  (launch:setup))
-		     (linktree (if toppath (configf:lookup *configdat* "setup" "linktree")))
-		     (runtop   (conc linktree "/" (getenv "MT_TARGET") "/" (args:get-arg "-runname")))
-		     (files    (if (file-exists? runtop)
-				   (append (glob (conc runtop "/.megatest*"))
-					   (glob (conc runtop "/.runconfig*")))
-				   '())))
-		(if (null? files)
-		    (debug:print-info 0 *default-log-port* "No cached megatest or runconfigs files found. None removed.")
-		    (begin
-		      (debug:print-info 0 *default-log-port* "Removing cached files:\n    " (string-intersperse files "\n    "))
-		      (for-each 
-		       (lambda (f)
-			 (handle-exceptions
-			     exn
-			     (debug:print 0 *default-log-port* "WARNING: Failed to remove file " f)
-			   (delete-file f)))
-		       files))))
-	      (debug:print-error 0 *default-log-port* "-clean-cache requires -runname."))
-	  (debug:print-error 0 *default-log-port* "-clean-cache requires -target or -reqtarg"))))
-	    
+      (runs:clean-cache (getenv "MT_TARGET")(args:get-arg "-runname") toppath)))
 	  
 (if (args:get-arg "-env2file")
     (begin
@@ -743,56 +784,42 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (or (args:get-arg "-list-servers")
-	(args:get-arg "-stop-server")
-        (args:get-arg "-kill-server"))
+        (args:get-arg "-kill-servers"))
     (let ((tl (launch:setup)))
-      (if tl 
-	  (let* ((tdbdat  (tasks:open-db))
-		 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
-		 (fmtstr  "~5a~12a~8a~20a~24a~10a~10a~10a~10a\n")
-		 (servers-to-kill '())
-                 (kill-switch  (if (args:get-arg "-kill-server") "-9" ""))
-                 (killinfo   (or (args:get-arg "-stop-server") (args:get-arg "-kill-server") ))
-		 (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
-		 (sid        (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f)))
-	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface:OutPort" "InPort" "LastBeat" "State" "Transport")
-	    (format #t fmtstr "==" "=====" "===" "====" "=================" "======" "========" "=====" "=========")
-	    (for-each 
+      (if tl ;; all roads from here exit
+	  (let* ((servers (server:get-list *toppath*))
+		 (fmtstr  "~8a~22a~20a~20a~8a\n"))
+	    (format #t fmtstr "pid" "Interface:port" "age (hms)" "Last mod" "State")
+	    (format #t fmtstr "===" "==============" "=========" "========" "=====")
+	    (for-each ;;  ( mod-time host port start-time pid )
 	     (lambda (server)
-	       (let* ((id         (vector-ref server 0))
-		      (pid        (vector-ref server 1))
-		      (hostname   (vector-ref server 2))
-		      (interface  (vector-ref server 3)) 
-		      (pullport   (vector-ref server 4))
-		      (pubport    (vector-ref server 5))
-		      (start-time (vector-ref server 6))
-		      (priority   (vector-ref server 7))
-		      (state      (vector-ref server 8))
-		      (mt-ver     (vector-ref server 9))
-		      (last-update (vector-ref server 10)) 
-		      (transport  (vector-ref server 11))
-		      (killed     #f)
-		      (status     (< last-update 20)))
-		 ;;   (zmq-sockets (if status (server:client-connect hostname port) #f)))
-		 ;; no need to login as status of #t indicates we are connecting to correct 
-		 ;; server
-		 (if (equal? state "dead")
-		     (if (> last-update (* 25 60 60)) ;; keep records around for slighly over a day.
-			 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid action: 'delete))
-		     (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
-			 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid)))
-		 (format #t fmtstr id mt-ver pid hostname (conc interface ":" pullport) pubport last-update
-			 (if status "alive" "dead") transport)
-		 (if (or (equal? id sid)
-			 (equal? sid 0)) ;; kill all/any
+	       (let* ((mtm (any->number (car server)))
+		      (mod (if mtm (- (current-seconds) mtm) "unk"))
+		      (age (- (current-seconds)(or (any->number (list-ref server 3)) (current-seconds))))
+		      (url (conc (cadr server) ":" (caddr server)))
+		      (pid (list-ref server 4))
+		      (alv (if (number? mod)(< mod 10) #f)))
+		 (format #t
+			 fmtstr
+			 pid
+			 url
+			 (seconds->hr-min-sec age)
+			 (seconds->hr-min-sec mod)
+			 (if alv "alive" "dead"))
+		 (if (and alv
+			  (args:get-arg "-kill-servers"))
 		     (begin
-		       (debug:print-info 0 *default-log-port* "Attempting to kill "kill-switch" server with pid " pid)
-		       (tasks:kill-server hostname pid kill-switch: kill-switch)))))
-	     servers)
-	    (debug:print-info 1 *default-log-port* "Done with listservers")
+		       (debug:print-info 0 *default-log-port* "Attempting to kill server with pid " pid)
+		       (server:kill server)))))
+	     (sort servers (lambda (a b)
+			     (let ((ma (or (any->number (car a)) 9e9))
+				   (mb (or (any->number (car b)) 9e9)))
+			       (> ma mb)))))
+	    ;; (debug:print-info 1 *default-log-port* "Done with listservers")
 	    (set! *didsomething* #t)
-	    (exit)) ;; must do, would have to add checks to many/all calls below
+	    (exit))
 	  (exit))))
+      ;; must do, would have to add checks to many/all calls below
 
 ;;======================================================================
 ;; Weird special calls that need to run *after* the server has started?
@@ -801,7 +828,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-list-targets")
     (if (launch:setup)
         (let ((targets (common:get-runconfig-targets)))
-          (debug:print 1 *default-log-port* "Found "(length targets) " targets")
+          ;; (debug:print 1 *default-log-port* "Found "(length targets) " targets")
           (case (string->symbol (or (args:get-arg "-dumpmode") "alist"))
             ((alist)
              (for-each (lambda (x)
@@ -830,7 +857,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (cfgf   (if rundir (conc rundir "/.runconfig." megatest-version "-" megatest-fossil-hash) #f)))
     (if (and cfgf
 	     (file-exists? cfgf)
-	     (file-write-access? cfgf))
+	     (file-write-access? cfgf)
+	     (common:use-cache?))
 	(configf:read-alist cfgf)
 	(let* ((keys   (rmt:get-keys))
 	       (target (common:args-get-target))
@@ -842,14 +870,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			       (for-each (lambda (kt)
 					   (setenv (car kt) (cadr kt)))
 					 key-vals))
-			   (read-config (conc *toppath* "/runconfigs.config") #f #t sections: sections))))
+			   ;; (read-config (conc *toppath* "/runconfigs.config") #f #t sections: sections))))
+                           (runconfig:read (conc *toppath* "/runconfigs.config") target #f))))
 	  (if (and rundir ;; have all needed variabless
 		   (directory-exists? rundir)
 		   (file-write-access? rundir))
 	      (begin
-		(configf:write-alist data cfgf)
+                (if (not (common:in-running-test?))
+                    (configf:write-alist data cfgf))
 		;; force re-read of megatest.config - this resolves circular references between megatest.config
-		(launch:setup force: #t)
+		(launch:setup force-reread: #t)
 		(launch:cache-config))) ;; we can safely cache megatest.config since we have a valid runconfig
 	  data))))
 
@@ -864,12 +894,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (let ((val (or (configf:lookup data (args:get-arg "-section")(args:get-arg "-var"))
 			 (configf:lookup data "default" (args:get-arg "-var")))))
 	    (if val (print val))))
-	 ((not (args:get-arg "-dumpmode"))
+	 ((or (not (args:get-arg "-dumpmode"))
+              (string=? (args:get-arg "-dumpmode") "ini"))
+	  (configf:config->ini data))
+	 ((string=? (args:get-arg "-dumpmode") "sexp")
 	  (pp (hash-table->alist data)))
 	 ((string=? (args:get-arg "-dumpmode") "json")
 	  (json-write data))
-	 ((string=? (args:get-arg "-dumpmode") "ini")
-	  (configf:config->ini data))
 	 (else
 	  (debug:print-error 0 *default-log-port* "-dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
 	(set! *didsomething* #t))
@@ -897,7 +928,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        (else
 	(debug:print-error 0 *default-log-port* "-dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
       (set! *didsomething* #t)
-      (pop-directory)))
+      (pop-directory)
+      (set! *time-to-exit* #t)))
 
 (if (args:get-arg "-show-cmdinfo")
     (if (or (args:get-arg ":value")(getenv "MT_CMDINFO"))
@@ -1050,7 +1082,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			;;   runstmp))
 	       (db-targets  (args:get-arg "-list-db-targets"))
 	       (seen        (make-hash-table))
-	       (dmode       (let ((d (args:get-arg "-dumpmode")))
+	       (dmode       (let ((d (args:get-arg "-dumpmode"))) ;; json, sexpr
 			      (if d (string->symbol d) #f)))
 	       (data        (make-hash-table))
 	       (fields-spec (if (args:get-arg "-fields")
@@ -1079,7 +1111,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (begin
 		      (debug:print-error 0 *default-log-port* "Invalid test fields specified: " (string-intersperse invalid-tests-spec ", "))
 		      (exit)))))
-
 	  ;; Each run
 	  (for-each 
 	   (lambda (run)
@@ -1110,7 +1141,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 							     'normal)
 				       '())))
 		     (case dmode
-		       ((json ods)
+		       ((json ods sexpr)
 			(if runs-spec
 			    (for-each 
 			     (lambda (field-name)
@@ -1143,7 +1174,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       
 		     (for-each 
 		      (lambda (test)
-		      	(handle-exceptions
+		      	(common:debug-handle-exceptions #f
 			 exn
 			 (begin
 			   (debug:print-error 0 *default-log-port* "Bad data in test record? " test)
@@ -1165,7 +1196,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 							"" 
 							(conc "(" itempath ")")))))
 			   (case dmode
-			     ((json ods)
+			     ((json ods sexpr)
 			      (if tests-spec
 				  (for-each
 				   (lambda (field-name)
@@ -1248,7 +1279,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				     first second))))
 			  tests))))))
 	   runs)
-	  (if (eq? dmode 'json)(json-write data))
+	  (case dmode
+	    ((json)  (json-write data))
+	    ((sexpr) (pp (common:to-alist data))))
 	  (let* ((metadat-fields (delete-duplicates
 				  (append keys '( "runname" "time" "owner" "pass_count" "fail_count" "state" "status" "comment" "id"))))
 		 (run-fields    '(
@@ -1321,7 +1354,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 									 (cons '()
 									       (cons run-fields tests)))))
 							   (begin
-							     (debug:print 0 *default-log-port* "WARNING: run " target "/" runname " appears to have no data")
+							     (debug:print 4 *default-log-port* "WARNING: run " target "/" runname " appears to have no data")
 							     ;; (pp rundat)
 							     '()))))
 						   runsdat)
@@ -1347,7 +1380,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  (create-directory tempdir #t)
 		  (ods:list->ods tempdir ouf sheets))))
 	  ;; (system (conc "rm -rf " tempdir))
-	  (set! *didsomething* #t))))
+	  (set! *didsomething* #t)
+          (set! *time-to-exit* #t)
+          ) ;; end if true branch (end of a let)
+        ) ;; end if
+    ) ;; end if -list-runs
 
 ;; Don't think I need this. Incorporated into -list-runs instead
 ;;
@@ -1384,55 +1421,59 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(args:get-arg "-rerun-clean")
 	(args:get-arg "-rerun-all")
 	(args:get-arg "-runtests"))
-    (general-run-call 
-     "-runall"
-     "run all tests"
-     (lambda (target runname keys keyvals)
-       (if (args:get-arg "-rerun-clean") ;; first set states/statuses correct
-	   (let ((states   (or (configf:lookup *configdat* "validvalues" "cleanrerun-states")
-			       "KILLREQ,KILLED,UNKNOWN,INCOMPLETE,STUCK,NOT_STARTED"))
-		 (statuses (or (configf:lookup *configdat* "validvalues" "cleanrerun-statuses")
-			       "FAIL,INCOMPLETE,ABORT,CHECK")))
-	     (hash-table-set! args:arg-hash "-preclean" #t)
-	     (runs:operate-on 'set-state-status
-			      target
-			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
-			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
-			      state:  states
-			      ;; status: statuses
-			      new-state-status: "NOT_STARTED,n/a")
-	     (runs:operate-on 'set-state-status
-			      target
-			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
-			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
-			      ;; state:  states
-			      status: statuses
-			      new-state-status: "NOT_STARTED,n/a")))
-       ;; RERUN ALL
-       (if (args:get-arg "-rerun-all") ;; first set states/statuses correct
-	   (begin
-	     (hash-table-set! args:arg-hash "-preclean" #t)
-	     (runs:operate-on 'set-state-status
-			      target
-			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
-			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
-			      state:  #f
-			      ;; status: statuses
-			      new-state-status: "NOT_STARTED,n/a")
-	     (runs:operate-on 'set-state-status
-			      target
-			      (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
-			      "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
-			      ;; state:  states
-			      status: #f
-			      new-state-status: "NOT_STARTED,n/a")))
-       (runs:run-tests target
-		       runname
-		       #f ;; (common:args-get-testpatt #f)
-		       ;; (or (args:get-arg "-testpatt")
-		       ;;     "%")
-		       user
-		       args:arg-hash))))
+    (let ((need-clean (or (args:get-arg "-rerun-clean")
+                          (args:get-arg "-rerun-all"))))
+      (general-run-call 
+       "-runall"
+       "run all tests"
+       (lambda (target runname keys keyvals)
+         (if (args:get-arg "-rerun-clean") ;; first set states/statuses correct
+             (let ((states   (or (configf:lookup *configdat* "validvalues" "cleanrerun-states")
+                                 "KILLREQ,KILLED,UNKNOWN,INCOMPLETE,STUCK,NOT_STARTED"))
+                   (statuses (or (configf:lookup *configdat* "validvalues" "cleanrerun-statuses")
+                                 "FAIL,INCOMPLETE,ABORT,CHECK")))
+               (hash-table-set! args:arg-hash "-preclean" #t)
+               (runs:operate-on 'set-state-status
+                                target
+                                (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+                                "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+                                state:  states
+                                ;; status: statuses
+                                new-state-status: "NOT_STARTED,n/a")
+               (runs:clean-cache target runname *toppath*)
+               (runs:operate-on 'set-state-status
+                                target
+                                (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+                                "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+                                ;; state:  states
+                                status: statuses
+                                new-state-status: "NOT_STARTED,n/a")))
+         ;; RERUN ALL
+         (if (args:get-arg "-rerun-all") ;; first set states/statuses correct
+             (begin
+               (hash-table-set! args:arg-hash "-preclean" #t)
+               (runs:operate-on 'set-state-status
+                                target
+                                (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+                                "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+                                state:  #f
+                                ;; status: statuses
+                                new-state-status: "NOT_STARTED,n/a")
+               (runs:clean-cache target runname *toppath*)
+               (runs:operate-on 'set-state-status
+                                target
+                                (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+                                "%" ;; (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+                                ;; state:  states
+                                status: #f
+                                new-state-status: "NOT_STARTED,n/a")))
+         (runs:run-tests target
+                         runname
+                         #f ;; (common:args-get-testpatt #f)
+                         ;; (or (args:get-arg "-testpatt")
+                         ;;     "%")
+                         user
+                         args:arg-hash)))))
 
 ;;======================================================================
 ;; run one test
@@ -1837,7 +1878,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
-      (let ((dbstruct (db:setup *toppath*)))
+      (let ((dbstruct (db:setup #f areapath: *toppath*)))
         (common:cleanup-db dbstruct))
       (set! *didsomething* #t)))
 
@@ -1896,7 +1937,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (let* ((toppath (launch:setup))
 	   (dbstruct (if (and toppath
                               (common:on-homehost?))
-                         (db:setup)
+                         (db:setup #t)
                          #f))) ;; make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
       (if *toppath*
 	  (cond
@@ -1985,7 +2026,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-import-megatest.db")
     (begin
       (db:multi-db-sync 
-       (db:setup)
+       (db:setup #f)
        'killservers
        'dejunk
        'adj-testids
@@ -1997,9 +2038,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-sync-to-megatest.db")
     (begin
       (db:multi-db-sync 
-       (db:setup)
+       (db:setup #f)
        'new2old
        )
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-sync-to")
+    (let ((toppath (launch:setup)))
+      (tasks:sync-to-postgres *configdat* (args:get-arg "-sync-to"))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-generate-html")
@@ -2014,11 +2060,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (not *didsomething*)
-    (debug:print 0 *default-log-port* help))
-;;(BB> "thread-join! watchdog")
+    (debug:print 0 *default-log-port* help)
+    (set! *time-to-exit* #t)
+    )
+;;(debug:print-info 13 *default-log-port* "thread-join! watchdog")
 
 ;; join the watchdog thread if it has been thread-start!ed  (it may not have been started in the case of a server that never enters running state)
 ;;   (symbols returned by thread-state: created ready running blocked suspended sleeping terminated dead)
+;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
 (if (thread? *watchdog*)
     (case (thread-state *watchdog*)
       ((ready running blocked sleeping terminated dead)

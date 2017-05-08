@@ -1,5 +1,5 @@
 
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2017, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -11,7 +11,6 @@
 (require-extension (srfi 18) extras tcp s11n)
 
 (use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest directory-utils posix-extras matchable)
-;; (use zmq)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
 
@@ -22,8 +21,6 @@
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 (declare (uses synchash))
 (declare (uses http-transport))
-(declare (uses rpc-transport))
-;;(declare (uses nmsg-transport))
 (declare (uses launch))
 (declare (uses daemon))
 
@@ -142,22 +139,25 @@
 ;;
 (define (server:logf-get-start-info logf)
   (let ((rx (regexp "^SERVER STARTED: (\\S+):(\\d+) AT ([\\d\\.]+)"))) ;; SERVER STARTED: host:port AT timesecs
-    (with-input-from-file
-	logf
-      (lambda ()
-	(let loop ((inl  (read-line))
-		   (lnum 0))
-	  (if (not (eof-object? inl))
-	      (let ((mlst (string-match rx inl)))
-		(if (not mlst)
-		    (if (< lnum 500) ;; give up if more than 500 lines of server log read
-			(loop (read-line)(+ lnum 1))
-			(list #f #f #f))
-		    (let ((dat  (cdr mlst)))
-		      (list (car dat) ;; host
-			    (string->number (cadr dat)) ;; port
-			    (string->number (caddr dat))))))
-	      (list #f #f #f)))))))
+    (handle-exceptions
+	exn
+	(list #f #f #f) ;; no idea what went wrong, call it a bad server
+      (with-input-from-file
+	  logf
+	(lambda ()
+	  (let loop ((inl  (read-line))
+		     (lnum 0))
+	    (if (not (eof-object? inl))
+		(let ((mlst (string-match rx inl)))
+		  (if (not mlst)
+		      (if (< lnum 500) ;; give up if more than 500 lines of server log read
+			  (loop (read-line)(+ lnum 1))
+			  (list #f #f #f))
+		      (let ((dat  (cdr mlst)))
+			(list (car dat) ;; host
+			      (string->number (cadr dat)) ;; port
+			      (string->number (caddr dat))))))
+		(list #f #f #f))))))))
 
 ;; get a list of servers with all relevant data
 ;; ( mod-time host port start-time pid )
@@ -169,7 +169,7 @@
     ;; otherwise attempt to create the logs dir and then
     ;; continue
     (if (if (directory-exists? (conc areapath "/logs"))
-	    #t
+	    '()
 	    (if (file-write-access? areapath)
 		(begin
 		  (condition-case
@@ -177,7 +177,7 @@
 		    (exn (i/o file)(debug:print 0 *default-log-port* "ERROR: Cannot create directory at " (conc areapath "/logs")))
 		    (exn ()(debug:print 0 *default-log-port* "ERROR: Unknown error attemtping to get server list.")))
 		  (directory-exists? (conc areapath "/logs")))
-		#f))
+		'()))
 	(let* ((server-logs   (glob (conc areapath "/logs/server-*.log")))
 	       (num-serv-logs (length server-logs)))
 	  (if (null? server-logs)
@@ -185,12 +185,15 @@
 	      (let loop ((hed  (car server-logs))
 			 (tal  (cdr server-logs))
 			 (res '()))
-		(let* ((mod-time  (file-modification-time hed))
+		(let* ((mod-time  (handle-exceptions
+				      exn
+				      (current-seconds) ;; 0
+				    (file-modification-time hed))) ;; default to *very* old so log gets ignored if deleted
 		       (down-time (- (current-seconds) mod-time))
 		       (serv-dat  (if (or (< num-serv-logs 10)
-				  	  (< down-time day-seconds))
-				     (server:logf-get-start-info hed)
-				     '())) ;; don't waste time processing server files not touched in the past day if there are more than ten servers to look at
+				  	  (< down-time 900)) ;; day-seconds))
+				      (server:logf-get-start-info hed)
+				      '())) ;; don't waste time processing server files not touched in the 15 minutes if there are more than ten servers to look at
 		       (serv-rec (cons mod-time serv-dat))
 		       (fmatch   (string-match fname-rx hed))
 		       (pid      (if fmatch (string->number (list-ref fmatch 2)) #f))
@@ -214,24 +217,31 @@
 ;; and servers should stick around for about two hours or so.
 ;;
 (define (server:get-best srvlst)
-  (let ((now (current-seconds)))
-    (sort
-     (filter (lambda (rec)
-	       (let ((start-time (list-ref rec 3))
-		     (mod-time   (list-ref rec 0)))
-		 ;; (print "start-time: " start-time " mod-time: " mod-time)
-		 (and start-time mod-time
-		      (> (- now start-time) 0)    ;; been running at least 0 seconds
-		      (< (- now mod-time)   16)   ;; still alive - file touched in last 16 seconds
-		      (< (- now start-time) 
-                         (+ (- (string->number (or (configf:lookup *configdat* "server" "runtime") "3600"))
-                               180)
-                            (random 360))) ;; under one hour running time +/- 180
-		      )))
-	     srvlst)
-     (lambda (a b)
-       (< (list-ref a 3)
-	  (list-ref b 3))))))
+  (let* ((nums (server:get-num-servers))
+	 (now  (current-seconds))
+	 (slst (sort
+		(filter (lambda (rec)
+			  (if (and (list? rec)
+				   (> (length rec) 2))
+			      (let ((start-time (list-ref rec 3))
+				    (mod-time   (list-ref rec 0)))
+				;; (print "start-time: " start-time " mod-time: " mod-time)
+				(and start-time mod-time
+				     (> (- now start-time) 0)    ;; been running at least 0 seconds
+				     (< (- now mod-time)   16)   ;; still alive - file touched in last 16 seconds
+				     (< (- now start-time) 
+					(+ (- (string->number (or (configf:lookup *configdat* "server" "runtime") "3600"))
+					      180)
+					   (random 360))) ;; under one hour running time +/- 180
+				     ))
+			      #f))
+			srvlst)
+		(lambda (a b)
+		  (< (list-ref a 3)
+		     (list-ref b 3))))))
+    (if (> (length slst) nums)
+	(take slst nums)
+	slst)))
 
 (define (server:get-first-best areapath)
   (let ((srvrs (server:get-best (server:get-list areapath))))
@@ -239,6 +249,16 @@
 	     (not (null? srvrs)))
 	(car srvrs)
 	#f)))
+
+(define (server:get-rand-best areapath)
+  (let ((srvrs (server:get-best (server:get-list areapath))))
+    (if (and (list? srvrs)
+	     (not (null? srvrs)))
+	(let* ((len (length srvrs))
+	       (idx (random len)))
+	  (list-ref srvrs idx))
+	#f)))
+
 
 (define (server:record->url servr)
   (match-let (((mod-time host port start-time pid)
@@ -256,47 +276,58 @@
 ;; kind start up of servers, wait 40 seconds before allowing another server for a given
 ;; run-id to be launched
 (define (server:kind-run areapath)
-  (let* ((last-run-dat (hash-table-ref/default *server-kind-run* areapath '(0 0))) ;; callnum, whenrun
-         (call-num     (car last-run-dat))
-         (when-run     (cadr last-run-dat))
-         (run-delay    (+ (case call-num
-                            ((0)    0)
-                            ((1)   20)
-                            ((2)  300)
-                            (else 600))
-                          (random 5)))) ;; add a small random number just in case a lot of jobs hit the work hosts simultaneously
-    (if	(> (- (current-seconds) when-run) run-delay)
-        (server:run areapath))
-    (hash-table-set! *server-kind-run* areapath (list (+ call-num 1)(current-seconds)))))
+  (if (not (server:check-if-running areapath)) ;; why try if there is already a server running?
+      (let* ((last-run-dat (hash-table-ref/default *server-kind-run* areapath '(0 0))) ;; callnum, whenrun
+	     (call-num     (car last-run-dat))
+	     (when-run     (cadr last-run-dat))
+	     (run-delay    (+ (case call-num
+				((0)    0)
+				((1)   20)
+				((2)  300)
+				(else 600))
+			      (random 5)))   ;; add a small random number just in case a lot of jobs hit the work hosts simultaneously
+	     (lock-file    (conc areapath "/logs/server-start.lock")))
+	(if	(> (- (current-seconds) when-run) run-delay)
+		(begin
+		  (common:simple-file-lock-and-wait lock-file expire-time: 15)
+		  (server:run areapath)
+		  (thread-sleep! 5) ;; don't release the lock for at least a few seconds
+		  (common:simple-file-release-lock lock-file)))
+	(hash-table-set! *server-kind-run* areapath (list (+ call-num 1)(current-seconds))))))
 
 (define (server:start-and-wait areapath #!key (timeout 60))
   (let ((give-up-time (+ (current-seconds) timeout)))
-    (let loop ((server-url (server:check-if-running areapath)))
+    (let loop ((server-url (server:check-if-running areapath))
+	       (try-num    0))
       (if (or server-url
 	      (> (current-seconds) give-up-time)) ;; server-url will be #f if no server available.
 	  server-url
 	  (let ((num-ok (length (server:get-best (server:get-list areapath)))))
-	    (if (< num-ok 1) ;; if there are no decent candidates for servers then try starting a new one
+	    (if (and (> try-num 0)  ;; first time through simply wait a little while then try again
+		     (< num-ok 1))  ;; if there are no decent candidates for servers then try starting a new one
 		(server:kind-run areapath))
 	    (thread-sleep! 5)
-	    (loop (server:check-if-running areapath)))))))
+	    (loop (server:check-if-running areapath)
+		  (+ try-num 1)))))))
 
 (define server:try-running server:run) ;; there is no more per-run servers ;; REMOVE ME. BUG.
 
-(define (server:dotserver-age-seconds areapath)
-  (let ((server-file (conc areapath "/.server")))
-    (begin
-      (handle-exceptions
-       exn
-       #f
-       (- (current-seconds)
-          (file-modification-time server-file))))))
-    
+(define (server:get-num-servers #!key (numservers 2))
+  (let ((ns (string->number
+	     (or (configf:lookup *configdat* "server" "numservers") "notanumber"))))
+    (or ns numservers)))
+
 ;; no longer care if multiple servers are started by accident. older servers will drop off in time.
 ;;
-(define (server:check-if-running areapath)
-  (let* ((servers       (server:get-best (server:get-list areapath))))
-    (if (null? servers)
+(define (server:check-if-running areapath) ;;  #!key (numservers "2"))
+  (let* ((ns            (server:get-num-servers))
+	 (servers       (server:get-best (server:get-list areapath))))
+    ;; (print "servers: " servers " ns: " ns)
+    (if (or (and servers
+		 (null? servers))
+	    (not servers)
+	    (and (list? servers)
+		 (< (length servers) (random ns)))) ;; somewhere between 0 and numservers
         #f
         (let loop ((hed (car servers))
                    (tal (cdr servers)))
@@ -383,6 +414,8 @@
 	     (else       #f))
 	   (loop (read-line) inl))))))
 
+;; NOT USED (well, ok, reference in rpc-transport but otherwise not used).
+;;
 (define (server:login toppath)
   (lambda (toppath)
     (set! *db-last-access* (current-seconds)) ;; might not be needed.
@@ -390,13 +423,27 @@
 	#t
 	#f)))
 
+;; timeout is in hours
 (define (server:get-timeout)
   (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
     (if (and (string? tmo)
 	     (string->number tmo))
 	(* 60 60 (string->number tmo))
 	;; (* 3 24 60 60) ;; default to three days
-	(* 60 1)         ;; default to one minute
-	;; (* 60 60 25)      ;; default to 25 hours
+	;;(* 60 60 1)     ;; default to one hour
+	(* 60 5)          ;; default to five minutes
 	)))
+
+(define (server:get-best-guess-address hostname)
+  (let ((res #f))
+    (for-each 
+     (lambda (adr)
+       (if (not (eq? (u8vector-ref adr 0) 127))
+	   (set! res adr)))
+     ;; NOTE: This can fail when there is no mention of the host in /etc/hosts. FIXME
+     (vector->list (hostinfo-addresses (hostname->hostinfo hostname))))
+    (string-intersperse 
+     (map number->string
+	  (u8vector->list
+	   (if res res (hostname->ip hostname)))) ".")))
 

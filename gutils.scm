@@ -22,6 +22,15 @@
 	 (delta (map (lambda (a b)(abs (- a b))) c1 c2)))
     (null? (filter (lambda (x)(> x 3)) delta))))
 
+(define gutils:colors
+  '((PASS . "70 249 73")
+    (FAIL . "253 33 49")
+    (SKIP . "230 230 0")))
+
+(define (gutils:get-color-spec effective-state)
+  (or (alist-ref effective-state gutils:colors)
+      (alist-ref 'FAIL gutils:colors)))
+ 
 (define (gutils:get-color-for-state-status state status);; #!key (get-label #f))
   ;; ((if get-label cadr car)
   (case (string->symbol state)
@@ -29,13 +38,14 @@
      (case (string->symbol status)
        ((PASS)        (list "70  249 73" status))
        ((WARN WAIVED) (list "255 172 13" status))
-       ((SKIP)        (list "230 230 0" status))
+       ((SKIP)        (list (gutils:get-color-spec 'SKIP) status))
+       ((ABORT)       (list "198 36 166" status))
        (else (list "253 33 49" status))))
     ((ARCHIVED)
      (case (string->symbol status)
        ((PASS)        (list "70  170 73" status))
        ((WARN WAIVED) (list "200 130 13" status))
-       ((SKIP)        (list "180 180 0" status))
+       ((SKIP)        (list (gutils:get-color-spec 'SKIP) status))
        (else (list "180 33 49" status))))
     ;;      (if (equal? status "PASS")
     ;;	  '("70 249 73" "PASS")
@@ -49,7 +59,9 @@
     ((RUNNING)          (list "9 131 232"    state))
     ((KILLREQ)          (list "39 82 206"    state))
     ((KILLED)           (list "234 101 17"   state))
-    ((NOT_STARTED)      (list "240 240 240"  state))
+    ((NOT_STARTED)      (case (string->symbol status)
+			  ((CHECK)(list (gutils:get-color-spec 'SKIP) state))
+			  (else   (list "240 240 240"                 state))))
     ;; for xor mode below
     ;;
     ((CLEAN)

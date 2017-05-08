@@ -9,8 +9,7 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking format md5 message-digest srfi-18)
-(import (prefix sqlite3 sqlite3:))
+(use (prefix sqlite3 sqlite3:) srfi-1 posix regex regex-case srfi-69 format md5 message-digest srfi-18)
 
 (declare (unit archive))
 (declare (uses db))
@@ -113,7 +112,7 @@
 	 (test-groups  (make-hash-table)) ;; these two (disk and test groups) could be combined nicely
 	 (bup-exe      (or (configf:lookup *configdat* "archive" "bup") "bup"))
 	 (compress     (or (configf:lookup *configdat* "archive" "compress") "9"))
-	 (linktree     (configf:lookup *configdat* "setup" "linktree")))
+	 (linktree     (common:get-linktree))) ;; (configf:lookup *configdat* "setup" "linktree")))
 
     (if (not archive-dir) ;; no archive disk found, this is fatal
 	(begin
@@ -213,7 +212,7 @@
   ;; allocate as needed should a disk fill up
   ;;
   (let* ((bup-exe      (or (configf:lookup *configdat* "archive" "bup") "bup"))
-	 (linktree     (configf:lookup *configdat* "setup" "linktree")))
+	 (linktree     (common:get-linktree))) ;; (configf:lookup *configdat* "setup" "linktree")))
 
     ;; from the test info bin the path to the test by stem
     ;;

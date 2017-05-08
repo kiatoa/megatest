@@ -101,20 +101,20 @@
 
 (define (portlogger:get-prev-used-port db)
   (handle-exceptions
-   exn
-   (begin
-     (debug:print 0 *default-log-port* "EXCEPTION: portlogger database probably overloaded or unreadable. If you see this message again remove /tmp/.$USER-portlogger.db")
-     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-     (debug:print 0 *default-log-port* "exn=" (condition->list exn))
-     (print-call-chain (current-error-port))
-     (debug:print 0 *default-log-port* "Continuing anyway.")
-     #f)
-   (sqlite3:fold-row
-    (lambda (var curr)
-      (or curr var curr))
-    #f
-    db
-    "SELECT (port) FROM ports WHERE state='released' LIMIT 1;")))
+      exn
+      (begin
+	(debug:print 0 *default-log-port* "EXCEPTION: portlogger database probably overloaded or unreadable. If you see this message again remove /tmp/.$USER-portlogger.db")
+	(debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+	(debug:print 0 *default-log-port* "exn=" (condition->list exn))
+	(print-call-chain (current-error-port))
+	(debug:print 0 *default-log-port* "Continuing anyway.")
+	#f)
+    (sqlite3:fold-row
+     (lambda (var curr)
+       (or curr var curr))
+     #f
+     db
+     "SELECT (port) FROM ports WHERE state='released' LIMIT 1;")))
 
 (define (portlogger:find-port db)
   (let* ((lowport (let ((val (configf:lookup *configdat* "server" "lowport")))

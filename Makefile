@@ -2,17 +2,17 @@
 # rm <files>.o ; make install CSCOPTS='-profile' ; ... ;  chicken-profile | less
 
 PREFIX=$(PWD)
-CSCOPTS= 
+CSCOPTS=
 INSTALL=install
 SRCFILES = common.scm items.scm launch.scm \
    ods.scm runconfig.scm server.scm configf.scm \
    db.scm keys.scm margs.scm megatest-version.scm \
    process.scm runs.scm tasks.scm tests.scm genexample.scm \
-   http-transport.scm filedb.scm \
+   http-transport.scm filedb.scm tdb.scm \
    client.scm synchash.scm daemon.scm mt.scm \
    ezsteps.scm lock-queue.scm sdb.scm \
-   rmt.scm api.scm tdb.scm rpc-transport.scm \
-   portlogger.scm archive.scm env.scm diff-report.scm
+   rmt.scm api.scm \
+   portlogger.scm archive.scm env.scm diff-report.scm cgisetup/models/pgdb.scm
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
@@ -40,7 +40,7 @@ ARCHSTR=$(shell lsb_release -sr)
 
 PNGFILES = $(shell cd docs/manual;ls *png)
 
-all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard 
+all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut ndboard
 
 mtest: $(OFILES) readline-fix.scm megatest.o
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
@@ -51,6 +51,9 @@ dboard : $(OFILES) $(GOFILES) dashboard.scm
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
 	csc $(CSCOPTS) $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
 
+mtut: $(OFILES) mtut.scm
+	csc $(CSCOPTS) $(OFILES) mtut.scm -o mtut
+
 # install documentation to $(PREFIX)/docs
 # DOES NOT REBUILD DOCS
 #
@@ -58,6 +61,10 @@ $(PREFIX)/share/docs/megatest_manual.html : docs/manual/megatest_manual.html
 	mkdir -p $(PREFIX)/share/docs
 	$(INSTALL) docs/manual/megatest_manual.html $(PREFIX)/share/docs/megatest_manual.html
 	for png in $(PNGFILES);do $(INSTALL) docs/manual/$$png $(PREFIX)/share/docs/$$png;done
+
+$(PREFIX)/share/db/mt-pg.sql : mt-pg.sql
+	mkdir -p $(PREFIX)/share/db
+	$(INSTALL) mt-pg.sql $(PREFIX)/share/db/mt-pg.sql
 
 #multi-dboard : multi-dboard.scm $(OFILES) $(GOFILES)
 #	csc $(CSCOPTS) $(OFILES) $(GOFILES) multi-dboard.scm -o multi-dboard
@@ -103,7 +110,14 @@ $(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard utils/mk_wrapper
 	utils/mk_wrapper $(PREFIX) ndboard $(PREFIX)/bin/newdashboard
 	chmod a+x $(PREFIX)/bin/newdashboard
 
-#$(PREFIX)/bin/.$(ARCHSTR)/mdboard : multi-dboard
+$(PREFIX)/bin/.$(ARCHSTR)/mtut : mtut
+	$(INSTALL) mtut $(PREFIX)/bin/.$(ARCHSTR)/mtut
+
+$(PREFIX)/bin/mtutil : $(PREFIX)/bin/.$(ARCHSTR)/mtut utils/mk_wrapper
+	utils/mk_wrapper $(PREFIX) mtut $(PREFIX)/bin/mtutil
+	chmod a+x $(PREFIX)/bin/mtutil
+
+# $(PREFIX)/bin/.$(ARCHSTR)/mdboard : multi-dboard
 #	$(INSTALL) multi-dboard $(PREFIX)/bin/.$(ARCHSTR)/mdboard
 
 # $(PREFIX)/bin/mdboard : $(PREFIX)/bin/.$(ARCHSTR)/mdboard  utils/mk_wrapper
@@ -180,7 +194,8 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
 	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/viewscreen $(PREFIX)/bin/mt_xterm \
-	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun
+	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun $(PREFIX)/bin/mtutil \
+          $(PREFIX)/share/db/mt-pg.sql $(PREFIX)/bin/.$(ARCHSTR)/ndboard $(PREFIX)/bin/newdashboard
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)
