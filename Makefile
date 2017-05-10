@@ -14,6 +14,9 @@ SRCFILES = common.scm items.scm launch.scm \
    rmt.scm api.scm tdb.scm rpc-transport.scm \
    portlogger.scm archive.scm env.scm diff-report.scm cgisetup/models/pgdb.scm
 
+# module source files
+MSRCFILES = ftail.scm
+
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
 dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
@@ -24,6 +27,12 @@ GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm gutils.scm dcommon.scm t
 
 OFILES   = $(SRCFILES:%.scm=%.o)
 GOFILES  = $(GUISRCF:%.scm=%.o)
+
+MOFILES = $(addprefix mofiles/,$(MSRCFILES:%.scm=%.o))
+
+mofiles/%.o : %.scm
+	mkdir -p mofiles
+	csc $(CSCOPTS) -J -c $< -o mofiles/$*.o
 
 ADTLSCR=mt_laststep mt_runstep mt_ezstep
 HELPERS=$(addprefix $(PREFIX)/bin/,$(ADTLSCR))
@@ -42,11 +51,11 @@ PNGFILES = $(shell cd docs/manual;ls *png)
 
 all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut ndboard
 
-mtest: $(OFILES) readline-fix.scm megatest.o
-	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
+mtest: $(OFILES) readline-fix.scm megatest.o $(MOFILES)
+	csc $(CSCOPTS) $(OFILES) $(MOFILES) megatest.o -o mtest
 
-dboard : $(OFILES) $(GOFILES) dashboard.scm
-	csc $(CSCOPTS) $(OFILES) dashboard.scm $(GOFILES) -o dboard
+dboard : $(OFILES) $(GOFILES) dashboard.scm $(MOFILES)
+	csc $(CSCOPTS) $(OFILES) dashboard.scm $(GOFILES) $(MOFILES) -o dboard
 
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
 	csc $(CSCOPTS) $(OFILES) $(GOFILES) newdashboard.scm -o ndboard

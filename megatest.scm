@@ -46,6 +46,8 @@
 (declare (uses tasks)) ;; only used for debugging.
 (declare (uses env))
 (declare (uses diff-report))
+(declare (uses ftail))
+(import ftail)
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
