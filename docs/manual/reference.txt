@@ -69,7 +69,9 @@ VAR1 VAL2
 
 Can use either wildcard of "%" or a regular expression:
 
+-------------------------
 [/abc.*def/]
+-------------------------
 
 Disk Space Checks
 ^^^^^^^^^^^^^^^^^
@@ -497,6 +499,29 @@ COMPLETED/ xterm -e bash -s --
 -----------------
 
 NOTE: There is a trailing space after the --
+
+There are a number of environment variables available to the trigger script
+but since triggers can be called in various contexts not all variables are
+available at all times. The trigger script should check for the variable and
+fail gracefully if it doesn't exist.
+
+.Environment variables visible to the trigger script
+[width="90%",cols="^,2m",frame="topbot",options="header"]
+|======================
+|Variable             | Purpose            
+| MT_TEST_RUN_DIR     | The directory where Megatest ran this test                   
+| MT_CMDINFO          | Encoded command data for the test                   
+| MT_DEBUG_MODE       | Used to pass the debug mode to nested calls to Megatest                   
+| MT_RUN_AREA_HOME    | Megatest home area 
+| MT_TESTSUITENAME    | The name of this testsuite or area                   
+| MT_TEST_NAME        | The name of this test
+| MT_ITEM_INFO        | The variable and values for the test item
+| MT_MEGATEST         | Which Megatest binary is being used by this area
+| MT_TARGET           | The target variable values, separated by '/'
+| MT_LINKTREE         | The base of the link tree where all run tests can be found
+| MT_ITEMPATH         | The values of the item path variables, separated by '/'
+| MT_RUNNAME          | The name of the run
+|======================
 
 
 Override the Toplevel HTML File
