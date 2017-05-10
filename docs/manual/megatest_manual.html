@@ -1417,11 +1417,31 @@ A a b c
 B d e f</pre>
 </div></div>
 <div class="paragraph"><p>Then the config file would effectively appear to contain an items section
-exactly like the output from the script. This is extremely useful when
-dynamically creating items, itemstables and other config structures. You can
-see the expansion of the call by looking in the cached files (look in your
-linktree for megatest.config and runconfigs.config cache files and in your
-test run areas for the expanded and cached testconfig).</p></div>
+exactly like the output from the script. This is useful when dynamically
+creating items, itemstables and other config structures. You can see the
+expansion of the call by looking in the cached files (look in your linktree
+for megatest.config and runconfigs.config cache files and in your test run
+areas for the expanded and cached testconfig).</p></div>
+<div class="paragraph"><p>Wildcards and regexes in Targets</p></div>
+<div class="listingblock">
+<div class="content monospaced">
+<pre>[a/2/b]
+VAR1 VAL1
+
+[a/%/b]
+VAR1 VAL2</pre>
+</div></div>
+<div class="paragraph"><p>Will result in:</p></div>
+<div class="listingblock">
+<div class="content monospaced">
+<pre>[a/2/b]
+VAR1 VAL2</pre>
+</div></div>
+<div class="paragraph"><p>Can use either wildcard of "%" or a regular expression:</p></div>
+<div class="listingblock">
+<div class="content monospaced">
+<pre>[/abc.*def/]</pre>
+</div></div>
 <div class="sect3">
 <h4 id="_disk_space_checks">Disk Space Checks</h4>
 <div class="paragraph"><p>Some parameters you can put in the [setup] section of megatest.config:</p></div>
@@ -1925,6 +1945,74 @@ COMPLETED/ xterm -e bash -s --</pre>
 <td class="content">There is a trailing space after the --</td>
 </tr></table>
 </div>
+<div class="paragraph"><p>There are a number of environment variables available to the trigger script
+but since triggers can be called in various contexts not all variables are
+available at all times. The trigger script should check for the variable and
+fail gracefully if it doesn&#8217;t exist.</p></div>
+<table class="tableblock frame-topbot grid-all"
+style="
+width:90%;
+">
+<caption class="title">Table 4. Environment variables visible to the trigger script</caption>
+<col style="width:33%;">
+<col style="width:66%;">
+<thead>
+<tr>
+<th class="tableblock halign-center valign-top" >Variable             </th>
+<th class="tableblock halign-left valign-top" > Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">MT_TEST_RUN_DIR</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">The directory where Megatest ran this test</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">MT_CMDINFO</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Encoded command data for the test</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">MT_DEBUG_MODE</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Used to pass the debug mode to nested calls to Megatest</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">MT_RUN_AREA_HOME</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Megatest home area</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">MT_TESTSUITENAME</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">The name of this testsuite or area</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">MT_TEST_NAME</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">The name of this test</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">MT_ITEM_INFO</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">The variable and values for the test item</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">MT_MEGATEST</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">Which Megatest binary is being used by this area</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">MT_TARGET</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">The target variable values, separated by <em>/</em></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">MT_LINKTREE</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">The base of the link tree where all run tests can be found</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">MT_ITEMPATH</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">The values of the item path variables, separated by <em>/</em></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top" ><p class="tableblock">MT_RUNNAME</p></td>
+<td class="tableblock halign-left valign-top" ><p class="tableblock monospaced">The name of the run</p></td>
+</tr>
+</tbody>
+</table>
 </div>
 <div class="sect2">
 <h3 id="_override_the_toplevel_html_file">Override the Toplevel HTML File</h3>
@@ -2013,7 +2101,7 @@ megatest -envdelta original-munged -dumpmode ini -o modified.config</pre>
 style="
 width:70%;
 ">
-<caption class="title">Table 4. API Keys Related Calls</caption>
+<caption class="title">Table 5. API Keys Related Calls</caption>
 <col style="width:14%;">
 <col style="width:28%;">
 <col style="width:28%;">
@@ -2065,7 +2153,7 @@ width:70%;
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br>
-Last updated 2016-12-12 13:03:08 PST
+Last updated 2017-04-12 13:34:13 PDT
 </div>
 </div>
 </body>
