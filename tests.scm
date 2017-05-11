@@ -1562,7 +1562,7 @@ EOF
 	   (debug:print-error 0 *default-log-port* "tried for over a minute to update meta info and failed. Giving up")
 	   (debug:print 0 *default-log-port* "EXCEPTION: database probably overloaded or unreadable.")
 	   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	   (print "exn=" (condition->list exn))
+	   (debug:print 5 *default-log-port* "exn=" (condition->list exn))
 	   (debug:print 0 *default-log-port* " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
 	   (print-call-chain (current-error-port))))
      (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)

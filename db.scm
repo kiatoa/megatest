@@ -615,7 +615,7 @@
      (debug:print 0 *default-log-port* "EXCEPTION: database probably overloaded or unreadable in db:sync-tables.")
      (print-call-chain (current-error-port))
      (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-     (print "exn=" (condition->list exn))
+     (debug:print 5 *default-log-port* "exn=" (condition->list exn))
      (debug:print 0 *default-log-port* " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
      (debug:print 0 *default-log-port* " src db:  " (db:dbdat-get-path fromdb))
      (for-each (lambda (dbdat)
@@ -1040,7 +1040,7 @@
        (else
 	(debug:print 0 *default-log-port* "EXCEPTION: database probably overloaded or unreadable.")
 	(debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	(print "exn=" (condition->list exn))
+	(debug:print 5 *default-log-port* "exn=" (condition->list exn))
 	(debug:print 0 *default-log-port* " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
 	(print-call-chain (current-error-port))
 	(thread-sleep! sleep-time)
