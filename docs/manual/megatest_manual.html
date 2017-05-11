@@ -803,14 +803,13 @@ qualification.</p></div>
 <div class="sect1">
 <h2 id="_megatest_design_philosophy">Megatest Design Philosophy</h2>
 <div class="sectionbody">
-<div class="paragraph"><p>Megatest is intended to provide the minimum needed resources to make
-writing a suite of tests and tasks for implementing continuous build
-for software, design engineering or process control (via owlfs for
-example) without being specialized for any specific problem
-space. Megatest in of itself does not know what constitutes a PASS or
-FAIL of a test or task. In most cases megatest is best used in
-conjunction with logpro or a similar tool to parse, analyze and decide
-on the test outcome.</p></div>
+<div class="paragraph"><p>Megatest is a distributed system intended to provide the minimum needed
+resources to make writing a suite of tests and tasks for implementing
+continuous build for software, design engineering or process control (via
+owlfs for example) without being specialized for any specific problem
+space. Megatest in of itself does not know what constitutes a PASS or FAIL
+of a test or task. In most cases megatest is best used in conjunction with
+logpro or a similar tool to parse, analyze and decide on the test outcome.</p></div>
 <div class="ulist"><ul>
 <li>
 <p>
@@ -878,20 +877,20 @@ sqlite3 database.</p></div>
 <li>
 <p>
 Reduce load on the file system. Sqlite3 files on network filesystem can be
-  a burden.
+  a burden. <span class="green">[DONE]</span>
 </p>
 </li>
 <li>
 <p>
 Reduce number of servers and frequency of start/stop. This is mostly an
-  issue of clutter but also a reduction in "moving parts".
+  issue of clutter but also a reduction in "moving parts". <span class="green">[DONE]</span>
 </p>
 </li>
 <li>
 <p>
 Coalesce activities to a single home host where possible. Give the user
   feedback that they have started the dashboard on a host other than the
-  home host.
+  home host. <span class="green">[DONE]</span>
 </p>
 </li>
 <li>
@@ -907,31 +906,31 @@ Reduce number of processes involved in managing running tests.
 <li>
 <p>
 ACID compliant db will be on /tmp and synced to megatest.db with a five
-  second max delay.
+  second max delay. <span class="green">[DONE]</span>
 </p>
 </li>
 <li>
 <p>
 Read/writes to db for processes on homehost will go direct to /tmp
-  megatest.db file.
+  megatest.db file. <span class="green">[DONE]</span>
 </p>
 </li>
 <li>
 <p>
 Read/wites fron non-homehost processes will go through one server. Bulk
   reads (e.g. for dashboard or list-runs) will be cached on the current host
-  in /tmp and synced from the home megatest.db in the testsuite area.
+  in /tmp and synced from the home megatest.db in the testsuite area. <span class="green">[DONE]</span>
 </p>
 </li>
 <li>
 <p>
-Db syncs rely on the target db file timestame minus some margin.
+Db syncs rely on the target db file timestame minus some margin. <span class="green">[DONE]</span>
 </p>
 </li>
 <li>
 <p>
 Since bulk reads do not use the server we can switch to simple RPC for the
-  network transport.
+  network transport. <span class="green">[DONE]</span>
 </p>
 </li>
 <li>
@@ -949,7 +948,7 @@ Test running manager process extended to manage multiple running tests.
 <div class="olist arabic"><ol class="arabic">
 <li>
 <p>
-Switch to inmem db with fast sync to on disk db&#8217;s [DONE]
+Switch to inmem db with fast sync to on disk db&#8217;s <span class="green">[DONE]</span>
 </p>
 </li>
 <li>
@@ -959,17 +958,18 @@ Server polls tasks table for next action
 <div class="olist loweralpha"><ol class="loweralpha">
 <li>
 <p>
-Task table used for tracking runner process [DONE]
+Task table used for tracking runner process <span class="red">[Replaced by mtutil]</span>
 </p>
 </li>
 <li>
 <p>
-Task table used for jobs to run
+Task table used for jobs to run <span class="red">[Replaced by mtutil]</span>
 </p>
 </li>
 <li>
 <p>
-Task table used for queueing runner actions (remove runs, cleanRunExecute, etc)
+Task table used for queueing runner actions (remove runs,
+   cleanRunExecute, etc)  <span class="red">[Replaced by mtutil</span>]
 </p>
 </li>
 </ol></div>
@@ -2153,7 +2153,7 @@ width:70%;
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br>
-Last updated 2017-04-12 13:34:13 PDT
+Last updated 2017-05-10 08:25:49 PDT
 </div>
 </div>
 </body>
