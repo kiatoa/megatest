@@ -226,10 +226,19 @@
 (define (common:set-last-run-version)
   (rmt:set-var "MEGATEST_VERSION" (common:version-signature)))
 
+;; postive number if megatest version > db version
+;; negative number if megatest version < db version
+(define (common:version-db-delta)
+         (- megatest-version (common:get-last-run-version-number)))
+
 (define (common:version-changed?)
   (not (equal? (common:get-last-run-version)
-	       (common:version-signature))))
+               (common:version-signature))))
 
+(define (common:api-changed?)
+  (not (equal? (substring (->string megatest-version) 0 4)
+               (substring (common:get-last-run-version) 0 4))))
+  
 ;; Move me elsewhere ...
 ;; RADT => Why do we meed the version check here, this is called only if version misma
 ;;
@@ -244,7 +253,7 @@
    ;; 'old2new
    'new2old
    )
-  (if (common:version-changed?)
+  (if (common:api-changed?)
       (common:set-last-run-version)))
 
 ;; Rotate logs, logic: 
@@ -287,7 +296,7 @@
 ;;
 (define (common:exit-on-version-changed)
   (if (common:on-homehost?)
-      (if (common:version-changed?)
+      (if (common:api-changed?)
 	  (let* ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config"))
                 (dbfile (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.db"))
                 (read-only (not (file-write-access? dbfile)))
