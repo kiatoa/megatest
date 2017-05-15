@@ -1178,7 +1178,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 exn
 			 (begin
 			   (debug:print-error 0 *default-log-port* "Bad data in test record? " test)
-			   (print "exn=" (condition->list exn))
+			   (debug:print-error 5 *default-log-port* "exn=" (condition->list exn))
 			   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 			   (print-call-chain (current-error-port)))
 			 (let* ((test-id      (if (member "id"           tests-spec)(get-value-by-fieldname test test-field-index "id"          ) #f)) ;; (db:test-get-id         test))

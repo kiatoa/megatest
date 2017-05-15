@@ -38,7 +38,7 @@
 	 (begin
 	   (print-call-chain (current-error-port))
 	   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	   (debug:print 0 *default-log-port* " exn=" (condition->list exn))
+	   (debug:print 5 *default-log-port* " exn=" (condition->list exn))
 	   (debug:print 0 *default-log-port* "tasks:wait-on-journal failed. Continuing on, you can ignore this call-chain")
 	   #t) ;; if stuff goes wrong just allow it to move on
 	 (let loop ((journal-exists (file-exists? fullpath))
@@ -89,13 +89,13 @@
 	   (begin
 	     (print-call-chain (current-error-port))
 	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 *default-log-port* " exn=" (condition->list exn))
+	     (debug:print 5 *default-log-port* " exn=" (condition->list exn))
 	     (thread-sleep! 1)
 	     (tasks:open-db numretries (- numretries 1)))
 	   (begin
 	     (print-call-chain (current-error-port))
 	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 *default-log-port* " exn=" (condition->list exn))))
+	     (debug:print 5 *default-log-port* " exn=" (condition->list exn))))
        (let* ((dbpath        (db:dbfile-path )) ;; (tasks:get-task-db-path))
 	      (dbfile       (conc dbpath "/monitor.db"))
 	      (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
