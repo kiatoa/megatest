@@ -2321,10 +2321,34 @@
 ;; in common
 ;;======================================================================
 
-(define (common:with-queue-db mtconf proc)
-  (let* ((pktsdirs (configf:lookup mtconf "setup"  "pktsdirs"))
-	 (pktsdir  (if pktsdirs (car (string-split pktsdirs " ")) #f))
-	 (toppath  (configf:lookup mtconf "dyndat" "toppath"))
+(define common:pkt-spec
+  '((server . ((action    . a)
+	       (pid       . d)
+	       (ipaddr    . i)
+	       (port      . p)))
+    			  
+    (test   . ((cpuuse    . c)
+	       (diskuse   . d)
+	       (item-path . i)
+	       (runname   . r)
+	       (state     . s)
+	       (target    . t)
+	       (status    . u)))))
+
+(define (common:get-pkts-dirs mtconf use-lt)
+  (let* ((pktsdirs-str (or (configf:lookup mtconf "setup"  "pktsdirs")
+			   (and use-lt
+				(conc *toppath* "/lt/.pkts"))))
+	 (pktsdirs  (if pktsdirs-str
+			(string-split pktsdirs-str " ")
+			#f)))
+    pktsdirs))
+
+(define (common:with-queue-db mtconf proc #!key (use-lt #f)(toppath-in #f))
+  (let* ((pktsdirs (common:get-pkts-dirs mtconf use-lt))
+	 (pktsdir  (if pktsdirs (car pktsdirs) #f))
+	 (toppath  (or (configf:lookup mtconf "scratchdat" "toppath")
+		       toppath-in))
 	 (pdbpath  (or (configf:lookup mtconf "setup"  "pdbpath") pktsdir)))
     (if (not (and  pktsdir toppath pdbpath))
 	(begin
@@ -2360,7 +2384,7 @@
 		       (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
 		       )))
 	       pkts))))
-      (string-split pktsdirs)))))
+      pktsdirs))))
 
 (define (common:get-pkt-alists pkts)
   (map (lambda (x)

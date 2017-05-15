@@ -310,10 +310,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (exit 1)))
 
 ;;======================================================================
-;; pkts
-;;======================================================================
-
-;;======================================================================
 ;; Runs
 ;;======================================================================
 
@@ -370,11 +366,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		     ;; pathenvvar: "MT_RUN_AREA_HOME"
 		     ))
 	 (mtconf    (if mtconfdat (car mtconfdat) #f)))
-    ;; we set some dynamic data in a section called "dyndata"
+    ;; we set some dynamic data in a section called "scratchdata"
     (if mtconf
 	(begin
-	  (configf:section-var-set! mtconf "dyndat" "toppath" start-dir)))
-    ;; (print "TOPPATH: " (configf:lookup mtconf "dyndat" "toppath"))
+	  (configf:section-var-set! mtconf "scratchdat" "toppath" start-dir)))
+    ;; (print "TOPPATH: " (configf:lookup mtconf "scratchdat" "toppath"))
     mtconfdat))
 
 
@@ -872,7 +868,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ((dispatch import rungen process)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
 	      (mtconf    (car mtconfdat))
-	      (toppath   (configf:lookup mtconf "dyndat" "toppath")))
+	      (toppath   (configf:lookup mtconf "scratchdat" "toppath")))
 	 (case (string->symbol *action*)
 	   ((process)  (begin
 			 (common:load-pkts-to-db mtconf)
