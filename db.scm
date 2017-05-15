@@ -615,7 +615,7 @@
      (debug:print 0 *default-log-port* "EXCEPTION: database probably overloaded or unreadable in db:sync-tables.")
      (print-call-chain (current-error-port))
      (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-     (print "exn=" (condition->list exn))
+     (debug:print 5 *default-log-port* "exn=" (condition->list exn))
      (debug:print 0 *default-log-port* " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
      (debug:print 0 *default-log-port* " src db:  " (db:dbdat-get-path fromdb))
      (for-each (lambda (dbdat)
@@ -1040,7 +1040,7 @@
        (else
 	(debug:print 0 *default-log-port* "EXCEPTION: database probably overloaded or unreadable.")
 	(debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	(print "exn=" (condition->list exn))
+	(debug:print 5 *default-log-port* "exn=" (condition->list exn))
 	(debug:print 0 *default-log-port* " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
 	(print-call-chain (current-error-port))
 	(thread-sleep! sleep-time)
@@ -3295,16 +3295,21 @@
                             ;;                               state-status-counts))
                             (all-curr-states      (common:special-sort  ;; worst -> best (sort of)
                                                    (delete-duplicates
-                                                    (cons state (map dbr:counts-state state-status-counts)))
+                                                    (if (not (equal? state "DELETED"))
+                                                        (cons state (map dbr:counts-state state-status-counts))
+                                                        (map dbr:counts-state state-status-counts)))
                                                    *common:std-states* >))
                             (all-curr-statuses    (common:special-sort  ;; worst -> best
                                                    (delete-duplicates
-                                                    (cons status (map dbr:counts-status state-status-counts)))
+                                                    (if (not (equal? state "DELETED"))
+                                                        (cons status (map dbr:counts-status state-status-counts))
+                                                        (map dbr:counts-status state-status-counts)))
                                                    *common:std-statuses* >))
 			    (non-completes     (filter (lambda (x)
 							 (not (equal? x "COMPLETED")))
 						       all-curr-states))
 			    (num-non-completes (length non-completes))
+                            
                             (newstate          (cond
 						((> running 0)
 						 "RUNNING") ;; anything running, call the situation running
@@ -3312,6 +3317,7 @@
 						 "COMPLETED") 
 						((> num-non-completes 0) ;;
 						 (car non-completes))  ;;  (remove (lambda (x)(equal? "COMPLETED" x)) all-curr-states)))
+                                                ;; only rollup DELETED if all DELETED
 						(else
 						 (car all-curr-states))))
 			                       ;; (if (> running 0)

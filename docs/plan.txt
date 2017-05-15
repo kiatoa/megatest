@@ -10,27 +10,27 @@ Goals
 ^^^^^
 
 . Reduce load on the file system. Sqlite3 files on network filesystem can be
-  a burden.
+  a burden. [green]#[DONE]#
 . Reduce number of servers and frequency of start/stop. This is mostly an
-  issue of clutter but also a reduction in "moving parts".
+  issue of clutter but also a reduction in "moving parts". [green]#[DONE]#
 . Coalesce activities to a single home host where possible. Give the user
   feedback that they have started the dashboard on a host other than the
-  home host.
+  home host. [green]#[DONE]#
 . Reduce number of processes involved in managing running tests.
 
 Changes Needed
 ^^^^^^^^^^^^^^
 
 . ACID compliant db will be on /tmp and synced to megatest.db with a five
-  second max delay.
+  second max delay. [green]#[DONE]#
 . Read/writes to db for processes on homehost will go direct to /tmp
-  megatest.db file.
+  megatest.db file. [green]#[DONE]#
 . Read/wites fron non-homehost processes will go through one server. Bulk
   reads (e.g. for dashboard or list-runs) will be cached on the current host
-  in /tmp and synced from the home megatest.db in the testsuite area.
-. Db syncs rely on the target db file timestame minus some margin.
+  in /tmp and synced from the home megatest.db in the testsuite area. [green]#[DONE]#
+. Db syncs rely on the target db file timestame minus some margin. [green]#[DONE]#
 . Since bulk reads do not use the server we can switch to simple RPC for the
-  network transport.
+  network transport. [green]#[DONE]#
 . Test running manager process extended to manage multiple running tests.
 
 Current Items
@@ -39,11 +39,12 @@ Current Items
 ww05 - migrate to inmem-db
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-. Switch to inmem db with fast sync to on disk db's [DONE]
+. Switch to inmem db with fast sync to on disk db's [green]#[DONE]#
 . Server polls tasks table for next action
-.. Task table used for tracking runner process [DONE]
-.. Task table used for jobs to run
-.. Task table used for queueing runner actions (remove runs, cleanRunExecute, etc)
+.. Task table used for tracking runner process [red]#[Replaced by mtutil]#
+.. Task table used for jobs to run [red]#[Replaced by mtutil]#
+.. Task table used for queueing runner actions (remove runs,
+   cleanRunExecute, etc)  [red]#[Replaced by mtutil#]
 
 
 // ww32
