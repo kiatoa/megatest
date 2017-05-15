@@ -14,7 +14,7 @@
 (define (toplevel-command . a) #f)
 
 (use srfi-1 posix srfi-69 readline ;;  regex regex-case srfi-69 apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
-     srfi-18 extras format pkts pkts regex regex-case
+     srfi-18 extras format pkts regex regex-case
      (prefix dbi dbi:)) ;;  zmq extras)
 
 (declare (uses common))
@@ -313,63 +313,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; pkts
 ;;======================================================================
 
-(define (with-queue-db mtconf proc)
-  (let* ((pktsdirs (configf:lookup mtconf "setup"  "pktsdirs"))
-	 (pktsdir  (if pktsdirs (car (string-split pktsdirs " ")) #f))
-	 (toppath  (configf:lookup mtconf "dyndat" "toppath"))
-	 (pdbpath  (or (configf:lookup mtconf "setup"  "pdbpath") pktsdir)))
-    (if (not (and  pktsdir toppath pdbpath))
-	(begin
-	  (print "ERROR: settings are missing in your megatest.config for area management.")
-	  (print "  you need to have pktsdir in the [setup] section."))
-	(let* ((pdb  (open-queue-db pdbpath "pkts.db"
-				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))))
-	  (proc pktsdirs pktsdir pdb)
-	  (dbi:close pdb)))))
-
-(define (load-pkts-to-db mtconf)
-  (with-queue-db
-   mtconf
-   (lambda (pktsdirs pktsdir pdb)
-     (for-each
-      (lambda (pktsdir) ;; look at all
-	(if (and (file-exists? pktsdir)
-		 (directory? pktsdir)
-		 (file-read-access? pktsdir))
-	    (let ((pkts (glob (conc pktsdir "/*.pkt"))))
-	      (for-each
-	       (lambda (pkt)
-		 (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
-			(exists  (lookup-by-uuid pdb uuid #f)))
-		   (if (not exists)
-		       (let* ((pktdat (string-intersperse
-				       (with-input-from-file pkt read-lines)
-				       "\n"))
-			      (apkt   (pkt->alist pktdat))
-			      (ptype  (alist-ref 'T apkt)))
-			 (add-to-queue pdb pktdat uuid (or ptype 'cmd) #f 0)
-			 (debug:print 4 *default-log-port* "Added " uuid " of type " ptype " to queue"))
-		       (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
-		       )))
-	       pkts))))
-      (string-split pktsdirs)))))
-
-(define (get-pkt-alists pkts)
-  (map (lambda (x)
-	 (alist-ref 'apkt x)) ;; 'pkta pulls out the alist from the read pkt
-       pkts))
-
-;; given list of pkts (alist mode) return list of D cards as Unix epoch, sorted descending
-;; also delete duplicates by target i.e. (car pkt)
-(define (get-pkt-times pkts)
-  (delete-duplicates
-   (sort 
-    (map (lambda (x)
-	   `(,(alist-ref 't x) . ,(string->number (alist-ref 'D x))))
-	 pkts)
-    (lambda (a b)(> (cdr a)(cdr b))))      ;; sort descending
-   (lambda (a b)(equal? (car a)(car b))))) ;; remove duplicates by target
-
 ;;======================================================================
 ;; Runs
 ;;======================================================================
@@ -540,7 +483,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (define (generate-run-pkts mtconf toppath)
   (let ((std-runname (conc "sched"  (time->string (seconds->local-time (current-seconds)) "%M%H%d"))))
-    (with-queue-db
+    (common:with-queue-db
      mtconf
      (lambda (pktsdirs pktsdir pdb)
        (let* ((rgconfdat (find-and-read-config (conc toppath "/runconfigs.config")))
@@ -572,16 +515,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			
 			(runstarts  (find-pkts pdb '(runstart) `((o . ,contour)
 								 (t . ,runkey))))
-			(rspkts     (get-pkt-alists runstarts))
+			(rspkts     (common:get-pkt-alists runstarts))
 			;; starttimes is for run start times and is used to know when the last run was launched
-			(starttimes (get-pkt-times rspkts)) ;; sort by age (youngest first) and delete duplicates by target
+			(starttimes (common:get-pkt-times rspkts)) ;; sort by age (youngest first) and delete duplicates by target
 			(last-run (if (null? starttimes) ;; if '() then it has never been run, else get the max
 				      0
 				      (apply max (map cdr starttimes))))
 			;; synctimes is for figuring out the last time a sync was done
 			(syncstarts   (find-pkts pdb '(syncstart) '())) ;; no qualifiers, a sync does all tarets etc.
-			(sspkts       (get-pkt-alists syncstarts))
-			(synctimes    (get-pkt-times  sspkts))
+			(sspkts       (common:get-pkt-alists syncstarts))
+			(synctimes    (common:get-pkt-times  sspkts))
 			(last-sync (if (null? synctimes) ;; if '() then it has never been run, else get the max
 				      0
 				      (apply max (map cdr synctimes))))
@@ -868,7 +811,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 #t)
 	     "logs"
 	     "/tmp")))
-    (with-queue-db
+    (common:with-queue-db
      mtconf
      (lambda (pktsdirs pktsdir pdb)
        (let* ((rgconfdat (find-and-read-config (conc toppath "/runconfigs.config")))
@@ -932,11 +875,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (toppath   (configf:lookup mtconf "dyndat" "toppath")))
 	 (case (string->symbol *action*)
 	   ((process)  (begin
-			 (load-pkts-to-db mtconf)
+			 (common:load-pkts-to-db mtconf)
 			 (generate-run-pkts mtconf toppath)
-			 (load-pkts-to-db mtconf)
+			 (common:load-pkts-to-db mtconf)
 			 (dispatch-commands mtconf toppath)))
-	   ((import)   (load-pkts-to-db mtconf)) ;; import pkts
+	   ((import)   (common:load-pkts-to-db mtconf)) ;; import pkts
 	   ((rungen)   (generate-run-pkts mtconf toppath))
 	   ((dispatch) (dispatch-commands mtconf toppath)))))
       ((db)
