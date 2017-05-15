@@ -10,9 +10,8 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest directory-utils posix-extras matchable
-     pkts
-     )
+(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest
+     directory-utils posix-extras matchable)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
 
@@ -56,10 +55,6 @@
 ;; start_server
 ;;
 (define (server:launch run-id transport-type)
-  (common:save-pkt `((action . start)
-		     (T      . server)
-		     (pid    . ,(current-process-id)))
-		   *configdat* #t)
   (case transport-type
     ((http)(http-transport:launch))
     ;;((nmsg)(nmsg-transport:launch run-id))
