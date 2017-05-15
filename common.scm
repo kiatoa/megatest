@@ -10,7 +10,7 @@
 ;;======================================================================
 
 (use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
-     matchable)
+     matchable pkts (prefix dbi dbi:))
 (require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -2315,4 +2315,69 @@
     (if (file-exists? home-cfgfile)
 	(read-config home-cfgfile view-cfgdat #t))
     view-cfgdat))
+
+;;======================================================================
+;; Manage pkts, used in servers, tests and likely other contexts so put
+;; in common
+;;======================================================================
+
+(define (common:with-queue-db mtconf proc)
+  (let* ((pktsdirs (configf:lookup mtconf "setup"  "pktsdirs"))
+	 (pktsdir  (if pktsdirs (car (string-split pktsdirs " ")) #f))
+	 (toppath  (configf:lookup mtconf "dyndat" "toppath"))
+	 (pdbpath  (or (configf:lookup mtconf "setup"  "pdbpath") pktsdir)))
+    (if (not (and  pktsdir toppath pdbpath))
+	(begin
+	  (print "ERROR: settings are missing in your megatest.config for area management.")
+	  (print "  you need to have pktsdir in the [setup] section."))
+	(let* ((pdb  (open-queue-db pdbpath "pkts.db"
+				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))))
+	  (proc pktsdirs pktsdir pdb)
+	  (dbi:close pdb)))))
+
+(define (common:load-pkts-to-db mtconf)
+  (common:with-queue-db
+   mtconf
+   (lambda (pktsdirs pktsdir pdb)
+     (for-each
+      (lambda (pktsdir) ;; look at all
+	(if (and (file-exists? pktsdir)
+		 (directory? pktsdir)
+		 (file-read-access? pktsdir))
+	    (let ((pkts (glob (conc pktsdir "/*.pkt"))))
+	      (for-each
+	       (lambda (pkt)
+		 (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
+			(exists  (lookup-by-uuid pdb uuid #f)))
+		   (if (not exists)
+		       (let* ((pktdat (string-intersperse
+				       (with-input-from-file pkt read-lines)
+				       "\n"))
+			      (apkt   (pkt->alist pktdat))
+			      (ptype  (alist-ref 'T apkt)))
+			 (add-to-queue pdb pktdat uuid (or ptype 'cmd) #f 0)
+			 (debug:print 4 *default-log-port* "Added " uuid " of type " ptype " to queue"))
+		       (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
+		       )))
+	       pkts))))
+      (string-split pktsdirs)))))
+
+(define (common:get-pkt-alists pkts)
+  (map (lambda (x)
+	 (alist-ref 'apkt x)) ;; 'pkta pulls out the alist from the read pkt
+       pkts))
+
+;; given list of pkts (alist mode) return list of D cards as Unix epoch, sorted descending
+;; also delete duplicates by target i.e. (car pkt)
+;;
+(define (common:get-pkt-times pkts)
+  (delete-duplicates
+   (sort 
+    (map (lambda (x)
+	   `(,(alist-ref 't x) . ,(string->number (alist-ref 'D x))))
+	 pkts)
+    (lambda (a b)(> (cdr a)(cdr b))))      ;; sort descending
+   (lambda (a b)(equal? (car a)(car b))))) ;; remove duplicates by target
+
+
 
