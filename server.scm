@@ -56,6 +56,10 @@
 ;; start_server
 ;;
 (define (server:launch run-id transport-type)
+  (common:save-pkt `((action . start)
+		     (ptype  . server)
+		     (pid    . (current-process-id)))
+		   *configdat* #t)
   (case transport-type
     ((http)(http-transport:launch))
     ;;((nmsg)(nmsg-transport:launch run-id))

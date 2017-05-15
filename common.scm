@@ -77,6 +77,7 @@
 
 (define *db-keys* #f)
 
+(define *pkts-info*    (make-hash-table)) ;; store stuff like the last parent here
 (define *configinfo*   #f)   ;; raw results from setup, includes toppath and table from megatest.config
 (define *runconfigdat* #f)   ;; run configs data
 (define *configdat*    #f)   ;; megatest.config data
@@ -2321,19 +2322,22 @@
 ;; in common
 ;;======================================================================
 
-(define common:pkt-spec
-  '((server . ((action    . a)
-	       (pid       . d)
-	       (ipaddr    . i)
-	       (port      . p)))
+(define common:pkts-spec
+  '((default . ((parent    . P)))
+    (server  . ((action    . a)
+		(pid       . d)
+		(ipaddr    . i)
+		(port      . p)
+		(parent    . P)))
     			  
-    (test   . ((cpuuse    . c)
-	       (diskuse   . d)
-	       (item-path . i)
-	       (runname   . r)
-	       (state     . s)
-	       (target    . t)
-	       (status    . u)))))
+    (test    . ((cpuuse    . c)
+		(diskuse   . d)
+		(item-path . i)
+		(runname   . r)
+		(state     . s)
+		(target    . t)
+		(status    . u)
+		(parent    . P)))))
 
 (define (common:get-pkts-dirs mtconf use-lt)
   (let* ((pktsdirs-str (or (configf:lookup mtconf "setup"  "pktsdirs")
@@ -2344,6 +2348,27 @@
 			#f)))
     pktsdirs))
 
+(define (common:save-pkt pktalist-in mtconf use-lt)
+  (let* ((parent   (hash-table-ref/default *pkts-info* 'last-parent #f))
+	 (pktalist (if parent
+		       (cons `(parent . ,parent)
+			     pktalist-in)
+		       pktalist-in)))
+    (let-values (((uuid pkt)
+		  (alist->pkt pktalist common:pkts-spec)))
+      (hash-table-set! *pkts-info* 'last-parent uuid)
+      (let ((pktsdir (or (hash-table-ref/default *pkts-info* 'pkts-dir #f)
+			 (let* ((pktsdirs (common:get-pkts-dirs mtconf use-lt))
+			       (pktsdir   (car pktsdirs))) ;; assume it is there
+			   (hash-table-set! *pkts-info* 'pkts-dir pktsdir)
+			   pktsdir))))
+	(if (not (file-exists? pktsdir))
+	    (create-directory pktsdir #t))
+	(with-output-to-file
+	    (conc pktsdir "/" uuid ".pkt")
+	  (lambda ()
+	    (print pkt)))))))
+	
 (define (common:with-queue-db mtconf proc #!key (use-lt #f)(toppath-in #f))
   (let* ((pktsdirs (common:get-pkts-dirs mtconf use-lt))
 	 (pktsdir  (if pktsdirs (car pktsdirs) #f))
