@@ -732,10 +732,11 @@ Misc
 			 ;; 2x delta time has not passed since last query
 			 (if (< nextmintime (current-milliseconds))
 			     (let* ((starttime (current-milliseconds))
-				    (changes   (dcommon:run-update keys data runname keypatts testpatt states statuses 'full my-window-id))
+				    ;; (changes   (dcommon:run-update keys data runname keypatts testpatt states statuses 'full my-window-id))
 				    (endtime   (current-milliseconds)))
 			       (set! nextmintime (+ endtime (* 2 (- endtime starttime))))
-			       (debug:print 11 *default-log-port* "CHANGE(S): " (car changes) "..."))
+			       ;; (debug:print 11 *default-log-port* "CHANGE(S): " (car changes) "..."))
+                               )
 			     (debug:print-info 11 *default-log-port* "Server overloaded"))))))
 
 ;; (dboard:data-updaters-set! *data* (make-hash-table))
