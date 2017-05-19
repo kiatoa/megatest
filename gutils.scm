@@ -30,7 +30,8 @@
 (define (gutils:get-color-spec effective-state)
   (or (alist-ref effective-state gutils:colors)
       (alist-ref 'FAIL gutils:colors)))
- 
+
+;; BBnote - state status dashboard button color / text defined here
 (define (gutils:get-color-for-state-status state status);; #!key (get-label #f))
   ;; ((if get-label cadr car)
   (case (string->symbol state)
@@ -56,11 +57,11 @@
     ((LAUNCHED)         (list "101 123 142"  state))
     ((CHECK)            (list "255 100 50"   state))
     ((REMOTEHOSTSTART)  (list "50 130 195"   state))
-    ((RUNNING)          (list "9 131 232"    state))
+    ((RUNNING STARTED)          (list "9 131 232"    state))
     ((KILLREQ)          (list "39 82 206"    state))
     ((KILLED)           (list "234 101 17"   state))
     ((NOT_STARTED)      (case (string->symbol status)
-			  ((CHECK)(list (gutils:get-color-spec 'SKIP) state))
+			  ((CHECK STARTED)(list (gutils:get-color-spec 'SKIP) state))
 			  (else   (list "240 240 240"                 state))))
     ;; for xor mode below
     ;;

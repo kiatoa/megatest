@@ -473,7 +473,8 @@
 ;; S T A T E S   A N D   S T A T U S E S
 ;;======================================================================
 
-(define *common:std-states*   
+;; BBnote: *common:std-states* - dashboard filter control and test control state buttons defined here; used in set-fields-panel and dboard:make-controls
+(define *common:std-states*   ;; for toggle buttons in dashboard
   '((0 "ARCHIVED")
     (1 "STUCK")
     (2 "KILLREQ")
@@ -485,6 +486,7 @@
     (8 "RUNNING")
     ))
 
+;; BBnote: *common:std-statuses* dashboard filter control and test control status buttons defined here; used in set-fields-panel and dboard:make-controls
 (define *common:std-statuses*
   '(;; (0 "DELETED")
     (1 "n/a")
@@ -503,8 +505,9 @@
 (define *common:badly-ended-states* ;; these roll up as CHECK, i.e. results need to be checked
   '("KILLED" "KILLREQ" "STUCK" "INCOMPLETE" "DEAD"))
 
+;; BBnote: *common:running-states* used from db:set-state-status-and-roll-up-items
 (define *common:running-states*     ;; test is either running or can be run
-  '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED"))
+  '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "STARTED"))
 
 (define *common:cant-run-states*    ;; These are stopping conditions that prevent a test from being run
   '("COMPLETED" "KILLED" "UNKNOWN" "INCOMPLETE" "ARCHIVED"))

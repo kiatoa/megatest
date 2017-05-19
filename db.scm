@@ -3322,7 +3322,7 @@
                             (newstatus            (if (or (> bad-not-started 0)
 							  (and (equal? newstate "NOT_STARTED")
 							       (> num-non-completes 0)))
-						      "n/a"
+						      "STARTED"
                                                       (car all-curr-statuses))))
                        ;; (print "bad-not-supported: " bad-not-support " all-curr-states: " all-curr-states " all-curr-statuses: " all-curr-states)
                        ;;      " newstate: " newstate " newstatus: " newstatus)
@@ -3332,7 +3332,7 @@
          (if (and test-id state status (equal? status "AUTO")) 
              (db:test-data-rollup dbstruct run-id test-id status))
          tr-res)))))
-
+;; BBnote: db:get-all-state-status-counts-for-test returns dbr:counts object aggregating state and status of items of a given test, *not including rollup state/status*
 (define (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path)
   (db:with-db
    dbstruct #f #f
