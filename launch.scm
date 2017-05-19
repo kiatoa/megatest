@@ -455,7 +455,6 @@
 	  (setenv "MT_TESTSUITENAME" areaname)
 	  (setenv "MT_RUN_AREA_HOME" top-path)
 	  (set! *toppath* top-path)
-	  (setenv "MT_TEST_RUN_DIR"  work-area)
 
 	  ;; On NFS it can be slow and unreliable to get needed startup information.
 	  ;;  i. Check if we are on the homehost, if so, proceed
@@ -544,6 +543,17 @@
 	  (let* ((test-info (rmt:get-test-info-by-id run-id test-id))
 		 (test-host (db:test-get-host        test-info))
 		 (test-pid  (db:test-get-process_id  test-info)))
+	    ;; if work-area was pre-ordained, use it, else create and then use
+	    (if (not (and (file-exists? work-area)
+			  (file-is-directory? work-area)))
+		;; (if (configf:var-is? *configdat* "setup" "early-setup" "yes")
+		(let ((dat  (create-work-area run-id runname keyvals test-id test-path #f test-name itemdat tconfig: tconfig)))
+		  (set! work-area (car dat))
+		  ;; (set! toptest-work-area (cadr dat)) ;; not used
+		  (debug:print-info 2 *default-log-port* "Using work area " work-area)))
+	    
+	    (setenv "MT_TEST_RUN_DIR"  work-area)
+	    
 	    (cond
 	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
 	      (debug:print 0 *default-log-port* "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
@@ -1026,8 +1036,9 @@
 ;;  
 ;; <target> - <testname> [ - <itempath> ] 
 ;;
-(define (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat #!key (remtries 2))
-  (let* ((item-path (if (string? itemdat) itemdat (item-list->path itemdat))) ;; if pass in string - just use it
+(define (create-work-area run-id run-info target test-id test-src-path disk-path-in testname itemdat #!key (tconfig #f)(remtries 2))
+  (let* ((disk-path (if disk-path-in disk-path-in (get-best-disk *configdat* tconfig))) ;; NOTE: You'd better have tconfig defined!
+	 (item-path (if (string? itemdat) itemdat (item-list->path itemdat))) ;; if pass in string - just use it
 	 (runname   (if (string? run-info) ;; if we pass in a string as run-info use it as run-name.
 			run-info
 			(db:get-value-by-header (db:get-rows run-info)
@@ -1035,7 +1046,7 @@
 						"runname")))
 	 (contour   #f) ;; NOT READY FOR THIS (args:get-arg "-contour"))
 	 ;; convert back to db: from rdb: - this is always run at server end
-	 (target   (string-intersperse (map cadr keyvals) "/"))
+	 ;; (target   (string-intersperse (map cadr keyvals) "/"))
 
 	 (not-iterated  (equal? "" item-path))
 
@@ -1193,7 +1204,7 @@
 	    (begin
 	      (debug:print-error 0 *default-log-port* "Failed to create work area at " test-path " with link at " lnktarget ", remaining attempts " remtries)
 	      ;; 
-	      (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat remtries: (- remtries 1)))
+	      (create-work-area run-id run-info target test-id test-src-path disk-path-in testname itemdat tconfig: tconfig remtries: (- remtries 1)))
 	    (list #f #f)))))
 
 ;; 1. look though disks list for disk with most space
@@ -1262,7 +1273,6 @@
 	   (test-sig        (conc (common:get-testsuite-name) ":" test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
 	   (work-area       #f)
 	   (toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
-	   (diskpath   #f)
 	   (cmdparms   #f)
 	   (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
 	   (mt-bindir-path #f)
@@ -1288,16 +1298,11 @@
       (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
       (rmt:set-state-status-and-roll-up-items run-id test-name item-path #f "LAUNCHED" #f)
       ;; (pp (hash-table->alist tconfig))
-      (set! diskpath (get-best-disk *configdat* tconfig))
-      (if diskpath
-	  (let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
+      (if (configf:var-is? *configdat* "setup" "early-setup" "yes")
+	  (let ((dat  (create-work-area run-id run-info keyvals test-id test-path #f test-name itemdat tconfig: tconfig)))
 	    (set! work-area (car dat))
 	    (set! toptest-work-area (cadr dat))
-	    (debug:print-info 2 *default-log-port* "Using work area " work-area))
-	  (begin
-	    (set! work-area (conc test-path "/tmp_run"))
-	    (create-directory work-area #t)
-	    (debug:print 0 *default-log-port* "WARNING: No disk work area specified - running in the test directory under tmp_run")))
+	    (debug:print-info 2 *default-log-port* "Using work area " work-area)))
       (set! cmdparms (base64:base64-encode 
 		      (z3:encode-buffer 
 		       (with-output-to-string
@@ -1334,7 +1339,7 @@
       ;; clean out step records from previous run if they exist
       ;; (rmt:delete-test-step-records run-id test-id)
       ;; if the dir does not exist we may have a itempath where individual variables are a path, launch anyway
-      (if (file-exists? work-area)
+      (if (and work-area (file-exists? work-area))
 	  (change-directory work-area)) ;; so that log files from the launch process don't clutter the test dir
       (cond
        ;; ((and launcher hosts) ;; must be using ssh hostname
@@ -1355,9 +1360,9 @@
       (let* ((commonprevvals (alist->env-vars
 			      (hash-table-ref/default *configdat* "env-override" '())))
 	     (miscprevvals   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
-			      (append (list (list "MT_TEST_RUN_DIR" work-area)
+			      (append (list (list "MT_TEST_RUN_DIR" (if work-area work-area "no-test-run-area-set-yet"))
 					    (list "MT_TEST_NAME" test-name)
-					    (list "MT_ITEM_INFO" (conc itemdat)) 
+					    (list "MT_ITEM_INFO" (conc itemdat)) ;; GET RID OF THIS ONE
 					    (list "MT_RUNNAME"   runname)
 					    (list "MT_TARGET"    mt_target)
 					    (list "MT_ITEMPATH"  item-path)
