@@ -3258,6 +3258,8 @@
 ;;
 (define (db:set-state-status-and-roll-up-items dbstruct run-id test-name item-path state status comment)
   ;; establish info on incoming test followed by info on top level test
+  ;; BBnote - for mode itemwait, linkage between upstream test & matching item status is propagated to run queue in db:prereqs-not-met
+  
   (let* ((testdat      (if (number? test-name)
 			   (db:get-test-info-by-id dbstruct run-id test-name) ;; test-name is actually a test-id
 			   (db:get-test-info       dbstruct run-id test-name item-path)))
@@ -3328,7 +3330,7 @@
                             (newstatus            (if (or (> bad-not-started 0)
 							  (and (equal? newstate "NOT_STARTED")
 							       (> num-non-completes 0)))
-						      "CHECK"
+						      "n/a"
                                                       (car all-curr-statuses))))
                        ;; (print "bad-not-supported: " bad-not-support " all-curr-states: " all-curr-states " all-curr-statuses: " all-curr-states)
                        ;;      " newstate: " newstate " newstatus: " newstatus)
@@ -3863,6 +3865,7 @@
 ;; 
 ;; (define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path mode)
 (define (db:get-prereqs-not-met dbstruct run-id waitons ref-test-name ref-item-path mode itemmaps) ;; #!key (mode '(normal))(itemmap #f))
+  ;; BBnote - rollup of an itemized test's overall state/status done in db:set-state-status-and-roll-up-items
   (append
    (if (member 'exclusive mode)
        (let ((running-tests (db:get-tests-for-run dbstruct
@@ -3904,11 +3907,11 @@
 		  (parent-waiton-met #f)
 		  (item-waiton-met   #f))
 	      (for-each 
-	       (lambda (test)
+	       (lambda (test) ;; BB- this is the upstream test
 		 ;; (if (equal? waitontest-name (db:test-get-testname test)) ;; by defintion this had better be true ...
 		 (let* ((state             (db:test-get-state test))
 			(status            (db:test-get-status test))
-			(item-path         (db:test-get-item-path test))
+			(item-path         (db:test-get-item-path test)) ;; BB- this is the upstream itempath
 			(is-completed      (equal? state "COMPLETED"))
 			(is-running        (equal? state "RUNNING"))
 			(is-killed         (equal? state "KILLED"))
@@ -3933,8 +3936,8 @@
 			  same-itempath)
 		     (if (and is-completed is-ok)
 			 (set! item-waiton-met #t))
-		     (if (and (equal? item-path "")
-			      (or is-completed is-running));; this is the parent, set it to run if completed or running
+		     (if (and (equal? item-path "") ;; if upstream rollup test is completed, parent-waiton-met is set
+			      (or is-completed is-running));; this is the parent, set it to run if completed or running ;; BB1
 			 (set! parent-waiton-met #t)))
 		    ;; normal checking of parent items, any parent or parent item not ok blocks running
 		    ((and is-completed
