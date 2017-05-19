@@ -599,16 +599,22 @@
 
 (define common:get-area-name common:get-testsuite-name)
 
-(define (common:get-db-tmp-area)
+(define (common:get-db-tmp-area . junk)
   (if *db-cache-path*
       *db-cache-path*
-      (if *toppath*
-	  (let ((dbpath (create-directory (conc "/tmp/" (current-user-name)
-						"/megatest_localdb/"
-						(common:get-testsuite-name) "/"
-						(string-translate *toppath* "/" ".")) #t)))
-	    (set! *db-cache-path* dbpath)
-	    dbpath)
+      (if *toppath* ;; common:get-create-writeable-dir
+	  (handle-exceptions
+	      exn
+	      (begin
+		(debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
+		(exit 1))
+	    (let ((dbpath (common:get-create-writeable-dir
+			   (list (conc "/tmp/" (current-user-name)
+				       "/megatest_localdb/"
+				       (common:get-testsuite-name) "/"
+				       (string-translate *toppath* "/" ".")))))) ;;  #t))))
+	      (set! *db-cache-path* dbpath)
+	      dbpath))
 	  #f)))
 
 (define (common:get-area-path-signature)

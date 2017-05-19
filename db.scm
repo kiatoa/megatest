@@ -190,15 +190,7 @@
 ;; 
 ;; If run-id is #f return to create and retrieve the path where the db will live.
 ;;
-(define (db:dbfile-path . junk) ;;  run-id)
-  (let* ((dbdir           (common:get-db-tmp-area)))
-    (handle-exceptions
-     exn
-     (begin
-       (debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
-       (exit 1))
-     (if (not (directory? dbdir))(create-directory dbdir #t)))
-    dbdir))
+(define db:dbfile-path common:get-db-tmp-area)
 
 (define (db:set-sync db)
   (let ((syncprag (configf:lookup *configdat* "setup" "sychronous")))
