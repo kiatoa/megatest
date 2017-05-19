@@ -541,6 +541,7 @@
 	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
 	  ;;
 	  (let* ((test-info (rmt:get-test-info-by-id run-id test-id))
+		 (tconfig   (tests:get-testconfig test-name item-path tconfigreg #t force-create: #t))
 		 (test-host (db:test-get-host        test-info))
 		 (test-pid  (db:test-get-process_id  test-info)))
 	    ;; if work-area was pre-ordained, use it, else create and then use
