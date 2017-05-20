@@ -545,10 +545,11 @@
 		 (test-host (db:test-get-host        test-info))
 		 (test-pid  (db:test-get-process_id  test-info)))
 	    ;; if work-area was pre-ordained, use it, else create and then use
-	    (if (not (and (file-exists? work-area)
+	    (if (not (and work-area
+                          (file-exists? work-area)
 			  (file-is-directory? work-area)))
 		;; (if (configf:var-is? *configdat* "setup" "early-setup" "yes")
-		(let ((dat  (create-work-area run-id runname keyvals test-id test-path #f test-name itemdat tconfig: tconfig)))
+		(let ((dat  (create-work-area run-id runname keyvals test-id testpath #f test-name itemdat tconfig: tconfig)))
 		  (set! work-area (car dat))
 		  ;; (set! toptest-work-area (cadr dat)) ;; not used
 		  (debug:print-info 2 *default-log-port* "Using work area " work-area)))
