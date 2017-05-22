@@ -185,14 +185,23 @@
 (define (tasks:kill-server hostname pid #!key (kill-switch ""))
   (debug:print-info 0 *default-log-port* "Attempting to kill server process " pid " on host " hostname)
   (setenv "TARGETHOST" hostname)
-  (let ((logdir (if (directory-exists? "logs")
+  (let* ((logdir (if (directory-exists? "logs")
                     "logs/"
-                    "")))
+                    ""))
+         (logfile (if logdir (conc "logs/server-"pid"-"hostname".log") #f))
+         (gzfile  (if logfile (conc logfile ".gz"))))
     (setenv "TARGETHOST_LOGF" (conc logdir "server-kills.log"))
+
     (system (conc "nbfake kill "kill-switch" "pid))
+
+    (when logfile
+      (thread-sleep! 0.5)
+      (if (file-exists? gzfile) (delete-file gzfile))
+      (system (conc "gzip "logfile))
+      
+      (unsetenv "TARGETHOST_LOGF")
+      (unsetenv "TARGETHOST"))))
     
-    (unsetenv "TARGETHOST_LOGF")
-    (unsetenv "TARGETHOST")))
  
 ;;======================================================================
 ;; M O N I T O R S

@@ -24,7 +24,7 @@
 (declare (uses gutils))
 (declare (uses db))
 (declare (uses server))
-(declare (uses synchash))
+;; (declare (uses synchash))
 (declare (uses dcommon))
 
 (include "common_records.scm")
