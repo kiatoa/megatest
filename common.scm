@@ -2341,7 +2341,9 @@
 (define (common:get-pkts-dirs mtconf use-lt)
   (let* ((pktsdirs-str (or (configf:lookup mtconf "setup"  "pktsdirs")
 			   (and use-lt
-				(conc *toppath* "/lt/.pkts"))))
+				(conc (or *toppath*
+					  (current-directory))
+				      "/lt/.pkts"))))
 	 (pktsdirs  (if pktsdirs-str
 			(string-split pktsdirs-str " ")
 			#f)))
@@ -2383,7 +2385,7 @@
 	  (proc pktsdirs pktsdir pdb)
 	  (dbi:close pdb)))))
 
-(define (common:load-pkts-to-db mtconf)
+(define (common:load-pkts-to-db mtconf #!key (use-lt #f))
   (common:with-queue-db
    mtconf
    (lambda (pktsdirs pktsdir pdb)
@@ -2408,7 +2410,8 @@
 		       (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
 		       )))
 	       pkts))))
-      pktsdirs))))
+      pktsdirs))
+   use-lt: use-lt))
 
 (define (common:get-pkt-alists pkts)
   (map (lambda (x)
