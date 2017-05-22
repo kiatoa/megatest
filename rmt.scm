@@ -13,9 +13,7 @@
 
 (declare (unit rmt))
 (declare (uses api))
-(declare (uses tdb))
 (declare (uses http-transport))
-;;(declare (uses nmsg-transport))
 (include "common_records.scm")
 
 ;;
@@ -757,10 +755,6 @@
 
 (define (rmt:read-test-data run-id test-id categorypatt #!key (work-area #f)) 
   (rmt:send-receive 'read-test-data run-id (list run-id test-id categorypatt)))
-;;   (let ((tdb  (rmt:open-test-db-by-test-id run-id test-id work-area: work-area)))
-;;     (if tdb
-;; 	(tdb:read-test-data tdb test-id categorypatt)
-;; 	'())))
 
 (define (rmt:testmeta-add-record testname)
   (rmt:send-receive 'testmeta-add-record #f (list testname)))

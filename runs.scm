@@ -10,9 +10,8 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking (srfi 18) 
+(use (prefix sqlite3 sqlite3:) srfi-1 posix regex regex-case srfi-69 (srfi 18) 
      posix-extras directory-utils pathname-expand typed-records format)
-(import (prefix sqlite3 sqlite3:))
 
 (declare (unit runs))
 (declare (uses db))
@@ -1164,11 +1163,8 @@
 	(registry-mutex        (make-mutex))
 	(num-retries           0)
 	(max-retries           (config-lookup *configdat* "setup" "maxretries"))
-	(max-concurrent-jobs   (let ((mcj (config-lookup *configdat* "setup"     "max_concurrent_jobs")))
-				 (if (and mcj (string->number mcj))
-				     (string->number mcj)
-				     1))) ;; length of the register queue ahead
-	(reglen                (if (number? reglen-in) reglen-in 1))
+	(max-concurrent-jobs   (configf:lookup-number *configdat* "setup" "max_concurrent_jobs" default: 50))
+        (reglen                (if (number? reglen-in) reglen-in 1))
 	(last-time-incomplete  (- (current-seconds) 900)) ;; force at least one clean up cycle
 	(last-time-some-running (current-seconds))
 	;; (tdbdat                (tasks:open-db))

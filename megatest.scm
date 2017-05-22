@@ -13,16 +13,14 @@
 ;; fake out readline usage of toplevel-command
 (define (toplevel-command . a) #f)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
-     http-client srfi-18 extras format) ;;  zmq extras)
+(use (prefix sqlite3 sqlite3:) srfi-1 posix regex regex-case srfi-69 (prefix base64 base64:)
+     readline apropos json http-client directory-utils typed-records
+     http-client srfi-18 extras format)
 
 ;; Added for csv stuff - will be removed
 ;;
 (use sparse-vectors)
 
-(import (prefix sqlite3 sqlite3:))
-(import (prefix base64 base64:))
-(import (prefix rpc rpc:))
 (require-library mutils)
 
 ;; (use zmq)
@@ -1182,7 +1180,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 exn
 			 (begin
 			   (debug:print-error 0 *default-log-port* "Bad data in test record? " test)
-			   (print "exn=" (condition->list exn))
+			   (debug:print-error 5 *default-log-port* "exn=" (condition->list exn))
 			   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
 			   (print-call-chain (current-error-port)))
 			 (let* ((test-id      (if (member "id"           tests-spec)(get-value-by-fieldname test test-field-index "id"          ) #f)) ;; (db:test-get-id         test))

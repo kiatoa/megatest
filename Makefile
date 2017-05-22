@@ -8,10 +8,10 @@ SRCFILES = common.scm items.scm launch.scm \
    ods.scm runconfig.scm server.scm configf.scm \
    db.scm keys.scm margs.scm megatest-version.scm \
    process.scm runs.scm tasks.scm tests.scm genexample.scm \
-   http-transport.scm filedb.scm \
-   client.scm synchash.scm daemon.scm mt.scm \
+   http-transport.scm filedb.scm tdb.scm \
+   client.scm daemon.scm mt.scm \
    ezsteps.scm lock-queue.scm sdb.scm \
-   rmt.scm api.scm tdb.scm rpc-transport.scm \
+   rmt.scm api.scm \
    portlogger.scm archive.scm env.scm diff-report.scm cgisetup/models/pgdb.scm
 
 # module source files

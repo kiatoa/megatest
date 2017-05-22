@@ -26,14 +26,13 @@ qualification.
 Megatest Design Philosophy
 --------------------------
 
-Megatest is intended to provide the minimum needed resources to make
-writing a suite of tests and tasks for implementing continuous build
-for software, design engineering or process control (via owlfs for
-example) without being specialized for any specific problem
-space. Megatest in of itself does not know what constitutes a PASS or
-FAIL of a test or task. In most cases megatest is best used in
-conjunction with logpro or a similar tool to parse, analyze and decide
-on the test outcome. 
+Megatest is a distributed system intended to provide the minimum needed
+resources to make writing a suite of tests and tasks for implementing
+continuous build for software, design engineering or process control (via
+owlfs for example) without being specialized for any specific problem
+space. Megatest in of itself does not know what constitutes a PASS or FAIL
+of a test or task. In most cases megatest is best used in conjunction with
+logpro or a similar tool to parse, analyze and decide on the test outcome.
 
  * Self-checking -Repeatable strive for directed or self-checking test
    as opposed to delta based tests

@@ -15,7 +15,6 @@
 
 (use regex)
 (declare (unit process))
-;;(declare (uses common))
 
 (define (process:conservative-read port)
   (let loop ((res ""))
@@ -55,7 +54,7 @@
    (begin
      (print "ERROR:  Failed to run command: " cmd " " (string-intersperse params " "))
      (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-     (print "exn=" (condition->list exn))
+     (debug:print 5 *default-log-port* "exn=" (condition->list exn))
      #f)
    (let-values (((fh fho pid) (if (null? params)
 				  (process cmd)

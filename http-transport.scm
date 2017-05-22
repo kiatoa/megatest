@@ -10,8 +10,7 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use  srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest posix-extras) ;; sqlite3
-;; (import (prefix sqlite3 sqlite3:))
+(use  srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest posix-extras)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars intarweb spiffy-directory-listing)
 
@@ -124,7 +123,7 @@
 	      (begin 
 		(debug:print 0 *default-log-port* "WARNING: attempt to start server failed. Trying again ...")
 		(debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-		(debug:print 0 *default-log-port* "exn=" (condition->list exn))
+		(debug:print 5 *default-log-port* "exn=" (condition->list exn))
 		(portlogger:open-run-close portlogger:set-failed portnum)
 		(debug:print 0 *default-log-port* "WARNING: failed to start on portnum: " portnum ", trying next port")
 		(thread-sleep! 0.1)

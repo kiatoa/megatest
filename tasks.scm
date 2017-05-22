@@ -38,7 +38,7 @@
 	 (begin
 	   (print-call-chain (current-error-port))
 	   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	   (debug:print 0 *default-log-port* " exn=" (condition->list exn))
+	   (debug:print 5 *default-log-port* " exn=" (condition->list exn))
 	   (debug:print 0 *default-log-port* "tasks:wait-on-journal failed. Continuing on, you can ignore this call-chain")
 	   #t) ;; if stuff goes wrong just allow it to move on
 	 (let loop ((journal-exists (file-exists? fullpath))
@@ -89,13 +89,13 @@
 	   (begin
 	     (print-call-chain (current-error-port))
 	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 *default-log-port* " exn=" (condition->list exn))
+	     (debug:print 5 *default-log-port* " exn=" (condition->list exn))
 	     (thread-sleep! 1)
 	     (tasks:open-db numretries (- numretries 1)))
 	   (begin
 	     (print-call-chain (current-error-port))
 	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 *default-log-port* " exn=" (condition->list exn))))
+	     (debug:print 5 *default-log-port* " exn=" (condition->list exn))))
        (let* ((dbpath        (db:dbfile-path )) ;; (tasks:get-task-db-path))
 	      (dbfile       (conc dbpath "/monitor.db"))
 	      (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
@@ -185,14 +185,23 @@
 (define (tasks:kill-server hostname pid #!key (kill-switch ""))
   (debug:print-info 0 *default-log-port* "Attempting to kill server process " pid " on host " hostname)
   (setenv "TARGETHOST" hostname)
-  (let ((logdir (if (directory-exists? "logs")
+  (let* ((logdir (if (directory-exists? "logs")
                     "logs/"
-                    "")))
+                    ""))
+         (logfile (if logdir (conc "logs/server-"pid"-"hostname".log") #f))
+         (gzfile  (if logfile (conc logfile ".gz"))))
     (setenv "TARGETHOST_LOGF" (conc logdir "server-kills.log"))
+
     (system (conc "nbfake kill "kill-switch" "pid))
+
+    (when logfile
+      (thread-sleep! 0.5)
+      (if (file-exists? gzfile) (delete-file gzfile))
+      (system (conc "gzip "logfile))
+      
+      (unsetenv "TARGETHOST_LOGF")
+      (unsetenv "TARGETHOST"))))
     
-    (unsetenv "TARGETHOST_LOGF")
-    (unsetenv "TARGETHOST")))
  
 ;;======================================================================
 ;; M O N I T O R S

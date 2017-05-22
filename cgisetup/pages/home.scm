@@ -11,6 +11,7 @@
 
 (use regex)
 (load "models/pgdb.scm")
+(include "pages/filter-defs.scm")
 (include "pages/home_ctrl.scm")
 (include "pages/home_view.scm")
 

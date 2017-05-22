@@ -10,10 +10,8 @@
 ;;======================================================================
 
 (use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
-     matchable)
-(require-extension regex posix)
-
-(require-extension (srfi 18) extras tcp rpc)
+     matchable regex posix srfi-18 extras
+     pkts (prefix dbi dbi:))
 
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
@@ -226,10 +224,19 @@
 (define (common:set-last-run-version)
   (rmt:set-var "MEGATEST_VERSION" (common:version-signature)))
 
+;; postive number if megatest version > db version
+;; negative number if megatest version < db version
+(define (common:version-db-delta)
+         (- megatest-version (common:get-last-run-version-number)))
+
 (define (common:version-changed?)
   (not (equal? (common:get-last-run-version)
-	       (common:version-signature))))
+               (common:version-signature))))
 
+(define (common:api-changed?)
+  (not (equal? (substring (->string megatest-version) 0 4)
+               (substring (common:get-last-run-version) 0 4))))
+  
 ;; Move me elsewhere ...
 ;; RADT => Why do we meed the version check here, this is called only if version misma
 ;;
@@ -244,7 +251,7 @@
    ;; 'old2new
    'new2old
    )
-  (if (common:version-changed?)
+  (if (common:api-changed?)
       (common:set-last-run-version)))
 
 ;; Rotate logs, logic: 
@@ -287,7 +294,7 @@
 ;;
 (define (common:exit-on-version-changed)
   (if (common:on-homehost?)
-      (if (common:version-changed?)
+      (if (common:api-changed?)
 	  (let* ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config"))
                 (dbfile (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.db"))
                 (read-only (not (file-write-access? dbfile)))
@@ -464,7 +471,8 @@
 ;; S T A T E S   A N D   S T A T U S E S
 ;;======================================================================
 
-(define *common:std-states*   
+;; BBnote: *common:std-states* - dashboard filter control and test control state buttons defined here; used in set-fields-panel and dboard:make-controls
+(define *common:std-states*   ;; for toggle buttons in dashboard
   '((0 "ARCHIVED")
     (1 "STUCK")
     (2 "KILLREQ")
@@ -476,6 +484,7 @@
     (8 "RUNNING")
     ))
 
+;; BBnote: *common:std-statuses* dashboard filter control and test control status buttons defined here; used in set-fields-panel and dboard:make-controls
 (define *common:std-statuses*
   '(;; (0 "DELETED")
     (1 "n/a")
@@ -494,8 +503,9 @@
 (define *common:badly-ended-states* ;; these roll up as CHECK, i.e. results need to be checked
   '("KILLED" "KILLREQ" "STUCK" "INCOMPLETE" "DEAD"))
 
+;; BBnote: *common:running-states* used from db:set-state-status-and-roll-up-items
 (define *common:running-states*     ;; test is either running or can be run
-  '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED"))
+  '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "STARTED"))
 
 (define *common:cant-run-states*    ;; These are stopping conditions that prevent a test from being run
   '("COMPLETED" "KILLED" "UNKNOWN" "INCOMPLETE" "ARCHIVED"))
@@ -590,16 +600,22 @@
 
 (define common:get-area-name common:get-testsuite-name)
 
-(define (common:get-db-tmp-area)
+(define (common:get-db-tmp-area . junk)
   (if *db-cache-path*
       *db-cache-path*
-      (if *toppath*
-	  (let ((dbpath (create-directory (conc "/tmp/" (current-user-name)
-						"/megatest_localdb/"
-						(common:get-testsuite-name) "/"
-						(string-translate *toppath* "/" ".")) #t)))
-	    (set! *db-cache-path* dbpath)
-	    dbpath)
+      (if *toppath* ;; common:get-create-writeable-dir
+	  (handle-exceptions
+	      exn
+	      (begin
+		(debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
+		(exit 1))
+	    (let ((dbpath (common:get-create-writeable-dir
+			   (list (conc "/tmp/" (current-user-name)
+				       "/megatest_localdb/"
+				       (common:get-testsuite-name) "/"
+				       (string-translate *toppath* "/" ".")))))) ;;  #t))))
+	      (set! *db-cache-path* dbpath)
+	      dbpath))
 	  #f)))
 
 (define (common:get-area-path-signature)
@@ -1034,8 +1050,12 @@
     ;; (if res (set-environment-variable "MT_RUNNAME" res)) ;; not sure if this is a good idea. side effect and all ...
     res))
 
+(define (common:get-fields cfgdat)
+  (let ((fields (hash-table-ref/default cfgdat "fields" '())))
+    (map car fields)))
+
 (define (common:args-get-target #!key (split #f)(exit-if-bad #f))
-  (let* ((keys    (if (hash-table? *configdat*) (keys:config-get-fields *configdat*) '()))
+  (let* ((keys    (if (hash-table? *configdat*) (common:get-fields *configdat*) '()))
 	 (numkeys (length keys))
 	 (target  (or (args:get-arg "-reqtarg")
 		      (args:get-arg "-target")
@@ -2149,89 +2169,77 @@
    ((equal? status "ABORT")   "brown")
    (else "black")))
 
-;;======================================================================
-;; N A N O M S G   C L I E N T
-;;======================================================================
-
-(define (server:get-best-guess-address hostname)
-  (let ((res #f))
-    (for-each 
-     (lambda (adr)
-       (if (not (eq? (u8vector-ref adr 0) 127))
-	   (set! res adr)))
-     ;; NOTE: This can fail when there is no mention of the host in /etc/hosts. FIXME
-     (vector->list (hostinfo-addresses (hostname->hostinfo hostname))))
-    (string-intersperse 
-     (map number->string
-	  (u8vector->list
-	   (if res res (hostname->ip hostname)))) ".")))
-
-
-(define (common:send-dboard-main-changed)
-  (let* ((dashboard-ips (mddb:get-dashboards)))
-    (for-each
-     (lambda (ipadr)
-       (let* ((soc (common:open-nm-req (conc "tcp://" ipadr)))
-	      (msg (conc "main " *toppath*))
-	      (res (common:nm-send-receive-timeout soc msg)))
-	 (if (not res) ;; couldn't reach that dashboard - remove it from db
-	     (print "ERROR: couldn't reach dashboard " ipadr))
-	 res))
-     dashboard-ips)))
-    
-    
-;;======================================================================
-;; D A S H B O A R D   D B 
-;;======================================================================
-
-(define (mddb:open-db)
-  (let* ((db (open-database (conc (get-environment-variable "HOME") "/.dashboard.db"))))
-    (set-busy-handler! db (busy-timeout 10000))
-    (for-each
-     (lambda (qry)
-       (exec (sql db qry)))
-     (list 
-      "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
-      "CREATE TABLE IF NOT EXISTS dashboards (
-          id         INTEGER PRIMARY KEY,
-          pid        INTEGER,
-          username   TEXT,
-          hostname   TEXT,
-          ipaddr     TEXT,
-          portnum    INTEGER,
-          start_time TIMESTAMP DEFAULT (strftime('%s','now')),
-             CONSTRAINT hostport UNIQUE (hostname,portnum)
-        );"
-      ))
-    db))
-
-;; register a dashboard 
-;;
-(define (mddb:register-dashboard port)
-  (let* ((pid      (current-process-id))
-	 (hostname (get-host-name))
-	 (ipaddr   (server:get-best-guess-address hostname))
-	 (username (current-user-name)) ;; (car userinfo)))
-	 (db      (mddb:open-db)))
-    (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
-    (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,username,hostname,ipaddr,portnum) VALUES (?,?,?,?,?);")
-	   pid username hostname ipaddr port)
-    (close-database db)))
-
-;; unregister a monitor
-;;
-(define (mddb:unregister-dashboard host port)
-  (let* ((db      (mddb:open-db)))
-    (print "Register unregister monitor, host:port=" host ":" port)
-    (exec (sql db "DELETE FROM dashboards WHERE hostname=? AND portnum=?;") host port)
-    (close-database db)))
-
-;; get registered dashboards
-;;
-(define (mddb:get-dashboards)
-  (let ((db (mddb:open-db)))
-    (query fetch-column
-	   (sql db "SELECT ipaddr || ':' || portnum FROM dashboards;"))))
+;; ;;======================================================================
+;; ;; N A N O M S G   C L I E N T
+;; ;;======================================================================
+;; 
+;; 
+;; 
+;; (define (common:send-dboard-main-changed)
+;;   (let* ((dashboard-ips (mddb:get-dashboards)))
+;;     (for-each
+;;      (lambda (ipadr)
+;;        (let* ((soc (common:open-nm-req (conc "tcp://" ipadr)))
+;; 	      (msg (conc "main " *toppath*))
+;; 	      (res (common:nm-send-receive-timeout soc msg)))
+;; 	 (if (not res) ;; couldn't reach that dashboard - remove it from db
+;; 	     (print "ERROR: couldn't reach dashboard " ipadr))
+;; 	 res))
+;;      dashboard-ips)))
+;;     
+;;     
+;; ;;======================================================================
+;; ;; D A S H B O A R D   D B 
+;; ;;======================================================================
+;; 
+;; (define (mddb:open-db)
+;;   (let* ((db (open-database (conc (get-environment-variable "HOME") "/.dashboard.db"))))
+;;     (set-busy-handler! db (busy-timeout 10000))
+;;     (for-each
+;;      (lambda (qry)
+;;        (exec (sql db qry)))
+;;      (list 
+;;       "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
+;;       "CREATE TABLE IF NOT EXISTS dashboards (
+;;           id         INTEGER PRIMARY KEY,
+;;           pid        INTEGER,
+;;           username   TEXT,
+;;           hostname   TEXT,
+;;           ipaddr     TEXT,
+;;           portnum    INTEGER,
+;;           start_time TIMESTAMP DEFAULT (strftime('%s','now')),
+;;              CONSTRAINT hostport UNIQUE (hostname,portnum)
+;;         );"
+;;       ))
+;;     db))
+;; 
+;; ;; register a dashboard 
+;; ;;
+;; (define (mddb:register-dashboard port)
+;;   (let* ((pid      (current-process-id))
+;; 	 (hostname (get-host-name))
+;; 	 (ipaddr   (server:get-best-guess-address hostname))
+;; 	 (username (current-user-name)) ;; (car userinfo)))
+;; 	 (db      (mddb:open-db)))
+;;     (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
+;;     (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,username,hostname,ipaddr,portnum) VALUES (?,?,?,?,?);")
+;; 	   pid username hostname ipaddr port)
+;;     (close-database db)))
+;; 
+;; ;; unregister a monitor
+;; ;;
+;; (define (mddb:unregister-dashboard host port)
+;;   (let* ((db      (mddb:open-db)))
+;;     (print "Register unregister monitor, host:port=" host ":" port)
+;;     (exec (sql db "DELETE FROM dashboards WHERE hostname=? AND portnum=?;") host port)
+;;     (close-database db)))
+;; 
+;; ;; get registered dashboards
+;; ;;
+;; (define (mddb:get-dashboards)
+;;   (let ((db (mddb:open-db)))
+;;     (query fetch-column
+;; 	   (sql db "SELECT ipaddr || ':' || portnum FROM dashboards;"))))
     
 ;;======================================================================
 ;;  T E S T   L A U N C H I N G   P E R   I T E M   W I T H   H O S T   T Y P E S
@@ -2306,4 +2314,93 @@
     (if (file-exists? home-cfgfile)
 	(read-config home-cfgfile view-cfgdat #t))
     view-cfgdat))
+
+;;======================================================================
+;; Manage pkts, used in servers, tests and likely other contexts so put
+;; in common
+;;======================================================================
+
+(define common:pkt-spec
+  '((server . ((action    . a)
+	       (pid       . d)
+	       (ipaddr    . i)
+	       (port      . p)))
+    			  
+    (test   . ((cpuuse    . c)
+	       (diskuse   . d)
+	       (item-path . i)
+	       (runname   . r)
+	       (state     . s)
+	       (target    . t)
+	       (status    . u)))))
+
+(define (common:get-pkts-dirs mtconf use-lt)
+  (let* ((pktsdirs-str (or (configf:lookup mtconf "setup"  "pktsdirs")
+			   (and use-lt
+				(conc *toppath* "/lt/.pkts"))))
+	 (pktsdirs  (if pktsdirs-str
+			(string-split pktsdirs-str " ")
+			#f)))
+    pktsdirs))
+
+(define (common:with-queue-db mtconf proc #!key (use-lt #f)(toppath-in #f))
+  (let* ((pktsdirs (common:get-pkts-dirs mtconf use-lt))
+	 (pktsdir  (if pktsdirs (car pktsdirs) #f))
+	 (toppath  (or (configf:lookup mtconf "scratchdat" "toppath")
+		       toppath-in))
+	 (pdbpath  (or (configf:lookup mtconf "setup"  "pdbpath") pktsdir)))
+    (if (not (and  pktsdir toppath pdbpath))
+	(begin
+	  (print "ERROR: settings are missing in your megatest.config for area management.")
+	  (print "  you need to have pktsdir in the [setup] section."))
+	(let* ((pdb  (open-queue-db pdbpath "pkts.db"
+				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))))
+	  (proc pktsdirs pktsdir pdb)
+	  (dbi:close pdb)))))
+
+(define (common:load-pkts-to-db mtconf)
+  (common:with-queue-db
+   mtconf
+   (lambda (pktsdirs pktsdir pdb)
+     (for-each
+      (lambda (pktsdir) ;; look at all
+	(if (and (file-exists? pktsdir)
+		 (directory? pktsdir)
+		 (file-read-access? pktsdir))
+	    (let ((pkts (glob (conc pktsdir "/*.pkt"))))
+	      (for-each
+	       (lambda (pkt)
+		 (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
+			(exists  (lookup-by-uuid pdb uuid #f)))
+		   (if (not exists)
+		       (let* ((pktdat (string-intersperse
+				       (with-input-from-file pkt read-lines)
+				       "\n"))
+			      (apkt   (pkt->alist pktdat))
+			      (ptype  (alist-ref 'T apkt)))
+			 (add-to-queue pdb pktdat uuid (or ptype 'cmd) #f 0)
+			 (debug:print 4 *default-log-port* "Added " uuid " of type " ptype " to queue"))
+		       (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
+		       )))
+	       pkts))))
+      pktsdirs))))
+
+(define (common:get-pkt-alists pkts)
+  (map (lambda (x)
+	 (alist-ref 'apkt x)) ;; 'pkta pulls out the alist from the read pkt
+       pkts))
+
+;; given list of pkts (alist mode) return list of D cards as Unix epoch, sorted descending
+;; also delete duplicates by target i.e. (car pkt)
+;;
+(define (common:get-pkt-times pkts)
+  (delete-duplicates
+   (sort 
+    (map (lambda (x)
+	   `(,(alist-ref 't x) . ,(string->number (alist-ref 'D x))))
+	 pkts)
+    (lambda (a b)(> (cdr a)(cdr b))))      ;; sort descending
+   (lambda (a b)(equal? (car a)(car b))))) ;; remove duplicates by target
+
+
 
