@@ -426,8 +426,30 @@
 	    ))
       #f))
 
+;; use to have definitive setting:
+;;  [foo]
+;;  var yes
+;;
+;;  (configf:var-is? cfgdat "foo" "var" "yes") => #t
+;;
+(define (configf:var-is? cfgdat section var expected-val)
+  (equal? (configf:lookup cfgdat section var) expected-val))
+
 (define configf:lookup config-lookup)
 (define configf:read-file read-config)
+
+;; safely look up a value that is expected to be a number, return
+;; a default (#f unless provided)
+;;
+(define (configf:lookup-number cfdat section varname #!key (default #f))
+  (let* ((val (configf:lookup *configdat* section varname))
+         (res (if val
+                  (string->number (string-substitute "\\s+" "" val #t))
+                  #f)))
+    (cond
+     (res  res)
+     (val  (debug:print 0 *default-log-port* "ERROR: no number found for [" section "], " varname ", got: " val))
+     (else default))))
 
 (define (configf:section-vars cfgdat section)
   (let ((sectdat (hash-table-ref/default cfgdat section '())))
