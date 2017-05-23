@@ -1755,7 +1755,8 @@
 			     (delim (if (string-search whitesp val) 
 					"\""
 					"")))
-			(print (if (member key ignorevars)
+			(print (if (or (member key ignorevars)
+				       (string-search whitesp key))
 				   "# setenv "
 				   "setenv ")
 			       key " " delim (mungeval val) delim)))
@@ -1769,6 +1770,7 @@
 					"\""
 					"")))
 			(print (if (or (member key ignorevars)
+				       (string-search whitesp key)
 				       (string-search ":" key)) ;; internal only values to be skipped.
 				   "# export "
 				   "export ")
@@ -1786,7 +1788,7 @@
 			   (prv (get-environment-variable var)))
 		      (set! res (cons (list var prv) res))
 		      (if val 
-			  (setenv var (->string val))
+			  (safe-setenv var (->string val))
 			  (unsetenv var))))
 		  lst)
 	res)
