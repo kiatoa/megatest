@@ -3261,7 +3261,9 @@
 			   test-name))
 	 (item-path    (db:test-get-item-path testdat))
          (tl-testdat   (db:get-test-info dbstruct run-id test-name ""))
-         (tl-test-id   (db:test-get-id tl-testdat)))
+         (tl-test-id   (if tl-testdat
+			   (db:test-get-id tl-testdat)
+			   #f)))
     (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
 	(db:general-call dbstruct 'set-test-start-time (list test-id)))
     (mutex-lock! *db-transaction-mutex*)
@@ -3327,7 +3329,8 @@
                        ;; (print "bad-not-supported: " bad-not-support " all-curr-states: " all-curr-states " all-curr-statuses: " all-curr-states)
                        ;;      " newstate: " newstate " newstatus: " newstatus)
                        ;; NB// Pass the db so it is part of the transaction
-                       (db:test-set-state-status db run-id tl-test-id newstate newstatus #f)))))))
+                       (if tl-test-id
+			   (db:test-set-state-status db run-id tl-test-id newstate newstatus #f))))))))
          (mutex-unlock! *db-transaction-mutex*)
          (if (and test-id state status (equal? status "AUTO")) 
              (db:test-data-rollup dbstruct run-id test-id status))
