@@ -28,12 +28,6 @@
 ;; DEF (rmt:kill-server run-id)
 ;; DEF (rmt:start-server run-id)
 (test #f '(#t "successful login")(rmt:login #f))
-
-(test-batch rmt:login
-            "rmt:login"
-            (list (list "good" (list #t "successful login") #f)
-                  (list "bad"  (list #f "login failed")     #t)))
-
 ;; DEF (rmt:login-no-auto-client-setup connection-info)
 (test #f #t (pair? (rmt:get-latest-host-load (get-host-name))))
 
@@ -114,7 +108,7 @@
                     (list "t=current" #f keys rnp tpt #f #f #f (+ 100 (current-seconds))) ;; should be no records from the future
                     )
               post-proc: (lambda (res)
-                           (print "rmt:get-runs-by-patt returned: " res)
+                           ;; (print "rmt:get-runs-by-patt returned: " res)
                            (and (vector? res)
                                 (let ((rows (vector-ref res 1)))
                                   (> (length rows) 0))))))

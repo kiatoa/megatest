@@ -319,7 +319,8 @@
 		  (debug:print 4 *default-log-port* "WARNING: a prior step failed, stopping at " ezstep)))))))
 
 (define (launch:monitor-job run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m work-area runtlim misc-flags)
-  (let* ((start-seconds (current-seconds))
+  (let* ((update-period (string->number (or (configf:lookup *configdat* "setup" "test-stats-update-period") "30")))
+         (start-seconds (current-seconds))
 	 (calc-minutes  (lambda ()
 			  (inexact->exact 
 			   (round 
@@ -334,18 +335,21 @@
 	       (cpu-load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
 	       (disk-free (get-df (current-directory)))
                (last-sync (current-seconds)))
-      (let* ((new-cpu-load (let* ((load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
-                                  (delta (abs (- load cpu-load))))
-                             (if (> delta 0.1) ;; don't bother updating with small changes
-                                 load
-                                 #f)))
-             (new-disk-free (let* ((df    (get-df (current-directory)))
+      (let* ((over-time     (> (current-seconds) (+ last-sync update-period)))
+             (new-cpu-load  (let* ((load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
+                                   (delta (abs (- load cpu-load))))
+                              (if (> delta 0.1) ;; don't bother updating with small changes
+                                  load
+                                  #f)))
+             (new-disk-free (let* ((df    (if over-time ;; only get df every 30 seconds
+                                              (get-df (current-directory))
+                                              disk-free))
                                    (delta (abs (- df disk-free))))
                               (if (and (> df 0)
                                        (> (/ delta df) 0.1)) ;; (> delta 200) ;; ignore changes under 200 Meg
                                   df
                                   #f)))
-             (do-sync       (or new-cpu-load new-disk-free (> (current-seconds) (+ last-sync 30)))))
+             (do-sync       (or new-cpu-load new-disk-free over-time)))
         (debug:print 4 *default-log-port* "cpu: " new-cpu-load " disk: " new-disk-free " last-sync: " last-sync " do-sync: " do-sync)
 	(set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
 			    (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
