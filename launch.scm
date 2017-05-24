@@ -332,17 +332,21 @@
     (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
     (let loop ((minutes   (calc-minutes))
 	       (cpu-load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
-	       (disk-free (get-df (current-directory))))
-      (let ((new-cpu-load (let* ((load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
-				 (delta (abs (- load cpu-load))))
-			    (if (> delta 0.1) ;; don't bother updating with small changes
-				load
-				#f)))
-	    (new-disk-free (let* ((df    (get-df (current-directory)))
-				  (delta (abs (- df disk-free))))
-			     (if (> delta 200) ;; ignore changes under 200 Meg
-				 df
-				 #f))))
+	       (disk-free (get-df (current-directory)))
+               (last-sync (current-seconds)))
+      (let* ((new-cpu-load (let* ((load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
+                                  (delta (abs (- load cpu-load))))
+                             (if (> delta 0.1) ;; don't bother updating with small changes
+                                 load
+                                 #f)))
+             (new-disk-free (let* ((df    (get-df (current-directory)))
+                                   (delta (abs (- df disk-free))))
+                              (if (and (> df 0)
+                                       (> (/ delta df) 0.1)) ;; (> delta 200) ;; ignore changes under 200 Meg
+                                  df
+                                  #f)))
+             (do-sync       (or new-cpu-load new-disk-free (> (current-seconds) (+ last-sync 30)))))
+        (debug:print 4 *default-log-port* "cpu: " new-cpu-load " disk: " new-disk-free " last-sync: " last-sync " do-sync: " do-sync)
 	(set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
 			    (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
 						(time-exceeded (> run-seconds runtlim)))
@@ -351,7 +355,8 @@
 						 (debug:print-info 0 *default-log-port* "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
 						 #t)
 					       #f)))))
-	(tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f)
+        (if do-sync
+            (tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f))
 	(if kill-job? 
 	    (begin
 	      (mutex-lock! m)
@@ -399,7 +404,10 @@
 	    (begin
 	      (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
 	      (if (hash-table-ref/default misc-flags 'keep-going #f)  ;; keep originals for cpu-load and disk-free unless they change more than the allowed delta
-		  (loop (calc-minutes) (or new-cpu-load cpu-load) (or new-disk-free disk-free)))))))
+		  (loop (calc-minutes)
+                        (or new-cpu-load cpu-load)
+                        (or new-disk-free disk-free)
+                        (if do-sync (current-seconds) last-sync)))))))
     (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f))) ;; NOTE: Checking twice for keep-going is intentional
 
 
