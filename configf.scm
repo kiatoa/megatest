@@ -229,6 +229,10 @@
 		     (sections #f)              (settings (make-hash-table)) (keep-filenames #f)
 		     (post-section-procs '())   (apply-wildcards #t))
   (debug:print 9 *default-log-port* "START: " path)
+  (if *configdat*
+      (common:save-pkt `((action . read-config)
+			 (f      . path))
+		       *configdat* #t add-only: #t))
   (if (and (not (port? path))
 	   (not (file-exists? path))) ;; for case where we are handed a port
       (begin 

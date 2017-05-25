@@ -113,6 +113,7 @@
       (remote-conndat-set! runremote #f) ;; invalidate the connection, thus forcing a new connection.
       (mutex-unlock! *rmt-mutex*)
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
+
      ;; on homehost and this is a read
      ((and (not (remote-force-server runremote))      ;; honor forced use of server
 	   (cdr (remote-hh-dat runremote))     ;; on homehost
