@@ -2322,7 +2322,12 @@
 ;;======================================================================
 
 (define common:pkts-spec
-  '((default . ((parent    . P)))
+  '((default . ((parent    . P)
+                (action    . a)
+                (filename  . f)))
+    (configf . ((parent    . P)
+                (action    . a)
+                (filename  . f)))
     (server  . ((action    . a)
 		(pid       . d)
 		(ipaddr    . i)
@@ -2350,7 +2355,7 @@
     pktsdirs))
 
 (define (common:save-pkt pktalist-in mtconf use-lt #!key (add-only #f)) ;; add-only saves the pkt only if there is a parent already
-  (if (or (not add-only)
+  (if (or add-only
 	  (hash-table-exists? *pkts-info* 'last-parent))
       (let* ((parent   (hash-table-ref/default *pkts-info* 'last-parent #f))
 	     (pktalist (if parent

@@ -1003,7 +1003,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (common:with-queue-db
 	  mtconf
 	  (lambda (pktsdirs pktsdir conn)
-	    (make-report "out.dot" conn common:pkts-spec '(action ipaddr port) ))
+	    (make-report "out.dot" conn common:pkts-spec '(action ipaddr port filename) ))
 	  use-lt: #t)))
       ((db)
        (if (null? remargs)
