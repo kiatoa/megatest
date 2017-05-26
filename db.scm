@@ -939,67 +939,67 @@
 ;;  run-ids: '(1 2 3 ...) or #f (for all)
 ;;
 (define (db:multi-db-sync dbstruct . options)
-  (if (not (launch:setup))
-      (debug:print 0 *default-log-port* "ERROR: not able to setup up for megatest.")
-      (let* ((mtdb     (dbr:dbstruct-mtdb dbstruct))
-	     (tmpdb    (db:get-db dbstruct))
-             (refndb   (dbr:dbstruct-refndb dbstruct))
-	     (allow-cleanup #t) ;; (if run-ids #f #t))
-	     (servers (server:get-list *toppath*)) ;; (tasks:get-all-servers (db:delay-if-busy tdbdat)))
-	     (data-synced 0)) ;; count of changed records (I hope)
+  ;; (if (not (launch:setup))
+  ;;    (debug:print 0 *default-log-port* "ERROR: not able to setup up for megatest.")
+  (let* ((mtdb     (dbr:dbstruct-mtdb dbstruct))
+	 (tmpdb    (db:get-db dbstruct))
+	 (refndb   (dbr:dbstruct-refndb dbstruct))
+	 (allow-cleanup #t) ;; (if run-ids #f #t))
+	 (servers (server:get-list *toppath*)) ;; (tasks:get-all-servers (db:delay-if-busy tdbdat)))
+	 (data-synced 0)) ;; count of changed records (I hope)
+    
+    (for-each
+     (lambda (option)
+       
+       (case option
+	 ;; kill servers
+	 ((killservers)
+	  (for-each
+	   (lambda (server)
+	     (match-let (((mod-time host port start-time pid) server))
+	       (if (and host pid)
+		   (tasks:kill-server host pid))))
+	   servers))
+	 
+	 ;; clear out junk records
+	 ;;
+	 ((dejunk)
+	  (db:delay-if-busy mtdb) ;; ok to delay on mtdb
+	  (db:clean-up mtdb)
+	  (db:clean-up tmpdb)
+	  (db:clean-up refndb))
 
-	(for-each
-	 (lambda (option)
+	 ;; sync runs, test_meta etc.
+	 ;;
+	 ((old2new)
+	  (set! data-synced
+	    (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb tmpdb refndb)
+	       data-synced)))
+	 
+	 ;; now ensure all newdb data are synced to megatest.db
+	 ;; do not use the run-ids list passed in to the function
+	 ;;
+	 ((new2old)
+	  (set! data-synced
+	    (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb refndb mtdb)
+	       data-synced)))
 
-	   (case option
-	     ;; kill servers
-	     ((killservers)
-	      (for-each
-	       (lambda (server)
-		 (match-let (((mod-time host port start-time pid) server))
-			    (if (and host pid)
-				(tasks:kill-server host pid))))
-	       servers))
-
-	     ;; clear out junk records
-	     ;;
-	     ((dejunk)
-	      (db:delay-if-busy mtdb) ;; ok to delay on mtdb
-	      (db:clean-up mtdb)
-	      (db:clean-up tmpdb)
-              (db:clean-up refndb))
-
-	     ;; sync runs, test_meta etc.
-	     ;;
-	     ((old2new)
-	      (set! data-synced
-		    (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb tmpdb refndb)
-		       data-synced)))
-	     
-	     ;; now ensure all newdb data are synced to megatest.db
-	     ;; do not use the run-ids list passed in to the function
-	     ;;
-	     ((new2old)
-	      (set! data-synced
-		    (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb refndb mtdb)
-		       data-synced)))
-
-	     ((adj-target)
-	      (db:adj-target (db:dbdat-get-db mtdb))
-	      (db:adj-target (db:dbdat-get-db tmpdb))
-	      (db:adj-target (db:dbdat-get-db refndb)))
-	   
-	     ((schema)
-              (db:patch-schema-maindb (db:dbdat-get-db mtdb))
-              (db:patch-schema-maindb (db:dbdat-get-db tmpdb))
-              (db:patch-schema-maindb (db:dbdat-get-db refndb))
-              (db:patch-schema-rundb  (db:dbdat-get-db mtdb))
-              (db:patch-schema-rundb  (db:dbdat-get-db tmpdb))
-              (db:patch-schema-rundb  (db:dbdat-get-db refndb))))
-	
-	   (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb))
-	 options)
-	data-synced)))
+	 ((adj-target)
+	  (db:adj-target (db:dbdat-get-db mtdb))
+	  (db:adj-target (db:dbdat-get-db tmpdb))
+	  (db:adj-target (db:dbdat-get-db refndb)))
+	 
+	 ((schema)
+	  (db:patch-schema-maindb (db:dbdat-get-db mtdb))
+	  (db:patch-schema-maindb (db:dbdat-get-db tmpdb))
+	  (db:patch-schema-maindb (db:dbdat-get-db refndb))
+	  (db:patch-schema-rundb  (db:dbdat-get-db mtdb))
+	  (db:patch-schema-rundb  (db:dbdat-get-db tmpdb))
+	  (db:patch-schema-rundb  (db:dbdat-get-db refndb))))
+       
+       (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb))
+     options)
+    data-synced))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)

@@ -761,18 +761,19 @@
 ;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
 (define (common:watchdog)
   (debug:print-info 13 *default-log-port* "common:watchdog entered.")
-  (if (common:on-homehost?)
-      (let ((dbstruct (db:setup #t)))
-	(debug:print-info 13 *default-log-port* "after db:setup with dbstruct="dbstruct)
-	(cond
-	 ((dbr:dbstruct-read-only dbstruct)
-	  (debug:print-info 13 *default-log-port* "loading read-only watchdog")
-	  (common:readonly-watchdog dbstruct))
-	 (else
-	  (debug:print-info 13 *default-log-port* "loading writable-watchdog.")
-	  (common:writable-watchdog dbstruct)))
-	(debug:print-info 13 *default-log-port* "watchdog done."))
-      (debug:print-info 13 *default-log-port* "no need for watchdog on non-homehost")))
+  (if (launch:setup)
+      (if (common:on-homehost?)
+	  (let ((dbstruct (db:setup #t)))
+	    (debug:print-info 13 *default-log-port* "after db:setup with dbstruct=" dbstruct)
+	    (cond
+	     ((dbr:dbstruct-read-only dbstruct)
+	      (debug:print-info 13 *default-log-port* "loading read-only watchdog")
+	      (common:readonly-watchdog dbstruct))
+	     (else
+	      (debug:print-info 13 *default-log-port* "loading writable-watchdog.")
+	      (common:writable-watchdog dbstruct)))
+	    (debug:print-info 13 *default-log-port* "watchdog done."))
+	  (debug:print-info 13 *default-log-port* "no need for watchdog on non-homehost"))))
 
 
 (define (std-exit-procedure)

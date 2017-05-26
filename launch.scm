@@ -859,9 +859,14 @@
 	     (sections (if target (list "default" target) #f)) ;; for runconfigs
 	     (mtconfig (or (args:get-arg "-config") "megatest.config")) ;; allow overriding megatest.config 
              (cachefiles (launch:get-cache-file-paths areapath toppath target mtconfig))
-	     (mtcachef   (car cachefiles)) ;; (and cachedir (conc cachedir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
-	     (rccachef   (cdr cachefiles)) ;; (and cachedir (conc cachedir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
-	     ) ;; (cancreate (and cachedir (common:file-exists? cachedir)(file-write-access? cachedir) (not (common:in-running-test?)))))
+	     ;; checking for null cachefiles should not be necessary, I was seeing error car of '(), might be a chicken bug or a red herring ...
+	     (mtcachef   (if (null? cachefiles)
+			     #f
+			     (car cachefiles))) ;; (and cachedir (conc cachedir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
+	     (rccachef   (if (null? cachefiles)
+			     #f
+			     (cdr cachefiles)))) ;; (and cachedir (conc cachedir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
+	      ;; (cancreate (and cachedir (common:file-exists? cachedir)(file-write-access? cachedir) (not (common:in-running-test?)))))
 	(set! *toppath* toppath) ;; This is needed when we are running as a test using CMDINFO as a datasource
         ;;(BB> "launch:setup-body -- cachefiles="cachefiles)
 	(cond
