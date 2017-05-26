@@ -231,7 +231,9 @@
   (debug:print 9 *default-log-port* "START: " path)
   (if *configdat*
       (common:save-pkt `((action . read-config)
-			 (f      . ,path)
+			 (f      . ,(cond ((string? path) path)
+					  ((port?   path) "port")
+					  (else (conc path))))
                          (T      . configf))
 		       *configdat* #t add-only: #t))
   (if (and (not (port? path))
