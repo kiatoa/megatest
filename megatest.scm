@@ -389,7 +389,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 
 ;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
-(define *watchdog* (make-thread common:watchdog "Watchdog thread"))
+(define *watchdog* (make-thread
+		    (lambda ()
+		      (handle-exceptions
+			  exn
+			  (begin
+			    (print-call-chain)
+			    (print " message: " ((condition-property-accessor 'exn 'message) exn)))
+			(common:watchdog)))
+		    "Watchdog thread"))
 
 ;;(if (not (args:get-arg "-server"))
 ;;    (thread-start! *watchdog*)) ;; if starting a server; wait till we get to running state before kicking off watchdog
