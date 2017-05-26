@@ -316,7 +316,8 @@
 		  (debug:print 4 *default-log-port* "WARNING: a prior step failed, stopping at " ezstep)))))))
 
 (define (launch:monitor-job run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m work-area runtlim misc-flags)
-  (let* ((start-seconds (current-seconds))
+  (let* ((update-period (string->number (or (configf:lookup *configdat* "setup" "test-stats-update-period") "30")))
+         (start-seconds (current-seconds))
 	 (calc-minutes  (lambda ()
 			  (inexact->exact 
 			   (round 
@@ -329,17 +330,24 @@
     (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
     (let loop ((minutes   (calc-minutes))
 	       (cpu-load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
-	       (disk-free (get-df (current-directory))))
-      (let ((new-cpu-load (let* ((load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
-				 (delta (abs (- load cpu-load))))
-			    (if (> delta 0.1) ;; don't bother updating with small changes
-				load
-				#f)))
-	    (new-disk-free (let* ((df    (get-df (current-directory)))
-				  (delta (abs (- df disk-free))))
-			     (if (> delta 200) ;; ignore changes under 200 Meg
-				 df
-				 #f))))
+	       (disk-free (get-df (current-directory)))
+               (last-sync (current-seconds)))
+      (let* ((over-time     (> (current-seconds) (+ last-sync update-period)))
+             (new-cpu-load  (let* ((load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
+                                   (delta (abs (- load cpu-load))))
+                              (if (> delta 0.1) ;; don't bother updating with small changes
+                                  load
+                                  #f)))
+             (new-disk-free (let* ((df    (if over-time ;; only get df every 30 seconds
+                                              (get-df (current-directory))
+                                              disk-free))
+                                   (delta (abs (- df disk-free))))
+                              (if (and (> df 0)
+                                       (> (/ delta df) 0.1)) ;; (> delta 200) ;; ignore changes under 200 Meg
+                                  df
+                                  #f)))
+             (do-sync       (or new-cpu-load new-disk-free over-time)))
+        (debug:print 4 *default-log-port* "cpu: " new-cpu-load " disk: " new-disk-free " last-sync: " last-sync " do-sync: " do-sync)
 	(set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
 			    (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
 						(time-exceeded (> run-seconds runtlim)))
@@ -348,7 +356,8 @@
 						 (debug:print-info 0 *default-log-port* "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
 						 #t)
 					       #f)))))
-	(tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f)
+        (if do-sync
+            (tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f))
 	(if kill-job? 
 	    (begin
 	      (mutex-lock! m)
@@ -396,7 +405,10 @@
 	    (begin
 	      (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
 	      (if (hash-table-ref/default misc-flags 'keep-going #f)  ;; keep originals for cpu-load and disk-free unless they change more than the allowed delta
-		  (loop (calc-minutes) (or new-cpu-load cpu-load) (or new-disk-free disk-free)))))))
+		  (loop (calc-minutes)
+                        (or new-cpu-load cpu-load)
+                        (or new-disk-free disk-free)
+                        (if do-sync (current-seconds) last-sync)))))))
     (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f))) ;; NOTE: Checking twice for keep-going is intentional
 
 
@@ -844,9 +856,14 @@
 	     (sections (if target (list "default" target) #f)) ;; for runconfigs
 	     (mtconfig (or (args:get-arg "-config") "megatest.config")) ;; allow overriding megatest.config 
              (cachefiles (launch:get-cache-file-paths areapath toppath target mtconfig))
-	     (mtcachef   (car cachefiles)) ;; (and cachedir (conc cachedir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
-	     (rccachef   (cdr cachefiles)) ;; (and cachedir (conc cachedir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
-	     ) ;; (cancreate (and cachedir (common:file-exists? cachedir)(file-write-access? cachedir) (not (common:in-running-test?)))))
+	     ;; checking for null cachefiles should not be necessary, I was seeing error car of '(), might be a chicken bug or a red herring ...
+	     (mtcachef   (if (null? cachefiles)
+			     #f
+			     (car cachefiles))) ;; (and cachedir (conc cachedir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
+	     (rccachef   (if (null? cachefiles)
+			     #f
+			     (cdr cachefiles)))) ;; (and cachedir (conc cachedir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
+	      ;; (cancreate (and cachedir (common:file-exists? cachedir)(file-write-access? cachedir) (not (common:in-running-test?)))))
 	(set! *toppath* toppath) ;; This is needed when we are running as a test using CMDINFO as a datasource
         ;;(BB> "launch:setup-body -- cachefiles="cachefiles)
 	(cond

@@ -515,7 +515,13 @@
 	  (let* ((keep-going        #t)
 		 (run-queue-retries 5)
 		 (th1        (make-thread (lambda ()
-					    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
+					    (handle-exceptions
+						exn
+						(begin
+						  (print-call-chain)
+						  (print " message: " ((condition-property-accessor 'exn 'message) exn)))
+					      (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests
+								    (any->number reglen) all-tests-registry)))
 					    ;; (handle-exceptions
 					    ;;  exn
 					    ;;  (begin
