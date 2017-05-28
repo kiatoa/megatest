@@ -58,6 +58,7 @@
     get-steps-data
     get-steps-for-test
     read-test-data
+    read-test-data*
     login
     tasks-get-last
     testmeta-get-record
@@ -259,6 +260,7 @@
 
                    ;; TEST DATA
                    ((read-test-data)               (apply db:read-test-data dbstruct params))
+                   ((read-test-data*)              (apply db:read-test-data* dbstruct params))
 
                    ;; MISC
                    ((get-latest-host-load)         (apply db:get-latest-host-load dbstruct params))

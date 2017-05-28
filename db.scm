@@ -3025,8 +3025,8 @@
 			     "logpro"                                       ;; 6 ;; Type
 			     ))))
 	   (let* ((value     (or (configf:lookup dat entry-name "measured")  "n/a"))
-		  (expected  (or (configf:lookup dat entry-name "expected")  "n/a"))
-		  (tolerance (or (configf:lookup dat entry-name "tolerance") "n/a"))
+		  (expected  (or (configf:lookup dat entry-name "expected")  0.0))
+		  (tolerance (or (configf:lookup dat entry-name "tolerance") 0.0))
 		  (comment   (or (configf:lookup dat entry-name "comment")
 				 (configf:lookup dat entry-name "desc")      "n/a"))
 		  (status    (or (configf:lookup dat entry-name "status")    "n/a"))
@@ -3131,6 +3131,21 @@
 	db
 	"SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
        (reverse res)))))
+
+;; This routine moved from tdb.scm, tdb:read-test-data
+;;
+(define (db:read-test-data* dbstruct run-id test-id categorypatt varpatt)
+  (let* ((res '()))
+    (db:with-db
+     dbstruct #f #f
+     (lambda (db)
+       (sqlite3:for-each-row 
+	(lambda (id test_id category variable value expected tol units comment status type)
+	  (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
+	db
+	"SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? AND variable LIKE ? ORDER BY category,variable;" test-id categorypatt varpatt)
+       (reverse res)))))
+
 
 ;;======================================================================
 ;; Misc. test related queries
