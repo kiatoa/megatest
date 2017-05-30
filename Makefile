@@ -306,3 +306,7 @@ altdb.scm :
 portlogger-example : portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
 	csc $(CSCOPTS) portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
 
+# create a pdf dot graphviz diagram from notations in rmt.scm
+rmt.pdf : rmt.scm
+	grep ';;DOT' rmt.scm | sed -e 's/.*;;DOT //' > rmt.dot;dot -Tpdf rmt.dot -o rmt.pdf
+
