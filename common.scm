@@ -150,6 +150,9 @@
 (define *launch-setup-mutex* (make-mutex))     ;; need to be able to call launch:setup often so mutex it and re-call the real deal only if *toppath* not set
 (define *homehost-mutex*     (make-mutex))
 
+;; Miscellaneous
+(define *triggers-mutex*     (make-mutex))     ;; block overlapping processing of triggers
+
 (defstruct remote
   (hh-dat            (common:get-homehost)) ;; homehost record ( addr . hhflag )
   (server-url        (if *toppath* (server:check-if-running *toppath*))) ;; (server:check-if-running *toppath*) #f))
