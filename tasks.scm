@@ -197,7 +197,7 @@
     (when logfile
       (thread-sleep! 0.5)
       (if (file-exists? gzfile) (delete-file gzfile))
-      (system (conc "gzip "logfile))
+      (system (conc "gzip " logfile))
       
       (unsetenv "TARGETHOST_LOGF")
       (unsetenv "TARGETHOST"))))

@@ -1271,7 +1271,10 @@
 
 	;; every 15 minutes verify the server is there for this run
 	(if (and (common:low-noise-print 240 "try start server"  run-id)
-		 (not (server:check-if-running *toppath*)))
+		 (not (or (and *runremote*
+			       (remote-server-url *runremote*)
+			       (server:ping (remote-server-url *runremote*)))
+			  (server:check-if-running *toppath*))))
 	    (server:kind-run *toppath*))
 	
 	(if (> num-running 0)

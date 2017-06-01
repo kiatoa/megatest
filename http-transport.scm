@@ -297,8 +297,13 @@
                          #f))) ;; (hash-table-ref/default *runremote* run-id #f)))
     (if (vector? server-dat)
 	(let ((api-dat (http-transport:server-dat-get-api-uri server-dat)))
-	  (close-connection! api-dat)
-	  #t)
+	  (handle-exceptions
+	    exn
+	    (begin
+	      (print-call-chain *default-log-port*)
+	      (debug:print-error 0 *default-log-port* " closing connection failed with error: " ((condition-property-accessor 'exn 'message) exn)))
+	    (close-connection! api-dat)
+	    #t))
 	#f)))
 
 
@@ -436,7 +441,6 @@
 	    (debug:print-info 0 *default-log-port* "Adjusted server timeout: " adjusted-timeout))
 	(cond
          ((and *server-run*
-	       (not *server-overloaded*)
 	       (> (+ last-access server-timeout)
 		  (current-seconds))
 	       (< (- (current-seconds) server-start-time) 3600)) ;; do not update log or touch log if we've been running for more than one hour.
@@ -446,7 +450,8 @@
 		(handle-exceptions
 		    exn
 		    (debug:print 0 *default-log-port* "ERROR: Failed to change timestamp on log file " server-log-file ". Are you out of space on that disk?")
-		  (change-file-times server-log-file curr-time curr-time))))
+		  (if (not *server-overloaded*)
+		      (change-file-times server-log-file curr-time curr-time)))))
           (loop 0 server-state bad-sync-count (current-milliseconds)))
          (else
           (debug:print-info 0 *default-log-port* "Server timed out. seconds since last db access: " (- (current-seconds) last-access))
