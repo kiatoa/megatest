@@ -47,7 +47,7 @@
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
 
-;; GLOBAL GLETCHES
+;; GLOBALS
 
 ;; CONTEXTS
 (defstruct cxt
@@ -130,6 +130,7 @@
 (define *heartbeat-mutex*   (make-mutex))
 (define *api-process-request-count* 0)
 (define *max-api-process-requests* 0)
+(define *server-overloaded*  #f)
 
 ;; client
 (define *rmt-mutex*         (make-mutex))     ;; remote access calls mutex 

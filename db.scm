@@ -405,6 +405,21 @@
     (mutex-unlock! *db-multi-sync-mutex*)
     (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb)))
 
+(define (db:safely-close-sqlite3-db db #!key (try-num 3))
+  (if (<= try-num 0)
+      #f
+      (handle-exceptions
+	  exn
+	  (begin
+	    (thread-sleep! 3)
+	    (sqlite3:interrupt! db)
+	    (db:safely-close-sqlite3-db db try-num: (- try-num 1)))
+	(if (sqlite3:database? db)
+	    (begin
+	      (sqlite3:finalize! db)
+	      #t)
+	    #f))))
+
 ;; close all opened run-id dbs
 (define (db:close-all dbstruct)
   (if (dbr:dbstruct? dbstruct)
@@ -419,11 +434,12 @@
               (mdb (db:dbdat-get-db (dbr:dbstruct-mtdb   dbstruct)))
               (rdb (db:dbdat-get-db (dbr:dbstruct-refndb dbstruct))))
           (map (lambda (db)
-		 (if (sqlite3:database? db)
-		     (sqlite3:finalize! db)))
+		 (db:safely-close-sqlite3-db db))
+;; 		 (if (sqlite3:database? db)
+;; 		     (sqlite3:finalize! db)))
 	       tdbs)
-          (if (sqlite3:database? mdb) (sqlite3:finalize! mdb))
-          (if (sqlite3:database? rdb) (sqlite3:finalize! rdb))))))
+          (db:safely-close-sqlite3-db mdb)     ;; (if (sqlite3:database? mdb) (sqlite3:finalize! mdb))
+          (db:safely-close-sqlite3-db rdb))))) ;; (if (sqlite3:database? rdb) (sqlite3:finalize! rdb))))))
 
 ;;   (let ((locdbs (dbr:dbstruct-locdbs dbstruct)))
 ;;     (if (hash-table? locdbs)

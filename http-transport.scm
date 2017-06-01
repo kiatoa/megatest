@@ -436,6 +436,7 @@
 	    (debug:print-info 0 *default-log-port* "Adjusted server timeout: " adjusted-timeout))
 	(cond
          ((and *server-run*
+	       (not *server-overloaded*)
 	       (> (+ last-access server-timeout)
 		  (current-seconds))
 	       (< (- (current-seconds) server-start-time) 3600)) ;; do not update log or touch log if we've been running for more than one hour.
