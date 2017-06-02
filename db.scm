@@ -1047,13 +1047,18 @@
 	 (last-update        (if no-sync-db
 				 (db:no-sync-get/default no-sync-db "LAST_UPDATE" 0)
 				 0)) ;; (or (db:get-var dbstruct "LAST_UPDATE") 0))
-	 (res                (db:tmp->megatest.db-sync dbstruct last-update)))
-    (let ((sync-time (- (current-seconds) start-time)))
-      (if no-sync-db
-	  (db:no-sync-set no-sync-db "LAST_UPDATE" start-time))
+	 (sync-needed        (> (- start-time last-update) 6))
+	 (res                (if sync-needed ;; don't sync if a sync already occurred in the past 6 seconds
+				 (begin
+				   (if no-sync-db
+				       (db:no-sync-set no-sync-db "LAST_UPDATE" start-time))
+				   (db:tmp->megatest.db-sync dbstruct last-update))
+				 0))
+	 (sync-time           (- (current-seconds) start-time)))
       (debug:print-info 3 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))
-      (if (common:low-noise-print 30 "sync new to old")
-	  (debug:print-info 0 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))))
+      (if sync-needed
+	  ;;     (common:low-noise-print 30 "sync new to old"))
+	  (debug:print-info 0 *default-log-port* "Sync of " res " records from newdb to olddb completed in " sync-time " seconds pid="(current-process-id)))
     res))
 
 ;; keeping it around for debugging purposes only
