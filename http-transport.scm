@@ -494,13 +494,12 @@
 ;; start_server? 
 ;;
 (define (http-transport:launch)
-  ;; (if (args:get-arg "-daemonize")
-  ;;     (begin
-  ;; 	(daemon:ize)
-  ;; 	(if *alt-log-file* ;; we should re-connect to this port, I think daemon:ize disrupts it
-  ;; 	    (begin
-  ;; 	      (current-error-port *alt-log-file*)
-  ;; 	      (current-output-port *alt-log-file*)))))
+  ;; lets not even bother to start if there are already three or more server files ready to go
+  (let* ((num-alive   (server:get-num-alive (server:get-list *toppath*))))
+    (if (> num-alive 3)
+	(begin
+	  (debug:print 0 *default-log-port* "ERROR: Aborting server start because there are already " num-alive " possible servers either running or starting up")
+	  (exit))))
   (let* ((th2 (make-thread (lambda ()
 			     (debug:print-info 0 *default-log-port* "Server run thread started")
 			     (http-transport:run 

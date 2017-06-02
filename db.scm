@@ -671,22 +671,38 @@
 	   (tot-count   0))
        (for-each ;; table
 	(lambda (tabledat)
-	  (let* ((tablename  (car tabledat))
-		 (fields     (cdr tabledat))
-		 (use-last-update  (if last-update
-				       (if (pair? last-update)
-					   (member (car last-update)    ;; last-update field name
-						   (map car fields))
-					   (begin
-					     (debug:print 0 *default-log-port* "ERROR: parameter last-update for db:sync-tables must be a pair, received: " last-update) ;; found in fields
-					     #f))
-				       #f))
+	  (let* ((tablename        (car tabledat))
+		 (fields           (cdr tabledat))
+		 (has-last-update  (member "last_update" fields))
+		 (use-last-update  (cond
+				    ((and has-last-update
+					  (member "last_update" fields))
+				     #t) ;; if given a number, just use it for all fields
+				    ((number? last-update) #f) ;; if not matched first entry then ignore last-update for this table
+				    ((and (pair? last-update)
+					  (member (car last-update)    ;; last-update field name
+						  (map car fields))) #t)
+				    (last-update
+				     (debug:print 0 *default-log-port* "ERROR: parameter last-update for db:sync-tables must be a pair or a number, received: " last-update) ;; found in fields
+				     #f)
+				    (else
+				     #f)))
+		 (last-update-value (if use-last-update ;; no need to check for has-last-update - it is already accounted for
+					(if (number? last-update)
+					    last-update
+					    (cdr last-update))
+					#f))
+		 (last-update-field (if use-last-update
+					(if (number? last-update)
+					    "last_update"
+					    (car last-update))
+					#f))
 		 (num-fields (length fields))
 		 (field->num (make-hash-table))
 		 (num->field (apply vector (map car fields)))
 		 (full-sel   (conc "SELECT " (string-intersperse (map car fields) ",") 
 				   " FROM " tablename (if use-last-update ;; apply last-update criteria
-							  (conc " " (car last-update) ">=" (cdr last-update))
+							  (conc " WHERE " last-update-field " >= " last-update-value)
 							  "")
 				   ";"))
 		 (full-ins   (conc "INSERT OR REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) "
@@ -911,37 +927,37 @@
 	(hash-table-set! *global-db-store* target cache-db)
 	cache-db)))
 
-;; call a proc with a cached db
-;;
-(define (db:call-with-cached-db proc . params)
-  ;; first cache the db in /tmp
-  (let* ((cname-part (conc "megatest_cache/" (common:get-testsuite-name)))
-	 (fname      (conc  (common:get-area-path-signature) ".db"))
-	 (cache-dir  (common:get-create-writeable-dir
-		      (list (conc "/tmp/" (current-user-name) "/" cname-part)
-			    (conc "/tmp/" (current-user-name) "-" cname-part)
-			     (conc "/tmp/" (current-user-name) "_" cname-part))))
-	 (megatest-db (conc *toppath* "/megatest.db")))
-    ;; (debug:print-info 0 *default-log-port* "Using cache dir " cache-dir)
-    (if (not cache-dir)
-	(begin
-	  (debug:print 0 *default-log-port* "ERROR: Failed to find an area to write the cache db")
-	  (exit 1))
-	(let* ((th1      (make-thread
-			  (lambda ()
-			    (if (and (file-exists? megatest-db)
-				     (file-write-access? megatest-db))
-				(begin
-				  (common:sync-to-megatest.db 'timestamps) ;; internally mutexes on *db-local-sync*
-				  (debug:print-info 2 *default-log-port* "Done syncing to megatest.db"))))
-			  "call-with-cached-db sync-to-megatest.db"))
-	       (cache-db (db:cache-for-read-only
-			  megatest-db
-			  (conc cache-dir "/" fname)
-			  use-last-update: #t)))
-	  (thread-start! th1)
-	  (apply proc cache-db params)
-	  ))))
+;; ;; call a proc with a cached db
+;; ;;
+;; (define (db:call-with-cached-db proc . params)
+;;   ;; first cache the db in /tmp
+;;   (let* ((cname-part (conc "megatest_cache/" (common:get-testsuite-name)))
+;; 	 (fname      (conc  (common:get-area-path-signature) ".db"))
+;; 	 (cache-dir  (common:get-create-writeable-dir
+;; 		      (list (conc "/tmp/" (current-user-name) "/" cname-part)
+;; 			    (conc "/tmp/" (current-user-name) "-" cname-part)
+;; 			     (conc "/tmp/" (current-user-name) "_" cname-part))))
+;; 	 (megatest-db (conc *toppath* "/megatest.db")))
+;;     ;; (debug:print-info 0 *default-log-port* "Using cache dir " cache-dir)
+;;     (if (not cache-dir)
+;; 	(begin
+;; 	  (debug:print 0 *default-log-port* "ERROR: Failed to find an area to write the cache db")
+;; 	  (exit 1))
+;; 	(let* ((th1      (make-thread
+;; 			  (lambda ()
+;; 			    (if (and (file-exists? megatest-db)
+;; 				     (file-write-access? megatest-db))
+;; 				(begin
+;; 				  (db:sync-to-megatest.db dbstruct 'timestamps) ;; internally mutexes on *db-local-sync*
+;; 				  (debug:print-info 2 *default-log-port* "Done syncing to megatest.db"))))
+;; 			  "call-with-cached-db sync-to-megatest.db"))
+;; 	       (cache-db (db:cache-for-read-only
+;; 			  megatest-db
+;; 			  (conc cache-dir "/" fname)
+;; 			  use-last-update: #t)))
+;; 	  (thread-start! th1)
+;; 	  (apply proc cache-db params)
+;; 	  ))))
 
 ;; options:
 ;;
@@ -1016,6 +1032,29 @@
        (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb))
      options)
     data-synced))
+
+(define (db:tmp->megatest.db-sync dbstruct last-update)
+  (let* ((mtdb        (dbr:dbstruct-mtdb dbstruct))
+	 (tmpdb       (db:get-db dbstruct))
+	 (refndb      (dbr:dbstruct-refndb dbstruct)))
+    (db:sync-tables (db:sync-all-tables-list dbstruct) last-update tmpdb refndb mtdb)))
+
+;;;; run-ids
+;;    if #f use *db-local-sync* : or 'local-sync-flags
+;;    if #t use timestamps      : or 'timestamps
+(define (db:sync-to-megatest.db dbstruct #!key (no-sync-db #f)) 
+  (let* ((start-time         (current-seconds))
+	 (last-update        (if no-sync-db
+				 (db:no-sync-get/default no-sync-db "LAST_UPDATE" 0)
+				 0)) ;; (or (db:get-var dbstruct "LAST_UPDATE") 0))
+	 (res                (db:tmp->megatest.db-sync dbstruct last-update)))
+    (let ((sync-time (- (current-seconds) start-time)))
+      (if no-sync-db
+	  (db:no-sync-set no-sync-db "LAST_UPDATE" start-time))
+      (debug:print-info 3 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))
+      (if (common:low-noise-print 30 "sync new to old")
+	  (debug:print-info 0 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))))
+    res))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
@@ -1786,6 +1825,35 @@
   (db:with-db dbstruct #f #t 
 	      (lambda (db)
 		(sqlite3:execute db "DELETE FROM metadat WHERE var=?;" var))))
+
+;;======================================================================
+;; no-sync.db - small bits of data to be shared between servers
+;;======================================================================
+
+(define (db:open-no-sync-db)
+  (let* ((dbpath (db:dbfile-path))
+	 (dbname (conc dbpath "/no-sync.db"))
+	 (db     (sqlite3:open-database dbname)))
+    (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
+    (sqlite3:execute db "PRAGMA synchronous = 0;")
+    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS no_sync_metadat (var TEXT,val TEXT, CONSTRAINT no_sync_metadat_constraint UNIQUE (var));")
+    db))
+
+(define (db:no-sync-set db var val)
+  (sqlite3:execute db "INSERT OR REPLACE INTO no_sync_metadat (var,val) VALUES (?,?);" var val))
+
+(define (db:no-sync-get/default db var default)
+  (let ((res default))
+    (sqlite3:for-each-row
+     (lambda (val)
+       (set! res val))
+     db
+     "SELECT val FROM no_sync_metadat WHERE var=?;"
+     var)
+    res))
+
+(define (db:no-sync-close-db db)
+  (db:safely-close-sqlite3-db db))
 
 ;; use a global for some primitive caching, it is just silly to
 ;; re-read the db over and over again for the keys since they never
