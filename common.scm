@@ -719,10 +719,11 @@
 					  (sqlite3:finalize! db #t)
 					  ;; (vector-set! *task-db* 0 #f)
 					  (set! *task-db* #f)))))
-                              (if (and *runremote*
-                                       (remote-conndat *runremote*))
-                                  (begin
-                                    (http-client#close-all-connections!))) ;; for http-client
+                              (http-client#close-all-connections!)
+                              ;; (if (and *runremote*
+                              ;;          (remote-conndat *runremote*))
+                              ;;     (begin
+                              ;;       (http-client#close-all-connections!))) ;; for http-client
                               (if (not (eq? *default-log-port* (current-error-port)))
                                   (close-output-port *default-log-port*))
 			      (set! *default-log-port* (current-error-port))) "Cleanup db exit thread"))

@@ -1056,10 +1056,11 @@
 				 0))
 	 (sync-time           (- (current-seconds) start-time)))
       (debug:print-info 3 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))
-      (if sync-needed
-	  ;;     (common:low-noise-print 30 "sync new to old"))
-	  (debug:print-info 0 *default-log-port* "Sync of " res " records from newdb to olddb completed in " sync-time " seconds pid="(current-process-id)))
-    res))
+      (if (common:low-noise-print 30 "sync new to old")
+          (if sync-needed
+              (debug:print-info 0 *default-log-port* "Sync of " res " records from newdb to olddb completed in " sync-time " seconds pid="(current-process-id))
+              (debug:print-info 0 *default-log-port* "No sync needed, last updated " (- start-time last-update) " seconds ago")))
+      res))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
@@ -1855,7 +1856,12 @@
      db
      "SELECT val FROM no_sync_metadat WHERE var=?;"
      var)
-    res))
+    (if res
+        (let ((newres (string->number res)))
+          (if newres
+              newres
+              res))
+        res)))
 
 (define (db:no-sync-close-db db)
   (db:safely-close-sqlite3-db db))
