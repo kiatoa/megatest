@@ -514,7 +514,7 @@
                   ;;(debug:print-info 13 *default-log-port* "delay-loop top; count="count" pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
                                                             
 		  (if (and (not *time-to-exit*)
-			   (< count 4)) ;; was 11, changing to 4. 
+			   (< count 6)) ;; was 11, changing to 4. 
 		      (begin
 			(thread-sleep! 1)
 			(delay-loop (+ count 1))))
