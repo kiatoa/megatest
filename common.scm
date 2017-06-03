@@ -45,7 +45,7 @@
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
 
-;; GLOBAL GLETCHES
+;; GLOBALS
 
 ;; CONTEXTS
 (defstruct cxt
@@ -128,6 +128,7 @@
 (define *heartbeat-mutex*   (make-mutex))
 (define *api-process-request-count* 0)
 (define *max-api-process-requests* 0)
+(define *server-overloaded*  #f)
 
 ;; client
 (define *rmt-mutex*         (make-mutex))     ;; remote access calls mutex 
@@ -147,6 +148,9 @@
 (define *run-info-cache*     (make-hash-table)) ;; run info is stable, no need to reget
 (define *launch-setup-mutex* (make-mutex))     ;; need to be able to call launch:setup often so mutex it and re-call the real deal only if *toppath* not set
 (define *homehost-mutex*     (make-mutex))
+
+;; Miscellaneous
+(define *triggers-mutex*     (make-mutex))     ;; block overlapping processing of triggers
 
 (defstruct remote
   (hh-dat            (common:get-homehost)) ;; homehost record ( addr . hhflag )
@@ -637,19 +641,6 @@
 ;;     (and ohh srv)))
     ;; (debug:print-info 0 *default-log-port* "common:run-sync? ohh=" ohh ", srv=" srv)
 
-;;;; run-ids
-;;    if #f use *db-local-sync* : or 'local-sync-flags
-;;    if #t use timestamps      : or 'timestamps
-(define (common:sync-to-megatest.db dbstruct) 
-  (let ((start-time         (current-seconds))
-	(res                (db:multi-db-sync dbstruct 'new2old)))
-    (let ((sync-time (- (current-seconds) start-time)))
-      (debug:print-info 3 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))
-      (if (common:low-noise-print 30 "sync new to old")
-	  (debug:print-info 0 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))))
-    res))
-
-
 
 
 (define *wdnum* 0)
@@ -679,82 +670,13 @@
         (if (not *time-to-exit*)
             (let ((golden-mtdb-mtime (file-modification-time golden-mtpath))
                   (tmp-mtdb-mtime    (file-modification-time tmp-mtpath)))
-              (if (> golden-mtdb-mtime tmp-mtdb-mtime)
-                  (let ((res (db:multi-db-sync dbstruct 'old2new)))
-                    (debug:print-info 13 *default-log-port* "rosync called, " res " records transferred.")))
+	      (if (> golden-mtdb-mtime tmp-mtdb-mtime)
+		  (if (< golden-mtdb-mtime (- (current-seconds) 3)) ;; file has NOT been touched in past three seconds, this way multiple servers won't fight to sync back
+		      (let ((res (db:multi-db-sync dbstruct 'old2new)))
+			(debug:print-info 13 *default-log-port* "rosync called, " res " records transferred."))))
               (loop (current-seconds)))
             #t)))
     (debug:print-info 0 *default-log-port* "Exiting readonly-watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" mtpath="golden-mtpath)))
-
-
-        
-(define (common:writable-watchdog dbstruct)
-  (thread-sleep! 0.05) ;; delay for startup
-  (let ((legacy-sync (common:run-sync?))
-	(debug-mode  (debug:debug-mode 1))
-	(last-time   (current-seconds))
-        (this-wd-num     (begin (mutex-lock! *wdnum*mutex) (let ((x *wdnum*)) (set! *wdnum* (add1 *wdnum*)) (mutex-unlock! *wdnum*mutex) x))))
-    (debug:print-info 2 *default-log-port* "Periodic sync thread started.")
-    (debug:print-info 3 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id)" this-wd-num="this-wd-num)
-    (if (and legacy-sync (not *time-to-exit*))
-	(let* (;;(dbstruct (db:setup))
-	       (mtdb     (dbr:dbstruct-mtdb dbstruct))
-	       (mtpath   (db:dbdat-get-path mtdb)))
-	  (debug:print-info 0 *default-log-port* "Server running, periodic sync started.")
-	  (let loop ()
-	    ;; sync for filesystem local db writes
-	    ;;
-	    (mutex-lock! *db-multi-sync-mutex*)
-	    (let* ((need-sync        (>= *db-last-access* *db-last-sync*)) ;; no sync since last write
-		   (sync-in-progress *db-sync-in-progress*)
-		   (should-sync      (and (not *time-to-exit*)
-                                          (> (- (current-seconds) *db-last-sync*) 5))) ;; sync every five seconds minimum
-		   (start-time       (current-seconds))
-		   (mt-mod-time      (file-modification-time mtpath))
-		   (recently-synced  (< (- start-time mt-mod-time) 4))
-		   (will-sync        (and (or need-sync should-sync)
-					  (not sync-in-progress)
-					  (not recently-synced))))
-              (debug:print-info 13 *default-log-port* "WD writable-watchdog top of loop.  need-sync="need-sync" sync-in-progress="sync-in-progress" should-sync="should-sync" start-time="start-time" mt-mod-time="mt-mod-time" recently-synced="recently-synced" will-sync="will-sync)
-	      ;; (if recently-synced (debug:print-info 0 *default-log-port* "Skipping sync due to recently-synced flag=" recently-synced))
-	      ;; (debug:print-info 0 *default-log-port* "need-sync: " need-sync " sync-in-progress: " sync-in-progress " should-sync: " should-sync " will-sync: " will-sync)
-	      (if will-sync (set! *db-sync-in-progress* #t))
-	      (mutex-unlock! *db-multi-sync-mutex*)
-	      (if will-sync
-		  (let ((res (common:sync-to-megatest.db dbstruct))) ;; did we sync any data? If so need to set the db touched flag to keep the server alive
-		    (if (> res 0) ;; some records were transferred, keep the db alive
-			(begin
-			  (mutex-lock! *heartbeat-mutex*)
-			  (set! *db-last-access* (current-seconds))
-			  (mutex-unlock! *heartbeat-mutex*)
-			  (debug:print-info 0 *default-log-port* "sync called, " res " records transferred."))
-			(debug:print-info 2 *default-log-port* "sync called but zero records transferred"))))
-	      (if will-sync
-		  (begin
-		    (mutex-lock! *db-multi-sync-mutex*)
-		    (set! *db-sync-in-progress* #f)
-		    (set! *db-last-sync* start-time)
-		    (mutex-unlock! *db-multi-sync-mutex*)))
-	      (if (and debug-mode
-		       (> (- start-time last-time) 60))
-		  (begin
-		    (set! last-time start-time)
-		    (debug:print-info 4 *default-log-port* "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
-	    
-	    ;; keep going unless time to exit
-	    ;;
-	    (if (not *time-to-exit*)
-		(let delay-loop ((count 0))
-                  ;;(debug:print-info 13 *default-log-port* "delay-loop top; count="count" pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
-                                                            
-		  (if (and (not *time-to-exit*)
-			   (< count 4)) ;; was 11, changing to 4. 
-		      (begin
-			(thread-sleep! 1)
-			(delay-loop (+ count 1))))
-		  (if (not *time-to-exit*) (loop))))
-	    (if (common:low-noise-print 30)
-		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" this-wd-num="this-wd-num)))))))
 
 ;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
 (define (common:watchdog)
@@ -769,7 +691,7 @@
 	      (common:readonly-watchdog dbstruct))
 	     (else
 	      (debug:print-info 13 *default-log-port* "loading writable-watchdog.")
-	      (common:writable-watchdog dbstruct)))
+	      (server:writable-watchdog dbstruct)))
 	    (debug:print-info 13 *default-log-port* "watchdog done."))
 	  (debug:print-info 13 *default-log-port* "no need for watchdog on non-homehost"))))
 
@@ -795,10 +717,11 @@
 					  (sqlite3:finalize! db #t)
 					  ;; (vector-set! *task-db* 0 #f)
 					  (set! *task-db* #f)))))
-                              (if (and *runremote*
-                                       (remote-conndat *runremote*))
-                                  (begin
-                                    (http-client#close-all-connections!))) ;; for http-client
+                              (http-client#close-all-connections!)
+                              ;; (if (and *runremote*
+                              ;;          (remote-conndat *runremote*))
+                              ;;     (begin
+                              ;;       (http-client#close-all-connections!))) ;; for http-client
                               (if (not (eq? *default-log-port* (current-error-port)))
                                   (close-output-port *default-log-port*))
 			      (set! *default-log-port* (current-error-port))) "Cleanup db exit thread"))

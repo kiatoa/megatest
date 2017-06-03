@@ -551,7 +551,11 @@
 	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
 	  ;;
 	  (let* ((test-info (rmt:get-test-info-by-id run-id test-id))
-		 (test-host (db:test-get-host        test-info))
+		 (test-host (if test-info
+				(db:test-get-host        test-info)
+				(begin
+				  (debug:print 0 *default-log-port* "ERROR: failed to find a record for test-id " test-id ", exiting.")
+				  (exit))))
 		 (test-pid  (db:test-get-process_id  test-info)))
 	    (cond
 	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
@@ -1225,7 +1229,8 @@
 	       (launch-delay (configf:lookup-number *configdat* "setup" "launch-delay" default: 1)))
       (if (> launch-delay delta)
 	  (begin
-	    (debug:print-info 0 *default-log-port* "Delaying launch of " test-name " for " (- launch-delay delta) " seconds")
+	    (if (common:low-noise-print 1200 "test launch delay") ;; every two hours or so remind the user about launch delay.
+		(debug:print-info 0 *default-log-port* "NOTE: test launches are delayed by " launch-delay " seconds. See megatest.config launch-delay setting to adjust.")) ;; launch of " test-name " for " (- launch-delay delta) " seconds"))
 	    (thread-sleep! (- launch-delay delta))
 	    (loop (- (current-seconds) *last-launch*) launch-delay))))
     (change-directory *toppath*)
