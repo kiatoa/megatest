@@ -75,10 +75,12 @@
 		       (not (equal? prevstat newstat)))
 		   (begin
 		     (case (string->symbol newstat)
+		       ((UNK)       ) ;; do nothing
 		       ((RUNNING)   (print "##teamcity[testStarted name='" tctname "']"))
 		       ((PASS SKIP) (print "##teamcity[testFinished name='" tctname "' duration='" duration "']"))
 		       (else
 			(print "##teamcity[testFailed name='" tctname "' message='" comment "' details='" logfile "']")))
+		     (flush-output)
 		     (hash-table-set! data testn newstat)))))
 	   tests)))
       run-ids))
