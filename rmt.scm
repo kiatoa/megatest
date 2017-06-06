@@ -13,7 +13,7 @@
 
 (declare (unit rmt))
 (declare (uses api))
-(declare (uses tdb))
+;; (declare (uses tdb))
 (declare (uses http-transport))
 ;;(declare (uses nmsg-transport))
 (include "common_records.scm")
