@@ -51,7 +51,7 @@
      (begin (print-call-chain) (print "Error message: " ((condition-property-accessor 'exn 'message) exn)))
      (for-each
       (lambda (run-id)
-	(let* ((tests (rmt:get-tests-for-run run-id "%" '() '() #f #f #f #f #f 'shortlist last-update #f)))
+	(let* ((tests (rmt:get-tests-for-run run-id "%" '() '() #f #f #f #f #f #f last-update #f)))
 	  ;; (print "DEBUG: got tests=" tests)
 	  (for-each
 	   (lambda (testdat)
