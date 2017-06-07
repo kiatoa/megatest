@@ -50,11 +50,11 @@
          (proc      (hash-table-ref/default *target-mappers* xlatr-key #f)))
     (if proc
         (begin
-          (print "Using target mapper: " area-xlatr)
+          (print "Using target mapper: " xlatr-key)
           (handle-exceptions
            exn
            (begin
-             (print "FAILED TO RUN TARGET MAPPER FOR " area ", called " area-xlatr)
+             (print "FAILED TO RUN TARGET MAPPER FOR " area ", called " xlatr-key)
              (print "   function is: " (hash-table-ref/default *target-mappers* xlatr-key #f ) )
              (print " message: " ((condition-property-accessor 'exn 'message) exn))
              runkey)
@@ -998,7 +998,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ((gendot)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
 	      (mtconf    (car mtconfdat)))
-	 (with-queue-db
+	 (common:with-queue-db
 	  mtconf
 	  (lambda (pktsdirs pktsdir conn)
 	    (make-report "out.dot" conn '())))))
