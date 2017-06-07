@@ -688,7 +688,7 @@
 
 (define (configf:write-alist cdat fname)
   (if (not (common:faux-lock fname))
-      (debug:print 0 *default-log-port* "WARNING: could not get lock on " fname))
+      (debug:print 0 *default-log-port* "INFO: Could not get lock on " fname))
   (let* ((dat  (configf:config->alist cdat))
          (res
           (begin

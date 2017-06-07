@@ -1006,8 +1006,8 @@
         (let* ((cachefiles   (launch:get-cache-file-paths areapath toppath target mtconfig))
                (mtcachef     (car cachefiles))
                (rccachef     (cdr cachefiles)))
-          (if (and rccachef *runconfigdat*) (configf:write-alist *runconfigdat* rccachef))
-          (if (and mtcachef *configdat*)    (configf:write-alist *configdat* mtcachef))
+          (if (and rccachef *runconfigdat* (not (file-exists? rccachef))) (configf:write-alist *runconfigdat* rccachef))
+          (if (and mtcachef *configdat*    (not (file-exists? mtcachef))) (configf:write-alist *configdat* mtcachef))
           (if (and rccachef mtcachef *runconfigdat* *configdat*)
               (set! *configstatus* 'fulldata)))
 
