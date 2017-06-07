@@ -243,7 +243,7 @@
 
 (define (common:api-changed?)
   (not (equal? (substring (->string megatest-version) 0 4)
-               (substring (common:get-last-run-version) 0 4))))
+               (substring (conc (common:get-last-run-version)) 0 4))))
   
 ;; Move me elsewhere ...
 ;; RADT => Why do we meed the version check here, this is called only if version misma
