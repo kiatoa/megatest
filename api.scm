@@ -197,6 +197,11 @@
                    ((tasks-set-state-given-param-key) (apply tasks:set-state-given-param-key dbstruct params))
                    ((tasks-get-last)            (apply tasks:get-last dbstruct params))
 
+		   ;; NO SYNC DB
+		   ((no-sync-set)               (apply db:no-sync-set         *no-sync-db* params))
+		   ((no-sync-get/default)       (apply db:no-sync-get/default *no-sync-db* params))
+		   ((no-sync-del!)              (apply db:no-sync-del!        *no-sync-db* params))
+		 
                    ;; ARCHIVES
                    ;; ((archive-get-allocations)   
                    ((archive-register-disk)     (apply db:archive-register-disk dbstruct params))

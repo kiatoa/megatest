@@ -710,7 +710,7 @@
           (common:faux-unlock fname)
           res)
         (begin
-          (debug:print 0 *default-log-port* "WARNING: could not get faux-lock on " fname)
+          (debug:print 0 *default-log-port* "WARNING: could not get lock on " fname)
           #f)))
 
 ;; convert hierarchial list to ini format

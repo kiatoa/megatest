@@ -853,6 +853,19 @@
   (rmt:send-receive 'tasks-get-last #f (list target runname)))
 
 ;;======================================================================
+;; N O   S Y N C   D B 
+;;======================================================================
+
+(define (rmt:no-sync-set var val)
+  (rmt:send-receive 'no-sync-set #f `(,var ,val)))
+
+(define (rmt:no-sync-get/default var default)
+  (rmt:send-receive 'no-sync-get/default #f `(,var ,default)))
+
+(define (rmt:no-sync-del! var)
+  (rmt:send-receive 'no-sync-del! #f `(,var)))
+
+;;======================================================================
 ;; A R C H I V E S
 ;;======================================================================
 
