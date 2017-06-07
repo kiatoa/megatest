@@ -687,32 +687,29 @@
      (with-input-from-file fname read))))
 
 (define (configf:write-alist cdat fname)
-    (if (common:faux-lock fname)
-        (let* ((dat  (configf:config->alist cdat))
-               (res
-                (begin
-                  (with-output-to-file fname ;; first write out the file
-                    (lambda ()
-                      (pp dat)))
-                  
-                  (if (common:file-exists? fname)   ;; now verify it is readable
-                      (if (configf:read-alist fname)
-                          #t ;; data is good.
-                          (begin
-                            (handle-exceptions
-                             exn
-                             #f
-                             (debug:print 0 *default-log-port* "WARNING: content " dat " for cache " fname " is not readable. Deleting generated file.")
-                             (delete-file fname))
-                            #f))
-                      #f))))
-          
-          (common:faux-unlock fname)
-          res)
-        (begin
-          (debug:print 0 *default-log-port* "WARNING: could not get lock on " fname)
-          #f)))
-
+  (if (not (common:faux-lock fname))
+      (debug:print 0 *default-log-port* "WARNING: could not get lock on " fname))
+  (let* ((dat  (configf:config->alist cdat))
+         (res
+          (begin
+            (with-output-to-file fname ;; first write out the file
+              (lambda ()
+                (pp dat)))
+            
+            (if (common:file-exists? fname)   ;; now verify it is readable
+                (if (configf:read-alist fname)
+                    #t ;; data is good.
+                    (begin
+                      (handle-exceptions
+                       exn
+                       #f
+                       (debug:print 0 *default-log-port* "WARNING: content " dat " for cache " fname " is not readable. Deleting generated file.")
+                       (delete-file fname))
+                      #f))
+                #f))))
+    (common:faux-unlock fname)
+    res))
+  
 ;; convert hierarchial list to ini format
 ;;
 (define (configf:config->ini data)
