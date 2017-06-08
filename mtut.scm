@@ -38,10 +38,10 @@
 ;;  iv. Use compiled version in preference to .scm version. Thus there is a manual "blessing"
 ;;      required to use .mtutil.scm.
 ;;
-(if (file-exists? "megatest.config")
-    (if (file-exists? ".mtutil.so")
+(if (common:file-exists? "megatest.config")
+    (if (common:file-exists? ".mtutil.so")
 	(load ".mtutil.so")
-	(if (file-exists? ".mtutil.scm")
+	(if (common:file-exists? ".mtutil.scm")
 	(load ".mtutil.scm"))))
 
 ;; Disabled help items
@@ -209,7 +209,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (handle-exceptions
 	exn
 	(print "ERROR: failed to clone or sync 1ossil " url " message: " ((condition-property-accessor 'exn 'message) exn))
-      (if (file-exists? targ-file)
+      (if (common:file-exists? targ-file)
 	  (system (conc "fossil pull --once " url " -R " targ-file))
 	  (system (conc "fossil clone " url " " targ-file))
 	  ))))
@@ -333,7 +333,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
    (lambda (pktsdirs pktsdir pdb)
      (for-each
       (lambda (pktsdir) ;; look at all
-	(if (and (file-exists? pktsdir)
+	(if (and (common:file-exists? pktsdir)
 		 (directory? pktsdir)
 		 (file-read-access? pktsdir))
 	    (let ((pkts (glob (conc pktsdir "/*.pkt"))))
@@ -907,7 +907,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     pktsdir))
 
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.mtutilrc")))
-  (if (file-exists? debugcontrolf)
+  (if (common:file-exists? debugcontrolf)
       (load debugcontrolf)))
 
 (if *action*
@@ -947,12 +947,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       ((pgschema)
 		(let* ((install-home (common:get-install-area))
 		       (schema-file  (conc install-home "/share/db/mt-pg.sql")))
-		  (if (file-exists? schema-file)
+		  (if (common:file-exists? schema-file)
 		      (system (conc "/bin/cat " schema-file)))))
 	       ((sqlite3schema)
 		(let* ((install-home (common:get-install-area))
 		       (schema-file  (conc install-home "/share/db/mt-sqlite3.sql")))
-		  (if (file-exists? schema-file)
+		  (if (common:file-exists? schema-file)
 		      (system (conc "/bin/cat " schema-file)))))
 	       ((junk)
 		(rmt:get-keys))))))))

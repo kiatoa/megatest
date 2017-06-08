@@ -41,7 +41,7 @@
 	   (debug:print 5 *default-log-port* " exn=" (condition->list exn))
 	   (debug:print 0 *default-log-port* "tasks:wait-on-journal failed. Continuing on, you can ignore this call-chain")
 	   #t) ;; if stuff goes wrong just allow it to move on
-	 (let loop ((journal-exists (file-exists? fullpath))
+	 (let loop ((journal-exists (common:file-exists? fullpath))
 		    (count          n)) ;; wait ten times ...
 	   (if journal-exists
 	       (begin
@@ -51,7 +51,7 @@
 		 (if (> count 0)
 		     (begin
 		       (thread-sleep! 1)
-		       (loop (file-exists? fullpath)
+		       (loop (common:file-exists? fullpath)
 			     (- count 1)))
 		     (begin
 		       (debug:print 0 *default-log-port* "ERROR: removing the journal file " fullpath ", this is not good. Look for disk full, write access and other issues.")
@@ -99,7 +99,7 @@
        (let* ((dbpath        (db:dbfile-path )) ;; (tasks:get-task-db-path))
 	      (dbfile       (conc dbpath "/monitor.db"))
 	      (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
-	      (exists       (file-exists? dbpath))
+	      (exists       (common:file-exists? dbpath))
 	      (write-access (file-write-access? dbpath))
 	      (mdb          (cond ;; what the hek is *toppath* doing here?
 			     ((and (string? *toppath*)(file-write-access? *toppath*))
@@ -196,7 +196,7 @@
 
     (when logfile
       (thread-sleep! 0.5)
-      (if (file-exists? gzfile) (delete-file gzfile))
+      (if (common:file-exists? gzfile) (delete-file gzfile))
       (system (conc "gzip " logfile))
       
       (unsetenv "TARGETHOST_LOGF")

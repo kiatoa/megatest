@@ -56,7 +56,7 @@
 (include "megatest-fossil-hash.scm")
 
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.megatestrc")))
-  (if (file-exists? debugcontrolf)
+  (if (common:file-exists? debugcontrolf)
       (load debugcontrolf)))
 
 ;; Disabled help items
@@ -377,7 +377,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; before doing anything else change to the start-dir if provided
 ;;
 (if (args:get-arg "-start-dir")
-    (if (file-exists? (args:get-arg "-start-dir"))
+    (if (common:file-exists? (args:get-arg "-start-dir"))
         (let ((fullpath (common:real-path (args:get-arg "-start-dir"))))
           (setenv "PWD" fullpath)
           (change-directory fullpath))
@@ -471,7 +471,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (install-home  (common:get-install-area))
 	   (manual-html   (conc install-home "/share/docs/megatest_manual.html")))
       (if (and install-home
-	       (file-exists? manual-html))
+	       (common:file-exists? manual-html))
 	  (system (conc "(" htmlviewercmd " " manual-html " ) &"))
 	  (system (conc "(" htmlviewercmd " http://www.kiatoa.com/cgi-bin/fossils/megatest/doc/tip/docs/manual/megatest_manual.html ) &")))
       (exit)))
@@ -726,7 +726,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (hash-table-keys results))))
 		((sqlite3)
 		 (let* ((db-file   (or out-file (pathname-file input-db)))
-			(db-exists (file-exists? db-file))
+			(db-exists (common:file-exists? db-file))
 			(db        (sqlite3:open-database db-file)))
 		   (if (not db-exists)(sqlite3:execute db "CREATE TABLE data (sheet,section,var,val);"))
 		   (configf:map-all-hier-alist
@@ -874,7 +874,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		     #f))
 	 (cfgf   (if rundir (conc rundir "/.runconfig." megatest-version "-" megatest-fossil-hash) #f)))
     (if (and cfgf
-	     (file-exists? cfgf)
+	     (common:file-exists? cfgf)
 	     (file-write-access? cfgf)
 	     (common:use-cache?))
 	(configf:read-alist cfgf)
@@ -1702,7 +1702,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 (paths    (tests:test-get-paths-matching keys target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
-			(if (file-exists? path)
+			(if (common:file-exists? path)
 			(print path)))	
 		      paths)))
 	;; else do a general-run-call

@@ -63,7 +63,7 @@
 ;;
 (define (launch:load-logpro-dat run-id test-id stepname)
   (let ((cname (conc stepname ".dat")))
-    (if (file-exists? cname)
+    (if (common:file-exists? cname)
 	(let* ((dat  (read-config cname #f #f))
 	       (csvr (db:logpro-dat->csv dat stepname))
 	       (csvt (let-values (((fmt-cell fmt-record fmt-csv) (make-format ",")))
@@ -92,7 +92,7 @@
 	 (html-file      (conc stepname ".html"))
 	 (dat-file       (conc stepname ".dat"))
 	 (tconfig-logpro (configf:lookup testconfig "logpro" stepname))
-	 (logpro-used    (file-exists? logpro-file)))
+	 (logpro-used    (common:file-exists? logpro-file)))
 
     (if (and tconfig-logpro
 	     (not logpro-used)) ;; no logpro file found but have a defn in the testconfig
@@ -111,7 +111,7 @@
     ;; ;; first source the previous environment
     ;; (let ((prev-env (conc ".ezsteps/" prevstep (if (string-search (regexp "csh") 
     ;;      							 (get-environment-variable "SHELL")) ".csh" ".sh"))))
-    ;;   (if (and prevstep (file-exists? prev-env))
+    ;;   (if (and prevstep (common:file-exists? prev-env))
     ;;       (set! script (conc script "source " prev-env))))
     
     ;; call the command using mt_ezstep
@@ -130,7 +130,7 @@
            (lambda ()
              (print stepname ".log :")
              (print "\t" cmd)
-             (if (file-exists? (conc stepname ".logpro"))
+             (if (common:file-exists? (conc stepname ".logpro"))
                  (print "\tlogpro " stepname ".logpro " stepname ".html < " stepname ".log"))
              (print)
              (print stepname " : " stepname ".log")
@@ -174,7 +174,7 @@
       (if logpro-used
 	  (let ((datfile (conc stepname ".dat")))
 	    ;; load the .dat file into the test_data table if it exists
-	    (if (file-exists? datfile)
+	    (if (common:file-exists? datfile)
 		(set! comment (launch:load-logpro-dat run-id test-id stepname)))
 	    (rmt:test-set-log! run-id test-id (conc stepname ".html"))))
       (rmt:teststep-set-status! run-id test-id stepname "end" exinfo comment logfna))
@@ -298,7 +298,7 @@
 	    (begin
 	      (debug:print-error 0 *default-log-port* "Failed to resolve megatest.config, runconfigs.config and testconfig issues. Giving up now")
 	      (exit 1)))
-	(if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
+	(if (not (common:file-exists? ".ezsteps"))(create-directory ".ezsteps"))
 	;; if ezsteps was defined then we are sure to have at least one step but check anyway
 	(if (not (> (length ezstepslst) 0))
 	    (debug:print-error 0 *default-log-port* "ezsteps defined but ezstepslst is zero length")
@@ -310,7 +310,7 @@
 		  (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig))
 			(stepname    (car ezstep)))
 		    ;; if logpro-used read in the stepname.dat file
-		    (if (and logpro-used (file-exists? (conc stepname ".dat")))
+		    (if (and logpro-used (common:file-exists? (conc stepname ".dat")))
 			(launch:load-logpro-dat run-id test-id stepname))
 		    (if (steprun-good? logpro-used (launch:einf-exit-code exit-info))
 			(if (not (null? tal))
@@ -454,7 +454,7 @@
                                   (if (substring-index "/" runscript)
                                       runscript ;; use unadultered if contains slashes
                                       (let ((fulln (conc testpath "/" runscript)))
-	                                  (if (and (file-exists? fulln)
+	                                  (if (and (common:file-exists? fulln)
                                                    (file-execute-access? fulln))
                                               fulln
                                               runscript))))) ;; assume it is on the path
@@ -519,7 +519,7 @@
 		  
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
-	    (if (or (file-exists? top-path)
+	    (if (or (common:file-exists? top-path)
 		    (> count 10))
 		(change-directory top-path)
 		(begin
@@ -615,7 +615,7 @@
 
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
-	    (if (or (file-exists? work-area)
+	    (if (or (common:file-exists? work-area)
 		    (> count 10))
 		(change-directory work-area)
 		(begin
@@ -686,7 +686,7 @@
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
 	      (if (and fullrunscript 
-		       (file-exists? fullrunscript)
+		       (common:file-exists? fullrunscript)
 		       (not (file-execute-access? fullrunscript)))
 		  (system (conc "chmod ug+x " fullrunscript))))
 
@@ -779,18 +779,18 @@
 	     (fulldir  (conc linktree "/"
 			     target "/"
 			     runname)))
-	(if (and linktree (file-exists? linktree)) ;; can't proceed without linktree
+	(if (and linktree (common:file-exists? linktree)) ;; can't proceed without linktree
 	    (begin
 	      (debug:print-info 0 *default-log-port* "Have -run with target=" target ", runname=" runname ", fulldir=" fulldir ", testpatt=" (or (args:get-arg "-testpatt") "%"))
-	      (if (not (file-exists? fulldir))
+	      (if (not (common:file-exists? fulldir))
 		  (create-directory fulldir #t)) ;; need to protect with exception handler 
 	      (if (and target
 		       runname
-		       (file-exists? fulldir))
+		       (common:file-exists? fulldir))
 		  (let ((tmpfile  (conc fulldir "/.megatest.cfg." (current-seconds)))
 			(targfile (conc fulldir "/.megatest.cfg-"  megatest-version "-" megatest-fossil-hash))
 			(rconfig  (conc fulldir "/.runconfig." megatest-version "-" megatest-fossil-hash)))
-		    (if (file-exists? rconfig) ;; only cache megatest.config AFTER runconfigs has been cached
+		    (if (common:file-exists? rconfig) ;; only cache megatest.config AFTER runconfigs has been cached
 			(begin
 			  (debug:print-info 0 *default-log-port* "Caching megatest.config in " tmpfile)
                           (if (not (common:in-running-test?))
@@ -998,7 +998,7 @@
 		      (debug:print-error 0 *default-log-port* "Something went wrong when trying to create link to linktree at " *toppath*)
 		      (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn)))
 		  (let ((tlink (conc *toppath* "/lt")))
-		    (if (not (file-exists? tlink))
+		    (if (not (common:file-exists? tlink))
 			(create-symbolic-link linktree tlink)))))
 	      (begin
 		(debug:print-error 0 *default-log-port* "linktree not defined in [setup] section of megatest.config")
@@ -1017,8 +1017,8 @@
         (let* ((cachefiles   (launch:get-cache-file-paths areapath toppath target mtconfig))
                (mtcachef     (car cachefiles))
                (rccachef     (cdr cachefiles)))
-          (if (and rccachef *runconfigdat* (not (file-exists? rccachef))) (configf:write-alist *runconfigdat* rccachef))
-          (if (and mtcachef *configdat*    (not (file-exists? mtcachef))) (configf:write-alist *configdat* mtcachef))
+          (if (and rccachef *runconfigdat* (not (common:file-exists? rccachef))) (configf:write-alist *runconfigdat* rccachef))
+          (if (and mtcachef *configdat*    (not (common:file-exists? mtcachef))) (configf:write-alist *configdat* mtcachef))
           (if (and rccachef mtcachef *runconfigdat* *configdat*)
               (set! *configstatus* 'fulldata)))
 
@@ -1136,7 +1136,7 @@
 	   (exit 1))
 	 (delete-file lnkpath)))
 
-    (if (not (or (file-exists? lnkpath)
+    (if (not (or (common:file-exists? lnkpath)
 		 (symbolic-link? lnkpath)))
 	(handle-exceptions
 	 exn
@@ -1161,7 +1161,7 @@
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?
 	  (rmt:general-call 'test-set-rundir-shortdir run-id lnkpath 
-			    (if (file-exists? lnkpath)
+			    (if (common:file-exists? lnkpath)
 				;; (resolve-pathname lnkpath)
 				(common:nice-path lnkpath)
 				lnkpath)
@@ -1200,7 +1200,7 @@
 	     (debug:print-error 0 *default-log-port* " Failed to re-create link " lnktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	     (exit))
 	   (if (symbolic-link? lnktarget)     (delete-file lnktarget))
-	   (if (not (file-exists? lnktarget)) (create-symbolic-link test-path lnktarget)))))
+	   (if (not (common:file-exists? lnktarget)) (create-symbolic-link test-path lnktarget)))))
 
     (if (not (directory? test-path))
 	(create-directory test-path #t)) ;; this is a hack, I don't know why out of the blue this path does not exist sometimes
@@ -1367,7 +1367,7 @@
       ;; clean out step records from previous run if they exist
       ;; (rmt:delete-test-step-records run-id test-id)
       ;; if the dir does not exist we may have a itempath where individual variables are a path, launch anyway
-      (if (file-exists? work-area)
+      (if (common:file-exists? work-area)
 	  (change-directory work-area)) ;; so that log files from the launch process don't clutter the test dir
       (cond
        ;; ((and launcher hosts) ;; must be using ssh hostname

@@ -236,7 +236,7 @@
 ;;
 (define (submegatest-panel dbstruct keydat testdat runname testconfig)
   (let* ((subarea (configf:lookup testconfig "setup" "submegatest"))
-	 (area-exists (and subarea (file-exists? subarea))))
+	 (area-exists (and subarea (common:file-exists? subarea))))
     ;; (debug:print-info 0 *default-log-port* "Megatest subarea=" subarea ", area-exists=" area-exists)
     (if subarea
 	(iup:frame 
@@ -460,7 +460,7 @@
 	       ;; this next block was added to fix a bug where variables were
                ;; needed. Revisit this.
 	       (runconfig  (let ((runconfigf (conc  *toppath* "/runconfigs.config"))) ;; no rush but it would be good to convert this call to use runconfig:read
-	 		     (if (file-exists? runconfigf)
+	 		     (if (common:file-exists? runconfigf)
 	 			 (handle-exceptions
                                    exn
                                    #f  ;; do nothing, just keep on trucking ....
@@ -474,14 +474,14 @@
 				 (tests:get-testconfig (db:test-get-testname testdat) (db:test-get-item-path testdat) test-registry #f)
 				 (tests:get-testconfig (db:test-get-testname testdat) item-path test-registry #t))))
 	       (viewlog    (lambda (x)
-			     (if (file-exists? logfile)
+			     (if (common:file-exists? logfile)
 					;(system (conc "firefox " logfile "&"))
 				 (dcommon:run-html-viewer logfile)
 				 (message-window (conc "File " logfile " not found")))))
 	       (view-a-log (lambda (lfile) 
 			     (let ((lfilename (conc rundir "/" lfile)))
 			       ;; (print "lfilename: " lfilename)
-			       (if (file-exists? lfilename)
+			       (if (common:file-exists? lfilename)
 					;(system (conc "firefox " logfile "&"))
 				   (dcommon:run-html-viewer lfilename)
 				   (message-window (conc "File " lfilename " not found"))))))
@@ -498,7 +498,7 @@
 	       (widgets    (make-hash-table))
 	       (refreshdat (lambda ()
 			     (let* ((curr-mod-time (file-modification-time db-path))
-				                   ;;     (max ..... (if (file-exists? testdat-path)
+				                   ;;     (max ..... (if (common:file-exists? testdat-path)
 						   ;;      	      (file-modification-time testdat-path)
 						   ;;      	      (begin
 						   ;;      		(set! testdat-path (conc rundir "/testdat.db"))

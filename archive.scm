@@ -32,7 +32,7 @@
 	(adisks  (archive:get-archive-disks)))
     ;; get testdir size
     ;;   - hand off du to job mgr
-    (if (and (file-exists? testdir)
+    (if (and (common:file-exists? testdir)
 	     (file-is-writable? testdir))
 	(let* ((dused  (jobrunner:run-job 
 			flavor  ;; machine type
@@ -139,7 +139,7 @@
 	      ;; note the trailing slash to get the dir inspite of it being a link
 	      (test-path         (conc linktree "/" test-partial-path))
 	      (mutex-lock! rp-mutex)
-	      (test-physical-path (if (file-exists? test-path) 
+	      (test-physical-path (if (common:file-exists? test-path) 
 				      (common:real-path test-path)
 				      #f))
 	      (mutex-unlock! rp-mutex)
@@ -154,7 +154,7 @@
  	 (cond
 	  (toplevel/children
 	   (debug:print 0 *default-log-port* "WARNING: cannot archive " test-name " with id " test-id " as it is a toplevel test with children"))
-	  ((not (file-exists? test-path))
+	  ((not (common:file-exists? test-path))
 	   (debug:print 0 *default-log-port* "WARNING: Cannot archive " test-name "/" item-path " as path " test-path " does not exist"))
 	  (else
 	   (debug:print 0 *default-log-port*
@@ -182,9 +182,9 @@
 					      (conc "--strip-path=" disk-group))
 					test-paths))
 	      (print-prefix      #f)) ;; "Running: ")) ;; change to #f to turn off printing
-	 (if (not (file-exists? archive-dir))
+	 (if (not (common:file-exists? archive-dir))
 	     (create-directory archive-dir #t))
-	 (if (not (file-exists? (conc archive-dir "/HEAD")))
+	 (if (not (common:file-exists? (conc archive-dir "/HEAD")))
 	     (begin
 	       ;; replace this with jobrunner stuff enventually
 	       (debug:print-info 0 *default-log-port* "Init bup in " archive-dir)
@@ -235,7 +235,7 @@
 	      (test-path         (conc linktree "/" test-partial-path))
 	      ;; if the old path was not deleted then prev-test-physical-path will end up pointing to a real directory
 	      (mutex-lock! rp-mutex)
-	      (prev-test-physical-path (if (file-exists? test-path)
+	      (prev-test-physical-path (if (common:file-exists? test-path)
 					   ;; (read-symbolic-link test-path #t)
 					   (common:real-path test-path)
 					   #f))
@@ -252,7 +252,7 @@
 	 ;;
 	 (if (and (not toplevel/children)  ;; special handling needed for toplevel with children
 		  prev-test-physical-path
-		  (file-exists? prev-test-physical-path)) ;; what to do? abort or clean up or link it in?
+		  (common:file-exists? prev-test-physical-path)) ;; what to do? abort or clean up or link it in?
 	     (let* ((base (pathname-directory prev-test-physical-path))
 		    (dirn (pathname-file      prev-test-physical-path))
 		    (newn (conc base "/." dirn)))

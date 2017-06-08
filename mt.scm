@@ -181,7 +181,7 @@
 	      ;; (mutex-lock! *triggers-mutex*)
 	      (if (and test-name
 		       test-rundir)   ;; #f means no dir set yet
-		       ;; (file-exists? test-rundir)
+		       ;; (common:file-exists? test-rundir)
 		       ;; (directory? test-rundir))
 		  (call-with-environment-variables
 		   (list (cons "MT_TEST_NAME"    (or test-name "no such test"))
@@ -251,7 +251,7 @@
 		     (tal (cdr test-dirs)))
 	    ;; Setting MT_LINKTREE here is almost certainly unnecessary. 
 	    (let ((tconfig-file (conc hed "/" test-name "/testconfig")))
-	      (if (and (file-exists? tconfig-file)
+	      (if (and (common:file-exists? tconfig-file)
 		       (file-read-access? tconfig-file))
 		  (let ((link-tree-path (common:get-linktree)) ;; (configf:lookup *configdat* "setup" "linktree"))
 			(old-link-tree  (get-environment-variable "MT_LINKTREE")))

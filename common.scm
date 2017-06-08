@@ -283,7 +283,7 @@
                      (> (- (current-seconds) (file-modification-time fullname))
                         (* 8 60 60))))
             (let ((gzfile (conc fullname ".gz")))
-              (if (file-exists? gzfile)
+              (if (common:file-exists? gzfile)
                   (begin
                     (debug:print-info 0 *default-log-port* "removing " gzfile)
                     (delete-file gzfile)))
@@ -313,7 +313,7 @@
 			 "   got:      " (common:get-last-run-version))
             (cond
              ((get-environment-variable "MT_SKIP_DB_MIGRATE") #t)
-             ((and (file-exists? mtconf) (file-exists? dbfile) (not read-only)
+             ((and (common:file-exists? mtconf) (common:file-exists? dbfile) (not read-only)
                    (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
               (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
               (handle-exceptions
@@ -324,10 +324,10 @@
                  (print-call-chain (current-error-port))
                  (exit 1))
                (common:cleanup-db dbstruct)))
-             ((not (file-exists? mtconf))
+             ((not (common:file-exists? mtconf))
               (debug:print 0 *default-log-port* "   megatest.config does not exist in this area.  Cannot proceed with megatest version migration.")
               (exit 1))
-             ((not (file-exists? dbfile))
+             ((not (common:file-exists? dbfile))
               (debug:print 0 *default-log-port* "   megatest.db does not exist in this area.  Cannot proceed with megatest version migration.")
               (exit 1))
              ((not (eq? (current-user-id)(file-owner mtconf)))
@@ -441,7 +441,7 @@
   (handle-exceptions
       exn
       #f ;; don't really care what went wrong right now. NOTE: I have not seen this one actually fail.
-    (if (file-exists? fname)
+    (if (common:file-exists? fname)
 	(if (> (- (current-seconds)(file-modification-time fname)) expire-time)
 	    (begin
 	      (delete-file* fname)
@@ -452,7 +452,7 @@
 	    (lambda ()
 	      (print key-string)))
 	  (thread-sleep! 0.25)
-	  (if (file-exists? fname)
+	  (if (common:file-exists? fname)
 	      (with-input-from-file fname
 		(lambda ()
 		  (equal? key-string (read-line))))
@@ -804,7 +804,7 @@
 		 (tal (cdr cmds)))
 	(let ((res (with-input-from-pipe (conc "which " hed) read-line)))
 	  (if (and (string? res)
-		   (file-exists? res))
+		   (common:file-exists? res))
 	      res
 	      (if (null? tal)
 		  #f
@@ -812,7 +812,7 @@
   
 (define (common:get-install-area)
   (let ((exe-path (car (argv))))
-    (if (file-exists? exe-path)
+    (if (common:file-exists? exe-path)
 	(handle-exceptions
 	 exn
 	 #f
@@ -1049,7 +1049,7 @@
 				   (debug:print 0 *default-log-port* "ERROR: Failed to read .homehost file after trying five times. Giving up and exiting, message: "  ((condition-property-accessor 'exn 'message) exn))
 				   (exit 1)))
 			   (let ((hhf (conc *toppath* "/.homehost")))
-			     (if (file-exists? hhf)
+			     (if (common:file-exists? hhf)
 				 (with-input-from-file hhf read-line)
 				 (if (file-write-access? *toppath*)
 				     (begin
@@ -2254,10 +2254,10 @@
   (let* ((view-cfgdat    (make-hash-table))
 	 (home-cfgfile   (conc (get-environment-variable "HOME") "/.mtviews.config"))
 	 (mthome-cfgfile (conc *toppath* "/.mtviews.config")))
-    (if (file-exists? mthome-cfgfile)
+    (if (common:file-exists? mthome-cfgfile)
 	(read-config mthome-cfgfile view-cfgdat #t))
     ;; we load the home dir file AFTER the MTRAH file so the user can clobber settings when running the dashboard in read-only areas
-    (if (file-exists? home-cfgfile)
+    (if (common:file-exists? home-cfgfile)
 	(read-config home-cfgfile view-cfgdat #t))
     view-cfgdat))
 
