@@ -110,6 +110,8 @@
 (define *db-cache-path*       #f)
 (define *db-with-db-mutex*    (make-mutex))
 (define *db-api-call-time*    (make-hash-table)) ;; hash of command => (list of times)
+;; no sync db
+(define *no-sync-db*          #f)
 
 ;; SERVER
 (define *my-client-signature* #f)
@@ -239,7 +241,7 @@
 
 (define (common:api-changed?)
   (not (equal? (substring (->string megatest-version) 0 4)
-               (substring (common:get-last-run-version) 0 4))))
+               (substring (conc (common:get-last-run-version)) 0 4))))
   
 ;; Move me elsewhere ...
 ;; RADT => Why do we meed the version check here, this is called only if version misma
@@ -1078,7 +1080,7 @@
 ;;
 (define (common:use-cache?)
   (let ((res #t)) ;; priority by order of evaluation
-    (if *configdat*
+    (if *configdat* ;; sillyness here. can't use setup/use-cache to know if we can use the cached files!
 	(if (equal? (configf:lookup *configdat* "setup" "use-cache") "no")
 	    (set! res #f)
 	    (if (equal? (configf:lookup *configdat* "setup" "use-cache") "yes")
@@ -2066,17 +2068,25 @@
              (string-split instr)))
    "/"))
 
-(define (common:faux-lock keyname)
-  (if (rmt:get-var keyname)
-      #f
+(define (common:faux-lock keyname #!key (wait-time 8))
+  (if (rmt:no-sync-get/default keyname #f) ;; do not be tempted to compare to pid. locking is a one-shot action, if already locked for this pid it doesn't actually count
+      (if (> wait-time 0)
+	  (begin
+	    (thread-sleep! 1)
+	    (if (eq? wait-time 1) ;; only one second left, steal the lock
+		(begin
+		  (debug:print-info 0 *default-log-port* "stealing lock for " keyname)
+		  (common:faux-unlock keyname force: #t)))
+	    (common:faux-lock keyname wait-time: (- wait-time 1)))
+	  #f)
       (begin
-        (rmt:set-var keyname (conc (current-process-id)))
-        (equal? (conc (current-process-id)) (conc (rmt:get-var keyname))))))
+        (rmt:no-sync-set keyname (conc (current-process-id)))
+        (equal? (conc (current-process-id)) (conc (rmt:no-sync-get/default keyname #f))))))
 
 (define (common:faux-unlock keyname #!key (force #f))
-  (if (or force (equal? (conc (current-process-id)) (conc (rmt:get-var keyname))))
+  (if (or force (equal? (conc (current-process-id)) (conc (rmt:no-sync-get/default keyname #f))))
       (begin
-        (if (rmt:get-var keyname) (rmt:del-var keyname))
+        (if (rmt:no-sync-get/default keyname #f) (rmt:no-sync-del! keyname))
         #t)
       #f))
 

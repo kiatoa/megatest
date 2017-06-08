@@ -1845,19 +1845,35 @@
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS no_sync_metadat (var TEXT,val TEXT, CONSTRAINT no_sync_metadat_constraint UNIQUE (var));")
     db))
 
+;; if we are not a server create a db handle. this is not finalized
+;; so watch for problems. I'm still not clear if it is needed to manually
+;; finalize sqlite3 dbs with the sqlite3 egg.
+;;
+(define (db:no-sync-db db-in)
+  (if db-in
+      db-in
+      (let ((db (db:open-no-sync-db)))
+	(set! *no-sync-db* db)
+	db)))
+
 (define (db:no-sync-set db var val)
-  (sqlite3:execute db "INSERT OR REPLACE INTO no_sync_metadat (var,val) VALUES (?,?);" var val))
+  (sqlite3:execute (db:no-sync-db db) "INSERT OR REPLACE INTO no_sync_metadat (var,val) VALUES (?,?);" var val))
+
+(define (db:no-sync-del! db var)
+  (sqlite3:execute (db:no-sync-db db) "DELETE FROM no_sync_metadat WHERE var=?;" var))
 
 (define (db:no-sync-get/default db var default)
   (let ((res default))
     (sqlite3:for-each-row
      (lambda (val)
        (set! res val))
-     db
+     (db:no-sync-db db)
      "SELECT val FROM no_sync_metadat WHERE var=?;"
      var)
     (if res
-        (let ((newres (string->number res)))
+        (let ((newres (if (string? res)
+			  (string->number res)
+			  #f)))
           (if newres
               newres
               res))

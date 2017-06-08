@@ -759,6 +759,8 @@
 		(exit 4))))
         )))
 
+;; DO NOT USE - caching of configs is handled in launch:setup now.
+;;
 (define (launch:cache-config)
   ;; if we have a linktree and -runtests and -target and the directory exists dump the config
   ;; to megatest-(current-seconds).cfg and symlink it to megatest.cfg
@@ -872,7 +874,12 @@
         ;;(BB> "launch:setup-body -- cachefiles="cachefiles)
 	(cond
 	 ;; if mtcachef exists just read it, however we need to assume toppath is available in $MT_RUN_AREA_HOME
-	 ((and (not force-reread) mtcachef (common:file-exists? mtcachef) (get-environment-variable "MT_RUN_AREA_HOME") use-cache)
+	 ((and (not force-reread)
+	       mtcachef  rccachef
+	       use-cache
+	       (get-environment-variable "MT_RUN_AREA_HOME")
+	       (common:file-exists? mtcachef)
+	       (common:file-exists? rccachef))
           ;;(BB> "launch:setup-body -- cond branch 1 - use-cache")
           (set! *configdat*    (configf:read-alist mtcachef))
           ;;(BB> "launch:setup-body -- 1 set! *configdat*="*configdat*)
@@ -881,8 +888,11 @@
 	  (set! *configstatus* 'fulldata)
 	  (set! *toppath*      (get-environment-variable "MT_RUN_AREA_HOME"))
 	  *toppath*)
+	 ;; there are no existing cached configs, do full reads of the configs and cache them
 	 ;; we have all the info needed to fully process runconfigs and megatest.config
-	 ((and (not force-reread) mtcachef) ;; BB- why are we doing this without asking if caching is desired?
+	 ((and ;; (not force-reread) ;; force-reread is irrelevant in the AND, could however OR it?
+	       mtcachef
+	       rccachef) ;; BB- why are we doing this without asking if caching is desired?
           ;;(BB> "launch:setup-body -- cond branch 2")
 	  (let* ((first-pass    (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect
 				 mtconfig
@@ -935,15 +945,15 @@
                          (mtcachef     (car cachefiles))
                          (rccachef     (cdr cachefiles)))
 		    (if rccachef (configf:write-alist runconfigdat rccachef))
-		    (set! *runconfigdat* runconfigdat)
 		    (if mtcachef (configf:write-alist *configdat* mtcachef))
+		    (set! *runconfigdat* runconfigdat)
 		    (if (and rccachef mtcachef) (set! *configstatus* 'fulldata))))
 		;; no configs found? should not happen but let's try to recover gracefully, return an empty hash-table
-		(begin (set! *configdat* (make-hash-table))
-                       ;;(BB> "launch:setup-body -- 3 set! *configdat*="*configdat*)
-                       )
+		(set! *configdat* (make-hash-table))
 		)))
+
 	 ;; else read what you can and set the flag accordingly
+	 ;; here we don't have either mtconfig or rccachef
 	 (else
           ;;(BB> "launch:setup-body -- cond branch 3 - else")
 	  (let* ((cfgdat   (find-and-read-config 
@@ -964,6 +974,8 @@
 		(begin
 		  (debug:print-error 0 *default-log-port* "No " mtconfig " file found. Giving up.")
 		  (exit 2))))))
+	;; COND ends here.
+	
 	;; additional house keeping
 	(let* ((linktree (common:get-linktree)))
 	  (if linktree
@@ -995,16 +1007,15 @@
 	      (setenv "MT_TESTSUITENAME" (common:get-testsuite-name)))
 	    (begin
 	      (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")
-	      ;;(exit 1)
 	      (set! *toppath* #f) ;; force it to be false so we return #f
-	      #f
-	      ))
+	      #f))
+	
         ;; one more attempt to cache the configs for future reading
         (let* ((cachefiles   (launch:get-cache-file-paths areapath toppath target mtconfig))
                (mtcachef     (car cachefiles))
                (rccachef     (cdr cachefiles)))
-          (if (and rccachef *runconfigdat*) (configf:write-alist *runconfigdat* rccachef))
-          (if (and mtcachef *configdat*)    (configf:write-alist *configdat* mtcachef))
+          (if (and rccachef *runconfigdat* (not (file-exists? rccachef))) (configf:write-alist *runconfigdat* rccachef))
+          (if (and mtcachef *configdat*    (not (file-exists? mtcachef))) (configf:write-alist *configdat* mtcachef))
           (if (and rccachef mtcachef *runconfigdat* *configdat*)
               (set! *configstatus* 'fulldata)))
 
