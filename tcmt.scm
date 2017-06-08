@@ -100,7 +100,7 @@
 	  (launch:setup)
 	  (set! keys (rmt:get-keys))))
     (set! tsname  (common:get-testsuite-name))
-    (print "TCMT: for testsuite=" tsname " found runname=" runname " and target=" target " and successfully ran launch:setup")
+    (print "TCMT: for testsuite=" tsname " found runname=" runname ", target=" target ", keys=" keys " and successfully ran launch:setup.")
     (let loop ()
       (handle-exceptions
        exn
@@ -109,7 +109,8 @@
        (let-values (((pidres exittype exitstatus)
 		     (process-wait pid #t)))
 	 (if (and keys
-		  (not run-ids))
+		  (or (not run-ids)
+		      (null? run-ids)))
 	     (let* ((runs (rmt:get-runs-by-patt keys
 						runname 
 						target
