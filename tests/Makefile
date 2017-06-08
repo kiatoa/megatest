@@ -175,7 +175,7 @@ minsetup : build
 	cd mintest;$(DASHBOARD) -rows 18 &
 
 cleanprep : ../*.scm Makefile */*.config build
-	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links /tmp/$(USER)/adisk1
+	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links /tmp/$(USER)/adisk1 fullrun/logs
 	rm -f */logging.db
 	touch cleanprep
 

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<meta name="generator" content="AsciiDoc 8.6.7">
+<meta name="generator" content="AsciiDoc 8.6.9">
 <title>The Megatest Users Manual</title>
 <style type="text/css">
 /* Shared CSS for AsciiDoc xhtml11 and html5 backends */
@@ -86,9 +86,15 @@ ul, ol, li > p {
 ul > li     { color: #aaa; }
 ul > li > * { color: black; }
 
-pre {
+.monospaced, code, pre {
+  font-family: "Courier New", Courier, monospace;
+  font-size: inherit;
+  color: navy;
   padding: 0;
   margin: 0;
+}
+pre {
+  white-space: pre-wrap;
 }
 
 #author {
@@ -218,7 +224,7 @@ div.exampleblock > div.content {
 }
 
 div.imageblock div.content { padding-left: 0; }
-span.image img { border-style: none; }
+span.image img { border-style: none; vertical-align: text-bottom; }
 a.image:visited { color: white; }
 
 dl {
@@ -414,12 +420,6 @@ div.unbreakable { page-break-inside: avoid; }
  *
  * */
 
-tt {
-  font-family: "Courier New", Courier, monospace;
-  font-size: inherit;
-  color: navy;
-}
-
 div.tableblock {
   margin-top: 1.0em;
   margin-bottom: 1.5em;
@@ -452,12 +452,6 @@ div.tableblock > table[frame="vsides"] {
  * html5 specific
  *
  * */
-
-.monospaced {
-  font-family: "Courier New", Courier, monospace;
-  font-size: inherit;
-  color: navy;
-}
 
 table.tableblock {
   margin-top: 1.0em;
@@ -538,6 +532,8 @@ body.manpage div.sectionbody {
 @media print {
   body.manpage div#toc { display: none; }
 }
+
+
 @media screen {
   body {
     max-width: 50em; /* approximately 80 characters wide */
@@ -1915,7 +1911,7 @@ lookittmp ;; Note: config file format supports multi-line entries where leading 
 </div>
 <div class="sect2">
 <h3 id="_triggers">Triggers</h3>
-<div class="paragraph"><p>In your testconfig triggers can be specified</p></div>
+<div class="paragraph"><p>In your testconfig or megatest.config triggers can be specified</p></div>
 <div class="listingblock">
 <div class="content monospaced">
 <pre>[triggers]
@@ -1929,7 +1925,7 @@ RUNNING/ running.sh
 # Call script onpass.sh any time status goes to PASS
 PASS/ onpass.sh</pre>
 </div></div>
-<div class="paragraph"><p>Scripts called will have; test-id test-rundir trigger, added to the commandline.</p></div>
+<div class="paragraph"><p>Scripts called will have; test-id test-rundir trigger test-name item-path state status event-time, added to the commandline.</p></div>
 <div class="paragraph"><p>HINT</p></div>
 <div class="paragraph"><p>To start an xterm (useful for debugging), use a command line like the following:</p></div>
 <div class="listingblock">
@@ -1940,7 +1936,7 @@ COMPLETED/ xterm -e bash -s --</pre>
 <div class="admonitionblock">
 <table><tr>
 <td class="icon">
-<img src="/nfs/pdx/disks/ice.disk.002/icfadm/pkgs/asciidoc/8.6.7/images/icons/note.png" alt="Note">
+<img src="/usr/images/icons/note.png" alt="Note">
 </td>
 <td class="content">There is a trailing space after the --</td>
 </tr></table>
@@ -2153,7 +2149,8 @@ width:70%;
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br>
-Last updated 2017-05-10 08:25:49 PDT
+Last updated
+ 2017-05-21 21:58:43 MST
 </div>
 </div>
 </body>

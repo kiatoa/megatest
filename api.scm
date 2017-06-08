@@ -58,6 +58,7 @@
     get-steps-data
     get-steps-for-test
     read-test-data
+    read-test-data*
     login
     tasks-get-last
     testmeta-get-record
@@ -128,6 +129,7 @@
      (vector #f (vector #f "remote must be called with a vector")))
     ((> *api-process-request-count* 20) ;; 20)
      (debug:print 0 *default-log-port* "WARNING: api:execute-requests received an overloaded message.")
+     (set! *server-overloaded* #t)
      (vector #f (vector #f 'overloaded))) ;; the inner vector is what gets returned. nope, don't know why. please refactor!
     (else  
      (let* ((cmd-in            (vector-ref dat 0))
@@ -259,6 +261,7 @@
 
                    ;; TEST DATA
                    ((read-test-data)               (apply db:read-test-data dbstruct params))
+                   ((read-test-data*)              (apply db:read-test-data* dbstruct params))
 
                    ;; MISC
                    ((get-latest-host-load)         (apply db:get-latest-host-load dbstruct params))

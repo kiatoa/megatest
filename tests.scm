@@ -422,15 +422,15 @@
     (let ((category (hash-table-ref/default otherdat ":category" ""))
 	  (variable (hash-table-ref/default otherdat ":variable" ""))
 	  (value    (hash-table-ref/default otherdat ":value"    #f))
-	  (expected (hash-table-ref/default otherdat ":expected" #f))
-	  (tol      (hash-table-ref/default otherdat ":tol"      #f))
+	  (expected (hash-table-ref/default otherdat ":expected" "n/a"))
+	  (tol      (hash-table-ref/default otherdat ":tol"      "n/a"))
 	  (units    (hash-table-ref/default otherdat ":units"    ""))
 	  (type     (hash-table-ref/default otherdat ":type"     ""))
 	  (dcomment (hash-table-ref/default otherdat ":comment"  "")))
       (debug:print 4 *default-log-port* 
 		   "category: " category ", variable: " variable ", value: " value
 		   ", expected: " expected ", tol: " tol ", units: " units)
-      (if (and value expected tol) ;; all three required
+      (if (and value) ;; require only value; BB was- all three required
 	  (let ((dat (conc category ","
 			   variable ","
 			   value    ","
@@ -441,7 +441,9 @@
 			   type     )))
 	    ;; This was run remote, don't think that makes sense. Perhaps not, but that is the easiest path for the moment.
 	    (rmt:csv->test-data run-id test-id
-				dat))))
+				dat)
+            (thread-sleep! 10) ;; add 10 second delay before quit incase rmt needs time to start a server.
+            )))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     ;;;;;; (if (not (equal? item-path ""))

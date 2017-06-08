@@ -296,8 +296,13 @@
                          #f))) ;; (hash-table-ref/default *runremote* run-id #f)))
     (if (vector? server-dat)
 	(let ((api-dat (http-transport:server-dat-get-api-uri server-dat)))
-	  (close-connection! api-dat)
-	  #t)
+	  (handle-exceptions
+	    exn
+	    (begin
+	      (print-call-chain *default-log-port*)
+	      (debug:print-error 0 *default-log-port* " closing connection failed with error: " ((condition-property-accessor 'exn 'message) exn)))
+	    (close-connection! api-dat)
+	    #t))
 	#f)))
 
 
@@ -444,7 +449,8 @@
 		(handle-exceptions
 		    exn
 		    (debug:print 0 *default-log-port* "ERROR: Failed to change timestamp on log file " server-log-file ". Are you out of space on that disk?")
-		  (change-file-times server-log-file curr-time curr-time))))
+		  (if (not *server-overloaded*)
+		      (change-file-times server-log-file curr-time curr-time)))))
           (loop 0 server-state bad-sync-count (current-milliseconds)))
          (else
           (debug:print-info 0 *default-log-port* "Server timed out. seconds since last db access: " (- (current-seconds) last-access))
@@ -487,13 +493,12 @@
 ;; start_server? 
 ;;
 (define (http-transport:launch)
-  ;; (if (args:get-arg "-daemonize")
-  ;;     (begin
-  ;; 	(daemon:ize)
-  ;; 	(if *alt-log-file* ;; we should re-connect to this port, I think daemon:ize disrupts it
-  ;; 	    (begin
-  ;; 	      (current-error-port *alt-log-file*)
-  ;; 	      (current-output-port *alt-log-file*)))))
+  ;; lets not even bother to start if there are already three or more server files ready to go
+  (let* ((num-alive   (server:get-num-alive (server:get-list *toppath*))))
+    (if (> num-alive 3)
+	(begin
+	  (debug:print 0 *default-log-port* "ERROR: Aborting server start because there are already " num-alive " possible servers either running or starting up")
+	  (exit))))
   (let* ((th2 (make-thread (lambda ()
 			     (debug:print-info 0 *default-log-port* "Server run thread started")
 			     (http-transport:run 
