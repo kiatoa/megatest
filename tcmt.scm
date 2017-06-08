@@ -99,6 +99,7 @@
 	(begin
 	  (launch:setup)
 	  (set! keys (rmt:get-keys))))
+    (print "TCMT: for testsuite=" tsname " found runname=" runname " and target=" target " and successfully ran launch:setup")
     (let loop ()
       (handle-exceptions
        exn
@@ -109,8 +110,8 @@
 	 (if (and keys
 		  (not run-ids))
 	     (let* ((runs (rmt:get-runs-by-patt keys
-						(args:get-arg "-runname")
-						(or (args:get-arg "-target")(args:get-arg "-reqtarg"))
+						runname 
+						target
 						#f ;; offset
 						#f ;; limit
 						#f ;; fields
