@@ -2018,7 +2018,8 @@
 	(if (launch:setup)
 	    (begin
 	      (full-runconfigs-read) ;; cache the run config
-	      (launch:cache-config)) ;; do not cache here - need to be sure runconfigs is processed
+	      ;; (launch:cache-config) ;; there are two independent config cache locations, turning this one off for now. MRW.
+	      ) ;; do not cache here - need to be sure runconfigs is processed
 	    (begin 
 	      (debug:print 0 *default-log-port* "Failed to setup, exiting")
 	      (exit 1)))

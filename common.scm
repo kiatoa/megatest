@@ -1078,7 +1078,7 @@
 ;;
 (define (common:use-cache?)
   (let ((res #t)) ;; priority by order of evaluation
-    (if *configdat*
+    (if *configdat* ;; sillyness here. can't use setup/use-cache to know if we can use the cached files!
 	(if (equal? (configf:lookup *configdat* "setup" "use-cache") "no")
 	    (set! res #f)
 	    (if (equal? (configf:lookup *configdat* "setup" "use-cache") "yes")
@@ -2066,16 +2066,20 @@
              (string-split instr)))
    "/"))
 
-(define (common:faux-lock keyname #!key (wait-time 5))
-  (if (rmt:no-sync-get/default keyname #f)
+(define (common:faux-lock keyname #!key (wait-time 8))
+  (if (rmt:no-sync-get/default keyname #f) ;; do not be tempted to compare to pid. locking is a one-shot action, if already locked for this pid it doesn't actually count
       (if (> wait-time 0)
 	  (begin
 	    (thread-sleep! 1)
+	    (if (eq? wait-time 1) ;; only one second left, steal the lock
+		(begin
+		  (debug:print-info 0 *default-log-port* "stealing lock for " keyname)
+		  (common:faux-unlock keyname force: #t)))
 	    (common:faux-lock keyname wait-time: (- wait-time 1)))
 	  #f)
       (begin
         (rmt:no-sync-set keyname (conc (current-process-id)))
-        (equal? (conc (current-process-id)) (conc (rmt:get-var keyname))))))
+        (equal? (conc (current-process-id)) (conc (rmt:no-sync-get/default keyname #f))))))
 
 (define (common:faux-unlock keyname #!key (force #f))
   (if (or force (equal? (conc (current-process-id)) (conc (rmt:no-sync-get/default keyname #f))))

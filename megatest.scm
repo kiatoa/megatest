@@ -566,7 +566,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-clean-cache")
     (let ((toppath  (launch:setup)))
       (set! *didsomething* #t) ;; suppress the help output.
-      (runs:clean-cache (getenv "MT_TARGET")(args:get-arg "-runname") toppath)))
+      (runs:clean-cache (or (getenv "MT_TARGET")
+			    (args:get-arg "-target")
+			    (args:get-arg "-remtarg"))
+			(args:get-arg "-runname")
+			toppath)))
 	  
 (if (args:get-arg "-env2file")
     (begin
@@ -894,7 +898,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
                     (configf:write-alist data cfgf))
 		;; force re-read of megatest.config - this resolves circular references between megatest.config
 		(launch:setup force-reread: #t)
-		(launch:cache-config))) ;; we can safely cache megatest.config since we have a valid runconfig
+		;; (launch:cache-config) ;; there are two independent config cache locations, turning this one off for now. MRW.
+		)) ;; we can safely cache megatest.config since we have a valid runconfig
 	  data))))
 
 (if (args:get-arg "-show-runconfig")

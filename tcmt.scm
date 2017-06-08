@@ -94,11 +94,12 @@
 	(target  (or (args:get-arg "-target")
 		     (args:get-arg "-reqtarg")))
 	(runname (args:get-arg "-runname"))
-	(tsname  (common:get-testsuite-name)))
+	(tsname  #f))
     (if (and target runname)
 	(begin
 	  (launch:setup)
 	  (set! keys (rmt:get-keys))))
+    (set! tsname  (common:get-testsuite-name))
     (print "TCMT: for testsuite=" tsname " found runname=" runname " and target=" target " and successfully ran launch:setup")
     (let loop ()
       (handle-exceptions
