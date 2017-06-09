@@ -529,6 +529,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	areas-procname
 	(string-split (or areas-string "") ","))))
 
+;; area   - the current area under consideration
+;; areas  - the list of allowed areas from the contour spec -OR-
+;;          if it is a string then it is the function to use to
+;;          lookup in *area-checkers*
+;;
 (define (area-allowed? area areas runkey contour)
   (cond
    ((not areas) #t) ;; no spec
