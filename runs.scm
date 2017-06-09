@@ -332,7 +332,7 @@
     (server:start-and-wait *toppath*)
     
     (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
-    (set! runconf (if (file-exists? runconfigf)
+    (set! runconf (if (common:file-exists? runconfigf)
 		      (setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
 		      (begin
 			(debug:print 0 *default-log-port* "WARNING: You do not have a run config file: " runconfigf)
@@ -1587,7 +1587,7 @@
       (if (not testdat) ;; should NOT happen
 	  (debug:print-error 0 *default-log-port* "failed to get test record for test-id " test-id))
       (set! test-id (db:test-get-id testdat))
-      (if (file-exists? test-path)
+      (if (common:file-exists? test-path)
 	  (change-directory test-path)
 	  (begin
 	    (debug:print-error 0 *default-log-port* "test run path not created before attempting to run the test. Perhaps you are running -remove-runs at the same time?")
@@ -1917,7 +1917,7 @@
 				    (let ((ddir (conc run-dir "/")))
 				      (case (string->symbol (args:get-arg "-archive"))
 					((save save-remove keep-html)
-					 (if (file-exists? ddir)
+					 (if (common:file-exists? ddir)
 					     (debug:print-info 0 *default-log-port* "Estimating disk space usage for " test-fulln ": " (common:get-disk-space-used ddir)))))))
 				(if (not (null? tal))
 				    (loop (car tal)(cdr tal))))
@@ -1926,7 +1926,8 @@
 		     (if worker-thread (thread-join! worker-thread))))))
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
-	       (let ((remtests (mt:get-tests-for-run (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") not-in: #t)))
+	       (let* ((run-id   (db:get-value-by-header run header "id")) ;; NB// masks run-id from above?
+                      (remtests (mt:get-tests-for-run run-id #f '("DELETED") '("n/a") not-in: #t)))
 		 (if (null? remtests) ;; no more tests remaining
 		     (let* ((dparts  (string-split lasttpath "/"))
 			    (runpath (conc "/" (string-intersperse 
@@ -1950,7 +1951,7 @@
 
 (define (runs:remove-test-directory test mode) ;; remove-data-only)
   (let* ((run-dir       (db:test-get-rundir test))    ;; run dir is from the link tree
-	 (real-dir      (if (file-exists? run-dir)
+	 (real-dir      (if (common:file-exists? run-dir)
 			    ;; (resolve-pathname run-dir)
 			    (common:nice-path run-dir)
 			    #f)))
@@ -1961,10 +1962,10 @@
     (debug:print-info 1 *default-log-port* "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
     (if (and real-dir 
 	     (> (string-length real-dir) 5)
-	     (file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
+	     (common:file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
 	(begin ;; let* ((realpath (resolve-pathname run-dir)))
 	  (debug:print-info 1 *default-log-port* "Recursively removing " real-dir)
-	  (if (file-exists? real-dir)
+	  (if (common:file-exists? real-dir)
 	      (runs:safe-delete-test-dir real-dir)
 	      (debug:print 0 *default-log-port* "WARNING: test dir " real-dir " appears to not exist or is not readable")))
 	(if real-dir 
@@ -2179,7 +2180,7 @@
       (if runname
 	  (let* ((linktree (common:get-linktree)) ;; (if toppath (configf:lookup *configdat* "setup" "linktree")))
 		 (runtop   (conc linktree "/" target "/" runname))
-		 (files    (if (file-exists? runtop)
+		 (files    (if (common:file-exists? runtop)
 			       (append (glob (conc runtop "/.megatest*"))
 				       (glob (conc runtop "/.runconfig*")))
 			       '())))

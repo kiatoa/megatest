@@ -199,7 +199,7 @@ EEmHSDpE0iGSDpF0iKRDJB0i6RBJh+gv8TgE/jVPQbMAAAAASUVORK5CYII=
 ;;      (sheet2 ( ... )
 ;;              ( ... ) ) )
 (define (ods:list->ods path fname data)
-  (if (not (file-exists? path))
+  (if (not (common:file-exists? path))
       (print "ERROR: path to create ods data must pre-exist")
       (begin
 	(with-output-to-file (conc path "/content.xml")

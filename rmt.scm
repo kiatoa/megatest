@@ -530,12 +530,12 @@
   (rmt:send-receive 'set-tests-state-status run-id (list run-id testnames currstate currstatus newstate newstatus)))
 
 (define (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)
-  (if (number? run-id)
-      (rmt:send-receive 'get-tests-for-run run-id (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode))
-      (begin
-	(debug:print-error 0 *default-log-port* "rmt:get-tests-for-run called with bad run-id=" run-id)
-	(print-call-chain (current-error-port))
-	'())))
+  ;; (if (number? run-id)
+  (rmt:send-receive 'get-tests-for-run run-id (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)))
+  ;;    (begin
+  ;;	(debug:print-error 0 *default-log-port* "rmt:get-tests-for-run called with bad run-id=" run-id)
+  ;;	(print-call-chain (current-error-port))
+  ;;	'())))
 
 ;; get stuff via synchash 
 (define (rmt:synchash-get run-id proc synckey keynum params)

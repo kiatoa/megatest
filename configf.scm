@@ -25,14 +25,14 @@
 (define (find-config configname #!key (toppath #f))
   (if toppath
       (let ((cfname (conc toppath "/" configname)))
-	(if (file-exists? cfname)
+	(if (common:file-exists? cfname)
 	    (list toppath cfname configname)
 	    (list #f      #f     #f)))
       (let* ((cwd (string-split (current-directory) "/")))
 	(let loop ((dir cwd))
 	  (let* ((path     (conc "/" (string-intersperse dir "/")))
 		 (fullpath (conc path "/" configname)))
-	    (if (file-exists? fullpath)
+	    (if (common:file-exists? fullpath)
 		(list path fullpath configname)
 		(let ((remcwd (take dir (- (length dir) 1))))
 		  (if (null? remcwd)
@@ -230,7 +230,7 @@
 		     (post-section-procs '())   (apply-wildcards #t))
   (debug:print 9 *default-log-port* "START: " path)
   (if (and (not (port? path))
-	   (not (file-exists? path))) ;; for case where we are handed a port
+	   (not (common:file-exists? path))) ;; for case where we are handed a port
       (begin 
 	(debug:print-info 1 *default-log-port* "read-config - file not found " path " current path: " (current-directory))
 	;; WARNING: This is a risky change but really, we should not return an empty hash table if no file read?
@@ -283,7 +283,7 @@
 											   curr-conf-dir
 											   ".")
 										       "/" include-file)))))
-							(if (file-exists? full-conf)
+							(if (common:file-exists? full-conf)
 							    (begin
 							      ;; (push-directory conf-dir)
 							      (debug:print 9 *default-log-port* "Including: " full-conf)
@@ -299,7 +299,7 @@
                                   ;;    (begin
                                   ;;      (debug:print '(0 2 9) #f "INFO: include from script " include-script " failed.")
                                   ;;      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
-							 (if (and (file-exists? include-script)(file-execute-access? include-script))
+							 (if (and (common:file-exists? include-script)(file-execute-access? include-script))
 							     (let* ((new-inp-port (open-input-pipe (conc include-script " " params))))
 							       (debug:print '(2 9) *default-log-port* "Including from script output: " include-script)
 							      ;;  (print "We got here, calling read-config next. Port is: " new-inp-port)
@@ -512,7 +512,7 @@
 	      (loop (car tal)(cdr tal) newres))))))
 
 (define (configf:file->list fname)
-  (if (file-exists? fname)
+  (if (common:file-exists? fname)
       (let ((inp (open-input-file fname)))
 	(let loop ((inl (read-line inp))
 		   (res '()))
@@ -616,7 +616,7 @@
 ;;   returns (list dat msg)
 (define (configf:read-refdb refdb-path)
   (let ((sheets-file  (conc refdb-path "/sheet-names.cfg")))
-    (if (not (file-exists? sheets-file))
+    (if (not (common:file-exists? sheets-file))
 	(list #f (conc "ERROR: no refdb found at " refdb-path))
 	(if (not (file-read-access? sheets-file))
 	    (list #f (conc "ERROR: refdb file not readable at " refdb-path))

@@ -34,7 +34,7 @@
 
 (define (lock-queue:open-db fname #!key (count 10))
   (let* ((actualfname (conc fname ".lockdb"))
-	 (dbexists (file-exists? actualfname))
+	 (dbexists (common:file-exists? actualfname))
 	 (db       (sqlite3:open-database actualfname))
 	 (handler  (make-busy-timeout 136000)))
     (if dbexists
@@ -165,8 +165,8 @@
 	     (handle-exceptions
 	      exn
 	      #f
-	      (if (file-exists? journal)(delete-file journal))
-	      (if (file-exists? fname)  (delete-file fname))
+	      (if (common:file-exists? journal)(delete-file journal))
+	      (if (common:file-exists? fname)  (delete-file fname))
 	      #f))))
      (sqlite3:execute (lock-queue:db-dat-get-db dbdat) "DELETE FROM runlocks WHERE test_id=?;" test-id)
      (sqlite3:finalize! (lock-queue:db-dat-get-db dbdat)))))

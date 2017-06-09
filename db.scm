@@ -206,7 +206,7 @@
   (let* ((parent-dir   (or (pathname-directory fname)(current-directory))) ;; no parent? go local
          (raw-fname    (pathname-file fname))
 	 (dir-writable (file-write-access? parent-dir))
-	 (file-exists  (file-exists? fname))
+	 (file-exists  (common:file-exists? fname))
 	 (file-write   (if file-exists
 			   (file-write-access? fname)
 			   dir-writable )))
@@ -215,7 +215,7 @@
 	(condition-case
          (let* ((lockfname   (conc fname ".lock"))
                 (readyfname  (conc parent-dir "/.ready-" raw-fname))
-                (readyexists (file-exists? readyfname)))
+                (readyexists (common:file-exists? readyfname)))
            (if (not readyexists)
                (common:simple-file-lock-and-wait lockfname))
            (let ((db      (sqlite3:open-database fname)))
@@ -266,7 +266,7 @@
 ;; ;; 
 ;; (define (db:open-rundb dbstruct run-id #!key (attemptnum 0)(do-not-open #f)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
 ;;   (let* ((dbfile       (db:dbfile-path run-id)) ;; (conc toppath "/db/" run-id ".db"))
-;;          (dbexists     (file-exists? dbfile))
+;;          (dbexists     (common:file-exists? dbfile))
 ;;          (db           (db:lock-create-open dbfile (lambda (db)
 ;;                                                      (handle-exceptions
 ;;                                                       exn
@@ -306,10 +306,10 @@
     (if (stack? tmpdb-stack)
 	(db:get-db tmpdb-stack) ;; get previously opened db (will create new db handle if all in the stack are already used
         (let* ((dbpath       (db:dbfile-path ))      ;; path to tmp db area
-               (dbexists     (file-exists? dbpath))
+               (dbexists     (common:file-exists? dbpath))
 	       (tmpdbfname   (conc dbpath "/megatest.db"))
-	       (dbfexists    (file-exists? tmpdbfname))  ;; (conc dbpath "/megatest.db")))
-               (mtdbexists   (file-exists? (conc *toppath* "/megatest.db")))
+	       (dbfexists    (common:file-exists? tmpdbfname))  ;; (conc dbpath "/megatest.db")))
+               (mtdbexists   (common:file-exists? (conc *toppath* "/megatest.db")))
                
                (mtdb         (db:open-megatest-db))
                (mtdbpath     (db:dbdat-get-path mtdb))
@@ -375,7 +375,7 @@
 (define (db:open-megatest-db #!key (path #f)(name #f))
   (let* ((dbdir        (or path *toppath*))
          (dbpath       (conc  dbdir "/" (or name "megatest.db")))
-	 (dbexists     (file-exists? dbpath))
+	 (dbexists     (common:file-exists? dbpath))
 	 (db           (db:lock-create-open dbpath
 					    (lambda (db)
                                               (db:initialize-main-db db)
@@ -547,7 +547,7 @@
     (debug:print-error 0 *default-log-port* "" fname " appears corrupted. Making backup \"old/" fname "\"")
     (system (conc "cd " dbdir ";mkdir -p old;cat " fname " > old/" tmpname))
     (system (conc "rm -f " dbpath))
-    (if (file-exists? fnamejnl)
+    (if (common:file-exists? fnamejnl)
 	(begin
 	  (debug:print-error 0 *default-log-port* "" fnamejnl " found, moving it to old dir as " tmpjnl)
 	  (system (conc "cd " dbdir ";mkdir -p old;cat " fnamejnl " > old/" tmpjnl))
@@ -913,7 +913,7 @@
 	   (>= (file-modification-time target)(file-modification-time source)))
       (hash-table-ref *global-db-store* target)
       (let* ((toppath   (launch:setup))
-	     (targ-db-last-mod (if (file-exists? target)
+	     (targ-db-last-mod (if (common:file-exists? target)
 				   (file-modification-time target)
 				   0))
 	     (cache-db  (or (hash-table-ref/default *global-db-store* target #f)
@@ -945,7 +945,7 @@
 ;; 	  (exit 1))
 ;; 	(let* ((th1      (make-thread
 ;; 			  (lambda ()
-;; 			    (if (and (file-exists? megatest-db)
+;; 			    (if (and (common:file-exists? megatest-db)
 ;; 				     (file-write-access? megatest-db))
 ;; 				(begin
 ;; 				  (db:sync-to-megatest.db dbstruct 'timestamps) ;; internally mutexes on *db-local-sync*
@@ -1457,7 +1457,7 @@
 
 (define (open-logging-db)
   (let* ((dbpath    (conc (if *toppath* (conc *toppath* "/") "") "logging.db")) ;; fname)
-	 (dbexists  (file-exists? dbpath))
+	 (dbexists  (common:file-exists? dbpath))
 	 (db        (sqlite3:open-database dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
@@ -1613,7 +1613,7 @@
        (let* (;; (min-incompleted (filter (lambda (x)
               ;;      		      (let* ((testpath (cadr x))
               ;;      			     (tdatpath (conc testpath "/testdat.db"))
-              ;;      			     (dbexists (file-exists? tdatpath)))
+              ;;      			     (dbexists (common:file-exists? tdatpath)))
               ;;      			(or (not dbexists) ;; if no file then something wrong - mark as incomplete
               ;;      			    (> (- (current-seconds)(file-modification-time tdatpath)) 600)))) ;; no change in 10 minutes to testdat.db - she's dead Jim
               ;;      		    incompleted))
@@ -1907,10 +1907,15 @@
   (if (or (null? header) (not row))
       #f
       (let loop ((hed (car header))
-		 (tal (cdr header))
-		 (n   0))
-	(if (equal? hed field)
-	    (vector-ref row n)
+                 (tal (cdr header))
+                 (n   0))
+        (if (equal? hed field)
+            (handle-exceptions
+             exn
+             (begin
+               (debug:print 0 *default-log-port* "WARNING: attempt to read non-existant field, row=" row " header=" header " field=" field)
+               #f)
+             (vector-ref row n))
 	    (if (null? tal) #f (loop (car tal)(cdr tal)(+ n 1)))))))
 
 ;; Accessors for the header/data structure
@@ -3811,7 +3816,7 @@
 		   (debug:print-info 0 *default-log-port* "WARNING: failed to test for existance of " dbfj)
 		   (thread-sleep! 1)
 		   (db:delay-if-busy count (- count 1))) 
-		 (file-exists? dbfj))
+		 (common:file-exists? dbfj))
 		(case count
 		  ((6)
 		   (thread-sleep! 0.2)
@@ -4176,8 +4181,8 @@
 					       (final-log (vector-ref vb (+  7 numkeys)))
 					       (run-dir   (vector-ref vb (+ 18 numkeys)))
 					       (log-fpath (conc run-dir "/"  final-log))) ;; (string-intersperse keyvals "/") "/" testname "/" item-path "/"
-					  (debug:print 4 *default-log-port* "log: " log-fpath " exists: " (file-exists? log-fpath))
-					  (vector-set! vb (+ 7 numkeys) (if (file-exists? log-fpath)
+					  (debug:print 4 *default-log-port* "log: " log-fpath " exists: " (common:file-exists? log-fpath))
+					  (vector-set! vb (+ 7 numkeys) (if (common:file-exists? log-fpath)
 									    (let ((newpath (conc pathmod "/"
 												 (string-intersperse keyvals "/")
 												 "/" runname "/" testname "/"

@@ -15,7 +15,7 @@
 ;;  2. Every five seconds check for state/status changes and print the info
 ;;
 
-(use srfi-1 posix srfi-69 srfi-18)
+(use srfi-1 posix srfi-69 srfi-18 regex)
 
 (declare (uses margs))
 (declare (uses rmt))
@@ -58,10 +58,10 @@
 	     (let* ((testn    (db:test-get-fullname     testdat))
 		    (testname (db:test-get-testname     testdat))
 		    (itempath (db:test-get-item-path    testdat))
-		    (tctname  (if (string=? itempath "") testname (conc testname "." itempath)))
+		    (tctname  (if (string=? itempath "") testname (conc testname "." (string-translate itempath "/" "."))))
 		    (state    (db:test-get-state        testdat))
 		    (status   (db:test-get-status       testdat))
-		    (duration (db:test-get-run_duration testdat))
+		    (duration (or (any->number (db:test-get-run_duration testdat)) 0))
 		    (comment  (db:test-get-comment      testdat))
 		    (logfile  (db:test-get-final_logf   testdat))
 		    (prevstat (hash-table-ref/default data testn #f))
@@ -69,7 +69,14 @@
 				  "RUNNING"
 				  (if (equal? state "COMPLETED")
 				      status
-				      "UNK"))))
+				      "UNK")))
+		    (cmtstr   (if comment
+				  (conc " message='" comment "' ")
+				  " "))
+		    (details  (if (string-match ".*html$" logfile)
+				  (conc " details='" *toppath* "/lt/" target "/" runname "/" testname (if (equal? itempath "") "/" (conc "/" itempath "/")) logfile "' ")
+				  "")))
+		    
 	       ;; (print "DEBUG: testn=" testn " state=" state " status=" status " prevstat=" prevstat " newstat=" newstat)
 	       (if (or (not prevstat)
 		       (not (equal? prevstat newstat)))
@@ -77,9 +84,9 @@
 		     (case (string->symbol newstat)
 		       ((UNK)       ) ;; do nothing
 		       ((RUNNING)   (print "##teamcity[testStarted name='" tctname "']"))
-		       ((PASS SKIP) (print "##teamcity[testFinished name='" tctname "' duration='" duration "']"))
+		       ((PASS SKIP) (print "##teamcity[testFinished name='" tctname "' duration='" (* 1e3 duration) "'" cmtstr details " ]"))
 		       (else
-			(print "##teamcity[testFailed name='" tctname "' message='" comment "' details='" logfile "']")))
+			(print "##teamcity[testFailed name='" tctname "' " cmtstr details " ]")))
 		     (flush-output)
 		     (hash-table-set! data testn newstat)))))
 	   tests)))
