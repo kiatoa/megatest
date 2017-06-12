@@ -5,6 +5,7 @@ DASHBOARD = $(BINDIR)/dashboard
 NEWDASHBOARD = $(BINDIR)/newdashboard
 RUNNAME   = a
 NUMTESTS  = 20
+DEBUG     = 0
 
 all :
 	$(MEGATEST) -remove-runs -target a/b -runname c -testpatt %/%
@@ -24,13 +25,13 @@ waitonall :
 	NUMTESTS=20 megatest -run -target a/b -runname waitonall -testpatt alltop
 
 bigrun :
-	NUMTESTS=$(NUMTESTS) $(MEGATEST) -run -testpatt bigrun -target a/bigrun -runname a$(shell date +%V)
+	NUMTESTS=$(NUMTESTS) $(MEGATEST) -run -testpatt bigrun -target a/bigrun -runname a$(shell date +%V) -debug $(DEBUG)
 
 bigrun2 :
-	NUMTESTS=$(NUMTESTS) $(MEGATEST) -run -testpatt bigrun2 -target a/bigrun2 -runname a$(shell date +%V)
+	NUMTESTS=$(NUMTESTS) $(MEGATEST) -run -testpatt bigrun2 -target a/bigrun2 -runname a$(shell date +%V) -debug $(DEBUG)
 
 bigrun3 :
-	NUMTESTS=$(NUMTESTS) $(MEGATEST) -run -testpatt bigrun3 -target a/bigrun3 -runname $(RUNNAME)
+	NUMTESTS=$(NUMTESTS) $(MEGATEST) -run -testpatt bigrun3 -target a/bigrun3 -runname $(RUNNAME) -debug $(DEBUG)
 
 dashboard : 
 	mkdir -p ../simpleruns

@@ -1477,9 +1477,9 @@
 (define (runs:calc-prereq-fail prereqs-not-met)
   (filter (lambda (test)
 	    (and (vector? test) ;; not (string? test))
-		 (equal? (db:test-get-state test) "NOT_STARTED")
+		 (equal? (db:test-get-state test) "COMPLETED") ;; "NOT_STARTED")
 		 (not (member (db:test-get-status test)
-			      '("n/a" "KEEP_TRYING")))))
+			      '("n/a" "KEEP_TRYING" "PASS" "SKIP")))))
 	  prereqs-not-met))
 
 (define (runs:calc-not-completed prereqs-not-met)
