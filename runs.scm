@@ -635,6 +635,12 @@
 	   (member (hash-table-ref/default test-registry (db:test-make-full-name hed item-path) 'n/a)
 		   '(DONOTRUN removed CANNOTRUN))) ;; *common:cant-run-states-sym*) ;; '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE)) ;; try to catch repeat processing of COMPLETED tests here
       (debug:print-info 1 *default-log-port* "Test " hed " set to \"" (hash-table-ref test-registry (db:test-make-full-name hed item-path)) "\". Removing it from the queue")
+      
+      (mt:test-set-state-status-by-id run-id test-id
+				      "NOT_STARTED"    ;; state
+				      (conc (hash-table-ref/default test-registry (db:test-make-full-name hed item-path) "CANNOTRUN"))
+				      "Failed to run due to failed prerequisites")
+
       (if (or (not (null? tal))
 	      (not (null? reg)))
 	  (list (runs:queue-next-hed tal reg reglen regfull)
@@ -1028,19 +1034,29 @@
 			    (runs:queue-next-reg newtal reg reglen regfull)
 			    reruns))
 		     ((symbol? nth-try)
-		      (if (eq? nth-try 'removed) ;; removed is removed - drop it NOW
-			  (if (null? tal)
-			      #f ;; yes, really
-			      (list (car tal)(cdr tal) reg reruns))
-			  (begin
-			    (if (runs:lownoise (conc "FAILED prerequisites or other issue" hed) 60)
-				(debug:print 0 *default-log-port* "WARNING: test " hed " has FAILED prerequisites or other issue. Internal state " nth-try " will be overridden and we'll retry."))
-			    (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "KEEP_TRYING" #f)
-			    (hash-table-set! test-registry hed 0)
-			    (list (runs:queue-next-hed newtal reg reglen regfull)
-				  (runs:queue-next-tal newtal reg reglen regfull)
-				  (runs:queue-next-reg newtal reg reglen regfull)
-				  reruns))))
+		      (case nth-try
+			((removed) ;; removed is removed - drop it NOW
+			 (if (null? tal)
+			     #f ;; yes, really
+			     (list (car tal)(cdr tal) reg reruns)))
+			((done)
+			 (if (runs:lownoise (conc "FAILED prerequisites or other issue - done" hed) 60)
+			     (debug:print 0 *default-log-port* "WARNING: test " hed " has FAILED prerequisites or other issue and is marked \"done\" internally. Dropping it."))
+			 (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "CANNOTRUN" "Failed prerequisites or other issue. CANNOTRUN")
+			 (hash-table-set! test-registry hed 0)
+			 (list (runs:queue-next-hed newtal reg reglen regfull)
+			       (runs:queue-next-tal newtal reg reglen regfull)
+			       (runs:queue-next-reg newtal reg reglen regfull)
+			       reruns))
+			(else
+			 (if (runs:lownoise (conc "FAILED prerequisites or other issue" hed) 60)
+			     (debug:print 0 *default-log-port* "WARNING: test " hed " has FAILED prerequisites or other issue. Internal state " nth-try " will be overridden and we'll retry."))
+			 (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "KEEP_TRYING" #f)
+			 (hash-table-set! test-registry hed 0)
+			 (list (runs:queue-next-hed newtal reg reglen regfull)
+			       (runs:queue-next-tal newtal reg reglen regfull)
+			       (runs:queue-next-reg newtal reg reglen regfull)
+			       reruns))))
 		     (else
 		      (if (runs:lownoise (conc "FAILED prerequitests and we tried" hed) 60)
 			  (debug:print 0 *default-log-port* "WARNING: test " hed " has FAILED prerequitests and we've tried at least 10 times to run it. Giving up now."))
