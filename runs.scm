@@ -1466,6 +1466,9 @@
     ;; we get here on "drop through". All done!
     (debug:print-info 1 *default-log-port* "All tests launched")))
 
+;; pre-reqs that are FAIL of some kind and thus prevent dependent test from
+;; proceeding
+;;
 (define (runs:calc-fails prereqs-not-met)
   (filter (lambda (test)
 	    (and (vector? test) ;; not (string? test))
@@ -1474,12 +1477,16 @@
 			      '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))))
 	  prereqs-not-met))
 
+;; pre-req tests that are marked such that *their* prereqs have failed
+;;
 (define (runs:calc-prereq-fail prereqs-not-met)
   (filter (lambda (test)
 	    (and (vector? test) ;; not (string? test))
-		 (equal? (db:test-get-state test) "COMPLETED") ;; "NOT_STARTED")
-		 (not (member (db:test-get-status test)
-			      '("n/a" "KEEP_TRYING" "PASS" "SKIP")))))
+		 (equal? (db:test-get-state test) "NOT_STARTED")
+		 (member (db:test-get-status test)
+			 '("PREQ_DISCARDED"))))
+	  ;; (not (member (db:test-get-status test)
+	  ;;	      '("n/a" "KEEP_TRYING" "PASS")))))
 	  prereqs-not-met))
 
 (define (runs:calc-not-completed prereqs-not-met)
@@ -1489,7 +1496,7 @@
 	 (not (member (db:test-get-state t) '("INCOMPLETE" "COMPLETED")))))
    prereqs-not-met))
 
-;; (define (runs:calc-not-completed prereqs-not-met)
+;; (define (runs:calc-not-completed prere qs-not-met)
 ;;   (filter
 ;;    (lambda (t)
 ;;      (or (not (vector? t))
