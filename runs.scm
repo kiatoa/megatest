@@ -810,6 +810,7 @@
 	 (jobgroup               (runs:testdat-jobgroup testdat))
 	 (waitons                (runs:testdat-waitons testdat))
 	 (item-path              (runs:testdat-item-path testdat))
+	 (tfullname              (db:test-make-full-name test-name item-path))
 	 (testmode               (runs:testdat-testmode testdat))
 	 (newtal                 (runs:testdat-newtal testdat))
 	 (itemmaps               (runs:testdat-itemmaps testdat))
@@ -859,9 +860,9 @@
 				  (conc " WARNING: t is not a vector=" t )))
 			    prereqs-not-met)
 		       ", ") ") fails: " fails
-		       "\nregistered? " (hash-table-ref/default test-registry (db:test-make-full-name test-name item-path) #f))
+		       "\nregistered? " (hash-table-ref/default test-registry tfullname #f))
 			    
-
+    (if (not (hash-table-ref/default test-registry tfullname #f))(hash-table-set! test-registry tfullname #f))
     
     (if (and (not (null? prereqs-not-met))
 	     (runs:lownoise (conc "waiting on tests " prereqs-not-met hed) 60))
@@ -969,12 +970,13 @@
 	  #f))
 
      ;; this might speed things up!?
-     ;; ((null? (filter (lambda (x)
-     ;; 		       (not (member (hash-table-ref/default test-registry x)
-     ;; 				    '(done removed))))
-     ;; 		     (hash-table-keys test-registry)))
-     ;;  (debug:print 0 *default-log-port* "NOTHING LEFT TO RUN!")
-     ;;  #f)
+     ((and (eq? 0 num-running)
+	   (null? (filter (lambda (x)
+			    (not (member (hash-table-ref/default test-registry (db:test-make-full-name test-name item-path) 'x)
+					 '(done removed))))
+			  (hash-table-keys test-registry))))
+      (debug:print 0 *default-log-port* "NOTHING LEFT TO RUN!")
+      #f)
      
      ;; must be we have unmet prerequisites
      ;;
