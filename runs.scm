@@ -967,6 +967,14 @@
 		(runs:queue-next-reg tal reg reglen regfull)
 		reruns)
 	  #f))
+
+     ;; this might speed things up!?
+     ;; ((null? (filter (lambda (x)
+     ;; 		       (not (member (hash-table-ref/default test-registry x)
+     ;; 				    '(done removed))))
+     ;; 		     (hash-table-keys test-registry)))
+     ;;  (debug:print 0 *default-log-port* "NOTHING LEFT TO RUN!")
+     ;;  #f)
      
      ;; must be we have unmet prerequisites
      ;;
@@ -1011,7 +1019,7 @@
 		     ((member "RUNNING" (map db:test-get-state prereqs-not-met))
 		      (if (runs:lownoise (conc "possible RUNNING prerequistes " hed) 60)
 			  (debug:print 0 *default-log-port* "WARNING: test " hed " has possible RUNNING prerequisites, don't give up on it yet."))
-		      (thread-sleep! 4)
+		      (thread-sleep! 1)
 		      (list (runs:queue-next-hed newtal reg reglen regfull)
 			    (runs:queue-next-tal newtal reg reglen regfull)
 			    (runs:queue-next-reg newtal reg reglen regfull)
@@ -1043,7 +1051,7 @@
 			 (if (runs:lownoise (conc "FAILED prerequisites or other issue - done" hed) 60)
 			     (debug:print 0 *default-log-port* "WARNING: test " hed " has FAILED prerequisites or other issue and is marked \"done\" internally. Dropping it."))
 			 (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "CANNOTRUN" "Failed prerequisites or other issue. CANNOTRUN")
-			 (hash-table-set! test-registry hed 0)
+			 (hash-table-set! test-registry hed 'removed)
 			 (list (runs:queue-next-hed newtal reg reglen regfull)
 			       (runs:queue-next-tal newtal reg reglen regfull)
 			       (runs:queue-next-reg newtal reg reglen regfull)
@@ -1064,12 +1072,13 @@
 		      (hash-table-set! test-registry hed 'removed)
 		      (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "TEN_STRIKES" #f)
 		      ;; I'm unclear on if this roll up is needed - it may be the root cause of the "all set to FAIL" bug.
-		      (rmt:set-state-status-and-roll-up-items run-id test-name item-path #f "FAIL" #f) ;; treat as FAIL
+		      ;; (rmt:set-state-status-and-roll-up-items run-id test-name item-path #f "FAIL" #f) ;; treat as FAIL
 		      (list (if (null? tal)(car newtal)(car tal))
 			    tal
 			    reg
 			    reruns)))))
 	      ;; can't drop this - maybe running? Just keep trying
+	      ;; else clause from (or (not (null? reg))(not (null? tal))) above
 	      (let ((runable-tests (runs:runable-tests prereqs-not-met)))
 		(if (null? runable-tests)
 		    #f   ;; I think we are truly done here
@@ -1089,7 +1098,7 @@
 		  (case (string->symbol state)
 		    ((COMPLETED INCOMPLETE) #f)
 		    ((NOT_STARTED)
-		     (if (member status '("TEN_STRIKES" "BLOCKED" "PREQ_FAIL" "ZERO_ITEMS" "PREQ_DISCARDED" "TIMED_OUT" ))
+		     (if (member status '("TEN_STRIKES" "BLOCKED" "PREQ_FAIL" "ZERO_ITEMS" "PREQ_DISCARDED" "TIMED_OUT" "CANNOTRUN"))
 			 #f
 			 t))
 		    ((DELETED) #f)
@@ -1336,7 +1345,8 @@
 		     "\n  regfull:     " regfull
 		     "\n  reglen:      " reglen
 		     "\n  length reg:  " (length reg)
-		     "\n  reg:         " reg)
+		     "\n  reg:         " reg
+		     "\n  flag:        " (hash-table-ref/default test-registry tfullname 'x))
 
 	;; check for hed in waitons => this would be circular, remove it and issue an
 	;; error
@@ -1363,9 +1373,17 @@
 	  (debug:print 0 *default-log-port* "WARNING: Marking test " tfullname " as not runnable. It is waiting on tests that cannot be run. Giving up now.")
 	  (hash-table-set! test-registry tfullname 'removed))
 
-	 ;; items is #f then the test is ok to be handed off to launch (but not before)
+	 ;; get rid of definitively removed items
+	 ((member (hash-table-ref/default test-registry tfullname 'x) '(removed CANNOTRUN))
+	  (debug:print 0 *default-log-port* "INFO: Dropping test " tfullname " from the tests queue due to flag "
+		       (hash-table-ref/default test-registry tfullname 'x))
+	  (if (not (null? tal))
+	      (loop (car tal)(cdr tal) reg reruns)))
+	 
+	 ;; items is #f then the test is ok to be handed off to launch (but not before), check that the test was not marked for removal
 	 ;; 
-	 ((not items)
+	 ((and (not (member (hash-table-ref/default test-registry tfullname 'x) '(removed CANNOTRUN)))
+	       (not items))
 	  (debug:print-info 4 *default-log-port* "OUTER COND: (not items)")
 	  (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests))
 		   (not (null? tal)))
