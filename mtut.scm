@@ -15,7 +15,8 @@
 
 (use srfi-1 posix srfi-69 readline ;;  regex regex-case srfi-69 apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
      srfi-18 extras format pkts regex regex-case
-     (prefix dbi dbi:)) ;;  zmq extras)
+     (prefix dbi dbi:)
+     (prefix nanomsg nmsg:))
 
 (declare (uses common))
 (declare (uses megatest-version))
