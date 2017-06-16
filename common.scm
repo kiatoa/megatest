@@ -248,17 +248,18 @@
 ;; Move me elsewhere ...
 ;; RADT => Why do we meed the version check here, this is called only if version misma
 ;;
-(define (common:cleanup-db dbstruct)
-  (db:multi-db-sync 
+(define (common:cleanup-db dbstruct #!key (full #f))
+  (apply db:multi-db-sync 
    dbstruct
    'schema
    ;; 'new2old
    'killservers
-   'dejunk
    'adj-target
    ;; 'old2new
    'new2old
-   )
+   (if full
+       '(dejunk)
+       '()))
   (if (common:api-changed?)
       (common:set-last-run-version)))
 

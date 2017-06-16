@@ -1992,7 +1992,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
       ;; keep this one local
-      (open-run-close patch-db #f)
+      ;; (open-run-close patch-db #f)
+      (let ((dbstruct (db:setup #f areapath: *toppath*)))
+        (common:cleanup-db dbstruct full: #t))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-cleanup-db")
