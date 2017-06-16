@@ -15,8 +15,8 @@
 
 (use srfi-1 posix srfi-69 readline ;;  regex regex-case srfi-69 apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
      srfi-18 extras format pkts regex regex-case
-     (prefix dbi dbi:)
-     (prefix nanomsg nmsg:))
+     (prefix dbi dbi:))
+     ;;(prefix nanomsg nmsg:))
 
 (declare (uses common))
 (declare (uses megatest-version))
@@ -535,13 +535,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;          if it is a string then it is the function to use to
 ;;          lookup in *area-checkers*
 ;;
-(define (area-allowed? area areas runkey contour)
+(define (area-allowed? area areas runkey contour mode-patt)
   (cond
    ((not areas) #t) ;; no spec
    ((string? areas) ;; 
-    (let ((check-fn (hash-table-ref/default *area-checkers* areas #f)))
+    (let ((check-fn (hash-table-ref/default *area-checkers* (string->symbol areas) #f)))
       (if check-fn
-	  (check-fn area runkey contour)
+	  (check-fn area runkey contour mode-patt)
 	  #f)))
    ((list? areas)(member area areas))
    (else #f))) ;; shouldn't get here 
@@ -834,7 +834,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (lambda (runkeydat)
 		      (for-each
 		       (lambda (area)
-			 (if (area-allowed? area areas runkey contour) ;; is this area to be handled (from areas=a,b,c OR using areafn=abcfn and *area-checks* ...)
+			 (if (area-allowed? area areas runkey contour mode-patt) ;; is this area to be handled (from areas=a,b,c OR using areafn=abcfn and *area-checks* ...)
                              (let* ((aval       (or (configf:lookup mtconf "areas" area) ""))
                                     (aval-alist (val->alist aval))
                                     (runname    (alist-ref 'runname runkeydat))
