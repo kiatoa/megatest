@@ -55,7 +55,7 @@ EOF
 fi
 
 cat >> $target << EOF 
-if [[ \$(ulimit -a | grep 'open files' | awk '{print \$4}') -gt 5000 ]];then ulimit -n 5000;fi
+if [[ \$(ulimit -a | grep 'open files' | awk '{print \$4}') -gt 10000 ]];then ulimit -n 10000;fi
 EOF
 
 # echo "#!/bin/bash" > $target

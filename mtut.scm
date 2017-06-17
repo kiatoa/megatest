@@ -15,8 +15,8 @@
 
 (use srfi-1 posix srfi-69 readline ;;  regex regex-case srfi-69 apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
      srfi-18 extras format pkts regex regex-case
-     (prefix dbi dbi:))
-     ;;(prefix nanomsg nmsg:))
+     (prefix dbi dbi:)
+     (prefix nanomsg nmsg:))
 
 (declare (uses common))
 (declare (uses megatest-version))
@@ -160,6 +160,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; args and pkt key specs
 ;;
 (define *arg-keys*
+  ;; used keys
+  ;;    a  - action
   '(
     ("-area"            . G) ;; maps to group
     ("-contour"         . c)
@@ -201,7 +203,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   '((run         . "-run")
     (sync        . "")
     (archive     . "-archive")
-    (set-ss      . "-set-state-status")))
+    (set-ss      . "-set-state-status")
+    (remove      . "-remove-runs")))
 
 ;; Card types:
 ;;
@@ -375,6 +378,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (exit 1)))
 
 ;;======================================================================
+
+
 ;; Runs
 ;;======================================================================
 
@@ -389,7 +394,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; sched => force the run start time to be recorded as sched Unix
 ;; epoch. This aligns times properly for triggers in some cases.
 ;;
-(define (command-line->pkt action args-alist sched-in #!key (extra-dat '()))
+;;  extra-dat format is ( 'x xval 'y yval .... )
+;;
+(define (command-line->pkt action args-alist sched-in #!key (extra-dat '())(area-path #f))
   (let* ((sched     (cond
 		     ((vector? sched-in)(local-time->seconds sched-in)) ;; we recieved a time
 		     ((number? sched-in) sched-in)
@@ -399,11 +406,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (hash-table->alist args-alist)
 			    args-alist)
 			(hash-table->alist args:arg-hash))) ;; if no args-alist then we assume this is a call driven directly by commandline
-	 (alldat    (apply append (list 'T "cmd"
-					'A action
-					'U (current-user-name)
-					'D sched)
-                           extra-dat
+	 (alldat    (apply append
+			   (list 'A action
+				 'U (current-user-name)
+				 'D sched)
+			   (if area-path
+			       (list 'S area-path) ;; the area-path is mapped to the start-dir
+			       '())
+                           (if (list? extra-dat)
+			       extra-dat
+			       (begin
+				 (debug:print 0 *default-log-port* "ERROR: command-line->pkt received bad extra-dat " extra-dat)
+				 '()))
 			   (map (lambda (x)
 				  (let* ((param (car x))
 					 (value (cdr x))
@@ -962,16 +976,26 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ((run remove rerun set-ss archive kill list)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
 	      (mtconf    (car mtconfdat))
+	      (area      (args:get-arg "-area")) ;; look up the area to dispatch to from [areas] section
+	      (areasec   (if area (configf:lookup mtconf "areas" area) #f))
+	      (areadat   (if areasec (val->alist areasec) #f))
+	      (area-path (if areadat (alist-ref 'path areadat) #f))
 	      (pktsdirs  (configf:lookup mtconf "setup" "pktsdirs"))
 	      (pktsdir   (if pktsdirs (car (string-split pktsdirs " ")) #f))
 	      (adjargs   (hash-table-copy args:arg-hash)))
+	 ;; check a few things
+	 (if (and area
+		  (not area-path))
+	     (begin
+	       (print "ERROR: the specified area was not found in the [areas] table. Area name=" area)
+	       (exit 1)))
 	 ;; (for-each
 	 ;;  (lambda (key)
 	 ;;    (if (not (member key *legal-params*))
 	 ;; 	(hash-table-delete! adjargs key))) ;; we need to delete any params intended for mtutil
 	 ;;  (hash-table-keys adjargs))
 	 (let-values (((uuid pkt)
-		       (command-line->pkt *action* adjargs #f)))
+		       (command-line->pkt *action* adjargs #f area-path: area-path)))
 	   (write-pkt pktsdir uuid pkt))))
       ((dispatch import rungen process)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
