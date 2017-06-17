@@ -114,37 +114,39 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; args and pkt key specs
 ;;
 (define *arg-keys*
-  '(("-area"       . G) ;; maps to group
-    ("-target"     . t)
-    ("-run-name"   . n)
-    ("-state"      . e)
-    ("-status"     . s)
-    ("-contour"    . c)
-    ("-test-patt"  . p)  ;; idea, enhance margs ("-test-patt" "-testpatt") => yields one value in "-test-patt"
-    ("-mode-patt"  . o)
-    ("-tag-expr"   . x)
-    ("-item-patt"  . i)
-    ("-sync-to"    . k)
+  ;; used keys
+  ;;    a  - action
+  '(("-area"          . G) ;; maps to group
+    ("-target"        . t)
+    ("-run-name"      . n)
+    ("-state"         . e)
+    ("-status"        . s)
+    ("-contour"       . c)
+    ("-test-patt"     . p)  ;; idea, enhance margs ("-test-patt" "-testpatt") => yields one value in "-test-patt"
+    ("-mode-patt"     . o)
+    ("-tag-expr"      . x)
+    ("-item-patt"     . i)
+    ("-sync-to"       . k)
     ("-append-config" . d)
     ;; misc
-    ("-start-dir"  . S)
-    ("-msg"        . M)
-    ("-set-vars"   . v)
-    ("-debug"      . #f)  ;; for *verbosity* > 2
-    ("-load"       . #f)  ;; load and exectute a scheme file
-    ("-log"        . #f)
+    ("-start-dir"     . S)
+    ("-msg"           . M)
+    ("-set-vars"      . v)
+    ("-debug"         . #f)  ;; for *verbosity* > 2
+    ("-load"          . #f)  ;; load and exectute a scheme file
+    ("-log"           . #f)
     ))
 (define *switch-keys*
-  '(("-h"          . #f)
-    ("-help"       . #f)
-    ("--help"      . #f)
-    ("-manual"     . #f)
-    ("-version"    . #f)
-    ;; misc
-    ("-repl"       . #f)
-    ("-immediate"  . I)
-    ("-preclean"   . r)
-    ("-rerun-all"  . u)
+  '(("-h"             . #f)
+    ("-help"          . #f)
+    ("--help"         . #f)
+    ("-manual"        . #f)
+    ("-version"       . #f)
+    ;; misc	      
+    ("-repl"          . #f)
+    ("-immediate"     . I)
+    ("-preclean"      . r)
+    ("-rerun-all"     . u)
     ))
 
 ;; alist to map actions to old megatest commands
@@ -320,14 +322,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (pktsdir  (if pktsdirs (car (string-split pktsdirs " ")) #f))
 	 (toppath  (configf:lookup mtconf "dyndat" "toppath"))
 	 (pdbpath  (or (configf:lookup mtconf "setup"  "pdbpath") pktsdir)))
-    (if (not (and  pktsdir toppath pdbpath))
-	(begin
-	  (print "ERROR: settings are missing in your megatest.config for area management.")
-	  (print "  you need to have pktsdir in the [setup] section."))
-	(let* ((pdb  (open-queue-db pdbpath "pkts.db"
-				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))))
-	  (proc pktsdirs pktsdir pdb)
-	  (dbi:close pdb)))))
+    (cond
+     ((not (and  pktsdir toppath pdbpath))
+      (debug:print 0 *default-log-port* "ERROR: settings are missing in your megatest.config for area management.")
+      (debug:print  0 *default-log-port* "  you need to have pktsdir in the [setup] section."))
+     ((not (common:file-exists? pktsdir))
+      (debug:print 0 *default-log-port* "ERROR: pkts directory not found " pktsdir))
+     ((not (equal? (file-owner pktsdir)(current-effective-user-id)))
+      (debug:print 0 *default-log-port* "ERROR: directory " pktsdir " is not owned by " (current-effective-user-name)))
+     (else
+      (let* ((pdb  (open-queue-db pdbpath "pkts.db"
+				  schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))))
+	(proc pktsdirs pktsdir pdb)
+	(dbi:close pdb))))))
 
 (define (load-pkts-to-db mtconf)
   (with-queue-db
@@ -335,25 +342,30 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
    (lambda (pktsdirs pktsdir pdb)
      (for-each
       (lambda (pktsdir) ;; look at all
-	(if (and (common:file-exists? pktsdir)
-		 (directory? pktsdir)
-		 (file-read-access? pktsdir))
-	    (let ((pkts (glob (conc pktsdir "/*.pkt"))))
-	      (for-each
-	       (lambda (pkt)
-		 (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
-			(exists  (lookup-by-uuid pdb uuid #f)))
-		   (if (not exists)
-		       (let* ((pktdat (string-intersperse
-				       (with-input-from-file pkt read-lines)
-				       "\n"))
-			      (apkt   (pkt->alist pktdat))
-			      (ptype  (alist-ref 'T apkt)))
-			 (add-to-queue pdb pktdat uuid (or ptype 'cmd) #f 0)
-			 (debug:print 4 *default-log-port* "Added " uuid " of type " ptype " to queue"))
-		       (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
-		       )))
-	       pkts))))
+	(cond
+	 ((not (common:file-exists? pktsdir))
+	  (debug:print 0 *default-log-port* "ERROR: packets directory " pktsdir " does not exist."))
+	 ((not (directory? pktsdir))
+	  (debug:print 0 *default-log-port* "ERROR: packets directory path " pktsdir " is not a directory."))
+	 ((not (file-read-access? pktsdir))
+	  (debug:print 0 *default-log-port* "ERROR: packets directory path " pktsdir " is not readable."))
+	 (else
+	  (let ((pkts (glob (conc pktsdir "/*.pkt"))))
+	    (for-each
+	     (lambda (pkt)
+	       (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
+		      (exists  (lookup-by-uuid pdb uuid #f)))
+		 (if (not exists)
+		     (let* ((pktdat (string-intersperse
+				     (with-input-from-file pkt read-lines)
+				     "\n"))
+			    (apkt   (pkt->alist pktdat))
+			    (ptype  (alist-ref 'T apkt)))
+		       (add-to-queue pdb pktdat uuid (or ptype 'cmd) #f 0)
+		       (debug:print 4 *default-log-port* "Added " uuid " of type " ptype " to queue"))
+		     (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
+		     )))
+	     pkts)))))
       (string-split pktsdirs)))))
 
 (define (get-pkt-alists pkts)
@@ -387,6 +399,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; sched => force the run start time to be recorded as sched Unix
 ;; epoch. This aligns times properly for triggers in some cases.
 ;;
+;;  extra-dat format is ( 'x xval 'y yval .... )
+;;
 (define (command-line->pkt action args-alist sched-in #!key (extra-dat '())(area-path #f))
   (let* ((sched     (cond
 		     ((vector? sched-in)(local-time->seconds sched-in)) ;; we recieved a time
@@ -405,7 +419,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			   (if area-path
 			       (list 'S area-path) ;; the area-path is mapped to the start-dir
 			       '())
-                           extra-dat
+                           (if (list? extra-dat)
+			       extra-dat
+			       (begin
+				 (debug:print 0 *default-log-port* "ERROR: command-line->pkt received bad extra-dat " extra-dat)
+				 '()))
 			   (map (lambda (x)
 				  (let* ((param (car x))
 					 (value (cdr x))
@@ -524,7 +542,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			'())
 		    )
 		   sched
-                   extra-dat: `((a . ,runkey))  ;; we need the run key for marking the run as launched
+                   extra-dat: `(y ,runkey)  ;; we need the run key for marking the run as launched
                    )))
       (with-output-to-file
 	  (conc pktsdir "/" uuid ".pkt")
