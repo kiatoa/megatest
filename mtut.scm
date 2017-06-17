@@ -103,7 +103,7 @@ Utility
 Examples:
 
 # Start a megatest run in the area \"mytests\"
-mtutil -area mytests -action run -target v1.63/aa3e -mode-patt MYPATT -tag-expr quick
+mtutil run -area mytests -target v1.63/aa3e -mode-patt MYPATT -tag-expr quick
 
 # Start a contour
 mtutil run -contour quick -target v1.63/aa3e 
@@ -386,7 +386,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; sched => force the run start time to be recorded as sched Unix
 ;; epoch. This aligns times properly for triggers in some cases.
 ;;
-(define (command-line->pkt action args-alist sched-in #!key (extra-dat '()))
+(define (command-line->pkt action args-alist sched-in #!key (extra-dat '())(area-path #f))
   (let* ((sched     (cond
 		     ((vector? sched-in)(local-time->seconds sched-in)) ;; we recieved a time
 		     ((number? sched-in) sched-in)
@@ -396,10 +396,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (hash-table->alist args-alist)
 			    args-alist)
 			(hash-table->alist args:arg-hash))) ;; if no args-alist then we assume this is a call driven directly by commandline
-	 (alldat    (apply append (list 'T "cmd"
-					'a action
-					'U (current-user-name)
-					'D sched)
+	 (alldat    (apply append
+			   (list 'T "cmd"
+				 'a action
+				 'U (current-user-name)
+				 'D sched)
+			   (if area-path
+			       (list 'S area-path) ;; the area-path is mapped to the start-dir
+			       '())
                            extra-dat
 			   (map (lambda (x)
 				  (let* ((param (car x))
@@ -916,16 +920,26 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ((run remove rerun set-ss archive kill)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
 	      (mtconf    (car mtconfdat))
+	      (area      (args:get-arg "-area")) ;; look up the area to dispatch to from [areas] section
+	      (areasec   (if area (configf:lookup mtconf "areas" area) #f))
+	      (areadat   (if areasec (val->alist areasec) #f))
+	      (area-path (if areadat (alist-ref 'path areadat) #f))
 	      (pktsdirs  (configf:lookup mtconf "setup" "pktsdirs"))
 	      (pktsdir   (if pktsdirs (car (string-split pktsdirs " ")) #f))
 	      (adjargs   (hash-table-copy args:arg-hash)))
+	 ;; check a few things
+	 (if (and area
+		  (not area-path))
+	     (begin
+	       (print "ERROR: the specified area was not found in the [areas] table. Area name=" area)
+	       (exit 1)))
 	 ;; (for-each
 	 ;;  (lambda (key)
 	 ;;    (if (not (member key *legal-params*))
 	 ;; 	(hash-table-delete! adjargs key))) ;; we need to delete any params intended for mtutil
 	 ;;  (hash-table-keys adjargs))
 	 (let-values (((uuid pkt)
-		       (command-line->pkt *action* adjargs #f)))
+		       (command-line->pkt *action* adjargs #f area-path: area-path)))
 	   (write-pkt pktsdir uuid pkt))))
       ((dispatch import rungen process)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
