@@ -152,7 +152,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   '((run         . "-run")
     (sync        . "")
     (archive     . "-archive")
-    (set-ss      . "-set-state-status")))
+    (set-ss      . "-set-state-status")
+    (remove      . "-remove-runs")))
 
 ;; inlst is an alternative input
 ;;
