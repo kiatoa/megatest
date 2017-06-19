@@ -2280,20 +2280,26 @@
 			#f)))
     pktsdirs))
 
+;; use-lt is use linktree "lt" link to find pkts dir
 (define (common:with-queue-db mtconf proc #!key (use-lt #f)(toppath-in #f))
   (let* ((pktsdirs (common:get-pkts-dirs mtconf use-lt))
 	 (pktsdir  (if pktsdirs (car pktsdirs) #f))
 	 (toppath  (or (configf:lookup mtconf "scratchdat" "toppath")
 		       toppath-in))
 	 (pdbpath  (or (configf:lookup mtconf "setup"  "pdbpath") pktsdir)))
-    (if (not (and  pktsdir toppath pdbpath))
-	(begin
-	  (print "ERROR: settings are missing in your megatest.config for area management.")
-	  (print "  you need to have pktsdir in the [setup] section."))
+    (cond
+     ((not (and  pktsdir toppath pdbpath))
+      (debug:print 0 *default-log-port* "ERROR: settings are missing in your megatest.config for area management.")
+      (debug:print  0 *default-log-port* "  you need to have pktsdir in the [setup] section."))
+     ((not (common:file-exists? pktsdir))
+      (debug:print 0 *default-log-port* "ERROR: pkts directory not found " pktsdir))
+     ((not (equal? (file-owner pktsdir)(current-effective-user-id)))
+      (debug:print 0 *default-log-port* "ERROR: directory " pktsdir " is not owned by " (current-effective-user-name)))
+     (else
 	(let* ((pdb  (open-queue-db pdbpath "pkts.db"
 				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))))
 	  (proc pktsdirs pktsdir pdb)
-	  (dbi:close pdb)))))
+	  (dbi:close pdb))))))
 
 (define (common:load-pkts-to-db mtconf)
   (common:with-queue-db
@@ -2301,25 +2307,31 @@
    (lambda (pktsdirs pktsdir pdb)
      (for-each
       (lambda (pktsdir) ;; look at all
-	(if (and (file-exists? pktsdir)
-		 (directory? pktsdir)
-		 (file-read-access? pktsdir))
-	    (let ((pkts (glob (conc pktsdir "/*.pkt"))))
-	      (for-each
-	       (lambda (pkt)
-		 (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
-			(exists  (lookup-by-uuid pdb uuid #f)))
-		   (if (not exists)
-		       (let* ((pktdat (string-intersperse
-				       (with-input-from-file pkt read-lines)
-				       "\n"))
-			      (apkt   (pkt->alist pktdat))
-			      (ptype  (alist-ref 'T apkt)))
-			 (add-to-queue pdb pktdat uuid (or ptype 'cmd) #f 0)
-			 (debug:print 4 *default-log-port* "Added " uuid " of type " ptype " to queue"))
-		       (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
-		       )))
-	       pkts))))
+	(cond
+	 ((not (common:file-exists? pktsdir))
+	  (debug:print 0 *default-log-port* "ERROR: packets directory " pktsdir " does not exist."))
+	 ((not (directory? pktsdir))
+	  (debug:print 0 *default-log-port* "ERROR: packets directory path " pktsdir " is not a directory."))
+	 ((not (file-read-access? pktsdir))
+	  (debug:print 0 *default-log-port* "ERROR: packets directory path " pktsdir " is not readable."))
+	 (else
+	  (debug:print-info 0 *default-log-port* "Loading packets found in " pktsdir)
+	  (let ((pkts (glob (conc pktsdir "/*.pkt"))))
+	    (for-each
+	     (lambda (pkt)
+	       (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
+		      (exists  (lookup-by-uuid pdb uuid #f)))
+		 (if (not exists)
+		     (let* ((pktdat (string-intersperse
+				     (with-input-from-file pkt read-lines)
+				     "\n"))
+			    (apkt   (pkt->alist pktdat))
+			    (ptype  (alist-ref 'T apkt)))
+		       (add-to-queue pdb pktdat uuid (or ptype 'cmd) #f 0)
+		       (debug:print 4 *default-log-port* "Added " uuid " of type " ptype " to queue"))
+		     (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
+		     )))
+	     pkts)))))
       pktsdirs))))
 
 (define (common:get-pkt-alists pkts)
