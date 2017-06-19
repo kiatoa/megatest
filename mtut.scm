@@ -169,6 +169,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ("-state"           . e)
     ("-item-patt"       . i)
     ("-sync-to"         . k)
+    ("-new"             . l) ;; l (see below) is new-ss
     ("-run-name"        . n)
     ("-mode-patt"       . o)
     ("-test-patt"       . p)  ;; idea, enhance margs ("-test-patt" "-testpatt") => yields one value in "-test-patt"
@@ -226,6 +227,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
     ;; Extras
     (a  . runkey    ) ;; needed for matching up pkts with target derived from runkey
+    ;; (l  . new-ss    ) ;; new state/status
     ))
 
 ;; inlst is an alternative input
@@ -253,7 +255,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   (-mode-patt . "--modepatt")
 		   (-run-name  . "-runname")
 		   (-test-patt . "-testpatt")
-		   (-msg       . "-m")))
+		   (-msg       . "-m")
+		   (-new       . "-set-state-status")))
       param))
 
 (define (val->alist val)
@@ -396,7 +399,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 ;;  extra-dat format is ( 'x xval 'y yval .... )
 ;;
-(define (command-line->pkt action args-alist sched-in #!key (extra-dat '())(area-path #f))
+(define (command-line->pkt action args-alist sched-in #!key (extra-dat '())(area-path #f)(new-ss #f))
   (let* ((sched     (cond
 		     ((vector? sched-in)(local-time->seconds sched-in)) ;; we recieved a time
 		     ((number? sched-in) sched-in)
@@ -840,7 +843,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   (tag-expr   (and mode-tag (if (null? mode-tag) #f (car mode-tag)))))
 	      (print "contour: " contour " areas=" areas " cval=" cval)
 	      (for-each
-	       (lambda (runkeydatset)
+	       (lambda (runkeydatset) 
 		 ;; (print "runkeydatset: ")(pp runkeydatset)
 		 (let ((runkey     (car runkeydatset))
 		       (runkeydats (cadr runkeydatset)))
@@ -982,7 +985,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (area-path (if areadat (alist-ref 'path areadat) #f))
 	      (pktsdirs  (configf:lookup mtconf "setup" "pktsdirs"))
 	      (pktsdir   (if pktsdirs (car (string-split pktsdirs " ")) #f))
-	      (adjargs   (hash-table-copy args:arg-hash)))
+	      (adjargs   (hash-table-copy args:arg-hash))
+	      (new-ss    (args:get-arg "-new")))
 	 ;; check a few things
 	 (if (and area
 		  (not area-path))
@@ -995,7 +999,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 ;; 	(hash-table-delete! adjargs key))) ;; we need to delete any params intended for mtutil
 	 ;;  (hash-table-keys adjargs))
 	 (let-values (((uuid pkt)
-		       (command-line->pkt *action* adjargs #f area-path: area-path)))
+		       (command-line->pkt *action* adjargs #f area-path: area-path new-ss: new-ss)))
 	   (write-pkt pktsdir uuid pkt))))
       ((dispatch import rungen process)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))

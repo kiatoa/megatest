@@ -433,7 +433,7 @@
 	    (debug:print 0 *default-log-port* "Server stats:")
 	    (db:print-current-query-stats)))
       (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600))
-	     (adjusted-timeout (if (> hrs-since-start 1)
+	     (adjusted-timeout (if (> hrs-since-start 1)  ;; never used!
 				   (- server-timeout (inexact->exact (round (* hrs-since-start 60))))  ;; subtract 60 seconds per hour
 				   server-timeout)))
 	(if (common:low-noise-print 120 "server timeout")
