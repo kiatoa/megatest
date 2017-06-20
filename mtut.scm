@@ -934,7 +934,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   #t)
 		 #t)
 	     "logs"
-	     "/tmp")))
+	     "/tmp"))
+	(cpuload (alist-ref 'adj-proc-load (common:get-normalized-cpu-load #f)))
+	(maxload (string->number (or (configf:lookup mtconf "setup" "maxload")
+				     (configf:lookup mtconf "jobtools" "maxload") ;; respect value used by Megatest calls
+				     "1.1"))))
     (common:with-queue-db
      mtconf
      (lambda (pktsdirs pktsdir pdb)
@@ -951,21 +955,37 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   (action  (alist-ref 'A pkta))
 		   (cmdline (pkt->cmdline pkta))
 		   (uuid    (alist-ref 'Z pkta))
+		   (user    (alist-ref 'U pkta))
+		   (area    (alist-ref 'G pkta))
 		   (logf    (conc logdir "/" uuid "-run.log"))
 		   (fullcmd (conc "NBFAKE_LOG=" logf " nbfake " cmdline)))
-	      (print "RUNNING: " fullcmd)
-	      (system fullcmd)
-	      (mark-processed pdb (list (alist-ref 'id pktdat)))
-	      (let-values (((ack-uuid ack-pkt)
-			    (add-z-card
-			     (construct-sdat 'P uuid
-					     'T (case (string->symbol action)
-						  ((run) "runstart")
-						  ((sync) "syncstart")    ;; example of translating run -> runstart
-						  (else   action))
-					     'c (alist-ref 'o pkta) ;; THIS IS WRONG! SHOULD BE 'c
-					     't (alist-ref 't pkta)))))
-		(write-pkt pktsdir ack-uuid ack-pkt))))
+	      (if (check-access user mtconf action area)
+		  (if (and (> cpuload maxload)
+			   (member action '("run" "archive"))) ;; do not run archive or run if load is over the specified limit
+		      (print "WARNING: cpuload too high, skipping processing of " uuid)
+		      (begin
+			(print "RUNNING: " fullcmd)
+			(system fullcmd)
+			(mark-processed pdb (list (alist-ref 'id pktdat)))
+			(let-values (((ack-uuid ack-pkt)
+				      (add-z-card
+				       (construct-sdat 'P uuid
+						       'T (case (string->symbol action)
+							    ((run) "runstart")
+							    ((sync) "syncstart")    ;; example of translating run -> runstart
+							    (else   action))
+						       'c (alist-ref 'o pkta) ;; THIS IS WRONG! SHOULD BE 'c
+						       't (alist-ref 't pkta)))))
+			  (write-pkt pktsdir ack-uuid ack-pkt))))
+		  (begin ;; access denied! Mark as such
+		    (mark-processed pdb (list (alist-ref 'id pktdat)))
+		    (let-values (((ack-uuid ack-pkt)
+				  (add-z-card
+				   (construct-sdat 'P uuid
+						   'T "access-denied"
+						   'c (alist-ref 'o pkta) ;; THIS IS WRONG! SHOULD BE 'c
+						   't (alist-ref 't pkta)))))
+		      (write-pkt pktsdir ack-uuid ack-pkt))))))
 	  pkts))))))
 
 (define (check-access user mtconf action area)
