@@ -156,7 +156,22 @@
                    ((kill-server)                     (set! *server-run* #f))
 
                    ;; TESTS
-                   ((test-set-state-status-by-id)     (apply mt:test-set-state-status-by-id dbstruct params))
+
+                   ;;((test-set-state-status-by-id)     (apply mt:test-set-state-status-by-id dbstruct params))
+                   ;;BB - commented out above because it was calling below, eventually, incorrectly (dbstruct passed to mt:test-set-state-status-by-id, which previosly did more, but now only passes thru to db:set-state-status-and-roll-up-items.
+                   ((test-set-state-status-by-id)
+
+                    ;; (define (db:set-state-status-and-roll-up-items dbstruct run-id test-name item-path state status comment)
+                    (db:set-state-status-and-roll-up-items
+                     dbstruct
+                     (list-ref params 0) ; run-id
+                     (list-ref params 1) ; test-name
+                     #f                  ; item-path
+                     (list-ref params 2) ; state
+                     (list-ref params 3) ; status
+                     (list-ref params 4) ; comment
+                     ))
+                   
                    ((delete-test-records)             (apply db:delete-test-records dbstruct params))
                    ((delete-old-deleted-test-records) (apply db:delete-old-deleted-test-records dbstruct params))
                    ((test-set-state-status)           (apply db:test-set-state-status dbstruct params))
