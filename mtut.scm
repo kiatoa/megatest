@@ -967,7 +967,34 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					     't (alist-ref 't pkta)))))
 		(write-pkt pktsdir ack-uuid ack-pkt))))
 	  pkts))))))
-  
+
+(define (check-access user mtconf action area)
+  ;; NOTE: Need control over defaults. E.g. default might be no access
+  (let* ((access-ctrl (hash-table-exists? mtconf "access"))  ;; if there is an access section the default is to REQUIRE enablement/access
+	 (access-list (map (lambda (x)
+			     (string-split x ":"))
+			   (string-split (or (configf:lookup mtconf "access" area) ;; userid:rightstype userid2:rightstype2 ...
+					     (if access-ctrl
+						 "*:none"  ;; nobody has access by default
+						 "*:all")))))
+	 (access-types-dat (configf:get-section mtconf "accesstypes")))
+    (debug:print 0 *default-log-port* "Checking access in " access-list " with access-ctrl " access-ctrl " for area " area)
+    (if access-ctrl
+	(let* ((user-access     (or (assoc user access-list)
+				    (assoc "*"  access-list)))
+	       (access-type     (cadr user-access))
+	       (access-types    (let ((res (alist-ref access-type access-types-dat equal?)))
+				  (if res (car res) res)))
+	       (allowed-actions (string-split (or access-types ""))))
+	  (print "Got " allowed-actions " for user " user " where access-types=" access-types " access-type=" access-type)
+	  (cond
+	   ((and access-types (member action allowed-actions))
+	    ;; (print "Access granted for " user " for " action)
+	    #t)
+	   (else
+	    ;; (print "Access denied for " user " for " action)
+	    #f))))))
+
 (define (get-pkts-dir mtconf)
   (let ((pktsdirs  (configf:lookup mtconf "setup" "pktsdirs"))
 	(pktsdir   (if pktsdirs (car (string-split pktsdirs " ")) #f)))
@@ -991,11 +1018,21 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (adjargs   (hash-table-copy args:arg-hash))
 	      (new-ss    (args:get-arg "-new")))
 	 ;; check a few things
-	 (if (and area
-		  (not area-path))
-	     (begin
-	       (print "ERROR: the specified area was not found in the [areas] table. Area name=" area)
-	       (exit 1)))
+	 (cond
+	  ((and area (not area-path))
+	   (print "ERROR: the specified area was not found in the [areas] table. Area name=" area)
+	   (exit 1))
+	  ((not area)
+	   (print "ERROR: no area specified. Use -area <areaname>")
+	   (exit 1))
+	  (else
+	   (let ((user (current-user-name)))
+	     (if (check-access user mtconf *action* area);; check rights
+		 (print "Access granted for " *action* " action by " user)
+		 (begin
+		   (print "Access denied for " *action* " action by " user)
+		   (exit 1))))))
+	 
 	 ;; (for-each
 	 ;;  (lambda (key)
 	 ;;    (if (not (member key *legal-params*))
