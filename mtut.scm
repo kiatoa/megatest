@@ -1038,7 +1038,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (common:with-queue-db
 	  mtconf
 	  (lambda (pktsdirs pktsdir conn)
-	    (make-report "out.dot" conn '() '())))))
+	    ;;                       pktspec display-fields 
+	    (make-report "out.dot" conn
+			 '((cmd      . ((parent . P)
+					(user   . M)
+					(target . t)))
+			   (runstart . ((parent . P)
+					(target . t)))
+			   (runtype . ((parent . P)))) ;; pktspec
+			 '(P U t)                                                     ;; 
+			 )))))  ;; no ptypes listed (ptypes are strings of pkt types to read from db
       ((db)
        (if (null? remargs)
 	   (print "ERROR: missing sub command for db command")
