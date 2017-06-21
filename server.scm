@@ -459,6 +459,7 @@
 	(debug-mode   (debug:debug-mode 1))
 	(last-time    (current-seconds))
 	(no-sync-db   (db:open-no-sync-db))
+        (sync-delay   (string->number (or (configf:get *configdat* "server" "sync-delay") "5")))
         (this-wd-num  (begin (mutex-lock! *wdnum*mutex) (let ((x *wdnum*)) (set! *wdnum* (add1 *wdnum*)) (mutex-unlock! *wdnum*mutex) x))))
     (set! *no-sync-db* no-sync-db) ;; make the no sync db available to api calls
     (debug:print-info 2 *default-log-port* "Periodic sync thread started.")
@@ -472,14 +473,21 @@
 	    ;; sync for filesystem local db writes
 	    ;;
 	    (mutex-lock! *db-multi-sync-mutex*)
-	    (let* ((need-sync        (>= *db-last-access* *db-last-sync*)) ;; no sync since last write
+	    (let* ((load-too-high    (> (common:get-normalized-cpu-load #f) 1))
+                   (need-sync        (>= *db-last-access* *db-last-sync*)) ;; no sync since last write
 		   (sync-in-progress *db-sync-in-progress*)
 		   (should-sync      (and (not *time-to-exit*)
-                                          (> (- (current-seconds) *db-last-sync*) 5))) ;; sync every five seconds minimum
+                                          (> (- (current-seconds) *db-last-sync*)
+                                             (or (if load-too-high ;; if load is high increase delay to bigger of sync-delay or 15 sec
+                                                     (max sync-delay 15)
+                                                     #f)
+                                                 sync-delay)))) ;; sync every five seconds minimum
 		   (start-time       (current-seconds))
 		   (mt-mod-time      (file-modification-time mtpath))
 		   (recently-synced  (< (- start-time mt-mod-time) 4))
-		   (will-sync        (and (or need-sync should-sync)
+		   (will-sync        (and (if load-too-high
+                                              should-sync
+                                              (or need-sync should-sync))
 					  (not sync-in-progress)
 					  (not recently-synced))))
               (debug:print-info 13 *default-log-port* "WD writable-watchdog top of loop.  need-sync="need-sync" sync-in-progress="sync-in-progress" should-sync="should-sync" start-time="start-time" mt-mod-time="mt-mod-time" recently-synced="recently-synced" will-sync="will-sync)

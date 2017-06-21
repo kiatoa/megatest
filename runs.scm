@@ -948,8 +948,23 @@
       (set! *max-tries-hash* (make-hash-table))
       ;; well, first lets see if cpu load throttling is enabled. If so wait around until the
       ;; average cpu load is under the threshold before continuing
-      (if (configf:lookup *configdat* "jobtools" "maxload") ;; only gate if maxload is specified
-	  (common:wait-for-cpuload maxload numcpus waitdelay))
+      (let ((hh       (common:get-homehost))
+            (maxload  (configf:lookup *configdat* "jobtools" "maxload")))
+        (if maxload ;; only gate if maxload is specified
+            (let loadloop ((load-dat #f))
+              (common:wait-for-cpuload maxload numcpus waitdelay) ;; first wait for local load to decrease if it happens to be high
+              (if (and hh
+                       (not (common:on-homehost?)))
+                  (let* ((hh-load-dat (common:get-normalized-cpu-load hh))
+                         (hh-load     (if hh-load-dat
+                                          (alist-ref 'adj-cpu-load hh-load-dat)
+                                          #f)))
+                    (cond
+                     ((not hh-load)(debug:print-info 0 *default-log-port* "Could not determine load on homehost. Proceeding as if load is fine ..."))
+                     ((> hh-load maxload)
+                      (debug:print-info 0 *default-log-port "Load too high on homehost, delaying before launching tests.")
+                     
+
       (run:test run-id run-info keyvals runname test-record flags #f test-registry all-tests-registry)
       (runs:incremental-print-results run-id)
       (hash-table-set! test-registry (db:test-make-full-name test-name item-path) 'running)
