@@ -1,3 +1,4 @@
+(include "test_records.scm")
 
 (define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
   (let* ((loadavg (common:get-cpu-load remote-host))
