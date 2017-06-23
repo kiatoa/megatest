@@ -1,3 +1,7 @@
+(include "common_records.scm")
+(include "key_records.scm")
+(include "db_records.scm")
+(include "run_records.scm")
 (include "test_records.scm")
 
 (define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
