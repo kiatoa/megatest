@@ -11,20 +11,22 @@
 ;;    
 (include "setup.scm")
 
+(include "direct.scm") ;; direct db calls
+
 ;; RUN A TEST
 (define (run-test dbconn run-id test-name)
-  (create-test dbconn run-id test-name)
-  (let ((test-id (get-test-id dbconn run-id test-name)))
-    (test-set-state-status dbconn test-id "LAUNCHED" "na")
+  (rmt:create-test dbconn run-id test-name)
+  (let ((test-id (rmt:get-test-id dbconn run-id test-name)))
+    (rmt:test-set-state-status dbconn test-id "LAUNCHED" "na")
     (thread-sleep! *launchdelay*)
-    (test-set-state-status dbconn test-id "RUNNING" "na")
+    (rmt:test-set-state-status dbconn test-id "RUNNING" "na")
     (for-each
      (lambda (step-name)
-       (create-step dbconn test-id step-name)
+       (rmt:create-step dbconn test-id step-name)
        (let ((step-id (get-step-id dbconn test-id step-name)))
-	 (step-set-state-status dbconn step-id "START" -1)
+	 (rmt:step-set-state-status dbconn step-id "START" -1)
 	 (thread-sleep! *stepdelay*)
-	 (step-set-state-status dbconn step-id "END" 0)
+	 (rmt:step-set-state-status dbconn step-id "END" 0)
 	 (print"   STEP: " step-name " done.")))
      '("step1" "step2" "step3" "step4" "step5" "step6" "step7" "step8" "step9"))
     (print "TEST: " test-name " done.")
@@ -32,8 +34,8 @@
 
 ;; RUN A RUN
 (define (run-run dbconn target run-name num-tests)
-  (create-run dbconn target run-name)
-  (let ((run-id (get-run-id dbconn target run-name)))
+  (rmt:create-run dbconn target run-name)
+  (let ((run-id (rmt:get-run-id dbconn target run-name)))
     (let loop ((test-num 0))
       (system (conc "NBFAKE_LOG=test-" test-num "-run-id-" run-id ".log NBFAKE_HOST=" *remotehost* " nbfake minimt runtest " run-id " test-" test-num))
       (if (< test-num num-tests)
@@ -47,7 +49,7 @@
   runtest run-id testname
   runrun  target runname")
       (let ((cmd    (car args))
-	    (dbconn (open-create-db *homepath* "mt.db" init-db)))
+	    (dbconn (rmt:open-create-db *homepath* "mt.db" init-db)))
 	(change-directory *homepath*)
 	(case (string->symbol cmd)
 	  ((runtest)
