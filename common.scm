@@ -833,8 +833,10 @@
 			    (file-write-access? hed)
 			    hed)
 		       (handle-exceptions
-			exn
-			#f
+			   exn
+			   (begin
+			     (debug:print-info 0 *default-log-port* "could not create " hed ", this might cause problems down the road.")
+			     #f)
 			(create-directory hed #t)))))
 	  (if (and (string? res)
 		   (directory? res))
@@ -1483,11 +1485,15 @@
      hosts)
     best-host))
 
-(define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
+(define (common:wait-for-cpuload maxload-in numcpus-in waitdelay #!key (count 1000) (msg #f)(remote-host #f))
   (let* ((loadavg (common:get-cpu-load remote-host))
+	 (numcpus (if (< 1 numcpus-in) ;; not possible
+		      (common:get-num-cpus remote-host)
+		      numcpus-in))
+	 (maxload (max maxload-in 0.5)) ;; so maxload must be greater than 0.5 for now BUG - FIXME?
 	 (first   (car loadavg))
 	 (next    (cadr loadavg))
-	 (adjload (* maxload numcpus))
+	 (adjload (* maxload (max 1 numcpus))) ;; possible bug where numcpus (or could be maxload) is zero, crude fallback is to at least use 1
 	 (loadjmp (- first next)))
     (cond
      ((and (> first adjload)
