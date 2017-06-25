@@ -35,7 +35,7 @@
   (create-run dbconn target run-name)
   (let ((run-id (get-run-id dbconn target run-name)))
     (let loop ((test-num 0))
-      (system (conc "nbfake minimt runtest " run-id " test-" test-num))
+      (system (conc "NBFAKE_LOG=test-" test-num "-run-id-" run-id ".log NBFAKE_HOST=" *remotehost* " nbfake minimt runtest " run-id " test-" test-num))
       (if (< test-num num-tests)
 	  (loop (+ test-num 1))))))
 
@@ -58,7 +58,18 @@
 	  ((runrun)
 	   (let ((target   (cadr args))
 		 (run-name (caddr args)))
-	     (run-run dbconn target run-name *numtests*)))
+	     (run-run dbconn target run-name *numtests*)
+	     (print "Use: sqlite3 runtest/mt.db 'select max(end_time)-min(start_time) from tests;' to see the total run time")
+	     ))
+	  ((runall)
+	   (for-each
+	    (lambda (target)
+	      (let loop ((run-num 0))
+		(thread-sleep! *rundelay*)
+		(system (conc "NBFAKE_LOG=run-" target "-" run-num ".log nbfake minimt runrun " target " run-" run-num))
+		(if (< run-num *numruns*)
+		    (loop (+ run-num 1)))))
+	    *targets*))
 	  (else
 	   (print "Command: " cmd " not recognised. Run without params to see help.")))
 	(close-database (dbconn-dat-dbh dbconn)))))
