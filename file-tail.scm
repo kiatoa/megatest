@@ -4,7 +4,7 @@
 (define (open-tail-db )
   (let* ((basedir   (create-directory (conc "/tmp/" (current-user-name))))
 	 (dbpath    (conc basedir "/megatest_logs.db"))
-	 (dbexists  (file-exists? dbpath))
+	 (dbexists  (common:file-exists? dbpath))
 	 (db        (sqlite3:open-database dbpath))
 	 (handler   (sqlite3:make-busy-timeout 136000)))
     (sqlite3:set-busy-handler! db handler)

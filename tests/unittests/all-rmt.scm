@@ -30,9 +30,21 @@
 (test #f '(#t "successful login")(rmt:login #f))
 ;; DEF (rmt:login-no-auto-client-setup connection-info)
 (test #f #t (pair? (rmt:get-latest-host-load (get-host-name))))
+
+;; get-latest-host-load does a lookup in the db, it won't return a useful value unless
+;; a test ran recently on host
+(test-batch rmt:get-latest-host-load
+            "rmt:get-latest-host-load"
+            (list (list "localhost"  #t (get-host-name))
+                  (list "not-a-host" #t "not-a-host"  ))
+            post-proc: pair?)
+                                           
 (test #f #t (list? (rmt:get-changed-record-ids 0)))
+
 (test #f #f (begin (runs:update-all-test_meta #f) #f))
+
 (test #f '("test1" "test2")(sort (alist-ref "tagtwo" (hash-table->alist (rmt:get-tests-tags)) equal?) string<=))
+
 (test #f '() (rmt:get-key-val-pairs 0))
 (test #f '("SYSTEM" "RELEASE") (rmt:get-keys))
 (test #f '("SYSTEM" "RELEASE") (rmt:get-keys-write)) ;; dummy query to force server start
@@ -84,7 +96,23 @@
 (test #f "JUSTFINE" (rmt:get-run-status 1))
 (test #f #t (begin (rmt:set-run-status 1 "NOTFINE" msg: "A message") #t))
 (test #f #t (begin (rmt:update-run-event_time 1) #t))
+
 ;; (rmt:get-runs-by-patt  keys runnamepatt targpatt offset limit fields last-runs-update) ;; fields of #f uses default
+;;
+(let ((keys (rmt:get-keys))
+      (rnp  "%")    ;; run name patt
+      (tpt  "%/%")) ;; target patt
+  (test-batch rmt:get-runs-by-patt
+              "rmt:get-runs-by-patt"
+              (list (list "t=0" #t keys rnp tpt #f #f #f 0)
+                    (list "t=current" #f keys rnp tpt #f #f #f (+ 100 (current-seconds))) ;; should be no records from the future
+                    )
+              post-proc: (lambda (res)
+                           ;; (print "rmt:get-runs-by-patt returned: " res)
+                           (and (vector? res)
+                                (let ((rows (vector-ref res 1)))
+                                  (> (length rows) 0))))))
+
 ;; (rmt:find-and-mark-incomplete run-id ovr-deadtime)
 ;; (rmt:get-main-run-stats run-id)
 ;; (rmt:get-var varname)

@@ -14,8 +14,9 @@
 (define (toplevel-command . a) #f)
 
 (use srfi-1 posix srfi-69 readline ;;  regex regex-case srfi-69 apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
-     srfi-18 extras format pkts pkts regex regex-case
-     (prefix dbi dbi:)) ;;  zmq extras)
+     srfi-18 extras format pkts regex regex-case
+     (prefix dbi dbi:)
+     (prefix nanomsg nmsg:))
 
 (declare (uses common))
 (declare (uses megatest-version))
@@ -27,9 +28,54 @@
 
 (require-library stml)
 
-(define *target-mappers*  (make-hash-table)) ;; '())
-(define *runname-mappers* (make-hash-table)) ;; '())
+;; stuff for the mapper and checker functions
+;;
+(define *target-mappers*  (make-hash-table)) 
+(define *runname-mappers* (make-hash-table)) 
+(define *area-checkers*   (make-hash-table)) 
 
+;; helpers for mappers/checkers
+(define (add-target-mapper name proc)
+  (hash-table-set! *target-mappers* name proc))
+(define (add-runname-mapper name proc)
+  (hash-table-set! *runname-mappers* name proc))
+(define (add-area-checker name proc)
+  (hash-table-set! *area-checkers* name proc))
+
+;; given a runkey, xlatr-key and other info return one of the following:
+;;   list of targets, null list to skip processing
+;;   
+(define (map-targets mtconf aval-alist runkey area contour #!key (xlatr-key-in #f))
+  (let* ((xlatr-key (or xlatr-key-in
+                        (conf-get/default mtconf aval-alist 'targtrans)))
+         (proc      (hash-table-ref/default *target-mappers* xlatr-key #f)))
+    (if proc
+        (begin
+          (print "Using target mapper: " xlatr-key)
+          (handle-exceptions
+           exn
+           (begin
+             (print "FAILED TO RUN TARGET MAPPER FOR " area ", called " xlatr-key)
+             (print "   function is: " (hash-table-ref/default *target-mappers* xlatr-key #f ) )
+             (print " message: " ((condition-property-accessor 'exn 'message) exn))
+             runkey)
+           (proc runkey area contour)))
+        (begin
+          (if xlatr-key 
+              (print "ERROR: Failed to find named target translator " xlatr-key ", using original target."))
+          `(,runkey))))) ;; no proc then use runkey
+
+;; given mtconf and areaconf extract a translator/filter, first look at areaconf
+;; then if not found look at default
+;;
+(define (conf-get/default mtconf areaconf keyname #!key (default #f))
+  (let ((res (or (alist-ref keyname areaconf)
+                 (configf:lookup mtconf "default" (conc keyname))
+                 default)))
+    (if res
+        (string->symbol res)
+        res)))
+  
 ;; this needs some thought regarding security implications.
 ;;
 ;;   i. Check that owner of the file and calling user are same?
@@ -38,11 +84,11 @@
 ;;  iv. Use compiled version in preference to .scm version. Thus there is a manual "blessing"
 ;;      required to use .mtutil.scm.
 ;;
-(if (file-exists? "megatest.config")
-    (if (file-exists? ".mtutil.so")
+(if (common:file-exists? "megatest.config")
+    (if (common:file-exists? ".mtutil.so")
 	(load ".mtutil.so")
-	(if (file-exists? ".mtutil.scm")
-	(load ".mtutil.scm"))))
+	(if (common:file-exists? ".mtutil.scm")
+            (load ".mtutil.scm"))))
 
 ;; Disabled help items
 ;;  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
@@ -58,51 +104,52 @@ mtutil, part of the Megatest tool suite, documentation at http://www.kiatoa.com/
   license GPL, Copyright Matt Welland 2006-2017
 
 Usage: mtutil action [options]
-  -h                       : this help
-  -manual                  : show the Megatest user manual
-  -version                 : print megatest version (currently " megatest-version ")
-
-Actions:
-   run                     : initiate runs
-   remove                  : remove runs
-   rerun                   : register action for processing
-   set-ss                  : set state/status
-   archive                 : compress and move test data to archive disk
-   kill                    : stop tests or entire runs
-   db                      : database utilities
+  -h                         : this help
+  -manual                    : show the Megatest user manual
+  -version                   : print megatest version (currently " megatest-version ")
+			     
+Actions:		     
+   run                       : initiate runs
+   remove                    : remove runs
+   rerun                     : register action for processing
+   set-ss                    : set state/status
+   archive                   : compress and move test data to archive disk
+   kill                      : stop tests or entire runs
+   db                        : database utilities
+   areas, contours, setup    : show areas, contours or setup section from megatest.config
 
 Contour actions:
-   process                 : runs import, rungen and dispatch 
-
-Selectors 
-  -immediate               : apply this action immediately, default is to queue up actions
-  -area areapatt1,area2... : apply this action only to the specified areas
-  -target key1/key2/...    : run for key1, key2, etc.
-  -test-patt p1/p2,p3/...  : % is wildcard
-  -run-name                : required, name for this particular test run
-  -contour contourname     : run all targets for contourname, requires -run-name, -target
-  -state-status c/p,c/f    : Specify a list of state and status patterns
-  -tag-expr tag1,tag2%,..  : select tests with tags matching expression
-  -mode-patt key           : load testpatt from <key> in runconfigs instead of default TESTPATT
-                             if -testpatt and -tagexpr are not specified
-  -new state/status        : specify new state/status for set-ss
-
-Misc 
-  -start-dir path          : switch to this directory before running mtutil
-  -set-vars V1=1,V2=2      : Add environment variables to a run NB// these are
-                                 overwritten by values set in config files.
-  -log logfile             : send stdout and stderr to logfile
-  -repl                    : start a repl (useful for extending megatest)
-  -load file.scm           : load and run file.scm
-  -debug N|N,M,O...        : enable debug messages 0-N or N and M and O ...
-
-Utility
- db pgschema               : emit postgresql schema; do \"mtutil db pgschema | psql -d mydb\"
+   process                   : runs import, rungen and dispatch 
+			     
+Selectors 		     
+  -immediate                 : apply this action immediately, default is to queue up actions
+  -area areapatt1,area2...   : apply this action only to the specified areas
+  -target key1/key2/...      : run for key1, key2, etc.
+  -test-patt p1/p2,p3/...    : % is wildcard
+  -run-name                  : required, name for this particular test run
+  -contour contourname       : run all targets for contourname, requires -run-name, -target
+  -state-status c/p,c/f      : Specify a list of state and status patterns
+  -tag-expr tag1,tag2%,..    : select tests with tags matching expression
+  -mode-patt key             : load testpatt from <key> in runconfigs instead of default TESTPATT
+                               if -testpatt and -tagexpr are not specified
+  -new state/status          : specify new state/status for set-ss
+			     
+Misc 			     
+  -start-dir path            : switch to this directory before running mtutil
+  -set-vars V1=1,V2=2        : Add environment variables to a run NB// these are
+                                   overwritten by values set in config files.
+  -log logfile               : send stdout and stderr to logfile
+  -repl                      : start a repl (useful for extending megatest)
+  -load file.scm             : load and run file.scm
+  -debug N|N,M,O...          : enable debug messages 0-N or N and M and O ...
+			     
+Utility			     
+ db pgschema                 : emit postgresql schema; do \"mtutil db pgschema | psql -d mydb\"
 
 Examples:
 
 # Start a megatest run in the area \"mytests\"
-mtutil -area mytests -action run -target v1.63/aa3e -mode-patt MYPATT -tag-expr quick
+mtutil run -area mytests -target v1.63/aa3e -mode-patt MYPATT -tag-expr quick
 
 # Start a contour
 mtutil run -contour quick -target v1.63/aa3e 
@@ -113,37 +160,43 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; args and pkt key specs
 ;;
 (define *arg-keys*
-  '(("-area"       . G) ;; maps to group
-    ("-target"     . t)
-    ("-run-name"   . n)
-    ("-state"      . e)
-    ("-status"     . s)
-    ("-contour"    . c)
-    ("-test-patt"  . p)  ;; idea, enhance margs ("-test-patt" "-testpatt") => yields one value in "-test-patt"
-    ("-mode-patt"  . o)
-    ("-tag-expr"   . x)
-    ("-item-patt"  . i)
-    ("-sync-to"    . k)
-    ("-append-config" . d)
+  ;; used keys
+  ;;    a  - action
+  '(
+    ("-area"            . G) ;; maps to group
+    ("-contour"         . c)
+    ("-append-config"   . d)
+    ("-state"           . e)
+    ("-item-patt"       . i)
+    ("-sync-to"         . k)
+    ("-new"             . l) ;; l (see below) is new-ss
+    ("-run-name"        . n)
+    ("-mode-patt"       . o)
+    ("-test-patt"       . p)  ;; idea, enhance margs ("-test-patt" "-testpatt") => yields one value in "-test-patt"
+    ("-status"          . s)
+    ("-target"          . t)
+    ("-tag-expr"        . x)
     ;; misc
-    ("-start-dir"  . S)
-    ("-msg"        . M)
-    ("-set-vars"   . v)
-    ("-debug"      . #f)  ;; for *verbosity* > 2
-    ("-load"       . #f)  ;; load and exectute a scheme file
-    ("-log"        . #f)
+    ("-debug"           . #f)  ;; for *verbosity* > 2
+    ("-load"            . #f)  ;; load and exectute a scheme file
+    ("-log"             . #f)
+    ("-msg"             . M)
+    ("-start-dir"       . S)
+    ("-set-vars"        . v)
     ))
 (define *switch-keys*
-  '(("-h"          . #f)
-    ("-help"       . #f)
-    ("--help"      . #f)
-    ("-manual"     . #f)
-    ("-version"    . #f)
-    ;; misc
-    ("-repl"       . #f)
-    ("-immediate"  . I)
-    ("-preclean"   . r)
-    ("-rerun-all"  . u)
+  '(
+    ("-h"               . #f)
+    ("-help"            . #f)
+    ("--help"           . #f)
+    ("-manual"          . #f)
+    ("-version"         . #f)
+    ;; misc	        
+    ("-repl"            . #f)
+    ("-immediate"       . I)
+    ("-preclean"        . r)
+    ("-rerun-all"       . u)
+    ("-prepend-contour" . w)
     ))
 
 ;; alist to map actions to old megatest commands
@@ -151,7 +204,31 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   '((run         . "-run")
     (sync        . "")
     (archive     . "-archive")
-    (set-ss      . "-set-state-status")))
+    (set-ss      . "-set-state-status")
+    (remove      . "-remove-runs")))
+
+;; Card types:
+;;
+;; A action
+;; U username (Unix)
+;; D timestamp
+;; T card type
+
+;; utilitarian alist for standard cards
+;;
+(define *additional-cards*
+  '(
+    ;; Standard Cards
+    (A  . action    )
+    (D  . timestamp )
+    (T  . cardtype  )
+    (U  . user      ) ;; username
+    (Z  . shar1sum  )
+
+    ;; Extras
+    (a  . runkey    ) ;; needed for matching up pkts with target derived from runkey
+    ;; (l  . new-ss    ) ;; new state/status
+    ))
 
 ;; inlst is an alternative input
 ;;
@@ -178,7 +255,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   (-mode-patt . "--modepatt")
 		   (-run-name  . "-runname")
 		   (-test-patt . "-testpatt")
-		   (-msg       . "-m")))
+		   (-msg       . "-m")
+		   (-new       . "-set-state-status")))
       param))
 
 (define (val->alist val)
@@ -209,7 +287,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (handle-exceptions
 	exn
 	(print "ERROR: failed to clone or sync 1ossil " url " message: " ((condition-property-accessor 'exn 'message) exn))
-      (if (file-exists? targ-file)
+      (if (common:file-exists? targ-file)
 	  (system (conc "fossil pull --once " url " -R " targ-file))
 	  (system (conc "fossil clone " url " " targ-file))
 	  ))))
@@ -258,17 +336,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(close-input-port timeline-port)
 	(values  (common:date-time->seconds (conc date " " time)) node))))))
 
-
 ;;======================================================================
 ;; GLOBALS
 ;;======================================================================
-
-;; Card types:
-;;
-;; a action
-;; u username (Unix)
-;; D timestamp
-;; T card type
 
 ;; process args
 (define *action* (if (> (length (argv)) 1)
@@ -300,6 +370,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (args:get-arg "-envcap")
 	       (args:get-arg "-envdelta")
 	       (member *action* '("db"))   ;; very loose checks on db.
+	       (equal? *action* "show")    ;; just keep going if list
 	       )))
     (debug:print-error 0 *default-log-port* "Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
@@ -310,67 +381,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (exit 1)))
 
 ;;======================================================================
-;; pkts
-;;======================================================================
 
-(define (with-queue-db mtconf proc)
-  (let* ((pktsdirs (configf:lookup mtconf "setup"  "pktsdirs"))
-	 (pktsdir  (if pktsdirs (car (string-split pktsdirs " ")) #f))
-	 (toppath  (configf:lookup mtconf "dyndat" "toppath"))
-	 (pdbpath  (or (configf:lookup mtconf "setup"  "pdbpath") pktsdir)))
-    (if (not (and  pktsdir toppath pdbpath))
-	(begin
-	  (print "ERROR: settings are missing in your megatest.config for area management.")
-	  (print "  you need to have pktsdir in the [setup] section."))
-	(let* ((pdb  (open-queue-db pdbpath "pkts.db"
-				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))))
-	  (proc pktsdirs pktsdir pdb)
-	  (dbi:close pdb)))))
 
-(define (load-pkts-to-db mtconf)
-  (with-queue-db
-   mtconf
-   (lambda (pktsdirs pktsdir pdb)
-     (for-each
-      (lambda (pktsdir) ;; look at all
-	(if (and (file-exists? pktsdir)
-		 (directory? pktsdir)
-		 (file-read-access? pktsdir))
-	    (let ((pkts (glob (conc pktsdir "/*.pkt"))))
-	      (for-each
-	       (lambda (pkt)
-		 (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
-			(exists  (lookup-by-uuid pdb uuid #f)))
-		   (if (not exists)
-		       (let* ((pktdat (string-intersperse
-				       (with-input-from-file pkt read-lines)
-				       "\n"))
-			      (apkt   (pkt->alist pktdat))
-			      (ptype  (alist-ref 'T apkt)))
-			 (add-to-queue pdb pktdat uuid (or ptype 'cmd) #f 0)
-			 (debug:print 4 *default-log-port* "Added " uuid " of type " ptype " to queue"))
-		       (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
-		       )))
-	       pkts))))
-      (string-split pktsdirs)))))
-
-(define (get-pkt-alists pkts)
-  (map (lambda (x)
-	 (alist-ref 'apkt x)) ;; 'pkta pulls out the alist from the read pkt
-       pkts))
-
-;; given list of pkts (alist mode) return list of D cards as Unix epoch, sorted descending
-;; also delete duplicates by target i.e. (car pkt)
-(define (get-pkt-times pkts)
-  (delete-duplicates
-   (sort 
-    (map (lambda (x)
-	   `(,(alist-ref 't x) . ,(string->number (alist-ref 'D x))))
-	 pkts)
-    (lambda (a b)(> (cdr a)(cdr b))))      ;; sort descending
-   (lambda (a b)(equal? (car a)(car b))))) ;; remove duplicates by target
-
-;;======================================================================
 ;; Runs
 ;;======================================================================
 
@@ -385,7 +397,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; sched => force the run start time to be recorded as sched Unix
 ;; epoch. This aligns times properly for triggers in some cases.
 ;;
-(define (command-line->pkt action args-alist sched-in #!key (extra-dat '()))
+;;  extra-dat format is ( 'x xval 'y yval .... )
+;;
+(define (command-line->pkt action args-alist sched-in #!key (extra-dat '())(area-path #f)(new-ss #f))
   (let* ((sched     (cond
 		     ((vector? sched-in)(local-time->seconds sched-in)) ;; we recieved a time
 		     ((number? sched-in) sched-in)
@@ -395,11 +409,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (hash-table->alist args-alist)
 			    args-alist)
 			(hash-table->alist args:arg-hash))) ;; if no args-alist then we assume this is a call driven directly by commandline
-	 (alldat    (apply append (list 'T "cmd"
-					'a action
-					'U (current-user-name)
-					'D sched)
-                           extra-dat
+	 (alldat    (apply append
+			   (list 'A action
+				 'U (current-user-name)
+				 'D sched)
+			   (if area-path
+			       (list 'S area-path) ;; the area-path is mapped to the start-dir
+			       '())
+                           (if (list? extra-dat)
+			       extra-dat
+			       (begin
+				 (debug:print 0 *default-log-port* "ERROR: command-line->pkt received bad extra-dat " extra-dat)
+				 '()))
 			   (map (lambda (x)
 				  (let* ((param (car x))
 					 (value (cdr x))
@@ -412,8 +433,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					(list meta value)
 					'())))
 				(filter cdr args-data)))))
-;; (print  "Alldat: " alldat
-;;         " args-data: " args-data)
+    (print  "Alldat: " alldat
+	    " args-data: " args-data)
     (add-z-card
      (apply construct-sdat alldat))))
 
@@ -427,11 +448,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		     ;; pathenvvar: "MT_RUN_AREA_HOME"
 		     ))
 	 (mtconf    (if mtconfdat (car mtconfdat) #f)))
-    ;; we set some dynamic data in a section called "dyndata"
+    ;; we set some dynamic data in a section called "scratchdata"
     (if mtconf
 	(begin
-	  (configf:section-var-set! mtconf "dyndat" "toppath" start-dir)))
-    ;; (print "TOPPATH: " (configf:lookup mtconf "dyndat" "toppath"))
+	  (configf:section-var-set! mtconf "scratchdat" "toppath" start-dir)))
+    ;; (print "TOPPATH: " (configf:lookup mtconf "scratchdat" "toppath"))
     mtconfdat))
 
 
@@ -446,12 +467,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 ;; Override the run start time record with sched. Usually #f is fine.
 ;; 
-(define (create-run-pkt mtconf action area runkey runname mode-patt tag-expr pktsdir reason contour sched dbdest append-conf runtrans)
+(define (create-run-pkt mtconf action area runkey target runname mode-patt 
+                        tag-expr pktsdir reason contour sched dbdest append-conf
+                        runtrans)
   (let* ((good-val   (lambda (inval)(and inval (string? inval)(not (string-null? inval)))))
 	 (area-dat   (val->alist (or (configf:lookup mtconf "areas" area) "")))
 	 (area-path  (alist-ref 'path      area-dat))
-	 (area-xlatr (alist-ref 'targtrans area-dat))
-	 (new-runname (let* ((callname (if (string? runtrans)(string->symbol runtrans) #f))
+	 ;; (area-xlatr (alist-ref 'targtrans area-dat))
+         ;; (xlatr-key  (if area-xlatr (string->symbol area-xlatr) #f))
+         (new-runname (let* ((callname (if (string? runtrans)(string->symbol runtrans) #f))
 			     (mapper   (if callname (hash-table-ref/default *runname-mappers* callname #f) #f)))
 			;; (print "callname=" callname " runtrans=" runtrans " mapper=" mapper)
 			(if (and callname
@@ -471,33 +495,21 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (case callname
 			      ((auto) runname)
 			      (else   runtrans)))))
-	 (new-target (if area-xlatr 
-			 (let ((xlatr-key (string->symbol area-xlatr)))
-			   (if (hash-table-exists? *target-mappers* xlatr-key)
-			       (begin
-				 (print "Using target mapper: " area-xlatr)
-				 (handle-exceptions
-				     exn
-				     (begin
-				       (print "FAILED TO RUN TARGET MAPPER FOR " area ", called " area-xlatr)
-				       (print "   function is: " (hash-table-ref/default *target-mappers* xlatr-key #f ) )
-				       (print " message: " ((condition-property-accessor 'exn 'message) exn))
-				       runkey)
-				   ((hash-table-ref *target-mappers* xlatr-key)
-				    runkey new-runname area area-path reason contour mode-patt)))
-			       (begin
-				 (print "ERROR: Failed to find named target translator " xlatr-key ", using original target.")
-				 runkey)))
-			 runkey)))
+	 (new-target     target) ;; I believe we will want target manipulation here .. (map-targets xlatr-key runkey area contour))
+	 (actual-action  (if action
+			     (if (equal? action "sync-prepend")
+				 "sync"
+				 action)
+			     "run"))) ;; this has gotten a bit ugly. Need a function to handle actions processing.
     ;; some hacks to remove switches not needed in certain cases
     (case (string->symbol (or action "run"))
-      ((sync)
+      ((sync sync-prepend)
        (set! new-target #f)
        (set! runame     #f)))
-    (print "area-path: " area-path " area-xlatr: " area-xlatr " orig-target: " runkey " new-target: " new-target)
+    ;; (print "area-path: " area-path " orig-target: " runkey " new-target: " new-target)
     (let-values (((uuid pkt)
 		  (command-line->pkt
-		   (if action action "run")
+		   actual-action
 		   (append 
 		    `(("-start-dir"  . ,area-path)
 		      ("-msg"        . ,reason)
@@ -508,6 +520,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (if (good-val tag-expr)    `(("-tag-expr"      . ,tag-expr))    '())
 		    (if (good-val dbdest)      `(("-sync-to"       . ,dbdest))      '())
 		    (if (good-val append-conf) `(("-append-config" . ,append-conf)) '())
+		    (if (equal? action "sync-prepend") '(("-prepend-contour" . " "))   '())
 		    (if (not (or mode-patt tag-expr))
 			`(("-testpatt"  . "%"))
 			'())
@@ -518,21 +531,37 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			'())
 		    )
 		   sched
-                   extra-dat: `((a . ,runkey))  ;; we need the run key for marking the run as launched
+                   extra-dat: `(a ,runkey)  ;; we need the run key for marking the run as launched
                    )))
       (with-output-to-file
 	  (conc pktsdir "/" uuid ".pkt")
 	(lambda ()
 	  (print pkt))))))
 
-
+;; look for areas=a1,a2,a3 OR areafn=somefuncname
+;;
 (define (val-alist->areas val-alist)
-  (string-split (or (alist-ref 'areas val-alist) "") ","))
+  (let ((areas-string   (alist-ref 'areas  val-alist))
+	(areas-procname (alist-ref 'areafn val-alist)))
+    (if areas-procname ;; areas-procname take precedence
+	areas-procname
+	(string-split (or areas-string "") ","))))
 
-(define (area-allowed? area areas)
-  (or (not areas)
-      (null? areas)
-      (member area areas)))
+;; area   - the current area under consideration
+;; areas  - the list of allowed areas from the contour spec -OR-
+;;          if it is a string then it is the function to use to
+;;          lookup in *area-checkers*
+;;
+(define (area-allowed? area areas runkey contour mode-patt)
+  (cond
+   ((not areas) #t) ;; no spec
+   ((string? areas) ;; 
+    (let ((check-fn (hash-table-ref/default *area-checkers* (string->symbol areas) #f)))
+      (if check-fn
+	  (check-fn area runkey contour mode-patt)
+	  #f)))
+   ((list? areas)(member area areas))
+   (else #f))) ;; shouldn't get here 
 
 ;; (use trace)(trace create-run-pkt)
 
@@ -540,7 +569,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (define (generate-run-pkts mtconf toppath)
   (let ((std-runname (conc "sched"  (time->string (seconds->local-time (current-seconds)) "%M%H%d"))))
-    (with-queue-db
+    (common:with-queue-db
      mtconf
      (lambda (pktsdirs pktsdir pdb)
        (let* ((rgconfdat (find-and-read-config (conc toppath "/runconfigs.config")))
@@ -569,22 +598,31 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			(val-alist  (val->alist val))
 			(runname    (make-runname "" ""))
 			(runtrans   (alist-ref 'runtrans val-alist))
+
+			;; these may or may not be defined and not all are used in each handler type in the case below
+			(run-name   (alist-ref 'run-name val-alist))
+			(target     (alist-ref 'target   val-alist))
+			(crontab    (alist-ref 'cron     val-alist))
+			(areas      (val-alist->areas    val-alist)) ;; areas can be a single string (a reference to call an areas function), or a list of area names.
+			(dbdest     (alist-ref 'dbdest   val-alist))
+			(appendconf (alist-ref 'appendconf val-alist))
+			(file-globs (alist-ref 'glob val-alist))
 			
 			(runstarts  (find-pkts pdb '(runstart) `((o . ,contour)
 								 (t . ,runkey))))
-			(rspkts     (get-pkt-alists runstarts))
+			(rspkts     (common:get-pkt-alists runstarts))
 			;; starttimes is for run start times and is used to know when the last run was launched
-			(starttimes (get-pkt-times rspkts)) ;; sort by age (youngest first) and delete duplicates by target
-			(last-run (if (null? starttimes) ;; if '() then it has never been run, else get the max
-				      0
-				      (apply max (map cdr starttimes))))
+			(starttimes (common:get-pkt-times rspkts)) ;; sort by age (youngest first) and delete duplicates by target
+			(last-run   (if (null? starttimes) ;; if '() then it has never been run, else get the max
+					0
+					(apply max (map cdr starttimes))))
 			;; synctimes is for figuring out the last time a sync was done
-			(syncstarts   (find-pkts pdb '(syncstart) '())) ;; no qualifiers, a sync does all tarets etc.
-			(sspkts       (get-pkt-alists syncstarts))
-			(synctimes    (get-pkt-times  sspkts))
-			(last-sync (if (null? synctimes) ;; if '() then it has never been run, else get the max
-				      0
-				      (apply max (map cdr synctimes))))
+			(syncstarts (find-pkts pdb '(syncstart) '())) ;; no qualifiers, a sync does all tarets etc.
+			(sspkts       (common:get-pkt-alists syncstarts))
+			(synctimes    (common:get-pkt-times  sspkts))
+			(last-sync  (if (null? synctimes) ;; if '() then it has never been run, else get the max
+					0
+					(apply max (map cdr synctimes))))
 			)
 
 		   (let ((delta (lambda (x)
@@ -602,45 +640,49 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 		     ((no-such-rule) (print "ERROR: no such rule for " sense))
 
+		     ;; Handle crontab like rules
+		     ;;
 		     ((scheduled)
 		      (if (not (alist-ref 'cron val-alist)) ;; gotta have cron spec
 			  (print "ERROR: bad sense spec \"" (string-intersperse sense " ") "\" params: " val-alist)
-			  (let* ((run-name (alist-ref 'run-name val-alist))
-				 (target   (alist-ref 'target   val-alist))
-				 (crontab  (alist-ref 'cron     val-alist))
-                                 (areas    (val-alist->areas val-alist))
+			  (let* (
 				 ;; (action   (alist-ref 'action   val-alist))
-				 (cron-safe-string (string-translate (string-intersperse (string-split (alist-ref 'cron val-alist)) "-") "*" "X"))
+				 (cron-safe-string (string-translate (string-intersperse (string-split crontab) "-") "*" "X"))
 				 (runname  std-runname)) ;; (conc "sched" (time->string (seconds->local-time (current-seconds)) "%M%H%d")))))
 			    ;; (print "last-run: " last-run " need-run: " need-run)
 			    ;; (if need-run
 			    (case (string->symbol action)
-			      ((sync)
+			      ((sync sync-prepend)
 			       (if (common:extended-cron crontab #f last-sync)
 				   (push-run-spec torun contour runkey
 						  `((message . ,(conc ruletype ":sync-" cron-safe-string))
 						    (action  . ,action)
-						    (dbdest  . ,(alist-ref 'dbdest val-alist))
-						    (append  . ,(alist-ref 'appendconf val-alist))))))
+						    (dbdest  . ,dbdest)
+						    (append  . ,appendconf)
+						    (areas   . ,areas)))))
 			      ((run)
 			       (if (common:extended-cron crontab #f last-run)
 				   (push-run-spec torun contour runkey
-						  `((message . ,(conc ruletype ":" cron-safe-string))
-						    (runname . ,runname)
+						  `((message  . ,(conc ruletype ":" cron-safe-string))
+						    (runname  . ,runname)
 						    (runtrans . ,runtrans)
-						    (action  . ,action)
-						    (target  . ,target)))))
+						    (action   . ,action)
+						    (areas    . ,areas)
+						    (target   . ,target)))))
                               ((remove)
                                (push-run-spec torun contour runkey
-						  `((message . ,(conc ruletype ":" cron-safe-string))
-						    (runname . ,runname)
+						  `((message  . ,(conc ruletype ":" cron-safe-string))
+						    (runname  . ,runname)
 						    (runtrans . ,runtrans)
-						    (action  . ,action)
-						    (target  . ,target))))
+						    (action   . ,action)
+						    (areas    . ,areas)
+						    (target   . ,target))))
 			      (else
 			       (print "ERROR: action \"" action "\" has no scheduled handler")
 			       )))))
 
+		     ;; script based sensors
+		     ;;
 		     ((script)
 		      ;; syntax is a little different here. It is a list of commands to run, "scriptname = extra_parameters;scriptname = ..."
 		      ;; where scriptname may be repeated multiple times. The script must return unix-epoch of last change, new-target-name and new-run-name
@@ -677,7 +719,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 							  (runname  . ,runname)
 							  (runtrans . ,runtrans)
 							  (action   . ,action)
-							  (target   . ,new-target))))
+							  (areas    . ,areas)
+							  (target   . ,new-target) ;; overriding with result from runing the script
+                                                          )))
 				       (print "key-msg: " key-msg)
 				       (push-run-spec torun contour
 						      (if optional  ;; we need to be able to differentiate same contour, different behavior. 
@@ -686,6 +730,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 						      key-msg)))))))
 		       val-alist)) ;; iterate over the param split by ;\s*
 
+		     ;; fossil scm based triggers
+		     ;;
 		     ((fossil)
 		      (for-each
 		       (lambda (fspec)
@@ -701,32 +747,37 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					 (fossil:last-change-node-and-time fdir fname branch)))
 			     (if (null? starttimes)
 				 (push-run-spec torun contour runkey
-						`((message . ,(conc "fossil:" branch "-neverrun"))
-						  (runname . ,(conc runname "-" node))
+						`((message  . ,(conc "fossil:" branch "-neverrun"))
+						  (runname  . ,(conc runname "-" node))
 						  (runtrans . ,runtrans)
-						  (target  . ,runkey)))
+						  (areas    . ,areas)
+						  ;; (target   . ,runkey)
+                                                  ))
 				 (if (> datetime last-run) ;; change time is greater than last-run time
 				     (push-run-spec torun contour runkey
-						    `((message . ,(conc "fossil:" branch "-" node))
-						      (runname . ,(conc runname "-" node))
+						    `((message  . ,(conc "fossil:" branch "-" node))
+						      (runname  . ,(conc runname "-" node))
 						      (runtrans . ,runtrans)
-						      (target  . ,runkey)))))
+						      (areas    . ,areas)
+						      ;; (target   . ,runkey)
+                                                      ))))
 			     (print "Got datetime=" datetime " node=" node))))
 		       val-alist))
-		     
+
+		     ;; sensor looking for one or more files newer than reference
+		     ;;
 		     ((file file-or) ;; one or more files must be newer than the reference
-		      (let* ((file-globs  (alist-ref 'glob val-alist))
-                             (areas       (val-alist->areas val-alist))
-			     (youngestdat (common:get-youngest (common:bash-glob file-globs)))
+		      (let* ((youngestdat (common:get-youngest (common:bash-glob file-globs)))
 			     (youngestmod (car youngestdat)))
 			;; (print "youngestmod: " youngestmod " starttimes: " starttimes)
 			(if (null? starttimes) ;; this target has never been run
 			    (push-run-spec torun contour runkey
-					   `((message . "file:neverrun")
-					     (action  . ,action)
+					   `((message  . "file:neverrun")
+					     (action   . ,action)
 					     (runtrans . ,runtrans)
-					     (target  . ,runkey)
-					     (runname . ,runname)))
+					     ;; (target   . ,runkey)
+					     (areas    . ,areas)
+					     (runname  . ,runname)))
 			;; (for-each
 			;;  (lambda (starttime) ;; look at the time the last run was kicked off for this contour
 			;;    (if (> youngestmod (cdr starttime))
@@ -734,29 +785,31 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			;; 	     (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
 			    (if (> youngestmod last-run)
 				(push-run-spec torun contour runkey
-					       `((message . ,(conc ruletype ":" (cadr youngestdat)))
-						 (action  . ,action)
-						 (target  . ,runkey)
+					       `((message  . ,(conc ruletype ":" (cadr youngestdat)))
+						 (action   . ,action)
+						 ;; (target   . ,runkey)
 						 (runtrans . ,runtrans)
-						 (runname . ,runname)
+						 (areas    . ,areas)
+						 (runname  . ,runname)
 						 ))))))
-		      ;; starttimes))
 
+		     ;; all globbed files must be newer than the reference
+		     ;;
 		     ((file-and) ;; all files must be newer than the reference
-		      (let* ((file-globs  (alist-ref 'glob val-alist))
-			     (youngestdat (common:get-youngest file-globs))
+		      (let* ((youngestdat (common:get-youngest file-globs))
 			     (youngestmod (car youngestdat))
 			     (success     #t)) ;; any cases of not true, set flag to #f for AND
 			;; (print "youngestmod: " youngestmod " starttimes: " starttimes)
 			(if (null? starttimes) ;; this target has never been run
 			    (push-run-spec torun contour runkey
-					   `((message . "file:neverrun")
-					     (runname . ,runname)
+					   `((message  . "file:neverrun")
+					     (runname  . ,runname)
 					     (runtrans . ,runtrans)
-					     (target  . ,runkey)
-					     (action  . ,action)))
+					     (areas    . ,areas)
+					     ;; (target   . ,runkey)
+					     (action   . ,action)))
 			    ;; NB// I think this is wrong. It should be looking at last-run only.
-			    (if (> youngestmod last-run)
+			    (if (> youngestmod last-run) ;; WAIT!! Shouldn't file-and be looking at the *oldest* file (thus all are younger than ...)
 				
 				;; 			    (for-each
 				;; 			     (lambda (starttime) ;; look at the time the last run was kicked off for this contour
@@ -767,11 +820,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				;; 			    (begin
 				;; 			      (print "starttime younger than youngestmod: " starttime " Youngestmod: " youngestmod)
 				(push-run-spec torun contour runkey
-					       `((message . ,(conc ruletype ":" (cadr youngestdat)))
-						 (runname . ,runname)
+					       `((message  . ,(conc ruletype ":" (cadr youngestdat)))
+						 (runname  . ,runname)
 						 (runtrans . ,runtrans)
-						 (target  . ,runkey)
-						 (action  . ,action)
+						 ;; (target   . ,runkey)
+						 (areas    . ,areas)
+						 (action   . ,action)
 						 ))))))
 		     (else (print "ERROR: unrecognised rule \"" ruletype)))))
 	       keydats))) ;; sense rules
@@ -780,16 +834,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 ;; now have to run populated
 	 (for-each
 	  (lambda (contour)
-	    (print "contour: " contour)
-	    (let* ((val       (or (configf:lookup mtconf "contours" contour) ""))
-		   (val-alist (val->alist val))
-		   (areas     (val-alist->areas val-alist))
-		   (selector  (alist-ref 'selector val-alist))
-		   (mode-tag  (and selector (string-split-fields "/" selector #:infix)))
-		   (mode-patt (and mode-tag (if (eq? (length mode-tag) 2)(cadr mode-tag) #f)))
-		   (tag-expr  (and mode-tag (if (null? mode-tag) #f (car mode-tag)))))
+	    (let* ((cval       (or (configf:lookup mtconf "contours" contour) ""))
+		   (cval-alist (val->alist cval))                     ;; BEWARE ... NOT the same val-alist as above!
+		   (areas      (val-alist->areas cval-alist))
+		   (selector   (alist-ref 'selector cval-alist))
+		   (mode-tag   (and selector (string-split-fields "/" selector #:infix)))
+		   (mode-patt  (and mode-tag (if (eq? (length mode-tag) 2)(cadr mode-tag) #f)))
+		   (tag-expr   (and mode-tag (if (null? mode-tag) #f (car mode-tag)))))
+	      (print "contour: " contour " areas=" areas " cval=" cval)
 	      (for-each
-	       (lambda (runkeydatset)
+	       (lambda (runkeydatset) 
 		 ;; (print "runkeydatset: ")(pp runkeydatset)
 		 (let ((runkey     (car runkeydatset))
 		       (runkeydats (cadr runkeydatset)))
@@ -797,27 +851,37 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (lambda (runkeydat)
 		      (for-each
 		       (lambda (area)
-                         (if (area-allowed? area areas) ;; is this area to be handled (from areas=a,b,c ...)
-                             (let ((runname (alist-ref 'runname runkeydat))
-                                   (runtrans (alist-ref 'runtrans runkeydat))
-                                   (reason  (alist-ref 'message runkeydat))
-                                   (sched   (alist-ref 'sched   runkeydat))
-                                   (action  (alist-ref 'action  runkeydat))
-                                   (dbdest  (alist-ref 'dbdest  runkeydat))
-                                   (append  (alist-ref 'append  runkeydat))
-                                   (target  (or (alist-ref 'target  runkeydat) runkey))) ;; override with target if forced
-                               (print "Have: runkey=" runkey " contour=" contour " area=" area " action=" action " tag-expr=" tag-expr " mode-patt=" mode-patt " target=" target)
-                               (if (case (or (and action (string->symbol action)) 'noaction)  ;; ensure we have the needed data to run this action
-                                     ((noaction) #f)
-                                     ((run)      (and runname reason))
-                                     ((sync)     (and reason dbdest))
-                                     (else       #f))
-                                   ;; instead of unwrapping the runkeydat alist, pass it directly to create-run-pkt
-                                   (create-run-pkt mtconf action area runkey runname mode-patt tag-expr pktsdir reason contour sched dbdest append runtrans) 
-                                   (print "ERROR: Missing info to make a " action " call: runkey=" runkey " contour=" contour " area=" area  " tag-expr=" tag-expr " mode-patt=" mode-patt " dbdest=" dbdest)
-                                   ))
-                             (print "NOTE: skipping " runkeydat " for area, not in " areas)))
-		       all-areas))
+			 (if (area-allowed? area areas runkey contour mode-patt) ;; is this area to be handled (from areas=a,b,c OR using areafn=abcfn and *area-checks* ...)
+                             (let* ((aval       (or (configf:lookup mtconf "areas" area) ""))
+                                    (aval-alist (val->alist aval))
+                                    (runname    (alist-ref 'runname runkeydat))
+                                    (runtrans   (alist-ref 'runtrans runkeydat))
+                                    
+                                    (reason     (alist-ref 'message runkeydat))
+                                    (sched      (alist-ref 'sched   runkeydat))
+                                    (action     (alist-ref 'action  runkeydat))
+                                    (dbdest     (alist-ref 'dbdest  runkeydat))
+                                    (append     (alist-ref 'append  runkeydat))
+                                    (targets    (or (alist-ref 'target  runkeydat)
+                                                    (map-targets mtconf aval-alist runkey area contour)))) ;; override with target if forced
+                               ;; NEED TO EXPAND RUNKEY => ALL TARGETS MAPPED AND THEN FOREACH .... 
+                               (for-each
+                                (lambda (target)
+                                  (print "Creating pkt for runkey=" runkey " target=" target " contour=" contour " area=" area " action=" action " tag-expr=" tag-expr " mode-patt=" mode-patt)
+                                  (if (case (or (and action (string->symbol action)) 'noaction)  ;; ensure we have the needed data to run this action
+                                        ((noaction)           #f)
+                                        ((run)                (and runname reason))
+                                        ((sync sync-prepend)  (and reason dbdest))
+                                        (else                 #f))
+                                      ;; instead of unwrapping the runkeydat alist, pass it directly to create-run-pkt
+                                      (create-run-pkt mtconf action area runkey target runname mode-patt
+                                                      tag-expr pktsdir reason contour sched dbdest append 
+                                                      runtrans) 
+                                      (print "ERROR: Missing info to make a " action " call: runkey=" runkey " contour=" contour " area=" area  " tag-expr=" tag-expr " mode-patt=" mode-patt " dbdest=" dbdest)
+                                      ))
+                                targets))
+                             (print "NOTE: skipping " runkeydat " for area \"" area "\", not in " areas)))
+                       all-areas))
 		    runkeydats)))
 	       (let ((res (configf:get-section torun contour))) ;; each contour / target
 		 ;; (print "res=" res)
@@ -825,7 +889,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (hash-table-keys torun)))))))
 
 (define (pkt->cmdline pkta)
-  (let ((action (or (lookup-action-by-key (alist-ref 'a pkta)) "noaction")))
+  (let* ((action (or (lookup-action-by-key (alist-ref 'A pkta)) "noaction"))
+	 (action-param (case (string->symbol action)
+			 ((-set-state-status) (conc (alist-ref 'l pkta) " "))
+			 (else ""))))
     (fold (lambda (a res)
 	    (let* ((key (car a)) ;; get the key name
 		   (val (cdr a))
@@ -834,13 +901,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      ;; (print "key: " key " val: " val " par: " par)
 	      (if par
 		  (conc res " " (param-translate par) " " val)
-		  (if (member key '(a Z U D T)) ;; a is the action
+		  (if (alist-ref key *additional-cards*) ;; these cards do not translate to parameters or switches
 		      res
 		      (begin
 			(print "ERROR: Unknown key in packet \"" key "\" with value \"" val "\"")
 			res)))))
 	  (conc "megatest " (if (not (member action '("sync")))
-				(conc action " ")
+				(conc action " " action-param)
 				""))
 	  pkta)))
 
@@ -867,8 +934,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   #t)
 		 #t)
 	     "logs"
-	     "/tmp")))
-    (with-queue-db
+	     "/tmp"))
+	(cpuload (alist-ref 'adj-proc-load (common:get-normalized-cpu-load #f)))
+	(maxload (string->number (or (configf:lookup mtconf "setup" "maxload")
+				     (configf:lookup mtconf "jobtools" "maxload") ;; respect value used by Megatest calls
+				     "1.1"))))
+    (common:with-queue-db
      mtconf
      (lambda (pktsdirs pktsdir pdb)
        (let* ((rgconfdat (find-and-read-config (conc toppath "/runconfigs.config")))
@@ -881,64 +952,159 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (for-each
 	  (lambda (pktdat)
 	    (let* ((pkta    (alist-ref 'apkt pktdat))
-		   (action  (alist-ref 'a pkta))
+		   (action  (alist-ref 'A pkta))
 		   (cmdline (pkt->cmdline pkta))
 		   (uuid    (alist-ref 'Z pkta))
+		   (user    (alist-ref 'U pkta))
+		   (area    (alist-ref 'G pkta))
 		   (logf    (conc logdir "/" uuid "-run.log"))
 		   (fullcmd (conc "NBFAKE_LOG=" logf " nbfake " cmdline)))
-	      (print "RUNNING: " fullcmd)
-	      (system fullcmd)
-	      (mark-processed pdb (list (alist-ref 'id pktdat)))
-	      (let-values (((ack-uuid ack-pkt)
-			    (add-z-card
-			     (construct-sdat 'P uuid
-					     'T (case (string->symbol action)
-						  ((run) "runstart")
-						  ((sync) "syncstart")    ;; example of translating run -> runstart
-						  (else   action))
-					     'c (alist-ref 'o pkta) ;; THIS IS WRONG! SHOULD BE 'c
-					     't (alist-ref 't pkta)))))
-		(write-pkt pktsdir ack-uuid ack-pkt))))
+	      (if (check-access user mtconf action area)
+		  (if (and (> cpuload maxload)
+			   (member action '("run" "archive"))) ;; do not run archive or run if load is over the specified limit
+		      (print "WARNING: cpuload too high, skipping processing of " uuid)
+		      (begin
+			(print "RUNNING: " fullcmd)
+			(system fullcmd)
+			(mark-processed pdb (list (alist-ref 'id pktdat)))
+			(let-values (((ack-uuid ack-pkt)
+				      (add-z-card
+				       (construct-sdat 'P uuid
+						       'T (case (string->symbol action)
+							    ((run) "runstart")
+							    ((sync) "syncstart")    ;; example of translating run -> runstart
+							    (else   action))
+						       'c (alist-ref 'o pkta) ;; THIS IS WRONG! SHOULD BE 'c
+						       't (alist-ref 't pkta)))))
+			  (write-pkt pktsdir ack-uuid ack-pkt))))
+		  (begin ;; access denied! Mark as such
+		    (mark-processed pdb (list (alist-ref 'id pktdat)))
+		    (let-values (((ack-uuid ack-pkt)
+				  (add-z-card
+				   (construct-sdat 'P uuid
+						   'T "access-denied"
+						   'c (alist-ref 'o pkta) ;; THIS IS WRONG! SHOULD BE 'c
+						   't (alist-ref 't pkta)))))
+		      (write-pkt pktsdir ack-uuid ack-pkt))))))
 	  pkts))))))
-  
+
+(define (check-access user mtconf action area)
+  ;; NOTE: Need control over defaults. E.g. default might be no access
+  (let* ((access-ctrl (hash-table-exists? mtconf "access"))  ;; if there is an access section the default is to REQUIRE enablement/access
+	 (access-list (map (lambda (x)
+			     (string-split x ":"))
+			   (string-split (or (configf:lookup mtconf "access" area) ;; userid:rightstype userid2:rightstype2 ...
+					     (if access-ctrl
+						 "*:none"  ;; nobody has access by default
+						 "*:all")))))
+	 (access-types-dat (configf:get-section mtconf "accesstypes")))
+    (debug:print 0 *default-log-port* "Checking access in " access-list " with access-ctrl " access-ctrl " for area " area)
+    (if access-ctrl
+	(let* ((user-access     (or (assoc user access-list)
+				    (assoc "*"  access-list)))
+	       (access-type     (cadr user-access))
+	       (access-types    (let ((res (alist-ref access-type access-types-dat equal?)))
+				  (if res (car res) res)))
+	       (allowed-actions (string-split (or access-types ""))))
+	  (print "Got " allowed-actions " for user " user " where access-types=" access-types " access-type=" access-type)
+	  (cond
+	   ((and access-types (member action allowed-actions))
+	    ;; (print "Access granted for " user " for " action)
+	    #t)
+	   (else
+	    ;; (print "Access denied for " user " for " action)
+	    #f))))))
+
 (define (get-pkts-dir mtconf)
   (let ((pktsdirs  (configf:lookup mtconf "setup" "pktsdirs"))
 	(pktsdir   (if pktsdirs (car (string-split pktsdirs " ")) #f)))
     pktsdir))
 
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.mtutilrc")))
-  (if (file-exists? debugcontrolf)
+  (if (common:file-exists? debugcontrolf)
       (load debugcontrolf)))
 
 (if *action*
     (case (string->symbol *action*)
-      ((run remove rerun set-ss archive kill)
+      ((run remove rerun set-ss archive kill list)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
 	      (mtconf    (car mtconfdat))
+	      (area      (args:get-arg "-area")) ;; look up the area to dispatch to from [areas] section
+	      (areasec   (if area (configf:lookup mtconf "areas" area) #f))
+	      (areadat   (if areasec (val->alist areasec) #f))
+	      (area-path (if areadat (alist-ref 'path areadat) #f))
 	      (pktsdirs  (configf:lookup mtconf "setup" "pktsdirs"))
 	      (pktsdir   (if pktsdirs (car (string-split pktsdirs " ")) #f))
-	      (adjargs   (hash-table-copy args:arg-hash)))
+	      (adjargs   (hash-table-copy args:arg-hash))
+	      (new-ss    (args:get-arg "-new")))
+	 ;; check a few things
+	 (cond
+	  ((and area (not area-path))
+	   (print "ERROR: the specified area was not found in the [areas] table. Area name=" area)
+	   (exit 1))
+	  ((not area)
+	   (print "ERROR: no area specified. Use -area <areaname>")
+	   (exit 1))
+	  (else
+	   (let ((user (current-user-name)))
+	     (if (check-access user mtconf *action* area);; check rights
+		 (print "Access granted for " *action* " action by " user)
+		 (begin
+		   (print "Access denied for " *action* " action by " user)
+		   (exit 1))))))
+	 
 	 ;; (for-each
 	 ;;  (lambda (key)
 	 ;;    (if (not (member key *legal-params*))
 	 ;; 	(hash-table-delete! adjargs key))) ;; we need to delete any params intended for mtutil
 	 ;;  (hash-table-keys adjargs))
 	 (let-values (((uuid pkt)
-		       (command-line->pkt *action* adjargs #f)))
+		       (command-line->pkt *action* adjargs #f area-path: area-path new-ss: new-ss)))
 	   (write-pkt pktsdir uuid pkt))))
       ((dispatch import rungen process)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
 	      (mtconf    (car mtconfdat))
-	      (toppath   (configf:lookup mtconf "dyndat" "toppath")))
+	      (toppath   (configf:lookup mtconf "scratchdat" "toppath")))
 	 (case (string->symbol *action*)
 	   ((process)  (begin
-			 (load-pkts-to-db mtconf)
+			 (common:load-pkts-to-db mtconf)
 			 (generate-run-pkts mtconf toppath)
-			 (load-pkts-to-db mtconf)
+			 (common:load-pkts-to-db mtconf)
 			 (dispatch-commands mtconf toppath)))
-	   ((import)   (load-pkts-to-db mtconf)) ;; import pkts
+	   ((import)   (common:load-pkts-to-db mtconf)) ;; import pkts
 	   ((rungen)   (generate-run-pkts mtconf toppath))
 	   ((dispatch) (dispatch-commands mtconf toppath)))))
+      ;; misc
+      ((show)
+       (if (> (length remargs) 0)
+	   (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
+		  (mtconf    (car mtconfdat))
+		  (sect-dat (configf:get-section mtconf (car remargs))))
+	     (if sect-dat
+		 (for-each
+		  (lambda (entry)
+		    (if (> (length entry) 1)
+			(print (car entry) "   " (cadr entry))
+			(print (car entry))))
+		  sect-dat)
+		 (print "No section \"" (car remargs) "\" found")))
+	   (print "ERROR: list requires section parameter; areas, setup or contours")))
+      ((gendot)
+       (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
+	      (mtconf    (car mtconfdat)))
+	 (common:with-queue-db
+	  mtconf
+	  (lambda (pktsdirs pktsdir conn)
+	    ;;                       pktspec display-fields 
+	    (make-report "out.dot" conn
+			 '((cmd      . ((parent . P)
+					(user   . M)
+					(target . t)))
+			   (runstart . ((parent . P)
+					(target . t)))
+			   (runtype . ((parent . P)))) ;; pktspec
+			 '(P U t)                                                     ;; 
+			 )))))  ;; no ptypes listed (ptypes are strings of pkt types to read from db
       ((db)
        (if (null? remargs)
 	   (print "ERROR: missing sub command for db command")
@@ -947,12 +1113,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       ((pgschema)
 		(let* ((install-home (common:get-install-area))
 		       (schema-file  (conc install-home "/share/db/mt-pg.sql")))
-		  (if (file-exists? schema-file)
+		  (if (common:file-exists? schema-file)
 		      (system (conc "/bin/cat " schema-file)))))
 	       ((sqlite3schema)
 		(let* ((install-home (common:get-install-area))
 		       (schema-file  (conc install-home "/share/db/mt-sqlite3.sql")))
-		  (if (file-exists? schema-file)
+		  (if (common:file-exists? schema-file)
 		      (system (conc "/bin/cat " schema-file)))))
 	       ((junk)
 		(rmt:get-keys))))))))
@@ -979,3 +1145,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (if (args:get-arg "-repl")
 	  (repl)
 	  (load (args:get-arg "-load")))))
+
+#|
+(define mtconf (car (simple-setup #f)))
+(define dat (with-queue-db mtconf (lambda (conn)(get-pkts conn '()))))
+(pp (pkts#flatten-all dat '((cmd . ((parent . P)(url . M)))(runtype . ((parent . P)))) 'id 'group-id 'uuid 'parent 'pkt-type 'pkt 'processed))
+|#

@@ -12,14 +12,9 @@
 ;; C L I E N T S
 ;;======================================================================
 
-(require-extension (srfi 18) extras tcp s11n)
-
-(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest matchable)
-;; (use zmq)
-
-(use (prefix sqlite3 sqlite3:))
-
-(use spiffy uri-common intarweb http-client spiffy-request-vars uri-common intarweb directory-utils)
+(use srfi-18 extras tcp s11n srfi-1 posix regex srfi-69 hostinfo md5
+     message-digest matchable spiffy uri-common intarweb http-client
+     spiffy-request-vars uri-common intarweb directory-utils)
 
 (declare (unit client))
 

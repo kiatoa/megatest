@@ -20,6 +20,22 @@
 
 (define test-work-dir (current-directory))
 
+;; given list of lists
+;;  ( ( msg expected param1 param2 ...)
+;;    ( ... ) )
+;; apply test to all
+;;
+(define (test-batch proc pname inlst #!key (post-proc #f))
+  (for-each
+   (lambda (spec)
+     (let ((msg    (conc pname " " (car spec)))
+           (result (cadr spec))
+           (params (cddr spec)))
+       (if post-proc
+           (test msg result (post-proc (apply proc params)))
+           (test msg result (apply proc params)))))
+   inlst))
+
 ;; read in all the _record files
 (let ((files (glob "*_records.scm")))
   (for-each

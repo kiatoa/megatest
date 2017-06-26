@@ -10,8 +10,7 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking directory-utils)
-(import (prefix sqlite3 sqlite3:))
+(use srfi-1 posix regex srfi-69 directory-utils)
 
 (declare (unit ezsteps))
 (declare (uses db))
@@ -39,7 +38,7 @@
 	 (test-name     (db:test-get-testname testdat))
 	 (kill-job      #f)) ;; for future use (on re-factoring with launch.scm code
     (let loop ((count 5))
-      (if (file-exists? test-run-dir)
+      (if (common:file-exists? test-run-dir)
 	  (push-directory test-run-dir)
 	  (if (> count 0)
 	      (begin
@@ -47,7 +46,7 @@
 		(sleep 3)
 		(loop (- count 1))))))
     (debug:print-info 0 *default-log-port* "Running in directory " test-run-dir)
-    (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
+    (if (not (common:file-exists? ".ezsteps"))(create-directory ".ezsteps"))
     ;; if ezsteps was defined then we are sure to have at least one step but check anyway
     (if (not (> (length ezstepslst) 0))
 	(message-window "ERROR: You can only re-run steps defined via ezsteps")
@@ -77,7 +76,7 @@
 		  (debug:print 4 *default-log-port* "ezsteps:\n stepname: " stepname " stepinfo: " stepinfo " stepparts: " stepparts
 			       " stepparms: " stepparms " stepcmd: " stepcmd)
 		  
-		  (if (file-exists? (conc stepname ".logpro"))(set! logpro-used #t))
+		  (if (common:file-exists? (conc stepname ".logpro"))(set! logpro-used #t))
 		  
 		  ;; call the command using mt_ezstep
 		  (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "-") " " stepcmd))

@@ -10,139 +10,96 @@
 ;;======================================================================
 
 (define (pages:home session db shared)
+  
   (let* ((dbh         (s:db))
-	 (ttypes      (pgdb:get-target-types dbh))
-	 (selected    (string->number (or (s:get "target-type") "-1")))
-         (target-slice (pgdb:get-distict-target-slice dbh)) 
-         (selected-slice (or (s:get "tslice") ""))  
-	 (curr-trec   (filter (lambda (x)(eq? selected (vector-ref x 0))) ttypes))
-	 (curr-ttype  (if (and selected
-			       (not (null? curr-trec)))
-			  (vector-ref (car curr-trec) 1) #f))
-	 (all-parts   (if curr-ttype (append (string-split curr-ttype "/") '("runname" "testname")) '()))
-	 (tfilter     (or (s:get "target-filter") "%"))
-         (tslice-filter     (or (s:get "t-slice-patt") ""))
-         (target-patt   (if (or (equal? selected-slice "") (equal? tslice-filter "" ))
-                             "" 
-                           (conc selected-slice "/" tslice-filter )))
-         (tab2-data (if (equal? target-patt "")
-                         `()
-                         (pgdb:get-all-run-stats-target-slice dbh target-patt)))
-         (tab2-ordered-data (pgdb:coalesce-runs-by-slice tab2-data selected-slice))  
-	 (targets     (pgdb:get-targets-of-type dbh selected tfilter))
-	 (row-or-col  (string-split (or (s:get "row-or-col") "") ","))
-	 (all-data    (if (and selected
-			       (not (eq? selected -1)))
-                          (pgdb:get-latest-run-stats-given-target dbh selected tfilter)
-                           '()  
+         (limit 50)
+         (curr-page   (if (or (equal? (s:get-param "pg") "") (equal? (s:get-param "pg") #f))
+                      1
+                        (string->number (s:get-param "pg"))))
+         
+         (offset (- (* limit  curr-page) limit))     
+         (dot    (if (s:get-param "dot")
+                           (string->number (s:get-param "dot"))
+                           (if (and  (s:get "dot") (not (equal? (s:get "dot") "all")))
+                             (string->number (s:get "dot"))
+                              "all")))
+         (type    (if (s:get-param "type")
+                           (s:get-param "type")
+                       (if (and (s:get "type") (not (equal? (s:get "type") "all")))
+                              (s:get "type")
+                              "all")))
+          (bp    (if (s:get-param "bp")
+                           (s:get-param "bp")
+                       (if (s:get "bp") 
+                              (s:get "bp")
+                              "p1273")))
+           (rel    (if (s:get-param "rel")
+                           (s:get-param "rel")
+                       (if (and  (s:get "rel") (not (equal? (s:get "rel") "all")))
+                              (s:get "rel")
+                              ""))) 
+          (pattern  (pgdb:mk-pattern dot type bp rel)) 	 
+	; (targets     (pgdb:get-targets-of-type dbh selected tfilter))
+	            
+	 (all-data       (pgdb:get-latest-run-stats-given-pattern dbh pattern  limit offset))
+                           ;'()  )
 			 ; (pgdb:get-stats-given-type-target dbh selected tfilter)
 			 ; (pgdb:get-stats-given-target dbh tfilter)
-			  ))
-  (ordered-data (pgdb:coalesce-runs dbh all-data all-parts row-or-col 0)))
+			  
+         (cnt     (pgdb:get-latest-run-cnt-by-pattern dbh pattern))
+         (total-pages (ceiling (/ cnt  limit))) 
+         (page-lst (pgdb:get-pg-lst total-pages))
+         (ordered-data (pgdb:coalesce-runs1 all-data))
+         (rel-val (if (equal? rel "")
+                       "%"
+                        rel)))
    (s:div 'class "col_12" 
         (s:ul 'class "tabs left"
-      	(s:li (s:a 'href "#tabr1" "Sliced Filter"))
-        (s:li (s:a 'href "#tabr2" "Genral Filter")))
-  (s:div 'id "tabr1" 'class "tab-content"
-      (s:div 'class "col_11" 
-      (s:fieldset    "Filter Targets by slice"
-	    (s:form
-	     'action "home.filter2" 'method "post"
-	     (s:div 'class "col_12"
-		    (s:div 'class "col_6"
-			   (s:select (map (lambda (x)
-					    (let ((t-slice (vector-ref x 0)))
-					      (if (equal? t-slice selected-slice)
-						  (list t-slice t-slice t-slice #t)
-						  (list t-slice t-slice t-slice #f))))
-					  target-slice)
-				     'name 'tslice-select))
-		    (s:div 'class "col_4"
-			   (s:input-preserve 'name "t-slice-filter" 'placeholder "Filter remainder target"))
-		    (s:div 'class "col_2"
-			   (s:input 'type "submit" 'name "set-filter-vals" 'value "Submit")))))
-      (s:br) 
-      (s:p "&nbsp;&nbsp;Result Format: &nbsp;&nbsp;total / pass / fail / other")
-      (s:fieldset	    (conc "Runs data for " target-patt) 
-          (let* ((target-keys (hash-table-keys tab2-ordered-data))
-		  (run-keys (delete-duplicates (apply  append (map (lambda (sub-key)
-					 (let ((subdat (hash-table-ref  tab2-ordered-data sub-key)))
-					   (hash-table-keys subdat)))
-				       target-keys)))))
-            (s:table  'class "striped"
-		   (s:tr  (s:th  'class "heading" ) 
- 			(map
-                	(lambda (th-key) 
-                         (s:th 'class "heading" th-key )) 
-                    run-keys))
-		   (map
-		    (lambda (row-key)
-		      (s:tr (s:td row-key)
-			    (map
-			     (lambda (col-key)
-			       (let ((val (let* ((ht  (hash-table-ref/default  tab2-ordered-data row-key #f)))
-					    (if ht (hash-table-ref/default ht col-key #f)))))
-				 (if val
-				     (let* ((total (vector-ref val 3))
-					    (pass  (vector-ref val 4))
-					    (fail  (vector-ref val 5))
-					    (other (vector-ref val 6))
-					    (passper (round (* (/ pass total) 100)))
-					    (target-param (string-substitute "[/]" "_x_" (conc selected-slice "/" row-key) 'all)))
-				       (s:td   'style (conc "background: -webkit-linear-gradient(left, green " passper "%, red); background: -o-linear-gradient(right, green " passper "%, red); background: -moz-linear-gradient(right, green " passper "%, red); background: linear-gradient(to right, green " passper "%, red);")
-      				      (s:a 'class "white"  'href (s:link-to "run" 'target target-param 'run col-key)
-(conc  total "/" pass "/" fail "/" other))))
-				     (s:td ""))))
-			     run-keys)))
-		    target-keys))
-))
-))
-    (s:div 'id "tabr2" 'class "tab-content"
+          
+        (map (lambda (x)
+            	(s:li (s:a 'href (conc "#" x) x)))
+	  *process*))
+       (map (lambda (x)
+        
+       (s:div 'id  x 'class "tab-content"
       (s:div 'class "col_11"
 	   (s:fieldset    "Area type and target filter"
 	    (s:form
-	     'action "home.filter#tabr2" 'method "post"
+	     'action (conc "home.filter#" x) 'method "post"
 	     (s:div 'class "col_12"
-		    (s:div 'class "col_6"
-			   (s:select (map (lambda (x)
-					    (if x
-						(let ((tt-id (vector-ref x 0))
-						      (ttype (vector-ref x 1)))
-						  (if (eq? tt-id selected)
-						      (list ttype tt-id ttype #t)
-						      (list ttype tt-id ttype #f)))
-						(list "all" -1 "all" (eq? selected -1))))
-					  (cons #f ttypes))
-				     'name 'target-type))
-		    (s:div 'class "col_4"
-			   (s:input-preserve 'name "tfilter" 'placeholder "Filter targets"))
+                        (s:div 'class "col_3"
+			   (s:label "Release Type") (s:select (map (lambda (x)
+                                           (if (equal?  x type)  
+                                            (list x x x #t)
+                                            (list x x x #f)) )
+					  *kit-types*)
+				     'name "kit-type"))
+                   (s:div 'class "col_3"
+			   (s:label "Dot") (s:select (map (lambda (x)
+                                            (if (equal?  x dot)  
+                                            (list x x x #t)
+                                            (list x x x #f)))
+					  *dots*)
+				     'name "dot"))
+
+		   (s:div 'class "col_3"
+                            (s:input 'type "hidden" 'value x 'name "bp")
+			   (s:label "Release #") (s:input 'type "text" 'name "rel-num" 'value rel-val))
 		    (s:div 'class "col_2"
 			   (s:input 'type "submit" 'name "set-filter-vals" 'value "Submit")))))
-           (s:br) 
+           (s:br)
+           ;(s:p (conc dot(string? dot) )) 
+             (s:p (map
+            (lambda (i) 
+          (s:span (s:a 'href (s:link-to "home" 'pg i ) "PAGE " i  )"&nbsp;|&nbsp;"))  
+          page-lst))
            (s:p "&nbsp;&nbsp;Result Format: &nbsp;&nbsp;total / pass / fail / other")
-           	   (s:fieldset	    (conc "Runs data for " tfilter)
-	    ;;
-	    ;; A very basic display
-	    ;;
-	    (let* ((a-keys (pgdb:ordered-data->a-keys ordered-data))
+            (if (equal? x bp)
+             (begin 
+           (s:fieldset	    (conc "Runs data for " pattern)
+	      (let* ((a-keys (pgdb:ordered-data->a-keys ordered-data))
 		   (b-keys (pgdb:ordered-data->b-keys ordered-data a-keys)))
-	      ;; (c-keys (delete-duplicates b-keys)))
-	      (if #f ;; swap rows/cols
-		  (s:table
-		    (s:tr (s:td "")(map s:tr b-keys))
-		   (map
-		    (lambda (row-key)
-		      (let ((subdat (hash-table-ref ordered-data row-key)))
-			(s:tr (s:td row-key)
-			      (map
-			       (lambda (col-key)
-				 (s:td (let ((dat (hash-table-ref/default subdat col-key #f)))
-					 (s:td (if dat
-						   (list (vector-ref dat 0)(vector-ref dat 1))
-						   "")))))
-			       b-keys))))
-		    a-keys))
-		  (s:table  'class "striped"
+  		  (s:table  'class "striped"
 		   (s:tr  (s:th  'class "heading" ) 
  			(map
                 	(lambda (th-key) 
@@ -156,20 +113,21 @@
 			       (let ((val (let* ((ht  (hash-table-ref/default ordered-data col-key #f)))
 					    (if ht (hash-table-ref/default ht row-key #f)))))
 				 (if val
-				     (let* ((total (vector-ref val 1))
-					    (pass  (vector-ref val 2))
-					    (fail  (vector-ref val 3))
-					    (other (vector-ref val 4))
-                                            (id (vector-ref val 5)) 
+				     (let* ((total (vector-ref val 2))
+                                            (event-time (vector-ref val 1)) 
+					    (pass  (vector-ref val 3))
+					    (fail  (vector-ref val 4))
+					    (other (vector-ref val 5))
+                                            (id (vector-ref val 6)) 
 					    (passper (round (* (/ pass total) 100)))
 					    (failper (- 100 passper))
-                                             (history (pgdb:get-run-stats-history-given-target dbh selected (conc col-key "/" row-key)))  
+                                             (history (pgdb:get-run-stats-history-given-target dbh 1 (conc col-key "/" row-key)))  
          				     (history-hash (pgdb:get-history-hash history))
                                              (history-keys (sort (hash-table-keys history-hash) string>=?))
 					    (run-key (string-substitute "[/]" "_x_" (conc col-key "/" row-key) 'all)))
 				       (s:td   'style (conc "background: -webkit-linear-gradient(left, green " passper "%, red); background: -o-linear-gradient(right, green " passper "%, red); background: -moz-linear-gradient(right, green " passper "%, red); background: linear-gradient(to right, green " passper "%, red);")
       				      (s:a 'class "white"  'href (s:link-to "run" 'target run-key)
-					  (conc "Latest:" total "/" pass "/" fail "/" other)) (s:span " | ") (s:a 'id id 'class "viewmodal"  'title "Click to see description"  "History") (s:br)
+					  (conc "Latest:" total "/" pass "/" fail "/" other)) (s:span "  | ") (s:a 'id id 'class "viewmodal"  'title "Click to see description"  "History") (s:br)
                                    (s:div 'id (conc "myModal" id) 'class "modal"
                                         (s:div 'class "modal-content"
                                              (s:span 'id id 'class "close" "&times;") 
@@ -191,11 +149,11 @@
                                                                 (s:tr (s:td  history-key)
                                                                       (s:td 'style (conc "background: -webkit-linear-gradient(left, green " passper "%, red); background: -o-linear-gradient(right, green " passper "%, red); background: -moz-linear-gradient(right, green " passper "%, red); background: linear-gradient(to right, green " passper "%, red);")
 (conc  htotal "/" hpass "/" hfail "/" hother )))))
-                                                              history-keys)))
-
-))
- ))
+                                                              history-keys)))))))
 				     (s:td ""))))
 			     a-keys)))
-		    b-keys)))))))
-)))
+		    b-keys))))
+)
+(begin 
+(s:p ""))))))
+ *process*))))
