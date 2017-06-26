@@ -206,7 +206,7 @@
   (let* ((parent-dir   (or (pathname-directory fname)(current-directory))) ;; no parent? go local
          (raw-fname    (pathname-file fname))
 	 (dir-writable (file-write-access? parent-dir))
-	 (file-exists  (file-exists? fname))
+	 (file-exists  (common:file-exists? fname))
 	 (file-write   (if file-exists
 			   (file-write-access? fname)
 			   dir-writable )))
@@ -215,7 +215,7 @@
 	(condition-case
          (let* ((lockfname   (conc fname ".lock"))
                 (readyfname  (conc parent-dir "/.ready-" raw-fname))
-                (readyexists (file-exists? readyfname)))
+                (readyexists (common:file-exists? readyfname)))
            (if (not readyexists)
                (common:simple-file-lock-and-wait lockfname))
            (let ((db      (sqlite3:open-database fname)))
@@ -266,7 +266,7 @@
 ;; ;; 
 ;; (define (db:open-rundb dbstruct run-id #!key (attemptnum 0)(do-not-open #f)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
 ;;   (let* ((dbfile       (db:dbfile-path run-id)) ;; (conc toppath "/db/" run-id ".db"))
-;;          (dbexists     (file-exists? dbfile))
+;;          (dbexists     (common:file-exists? dbfile))
 ;;          (db           (db:lock-create-open dbfile (lambda (db)
 ;;                                                      (handle-exceptions
 ;;                                                       exn
@@ -306,10 +306,10 @@
     (if (stack? tmpdb-stack)
 	(db:get-db tmpdb-stack) ;; get previously opened db (will create new db handle if all in the stack are already used
         (let* ((dbpath       (db:dbfile-path ))      ;; path to tmp db area
-               (dbexists     (file-exists? dbpath))
+               (dbexists     (common:file-exists? dbpath))
 	       (tmpdbfname   (conc dbpath "/megatest.db"))
-	       (dbfexists    (file-exists? tmpdbfname))  ;; (conc dbpath "/megatest.db")))
-               (mtdbexists   (file-exists? (conc *toppath* "/megatest.db")))
+	       (dbfexists    (common:file-exists? tmpdbfname))  ;; (conc dbpath "/megatest.db")))
+               (mtdbexists   (common:file-exists? (conc *toppath* "/megatest.db")))
                
                (mtdb         (db:open-megatest-db))
                (mtdbpath     (db:dbdat-get-path mtdb))
@@ -375,7 +375,7 @@
 (define (db:open-megatest-db #!key (path #f)(name #f))
   (let* ((dbdir        (or path *toppath*))
          (dbpath       (conc  dbdir "/" (or name "megatest.db")))
-	 (dbexists     (file-exists? dbpath))
+	 (dbexists     (common:file-exists? dbpath))
 	 (db           (db:lock-create-open dbpath
 					    (lambda (db)
                                               (db:initialize-main-db db)
@@ -405,6 +405,21 @@
     (mutex-unlock! *db-multi-sync-mutex*)
     (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb)))
 
+(define (db:safely-close-sqlite3-db db #!key (try-num 3))
+  (if (<= try-num 0)
+      #f
+      (handle-exceptions
+	  exn
+	  (begin
+	    (thread-sleep! 3)
+	    (sqlite3:interrupt! db)
+	    (db:safely-close-sqlite3-db db try-num: (- try-num 1)))
+	(if (sqlite3:database? db)
+	    (begin
+	      (sqlite3:finalize! db)
+	      #t)
+	    #f))))
+
 ;; close all opened run-id dbs
 (define (db:close-all dbstruct)
   (if (dbr:dbstruct? dbstruct)
@@ -419,11 +434,12 @@
               (mdb (db:dbdat-get-db (dbr:dbstruct-mtdb   dbstruct)))
               (rdb (db:dbdat-get-db (dbr:dbstruct-refndb dbstruct))))
           (map (lambda (db)
-		 (if (sqlite3:database? db)
-		     (sqlite3:finalize! db)))
+		 (db:safely-close-sqlite3-db db))
+;; 		 (if (sqlite3:database? db)
+;; 		     (sqlite3:finalize! db)))
 	       tdbs)
-          (if (sqlite3:database? mdb) (sqlite3:finalize! mdb))
-          (if (sqlite3:database? rdb) (sqlite3:finalize! rdb))))))
+          (db:safely-close-sqlite3-db mdb)     ;; (if (sqlite3:database? mdb) (sqlite3:finalize! mdb))
+          (db:safely-close-sqlite3-db rdb))))) ;; (if (sqlite3:database? rdb) (sqlite3:finalize! rdb))))))
 
 ;;   (let ((locdbs (dbr:dbstruct-locdbs dbstruct)))
 ;;     (if (hash-table? locdbs)
@@ -531,7 +547,7 @@
     (debug:print-error 0 *default-log-port* "" fname " appears corrupted. Making backup \"old/" fname "\"")
     (system (conc "cd " dbdir ";mkdir -p old;cat " fname " > old/" tmpname))
     (system (conc "rm -f " dbpath))
-    (if (file-exists? fnamejnl)
+    (if (common:file-exists? fnamejnl)
 	(begin
 	  (debug:print-error 0 *default-log-port* "" fnamejnl " found, moving it to old dir as " tmpjnl)
 	  (system (conc "cd " dbdir ";mkdir -p old;cat " fnamejnl " > old/" tmpjnl))
@@ -655,22 +671,38 @@
 	   (tot-count   0))
        (for-each ;; table
 	(lambda (tabledat)
-	  (let* ((tablename  (car tabledat))
-		 (fields     (cdr tabledat))
-		 (use-last-update  (if last-update
-				       (if (pair? last-update)
-					   (member (car last-update)    ;; last-update field name
-						   (map car fields))
-					   (begin
-					     (debug:print 0 *default-log-port* "ERROR: parameter last-update for db:sync-tables must be a pair, received: " last-update) ;; found in fields
-					     #f))
-				       #f))
+	  (let* ((tablename        (car tabledat))
+		 (fields           (cdr tabledat))
+		 (has-last-update  (member "last_update" fields))
+		 (use-last-update  (cond
+				    ((and has-last-update
+					  (member "last_update" fields))
+				     #t) ;; if given a number, just use it for all fields
+				    ((number? last-update) #f) ;; if not matched first entry then ignore last-update for this table
+				    ((and (pair? last-update)
+					  (member (car last-update)    ;; last-update field name
+						  (map car fields))) #t)
+				    (last-update
+				     (debug:print 0 *default-log-port* "ERROR: parameter last-update for db:sync-tables must be a pair or a number, received: " last-update) ;; found in fields
+				     #f)
+				    (else
+				     #f)))
+		 (last-update-value (if use-last-update ;; no need to check for has-last-update - it is already accounted for
+					(if (number? last-update)
+					    last-update
+					    (cdr last-update))
+					#f))
+		 (last-update-field (if use-last-update
+					(if (number? last-update)
+					    "last_update"
+					    (car last-update))
+					#f))
 		 (num-fields (length fields))
 		 (field->num (make-hash-table))
 		 (num->field (apply vector (map car fields)))
 		 (full-sel   (conc "SELECT " (string-intersperse (map car fields) ",") 
 				   " FROM " tablename (if use-last-update ;; apply last-update criteria
-							  (conc " " (car last-update) ">=" (cdr last-update))
+							  (conc " WHERE " last-update-field " >= " last-update-value)
 							  "")
 				   ";"))
 		 (full-ins   (conc "INSERT OR REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) "
@@ -881,7 +913,7 @@
 	   (>= (file-modification-time target)(file-modification-time source)))
       (hash-table-ref *global-db-store* target)
       (let* ((toppath   (launch:setup))
-	     (targ-db-last-mod (if (file-exists? target)
+	     (targ-db-last-mod (if (common:file-exists? target)
 				   (file-modification-time target)
 				   0))
 	     (cache-db  (or (hash-table-ref/default *global-db-store* target #f)
@@ -895,37 +927,37 @@
 	(hash-table-set! *global-db-store* target cache-db)
 	cache-db)))
 
-;; call a proc with a cached db
-;;
-(define (db:call-with-cached-db proc . params)
-  ;; first cache the db in /tmp
-  (let* ((cname-part (conc "megatest_cache/" (common:get-testsuite-name)))
-	 (fname      (conc  (common:get-area-path-signature) ".db"))
-	 (cache-dir  (common:get-create-writeable-dir
-		      (list (conc "/tmp/" (current-user-name) "/" cname-part)
-			    (conc "/tmp/" (current-user-name) "-" cname-part)
-			     (conc "/tmp/" (current-user-name) "_" cname-part))))
-	 (megatest-db (conc *toppath* "/megatest.db")))
-    ;; (debug:print-info 0 *default-log-port* "Using cache dir " cache-dir)
-    (if (not cache-dir)
-	(begin
-	  (debug:print 0 *default-log-port* "ERROR: Failed to find an area to write the cache db")
-	  (exit 1))
-	(let* ((th1      (make-thread
-			  (lambda ()
-			    (if (and (file-exists? megatest-db)
-				     (file-write-access? megatest-db))
-				(begin
-				  (common:sync-to-megatest.db 'timestamps) ;; internally mutexes on *db-local-sync*
-				  (debug:print-info 2 *default-log-port* "Done syncing to megatest.db"))))
-			  "call-with-cached-db sync-to-megatest.db"))
-	       (cache-db (db:cache-for-read-only
-			  megatest-db
-			  (conc cache-dir "/" fname)
-			  use-last-update: #t)))
-	  (thread-start! th1)
-	  (apply proc cache-db params)
-	  ))))
+;; ;; call a proc with a cached db
+;; ;;
+;; (define (db:call-with-cached-db proc . params)
+;;   ;; first cache the db in /tmp
+;;   (let* ((cname-part (conc "megatest_cache/" (common:get-testsuite-name)))
+;; 	 (fname      (conc  (common:get-area-path-signature) ".db"))
+;; 	 (cache-dir  (common:get-create-writeable-dir
+;; 		      (list (conc "/tmp/" (current-user-name) "/" cname-part)
+;; 			    (conc "/tmp/" (current-user-name) "-" cname-part)
+;; 			     (conc "/tmp/" (current-user-name) "_" cname-part))))
+;; 	 (megatest-db (conc *toppath* "/megatest.db")))
+;;     ;; (debug:print-info 0 *default-log-port* "Using cache dir " cache-dir)
+;;     (if (not cache-dir)
+;; 	(begin
+;; 	  (debug:print 0 *default-log-port* "ERROR: Failed to find an area to write the cache db")
+;; 	  (exit 1))
+;; 	(let* ((th1      (make-thread
+;; 			  (lambda ()
+;; 			    (if (and (common:file-exists? megatest-db)
+;; 				     (file-write-access? megatest-db))
+;; 				(begin
+;; 				  (db:sync-to-megatest.db dbstruct 'timestamps) ;; internally mutexes on *db-local-sync*
+;; 				  (debug:print-info 2 *default-log-port* "Done syncing to megatest.db"))))
+;; 			  "call-with-cached-db sync-to-megatest.db"))
+;; 	       (cache-db (db:cache-for-read-only
+;; 			  megatest-db
+;; 			  (conc cache-dir "/" fname)
+;; 			  use-last-update: #t)))
+;; 	  (thread-start! th1)
+;; 	  (apply proc cache-db params)
+;; 	  ))))
 
 ;; options:
 ;;
@@ -1000,6 +1032,35 @@
        (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb))
      options)
     data-synced))
+
+(define (db:tmp->megatest.db-sync dbstruct last-update)
+  (let* ((mtdb        (dbr:dbstruct-mtdb dbstruct))
+	 (tmpdb       (db:get-db dbstruct))
+	 (refndb      (dbr:dbstruct-refndb dbstruct)))
+    (db:sync-tables (db:sync-all-tables-list dbstruct) last-update tmpdb refndb mtdb)))
+
+;;;; run-ids
+;;    if #f use *db-local-sync* : or 'local-sync-flags
+;;    if #t use timestamps      : or 'timestamps
+(define (db:sync-to-megatest.db dbstruct #!key (no-sync-db #f)) 
+  (let* ((start-time         (current-seconds))
+	 (last-update        (if no-sync-db
+				 (db:no-sync-get/default no-sync-db "LAST_UPDATE" 0)
+				 0)) ;; (or (db:get-var dbstruct "LAST_UPDATE") 0))
+	 (sync-needed        (> (- start-time last-update) 6))
+	 (res                (if sync-needed ;; don't sync if a sync already occurred in the past 6 seconds
+				 (begin
+				   (if no-sync-db
+				       (db:no-sync-set no-sync-db "LAST_UPDATE" start-time))
+				   (db:tmp->megatest.db-sync dbstruct last-update))
+				 0))
+	 (sync-time           (- (current-seconds) start-time)))
+      (debug:print-info 3 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))
+      (if (common:low-noise-print 30 "sync new to old")
+          (if sync-needed
+              (debug:print-info 0 *default-log-port* "Sync of " res " records from newdb to olddb completed in " sync-time " seconds pid="(current-process-id))
+              (debug:print-info 0 *default-log-port* "No sync needed, last updated " (- start-time last-update) " seconds ago")))
+      res))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
@@ -1396,7 +1457,7 @@
 
 (define (open-logging-db)
   (let* ((dbpath    (conc (if *toppath* (conc *toppath* "/") "") "logging.db")) ;; fname)
-	 (dbexists  (file-exists? dbpath))
+	 (dbexists  (common:file-exists? dbpath))
 	 (db        (sqlite3:open-database dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
@@ -1552,7 +1613,7 @@
        (let* (;; (min-incompleted (filter (lambda (x)
               ;;      		      (let* ((testpath (cadr x))
               ;;      			     (tdatpath (conc testpath "/testdat.db"))
-              ;;      			     (dbexists (file-exists? tdatpath)))
+              ;;      			     (dbexists (common:file-exists? tdatpath)))
               ;;      			(or (not dbexists) ;; if no file then something wrong - mark as incomplete
               ;;      			    (> (- (current-seconds)(file-modification-time tdatpath)) 600)))) ;; no change in 10 minutes to testdat.db - she's dead Jim
               ;;      		    incompleted))
@@ -1771,6 +1832,56 @@
 	      (lambda (db)
 		(sqlite3:execute db "DELETE FROM metadat WHERE var=?;" var))))
 
+;;======================================================================
+;; no-sync.db - small bits of data to be shared between servers
+;;======================================================================
+
+(define (db:open-no-sync-db)
+  (let* ((dbpath (db:dbfile-path))
+	 (dbname (conc dbpath "/no-sync.db"))
+	 (db     (sqlite3:open-database dbname)))
+    (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
+    (sqlite3:execute db "PRAGMA synchronous = 0;")
+    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS no_sync_metadat (var TEXT,val TEXT, CONSTRAINT no_sync_metadat_constraint UNIQUE (var));")
+    db))
+
+;; if we are not a server create a db handle. this is not finalized
+;; so watch for problems. I'm still not clear if it is needed to manually
+;; finalize sqlite3 dbs with the sqlite3 egg.
+;;
+(define (db:no-sync-db db-in)
+  (if db-in
+      db-in
+      (let ((db (db:open-no-sync-db)))
+	(set! *no-sync-db* db)
+	db)))
+
+(define (db:no-sync-set db var val)
+  (sqlite3:execute (db:no-sync-db db) "INSERT OR REPLACE INTO no_sync_metadat (var,val) VALUES (?,?);" var val))
+
+(define (db:no-sync-del! db var)
+  (sqlite3:execute (db:no-sync-db db) "DELETE FROM no_sync_metadat WHERE var=?;" var))
+
+(define (db:no-sync-get/default db var default)
+  (let ((res default))
+    (sqlite3:for-each-row
+     (lambda (val)
+       (set! res val))
+     (db:no-sync-db db)
+     "SELECT val FROM no_sync_metadat WHERE var=?;"
+     var)
+    (if res
+        (let ((newres (if (string? res)
+			  (string->number res)
+			  #f)))
+          (if newres
+              newres
+              res))
+        res)))
+
+(define (db:no-sync-close-db db)
+  (db:safely-close-sqlite3-db db))
+
 ;; use a global for some primitive caching, it is just silly to
 ;; re-read the db over and over again for the keys since they never
 ;; change
@@ -1796,10 +1907,15 @@
   (if (or (null? header) (not row))
       #f
       (let loop ((hed (car header))
-		 (tal (cdr header))
-		 (n   0))
-	(if (equal? hed field)
-	    (vector-ref row n)
+                 (tal (cdr header))
+                 (n   0))
+        (if (equal? hed field)
+            (handle-exceptions
+             exn
+             (begin
+               (debug:print 0 *default-log-port* "WARNING: attempt to read non-existant field, row=" row " header=" header " field=" field)
+               #f)
+             (vector-ref row n))
 	    (if (null? tal) #f (loop (car tal)(cdr tal)(+ n 1)))))))
 
 ;; Accessors for the header/data structure
@@ -3025,8 +3141,8 @@
 			     "logpro"                                       ;; 6 ;; Type
 			     ))))
 	   (let* ((value     (or (configf:lookup dat entry-name "measured")  "n/a"))
-		  (expected  (or (configf:lookup dat entry-name "expected")  "n/a"))
-		  (tolerance (or (configf:lookup dat entry-name "tolerance") "n/a"))
+		  (expected  (or (configf:lookup dat entry-name "expected")  0.0))
+		  (tolerance (or (configf:lookup dat entry-name "tolerance") 0.0))
 		  (comment   (or (configf:lookup dat entry-name "comment")
 				 (configf:lookup dat entry-name "desc")      "n/a"))
 		  (status    (or (configf:lookup dat entry-name "status")    "n/a"))
@@ -3131,6 +3247,21 @@
 	db
 	"SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
        (reverse res)))))
+
+;; This routine moved from tdb.scm, tdb:read-test-data
+;;
+(define (db:read-test-data* dbstruct run-id test-id categorypatt varpatt)
+  (let* ((res '()))
+    (db:with-db
+     dbstruct #f #f
+     (lambda (db)
+       (sqlite3:for-each-row 
+	(lambda (id test_id category variable value expected tol units comment status type)
+	  (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
+	db
+	"SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? AND variable LIKE ? ORDER BY category,variable;" test-id categorypatt varpatt)
+       (reverse res)))))
+
 
 ;;======================================================================
 ;; Misc. test related queries
@@ -3685,7 +3816,7 @@
 		   (debug:print-info 0 *default-log-port* "WARNING: failed to test for existance of " dbfj)
 		   (thread-sleep! 1)
 		   (db:delay-if-busy count (- count 1))) 
-		 (file-exists? dbfj))
+		 (common:file-exists? dbfj))
 		(case count
 		  ((6)
 		   (thread-sleep! 0.2)
@@ -4050,8 +4181,8 @@
 					       (final-log (vector-ref vb (+  7 numkeys)))
 					       (run-dir   (vector-ref vb (+ 18 numkeys)))
 					       (log-fpath (conc run-dir "/"  final-log))) ;; (string-intersperse keyvals "/") "/" testname "/" item-path "/"
-					  (debug:print 4 *default-log-port* "log: " log-fpath " exists: " (file-exists? log-fpath))
-					  (vector-set! vb (+ 7 numkeys) (if (file-exists? log-fpath)
+					  (debug:print 4 *default-log-port* "log: " log-fpath " exists: " (common:file-exists? log-fpath))
+					  (vector-set! vb (+ 7 numkeys) (if (common:file-exists? log-fpath)
 									    (let ((newpath (conc pathmod "/"
 												 (string-intersperse keyvals "/")
 												 "/" runname "/" testname "/"

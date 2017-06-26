@@ -1512,6 +1512,15 @@ flexi-launcher yes</pre>
 <pre>[setup]
 reruns 5</pre>
 </div></div>
+<div class="paragraph"><p>Replace the default blacklisted environment variables with user supplied
+list.</p></div>
+<div class="paragraph"><p>Default list: USER HOME DISPLAY LS_COLORS XKEYSYMDB EDITOR MAKEFLAGS MAKEF MAKEOVERRIDES</p></div>
+<div class="paragraph"><div class="title">Add a "bad" variable "PROMPT" to the variables that will be commented out</div><p>in the megatest.sh and megatest.csh files:</p></div>
+<div class="listingblock">
+<div class="content monospaced">
+<pre>[setup]
+blacklistvars USER HOME DISPLAY LS_COLORS XKEYSYMDB EDITOR MAKEFLAGS PROMPT</pre>
+</div></div>
 </div>
 <div class="sect4">
 <h5 id="_run_time_limit">Run time limit</h5>
@@ -1915,7 +1924,7 @@ lookittmp ;; Note: config file format supports multi-line entries where leading 
 </div>
 <div class="sect2">
 <h3 id="_triggers">Triggers</h3>
-<div class="paragraph"><p>In your testconfig triggers can be specified</p></div>
+<div class="paragraph"><p>In your testconfig or megatest.config triggers can be specified</p></div>
 <div class="listingblock">
 <div class="content monospaced">
 <pre>[triggers]
@@ -1929,7 +1938,7 @@ RUNNING/ running.sh
 # Call script onpass.sh any time status goes to PASS
 PASS/ onpass.sh</pre>
 </div></div>
-<div class="paragraph"><p>Scripts called will have; test-id test-rundir trigger, added to the commandline.</p></div>
+<div class="paragraph"><p>Scripts called will have; test-id test-rundir trigger test-name item-path state status event-time, added to the commandline.</p></div>
 <div class="paragraph"><p>HINT</p></div>
 <div class="paragraph"><p>To start an xterm (useful for debugging), use a command line like the following:</p></div>
 <div class="listingblock">
@@ -2153,7 +2162,7 @@ width:70%;
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br>
-Last updated 2017-05-10 08:25:49 PDT
+Last updated 2017-05-15 15:18:21 PDT
 </div>
 </div>
 </body>

@@ -296,8 +296,13 @@
                          #f))) ;; (hash-table-ref/default *runremote* run-id #f)))
     (if (vector? server-dat)
 	(let ((api-dat (http-transport:server-dat-get-api-uri server-dat)))
-	  (close-connection! api-dat)
-	  #t)
+	  (handle-exceptions
+	    exn
+	    (begin
+	      (print-call-chain *default-log-port*)
+	      (debug:print-error 0 *default-log-port* " closing connection failed with error: " ((condition-property-accessor 'exn 'message) exn)))
+	    (close-connection! api-dat)
+	    #t))
 	#f)))
 
 
@@ -441,7 +446,7 @@
 	    (debug:print 0 *default-log-port* "Server stats:")
 	    (db:print-current-query-stats)))
       (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600))
-	     (adjusted-timeout (if (> hrs-since-start 1)
+	     (adjusted-timeout (if (> hrs-since-start 1)  ;; never used!
 				   (- server-timeout (inexact->exact (round (* hrs-since-start 60))))  ;; subtract 60 seconds per hour
 				   server-timeout)))
 	(if (common:low-noise-print 120 "server timeout")
@@ -457,7 +462,8 @@
 		(handle-exceptions
 		    exn
 		    (debug:print 0 *default-log-port* "ERROR: Failed to change timestamp on log file " server-log-file ". Are you out of space on that disk?")
-		  (change-file-times server-log-file curr-time curr-time))))
+		  (if (not *server-overloaded*)
+		      (change-file-times server-log-file curr-time curr-time)))))
           (loop 0 server-state bad-sync-count (current-milliseconds)))
          (else
           (debug:print-info 0 *default-log-port* "Server timed out. seconds since last db access: " (- (current-seconds) last-access))
@@ -503,6 +509,12 @@
 ;; start_server? 
 ;;
 (define (http-transport:launch)
+  ;; lets not even bother to start if there are already three or more server files ready to go
+  (let* ((num-alive   (server:get-num-alive (server:get-list *toppath*))))
+    (if (> num-alive 3)
+	(begin
+	  (debug:print 0 *default-log-port* "ERROR: Aborting server start because there are already " num-alive " possible servers either running or starting up")
+	  (exit))))
   (common:save-pkt `((action . start)
 		     (T      . server)
 		     (pid    . ,(current-process-id)))

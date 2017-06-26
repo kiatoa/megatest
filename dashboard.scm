@@ -1924,7 +1924,7 @@ Misc
 	 (viewgen (configf:lookup views-cfgdat view-name "viewgen"))
 	 (updater (configf:lookup views-cfgdat view-name "updater"))
 	 (result-child #f))
-    (if (and (file-exists? source)
+    (if (and (common:file-exists? source)
 	     (file-read-access? source))
 	(handle-exceptions
 	 exn
@@ -2831,7 +2831,7 @@ Misc
 (define (dashboard:monitor-changed? commondat tabdat)
   (let* ((run-update-time (current-seconds))
 	 (monitor-db-path (dboard:tabdat-monitor-db-path tabdat))
-	 (monitor-modtime (if (and monitor-db-path (file-exists? monitor-db-path))
+	 (monitor-modtime (if (and monitor-db-path (common:file-exists? monitor-db-path))
 			      (file-modification-time monitor-db-path)
 			      -1)))
     (if (and (eq? (dboard:commondat-curr-tab-num commondat) 0)
@@ -3548,7 +3548,7 @@ Misc
 
 (define (main)
   (let ((mtdb-path (conc *toppath* "/megatest.db"))) ;; 
-    (if (and (file-exists? mtdb-path)
+    (if (and (common:file-exists? mtdb-path)
 	     (file-write-access? mtdb-path))
 	(if (not (args:get-arg "-skip-version-check"))
             (common:exit-on-version-changed)))
@@ -3607,7 +3607,7 @@ Misc
 
 ;; ease debugging by loading ~/.dashboardrc
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.dashboardrc")))
-  (if (file-exists? debugcontrolf)
+  (if (common:file-exists? debugcontrolf)
       (load debugcontrolf)))
 
 (if (args:get-arg "-repl")

@@ -148,6 +148,18 @@ Attempt to rerun tests in "STUCK/DEAD", "n/a", "ZERO_ITEMS" states.
 reruns 5
 ------------------
 
+Replace the default blacklisted environment variables with user supplied
+list.
+
+Default list: USER HOME DISPLAY LS_COLORS XKEYSYMDB EDITOR MAKEFLAGS MAKEF MAKEOVERRIDES
+
+.Add a "bad" variable "PROMPT" to the variables that will be commented out
+in the megatest.sh and megatest.csh files:
+-----------------
+[setup]
+blacklistvars USER HOME DISPLAY LS_COLORS XKEYSYMDB EDITOR MAKEFLAGS PROMPT
+-----------------
+
 Run time limit
 ++++++++++++++
 
@@ -472,7 +484,7 @@ $MT_MEGATEST -env2file .ezsteps/${stepname}
 Triggers
 ~~~~~~~~
 
-In your testconfig triggers can be specified 
+In your testconfig or megatest.config triggers can be specified 
 
 -----------------
 [triggers]
@@ -487,7 +499,7 @@ RUNNING/ running.sh
 PASS/ onpass.sh
 -----------------
 
-Scripts called will have; test-id test-rundir trigger, added to the commandline.
+Scripts called will have; test-id test-rundir trigger test-name item-path state status event-time, added to the commandline.
 
 HINT
 
