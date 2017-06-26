@@ -337,10 +337,10 @@
               (exit 1))
              (else
               (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
-              (exit 1)))))
-      (begin
-	(debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
-	(exit 1))))
+              (exit 1)))))))
+;;      (begin
+;;	(debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
+;;	(exit 1))))
 
 ;;======================================================================
 ;; S P A R S E   A R R A Y S
@@ -1485,9 +1485,6 @@
      hosts)
     best-host))
 
-
-
-
 (define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
   (let* ((loadavg (common:get-cpu-load remote-host))
 	 (first   (car loadavg))
@@ -1497,7 +1494,7 @@
     (cond
      ((and (> first adjload)
 	   (> count 0))
-      (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload (if msg msg ""))
+      (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload " " (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
      ((and (> loadjmp numcpus)
@@ -1505,6 +1502,14 @@
       (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
+
+(define (common:wait-for-homehost-load maxload msg)
+  (let* ((hh-dat (if (common:on-homehost?) ;; if we are on the homehost then pass in #f so the calls are local.
+                     #f
+                     (common:get-homehost)))
+         (hh     (if hh-dat (car hh-dat) #f))
+         (numcpus (common:get-num-cpus hh)))
+    (common:wait-for-normalized-load maxload msg: msg remote-host: hh)))
 
 (define (common:get-num-cpus remote-host)
   (let ((proc (lambda ()
@@ -1526,7 +1531,7 @@
 ;;
 (define (common:wait-for-normalized-load maxload #!key (msg #f)(remote-host #f))
   (let ((num-cpus (common:get-num-cpus remote-host)))
-    (common:wait-for-cpuload maxload num-cpus 15 msg: msg)))
+    (common:wait-for-cpuload maxload num-cpus 15 msg: msg remote-host: remote-host)))
 
 (define (get-uname . params)
   (let* ((uname-res (process:cmd-run->list (conc "uname " (if (null? params) "-a" (car params)))))

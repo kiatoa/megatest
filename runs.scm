@@ -842,8 +842,9 @@
 	 (loop-list               (list hed tal reg reruns))
 	 ;; configure the load runner
 	 (numcpus                 (common:get-num-cpus #f))
-	 (maxload                 (string->number (or (configf:lookup *configdat* "jobtools" "maxload") "3")))
-	 (waitdelay               (string->number (or (configf:lookup *configdat* "jobtools" "waitdelay") "60"))))
+	 (maxload                 (string->number (or (configf:lookup *configdat* "jobtools" "maxload") "3.0")))         ;; use a non-number string to disable
+         (maxhomehostload         (string->number (or (configf:lookup *configdat* "jobtools" "maxhomehostload") "1.2"))) ;; use a non-number string to disable
+         (waitdelay               (string->number (or (configf:lookup *configdat* "jobtools" "waitdelay") "60"))))
     (debug:print-info 4 *default-log-port* "have-resources: " have-resources " prereqs-not-met: (" 
 		      (string-intersperse 
 		       (map (lambda (t)
@@ -947,8 +948,11 @@
       (set! *max-tries-hash* (make-hash-table))
       ;; well, first lets see if cpu load throttling is enabled. If so wait around until the
       ;; average cpu load is under the threshold before continuing
-      (if (configf:lookup *configdat* "jobtools" "maxload") ;; only gate if maxload is specified
-	  (common:wait-for-cpuload maxload numcpus waitdelay))
+      (if maxload ;; only gate if maxload is specified
+          (common:wait-for-cpuload maxload numcpus waitdelay))
+      (if maxhomehostload
+          (common:wait-for-homehost-load maxhomehostload (conc "Waiting for homehost load to drop below normalized value of " maxhomehostload)))
+      
       (run:test run-id run-info keyvals runname test-record flags #f test-registry all-tests-registry)
       (runs:incremental-print-results run-id)
       (hash-table-set! test-registry (db:test-make-full-name test-name item-path) 'running)
