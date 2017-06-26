@@ -10,10 +10,8 @@
 ;;======================================================================
 
 (use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
-     matchable)
-(require-extension regex posix)
-
-(require-extension (srfi 18) extras tcp rpc)
+     matchable regex posix srfi-18 extras
+     pkts (prefix dbi dbi:))
 
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
@@ -248,17 +246,18 @@
 ;; Move me elsewhere ...
 ;; RADT => Why do we meed the version check here, this is called only if version misma
 ;;
-(define (common:cleanup-db dbstruct)
-  (db:multi-db-sync 
+(define (common:cleanup-db dbstruct #!key (full #f))
+  (apply db:multi-db-sync 
    dbstruct
    'schema
    ;; 'new2old
    'killservers
-   'dejunk
    'adj-target
    ;; 'old2new
    'new2old
-   )
+   (if full
+       '(dejunk)
+       '()))
   (if (common:api-changed?)
       (common:set-last-run-version)))
 
@@ -338,10 +337,10 @@
               (exit 1))
              (else
               (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
-              (exit 1)))))
-      (begin
-	(debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
-	(exit 1))))
+              (exit 1)))))))
+;;      (begin
+;;	(debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
+;;	(exit 1))))
 
 ;;======================================================================
 ;; S P A R S E   A R R A Y S
@@ -978,8 +977,12 @@
     ;; (if res (set-environment-variable "MT_RUNNAME" res)) ;; not sure if this is a good idea. side effect and all ...
     res))
 
+(define (common:get-fields cfgdat)
+  (let ((fields (hash-table-ref/default cfgdat "fields" '())))
+    (map car fields)))
+
 (define (common:args-get-target #!key (split #f)(exit-if-bad #f))
-  (let* ((keys    (if (hash-table? *configdat*) (keys:config-get-fields *configdat*) '()))
+  (let* ((keys    (if (hash-table? *configdat*) (common:get-fields *configdat*) '()))
 	 (numkeys (length keys))
 	 (target  (or (args:get-arg "-reqtarg")
 		      (args:get-arg "-target")
@@ -1482,9 +1485,6 @@
      hosts)
     best-host))
 
-
-
-
 (define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
   (let* ((loadavg (common:get-cpu-load remote-host))
 	 (first   (car loadavg))
@@ -1494,7 +1494,7 @@
     (cond
      ((and (> first adjload)
 	   (> count 0))
-      (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload (if msg msg ""))
+      (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload " " (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
      ((and (> loadjmp numcpus)
@@ -1502,6 +1502,14 @@
       (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
+
+(define (common:wait-for-homehost-load maxload msg)
+  (let* ((hh-dat (if (common:on-homehost?) ;; if we are on the homehost then pass in #f so the calls are local.
+                     #f
+                     (common:get-homehost)))
+         (hh     (if hh-dat (car hh-dat) #f))
+         (numcpus (common:get-num-cpus hh)))
+    (common:wait-for-normalized-load maxload msg: msg remote-host: hh)))
 
 (define (common:get-num-cpus remote-host)
   (let ((proc (lambda ()
@@ -1523,7 +1531,7 @@
 ;;
 (define (common:wait-for-normalized-load maxload #!key (msg #f)(remote-host #f))
   (let ((num-cpus (common:get-num-cpus remote-host)))
-    (common:wait-for-cpuload maxload num-cpus 15 msg: msg)))
+    (common:wait-for-cpuload maxload num-cpus 15 msg: msg remote-host: remote-host)))
 
 (define (get-uname . params)
   (let* ((uname-res (process:cmd-run->list (conc "uname " (if (null? params) "-a" (car params)))))
@@ -2103,89 +2111,77 @@
    ((equal? status "ABORT")   "brown")
    (else "black")))
 
-;;======================================================================
-;; N A N O M S G   C L I E N T
-;;======================================================================
-
-(define (server:get-best-guess-address hostname)
-  (let ((res #f))
-    (for-each 
-     (lambda (adr)
-       (if (not (eq? (u8vector-ref adr 0) 127))
-	   (set! res adr)))
-     ;; NOTE: This can fail when there is no mention of the host in /etc/hosts. FIXME
-     (vector->list (hostinfo-addresses (hostname->hostinfo hostname))))
-    (string-intersperse 
-     (map number->string
-	  (u8vector->list
-	   (if res res (hostname->ip hostname)))) ".")))
-
-
-(define (common:send-dboard-main-changed)
-  (let* ((dashboard-ips (mddb:get-dashboards)))
-    (for-each
-     (lambda (ipadr)
-       (let* ((soc (common:open-nm-req (conc "tcp://" ipadr)))
-	      (msg (conc "main " *toppath*))
-	      (res (common:nm-send-receive-timeout soc msg)))
-	 (if (not res) ;; couldn't reach that dashboard - remove it from db
-	     (print "ERROR: couldn't reach dashboard " ipadr))
-	 res))
-     dashboard-ips)))
-    
-    
-;;======================================================================
-;; D A S H B O A R D   D B 
-;;======================================================================
-
-(define (mddb:open-db)
-  (let* ((db (open-database (conc (get-environment-variable "HOME") "/.dashboard.db"))))
-    (set-busy-handler! db (busy-timeout 10000))
-    (for-each
-     (lambda (qry)
-       (exec (sql db qry)))
-     (list 
-      "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
-      "CREATE TABLE IF NOT EXISTS dashboards (
-          id         INTEGER PRIMARY KEY,
-          pid        INTEGER,
-          username   TEXT,
-          hostname   TEXT,
-          ipaddr     TEXT,
-          portnum    INTEGER,
-          start_time TIMESTAMP DEFAULT (strftime('%s','now')),
-             CONSTRAINT hostport UNIQUE (hostname,portnum)
-        );"
-      ))
-    db))
-
-;; register a dashboard 
-;;
-(define (mddb:register-dashboard port)
-  (let* ((pid      (current-process-id))
-	 (hostname (get-host-name))
-	 (ipaddr   (server:get-best-guess-address hostname))
-	 (username (current-user-name)) ;; (car userinfo)))
-	 (db      (mddb:open-db)))
-    (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
-    (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,username,hostname,ipaddr,portnum) VALUES (?,?,?,?,?);")
-	   pid username hostname ipaddr port)
-    (close-database db)))
-
-;; unregister a monitor
-;;
-(define (mddb:unregister-dashboard host port)
-  (let* ((db      (mddb:open-db)))
-    (print "Register unregister monitor, host:port=" host ":" port)
-    (exec (sql db "DELETE FROM dashboards WHERE hostname=? AND portnum=?;") host port)
-    (close-database db)))
-
-;; get registered dashboards
-;;
-(define (mddb:get-dashboards)
-  (let ((db (mddb:open-db)))
-    (query fetch-column
-	   (sql db "SELECT ipaddr || ':' || portnum FROM dashboards;"))))
+;; ;;======================================================================
+;; ;; N A N O M S G   C L I E N T
+;; ;;======================================================================
+;; 
+;; 
+;; 
+;; (define (common:send-dboard-main-changed)
+;;   (let* ((dashboard-ips (mddb:get-dashboards)))
+;;     (for-each
+;;      (lambda (ipadr)
+;;        (let* ((soc (common:open-nm-req (conc "tcp://" ipadr)))
+;; 	      (msg (conc "main " *toppath*))
+;; 	      (res (common:nm-send-receive-timeout soc msg)))
+;; 	 (if (not res) ;; couldn't reach that dashboard - remove it from db
+;; 	     (print "ERROR: couldn't reach dashboard " ipadr))
+;; 	 res))
+;;      dashboard-ips)))
+;;     
+;;     
+;; ;;======================================================================
+;; ;; D A S H B O A R D   D B 
+;; ;;======================================================================
+;; 
+;; (define (mddb:open-db)
+;;   (let* ((db (open-database (conc (get-environment-variable "HOME") "/.dashboard.db"))))
+;;     (set-busy-handler! db (busy-timeout 10000))
+;;     (for-each
+;;      (lambda (qry)
+;;        (exec (sql db qry)))
+;;      (list 
+;;       "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
+;;       "CREATE TABLE IF NOT EXISTS dashboards (
+;;           id         INTEGER PRIMARY KEY,
+;;           pid        INTEGER,
+;;           username   TEXT,
+;;           hostname   TEXT,
+;;           ipaddr     TEXT,
+;;           portnum    INTEGER,
+;;           start_time TIMESTAMP DEFAULT (strftime('%s','now')),
+;;              CONSTRAINT hostport UNIQUE (hostname,portnum)
+;;         );"
+;;       ))
+;;     db))
+;; 
+;; ;; register a dashboard 
+;; ;;
+;; (define (mddb:register-dashboard port)
+;;   (let* ((pid      (current-process-id))
+;; 	 (hostname (get-host-name))
+;; 	 (ipaddr   (server:get-best-guess-address hostname))
+;; 	 (username (current-user-name)) ;; (car userinfo)))
+;; 	 (db      (mddb:open-db)))
+;;     (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
+;;     (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,username,hostname,ipaddr,portnum) VALUES (?,?,?,?,?);")
+;; 	   pid username hostname ipaddr port)
+;;     (close-database db)))
+;; 
+;; ;; unregister a monitor
+;; ;;
+;; (define (mddb:unregister-dashboard host port)
+;;   (let* ((db      (mddb:open-db)))
+;;     (print "Register unregister monitor, host:port=" host ":" port)
+;;     (exec (sql db "DELETE FROM dashboards WHERE hostname=? AND portnum=?;") host port)
+;;     (close-database db)))
+;; 
+;; ;; get registered dashboards
+;; ;;
+;; (define (mddb:get-dashboards)
+;;   (let ((db (mddb:open-db)))
+;;     (query fetch-column
+;; 	   (sql db "SELECT ipaddr || ':' || portnum FROM dashboards;"))))
     
 ;;======================================================================
 ;;  T E S T   L A U N C H I N G   P E R   I T E M   W I T H   H O S T   T Y P E S
@@ -2260,4 +2256,105 @@
     (if (common:file-exists? home-cfgfile)
 	(read-config home-cfgfile view-cfgdat #t))
     view-cfgdat))
+
+;;======================================================================
+;; Manage pkts, used in servers, tests and likely other contexts so put
+;; in common
+;;======================================================================
+
+(define common:pkt-spec
+  '((server . ((action    . a)
+	       (pid       . d)
+	       (ipaddr    . i)
+	       (port      . p)))
+    			  
+    (test   . ((cpuuse    . c)
+	       (diskuse   . d)
+	       (item-path . i)
+	       (runname   . r)
+	       (state     . s)
+	       (target    . t)
+	       (status    . u)))))
+
+(define (common:get-pkts-dirs mtconf use-lt)
+  (let* ((pktsdirs-str (or (configf:lookup mtconf "setup"  "pktsdirs")
+			   (and use-lt
+				(conc *toppath* "/lt/.pkts"))))
+	 (pktsdirs  (if pktsdirs-str
+			(string-split pktsdirs-str " ")
+			#f)))
+    pktsdirs))
+
+;; use-lt is use linktree "lt" link to find pkts dir
+(define (common:with-queue-db mtconf proc #!key (use-lt #f)(toppath-in #f))
+  (let* ((pktsdirs (common:get-pkts-dirs mtconf use-lt))
+	 (pktsdir  (if pktsdirs (car pktsdirs) #f))
+	 (toppath  (or (configf:lookup mtconf "scratchdat" "toppath")
+		       toppath-in))
+	 (pdbpath  (or (configf:lookup mtconf "setup"  "pdbpath") pktsdir)))
+    (cond
+     ((not (and  pktsdir toppath pdbpath))
+      (debug:print 0 *default-log-port* "ERROR: settings are missing in your megatest.config for area management.")
+      (debug:print  0 *default-log-port* "  you need to have pktsdir in the [setup] section."))
+     ((not (common:file-exists? pktsdir))
+      (debug:print 0 *default-log-port* "ERROR: pkts directory not found " pktsdir))
+     ((not (equal? (file-owner pktsdir)(current-effective-user-id)))
+      (debug:print 0 *default-log-port* "ERROR: directory " pktsdir " is not owned by " (current-effective-user-name)))
+     (else
+	(let* ((pdb  (open-queue-db pdbpath "pkts.db"
+				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))))
+	  (proc pktsdirs pktsdir pdb)
+	  (dbi:close pdb))))))
+
+(define (common:load-pkts-to-db mtconf)
+  (common:with-queue-db
+   mtconf
+   (lambda (pktsdirs pktsdir pdb)
+     (for-each
+      (lambda (pktsdir) ;; look at all
+	(cond
+	 ((not (common:file-exists? pktsdir))
+	  (debug:print 0 *default-log-port* "ERROR: packets directory " pktsdir " does not exist."))
+	 ((not (directory? pktsdir))
+	  (debug:print 0 *default-log-port* "ERROR: packets directory path " pktsdir " is not a directory."))
+	 ((not (file-read-access? pktsdir))
+	  (debug:print 0 *default-log-port* "ERROR: packets directory path " pktsdir " is not readable."))
+	 (else
+	  (debug:print-info 0 *default-log-port* "Loading packets found in " pktsdir)
+	  (let ((pkts (glob (conc pktsdir "/*.pkt"))))
+	    (for-each
+	     (lambda (pkt)
+	       (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
+		      (exists  (lookup-by-uuid pdb uuid #f)))
+		 (if (not exists)
+		     (let* ((pktdat (string-intersperse
+				     (with-input-from-file pkt read-lines)
+				     "\n"))
+			    (apkt   (pkt->alist pktdat))
+			    (ptype  (alist-ref 'T apkt)))
+		       (add-to-queue pdb pktdat uuid (or ptype 'cmd) #f 0)
+		       (debug:print 4 *default-log-port* "Added " uuid " of type " ptype " to queue"))
+		     (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
+		     )))
+	     pkts)))))
+      pktsdirs))))
+
+(define (common:get-pkt-alists pkts)
+  (map (lambda (x)
+	 (alist-ref 'apkt x)) ;; 'pkta pulls out the alist from the read pkt
+       pkts))
+
+;; given list of pkts (alist mode) return list of D cards as Unix epoch, sorted descending
+;; also delete duplicates by target i.e. (car pkt)
+;;
+(define (common:get-pkt-times pkts)
+  (delete-duplicates
+   (sort 
+    (map (lambda (x)
+	   `(,(alist-ref 't x) . ,(string->number (alist-ref 'D x))))
+	 pkts)
+    (lambda (a b)(> (cdr a)(cdr b))))      ;; sort descending
+   (lambda (a b)(equal? (car a)(car b))))) ;; remove duplicates by target
+
+
 

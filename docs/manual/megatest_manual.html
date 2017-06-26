@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<meta name="generator" content="AsciiDoc 8.6.9">
+<meta name="generator" content="AsciiDoc 8.6.7">
 <title>The Megatest Users Manual</title>
 <style type="text/css">
 /* Shared CSS for AsciiDoc xhtml11 and html5 backends */
@@ -86,15 +86,9 @@ ul, ol, li > p {
 ul > li     { color: #aaa; }
 ul > li > * { color: black; }
 
-.monospaced, code, pre {
-  font-family: "Courier New", Courier, monospace;
-  font-size: inherit;
-  color: navy;
+pre {
   padding: 0;
   margin: 0;
-}
-pre {
-  white-space: pre-wrap;
 }
 
 #author {
@@ -224,7 +218,7 @@ div.exampleblock > div.content {
 }
 
 div.imageblock div.content { padding-left: 0; }
-span.image img { border-style: none; vertical-align: text-bottom; }
+span.image img { border-style: none; }
 a.image:visited { color: white; }
 
 dl {
@@ -420,6 +414,12 @@ div.unbreakable { page-break-inside: avoid; }
  *
  * */
 
+tt {
+  font-family: "Courier New", Courier, monospace;
+  font-size: inherit;
+  color: navy;
+}
+
 div.tableblock {
   margin-top: 1.0em;
   margin-bottom: 1.5em;
@@ -452,6 +452,12 @@ div.tableblock > table[frame="vsides"] {
  * html5 specific
  *
  * */
+
+.monospaced {
+  font-family: "Courier New", Courier, monospace;
+  font-size: inherit;
+  color: navy;
+}
 
 table.tableblock {
   margin-top: 1.0em;
@@ -532,8 +538,6 @@ body.manpage div.sectionbody {
 @media print {
   body.manpage div#toc { display: none; }
 }
-
-
 @media screen {
   body {
     max-width: 50em; /* approximately 80 characters wide */
@@ -1508,6 +1512,15 @@ flexi-launcher yes</pre>
 <pre>[setup]
 reruns 5</pre>
 </div></div>
+<div class="paragraph"><p>Replace the default blacklisted environment variables with user supplied
+list.</p></div>
+<div class="paragraph"><p>Default list: USER HOME DISPLAY LS_COLORS XKEYSYMDB EDITOR MAKEFLAGS MAKEF MAKEOVERRIDES</p></div>
+<div class="paragraph"><div class="title">Add a "bad" variable "PROMPT" to the variables that will be commented out</div><p>in the megatest.sh and megatest.csh files:</p></div>
+<div class="listingblock">
+<div class="content monospaced">
+<pre>[setup]
+blacklistvars USER HOME DISPLAY LS_COLORS XKEYSYMDB EDITOR MAKEFLAGS PROMPT</pre>
+</div></div>
 </div>
 <div class="sect4">
 <h5 id="_run_time_limit">Run time limit</h5>
@@ -1936,7 +1949,7 @@ COMPLETED/ xterm -e bash -s --</pre>
 <div class="admonitionblock">
 <table><tr>
 <td class="icon">
-<img src="/usr/images/icons/note.png" alt="Note">
+<img src="/nfs/pdx/disks/ice.disk.002/icfadm/pkgs/asciidoc/8.6.7/images/icons/note.png" alt="Note">
 </td>
 <td class="content">There is a trailing space after the --</td>
 </tr></table>
@@ -2149,8 +2162,7 @@ width:70%;
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br>
-Last updated
- 2017-05-21 21:58:43 MST
+Last updated 2017-05-15 15:18:21 PDT
 </div>
 </div>
 </body>

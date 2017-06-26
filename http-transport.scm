@@ -10,8 +10,7 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use  srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest posix-extras) ;; sqlite3
-;; (import (prefix sqlite3 sqlite3:))
+(use  srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest posix-extras)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars intarweb spiffy-directory-listing)
 
@@ -434,7 +433,7 @@
 	    (debug:print 0 *default-log-port* "Server stats:")
 	    (db:print-current-query-stats)))
       (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600))
-	     (adjusted-timeout (if (> hrs-since-start 1)
+	     (adjusted-timeout (if (> hrs-since-start 1)  ;; never used!
 				   (- server-timeout (inexact->exact (round (* hrs-since-start 60))))  ;; subtract 60 seconds per hour
 				   server-timeout)))
 	(if (common:low-noise-print 120 "server timeout")

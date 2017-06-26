@@ -23,9 +23,6 @@
 (declare (uses common))
 (declare (uses configf))
 (declare (uses db))
-;; (declare (uses sdb))
-(declare (uses tdb))
-;; (declare (uses filedb))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -674,7 +671,10 @@
           ;;(bb-check-path msg: "launch:execute post block 42")
 	  (set-item-env-vars itemdat)
           ;;(bb-check-path msg: "launch:execute post block 43")
-	  (save-environment-as-files "megatest")
+          (let ((blacklist (configf:lookup *configdat* "setup" "blacklistvars")))
+            (if blacklist
+                (save-environment-as-files "megatest" ignorevars: (string-split blacklist))
+                (save-environment-as-files "megatest")))
           ;;(bb-check-path msg: "launch:execute post block 44")
 	  ;; open-run-close not needed for test-set-meta-info
 	  ;; (tests:set-full-meta-info #f test-id run-id 0 work-area)
