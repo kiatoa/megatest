@@ -332,7 +332,7 @@
     (server:start-and-wait *toppath*)
     
     (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
-    (set! runconf (if (file-exists? runconfigf)
+    (set! runconf (if (common:file-exists? runconfigf)
 		      (setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
 		      (begin
 			(debug:print 0 *default-log-port* "WARNING: You do not have a run config file: " runconfigf)
@@ -515,7 +515,13 @@
 	  (let* ((keep-going        #t)
 		 (run-queue-retries 5)
 		 (th1        (make-thread (lambda ()
-					    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
+					    (handle-exceptions
+						exn
+						(begin
+						  (print-call-chain)
+						  (print " message: " ((condition-property-accessor 'exn 'message) exn)))
+					      (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests
+								    (any->number reglen) all-tests-registry)))
 					    ;; (handle-exceptions
 					    ;;  exn
 					    ;;  (begin
@@ -836,8 +842,9 @@
 	 (loop-list               (list hed tal reg reruns))
 	 ;; configure the load runner
 	 (numcpus                 (common:get-num-cpus #f))
-	 (maxload                 (string->number (or (configf:lookup *configdat* "jobtools" "maxload") "3")))
-	 (waitdelay               (string->number (or (configf:lookup *configdat* "jobtools" "waitdelay") "60"))))
+	 (maxload                 (string->number (or (configf:lookup *configdat* "jobtools" "maxload") "3.0")))         ;; use a non-number string to disable
+         (maxhomehostload         (string->number (or (configf:lookup *configdat* "jobtools" "maxhomehostload") "1.2"))) ;; use a non-number string to disable
+         (waitdelay               (string->number (or (configf:lookup *configdat* "jobtools" "waitdelay") "60"))))
     (debug:print-info 4 *default-log-port* "have-resources: " have-resources " prereqs-not-met: (" 
 		      (string-intersperse 
 		       (map (lambda (t)
@@ -941,8 +948,11 @@
       (set! *max-tries-hash* (make-hash-table))
       ;; well, first lets see if cpu load throttling is enabled. If so wait around until the
       ;; average cpu load is under the threshold before continuing
-      (if (configf:lookup *configdat* "jobtools" "maxload") ;; only gate if maxload is specified
-	  (common:wait-for-cpuload maxload numcpus waitdelay))
+      (if maxload ;; only gate if maxload is specified
+          (common:wait-for-cpuload maxload numcpus waitdelay))
+      (if maxhomehostload
+          (common:wait-for-homehost-load maxhomehostload (conc "Waiting for homehost load to drop below normalized value of " maxhomehostload)))
+      
       (run:test run-id run-info keyvals runname test-record flags #f test-registry all-tests-registry)
       (runs:incremental-print-results run-id)
       (hash-table-set! test-registry (db:test-make-full-name test-name item-path) 'running)
@@ -1264,7 +1274,10 @@
 
 	;; every 15 minutes verify the server is there for this run
 	(if (and (common:low-noise-print 240 "try start server"  run-id)
-		 (not (server:check-if-running *toppath*)))
+		 (not (or (and *runremote*
+			       (remote-server-url *runremote*)
+			       (server:ping (remote-server-url *runremote*)))
+			  (server:check-if-running *toppath*))))
 	    (server:kind-run *toppath*))
 	
 	(if (> num-running 0)
@@ -1578,7 +1591,7 @@
       (if (not testdat) ;; should NOT happen
 	  (debug:print-error 0 *default-log-port* "failed to get test record for test-id " test-id))
       (set! test-id (db:test-get-id testdat))
-      (if (file-exists? test-path)
+      (if (common:file-exists? test-path)
 	  (change-directory test-path)
 	  (begin
 	    (debug:print-error 0 *default-log-port* "test run path not created before attempting to run the test. Perhaps you are running -remove-runs at the same time?")
@@ -1908,7 +1921,7 @@
 				    (let ((ddir (conc run-dir "/")))
 				      (case (string->symbol (args:get-arg "-archive"))
 					((save save-remove keep-html)
-					 (if (file-exists? ddir)
+					 (if (common:file-exists? ddir)
 					     (debug:print-info 0 *default-log-port* "Estimating disk space usage for " test-fulln ": " (common:get-disk-space-used ddir)))))))
 				(if (not (null? tal))
 				    (loop (car tal)(cdr tal))))
@@ -1917,7 +1930,8 @@
 		     (if worker-thread (thread-join! worker-thread))))))
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
-	       (let ((remtests (mt:get-tests-for-run (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") not-in: #t)))
+	       (let* ((run-id   (db:get-value-by-header run header "id")) ;; NB// masks run-id from above?
+                      (remtests (mt:get-tests-for-run run-id #f '("DELETED") '("n/a") not-in: #t)))
 		 (if (null? remtests) ;; no more tests remaining
 		     (let* ((dparts  (string-split lasttpath "/"))
 			    (runpath (conc "/" (string-intersperse 
@@ -1941,7 +1955,7 @@
 
 (define (runs:remove-test-directory test mode) ;; remove-data-only)
   (let* ((run-dir       (db:test-get-rundir test))    ;; run dir is from the link tree
-	 (real-dir      (if (file-exists? run-dir)
+	 (real-dir      (if (common:file-exists? run-dir)
 			    ;; (resolve-pathname run-dir)
 			    (common:nice-path run-dir)
 			    #f)))
@@ -1952,10 +1966,10 @@
     (debug:print-info 1 *default-log-port* "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
     (if (and real-dir 
 	     (> (string-length real-dir) 5)
-	     (file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
+	     (common:file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
 	(begin ;; let* ((realpath (resolve-pathname run-dir)))
 	  (debug:print-info 1 *default-log-port* "Recursively removing " real-dir)
-	  (if (file-exists? real-dir)
+	  (if (common:file-exists? real-dir)
 	      (runs:safe-delete-test-dir real-dir)
 	      (debug:print 0 *default-log-port* "WARNING: test dir " real-dir " appears to not exist or is not readable")))
 	(if real-dir 
@@ -2008,7 +2022,8 @@
 	(if (launch:setup)
 	    (begin
 	      (full-runconfigs-read) ;; cache the run config
-	      (launch:cache-config)) ;; do not cache here - need to be sure runconfigs is processed
+	      ;; (launch:cache-config) ;; there are two independent config cache locations, turning this one off for now. MRW.
+	      ) ;; do not cache here - need to be sure runconfigs is processed
 	    (begin 
 	      (debug:print 0 *default-log-port* "Failed to setup, exiting")
 	      (exit 1)))
@@ -2169,7 +2184,7 @@
       (if runname
 	  (let* ((linktree (common:get-linktree)) ;; (if toppath (configf:lookup *configdat* "setup" "linktree")))
 		 (runtop   (conc linktree "/" target "/" runname))
-		 (files    (if (file-exists? runtop)
+		 (files    (if (common:file-exists? runtop)
 			       (append (glob (conc runtop "/.megatest*"))
 				       (glob (conc runtop "/.runconfig*")))
 			       '())))

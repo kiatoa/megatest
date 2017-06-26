@@ -63,12 +63,12 @@
       test-registry
       (let loop ((hed (car tests-paths))
 		 (tal (cdr tests-paths)))
-	(if (file-exists? hed)
+	(if (common:file-exists? hed)
 	    (for-each (lambda (test-path)
 			(let* ((tname   (last (string-split test-path "/")))
 			       (tconfig (conc test-path "/testconfig")))
 			  (if (and (not (hash-table-ref/default test-registry tname #f))
-				   (file-exists? tconfig))
+				   (common:file-exists? tconfig))
 			      (hash-table-set! test-registry tname test-path))))
 		      (glob (conc hed "/*"))))
 	(if (null? tal)
@@ -333,7 +333,7 @@
 	 (waiver-rx   (regexp "^(\\S+)\\s+(.*)$"))
 	 (diff-rule   "diff %file1% %file2%")
 	 (logpro-rule "diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html"))
-    (if (not (file-exists? test-rundir))
+    (if (not (common:file-exists? test-rundir))
 	(begin
 	  (debug:print-error 0 *default-log-port* "test run directory is gone, cannot propagate waiver")
 	  #f)
@@ -350,7 +350,7 @@
 				     (waiver-glob (if wparts (caddr wparts) #f))
 				     (logpro-file (if waiver
 						      (let ((fname (conc hed ".logpro")))
-							(if (file-exists? fname)
+							(if (common:file-exists? fname)
 							    fname 
 							    (begin
 							      (debug:print 0 *default-log-port* "INFO: No logpro file " fname " falling back to diff")
@@ -448,15 +448,15 @@
     (let ((category (hash-table-ref/default otherdat ":category" ""))
 	  (variable (hash-table-ref/default otherdat ":variable" ""))
 	  (value    (hash-table-ref/default otherdat ":value"    #f))
-	  (expected (hash-table-ref/default otherdat ":expected" #f))
-	  (tol      (hash-table-ref/default otherdat ":tol"      #f))
+	  (expected (hash-table-ref/default otherdat ":expected" "n/a"))
+	  (tol      (hash-table-ref/default otherdat ":tol"      "n/a"))
 	  (units    (hash-table-ref/default otherdat ":units"    ""))
 	  (type     (hash-table-ref/default otherdat ":type"     ""))
 	  (dcomment (hash-table-ref/default otherdat ":comment"  "")))
       (debug:print 4 *default-log-port* 
 		   "category: " category ", variable: " variable ", value: " value
 		   ", expected: " expected ", tol: " tol ", units: " units)
-      (if (and value expected tol) ;; all three required
+      (if (and value) ;; require only value; BB was- all three required
 	  (let ((dat (conc category ","
 			   variable ","
 			   value    ","
@@ -467,7 +467,9 @@
 			   type     )))
 	    ;; This was run remote, don't think that makes sense. Perhaps not, but that is the easiest path for the moment.
 	    (rmt:csv->test-data run-id test-id
-				dat))))
+				dat)
+            (thread-sleep! 10) ;; add 10 second delay before quit incase rmt needs time to start a server.
+            )))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     ;;;;;; (if (not (equal? item-path ""))
@@ -867,7 +869,7 @@ EOF
 							(let* ((targ-path (string-intersperse p "/"))
                                                                (full-path (conc linktree "/" targ-path))
                                                                (run-name  (car (reverse p))))
-                                                          (if (and (file-exists? full-path)
+                                                          (if (and (common:file-exists? full-path)
                                                                    (directory?   full-path)
                                                                    (file-write-access? full-path))
                                                               (s:a run-name 'href (conc targ-path "/run-summary.html"))
@@ -906,7 +908,7 @@ EOF
                     (tests-htree (common:list->htree tests-tree-dat))
                     (html-dir    (conc linktree "/" (string-intersperse run-dir "/")))
                     (html-path   (conc html-dir "/run-summary.html"))
-                    (oup         (if (and (file-exists? html-dir)
+                    (oup         (if (and (common:file-exists? html-dir)
                                           (directory?   html-dir)
                                           (file-write-access? html-dir))
                                      (open-output-file  html-path)
@@ -934,17 +936,17 @@ EOF
                                                                           (full-targ (conc html-dir "/" targ-path))
                                                                           (std-file  (conc full-targ "/test-summary.html"))
                                                                           (alt-file  (conc full-targ "/megatest-rollup-" test-name ".html"))
-                                                                          (html-file (if (file-exists? alt-file)
+                                                                          (html-file (if (common:file-exists? alt-file)
                                                                                          alt-file
                                                                                          std-file))
                                                                           (run-name  (car (reverse p))))
-                                                                     (if (and (not (file-exists? full-targ))
+                                                                     (if (and (not (common:file-exists? full-targ))
                                                                               (directory? full-targ)
                                                                               (file-write-access? full-targ))
                                                                          (tests:summarize-test 
                                                                           run-id 
                                                                           (rmt:get-test-id run-id test-name item-path)))
-                                                                     (if (file-exists? full-targ)
+                                                                     (if (common:file-exists? full-targ)
                                                                          (s:a run-name 'href html-file)
                                                                          (begin
                                                                            (debug:print 0 *default-log-port* "ERROR: can't access " full-targ)
@@ -1157,7 +1159,7 @@ EOF
 
 ;; (define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
 ;;   (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
-;;     (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
+;;     (set! tests (filter (lambda (test)(common:file-exists? (conc test "/testconfig"))) tests))
 ;;     (delete-duplicates
 ;;      (filter (lambda (testname)
 ;; 	       (tests:match test-patts testname #f))
@@ -1192,7 +1194,7 @@ EOF
 	 (cache-file   (and cache-path (conc cache-path "/.testconfig")))
 	 (cache-exists (and cache-file
 			    (not force-create)  ;; if force-create then pretend there is no cache to read
-			    (file-exists? cache-file)))
+			    (common:file-exists? cache-file)))
 	 (cached-dat   (if (and (not force-create)
 				cache-exists
 				use-cache)
@@ -1216,7 +1218,7 @@ EOF
 		     (test-path    (or (hash-table-ref/default treg test-name #f)
 				       (conc *toppath* "/tests/" test-name)))
 		     (test-configf (conc test-path "/testconfig"))
-		     (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
+		     (testexists   (and (common:file-exists? test-configf)(file-read-access? test-configf)))
 		     (tcfg         (if testexists
 				       (read-config test-configf #f system-allowed
 						    environ-patt: (if system-allowed
@@ -1385,7 +1387,7 @@ EOF
   (let ((dfile (conc "/tmp/." (current-user-name) "-" (server:mk-signature) ".dot"))
 	(fname (conc "/tmp/." (current-user-name) "-" (server:mk-signature) ".dotdat")))
     (tests:write-dot-file testrecords dfile sizex sizey)
-    (if (file-exists? fname)
+    (if (common:file-exists? fname)
 	(let ((res (with-input-from-file fname
 		     (lambda ()
 		       (read-lines)))))

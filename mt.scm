@@ -130,42 +130,85 @@
 ;;  T R I G G E R S
 ;;======================================================================
 
+(define (mt:run-trigger cmd test-id test-rundir trigger logname test-name item-path event-time actual-state actual-status)
+  ;; Putting the commandline into ( )'s means no control over the shell. 
+  ;; stdout and stderr will be caught in the NBFAKE or mt_launch.log files
+  ;; or equivalent. No need to do this. Just run it?
+  (let* ((fullcmd (conc "nbfake "
+			cmd           " "
+			test-id       " "
+			test-rundir   " "
+			trigger       " "
+			test-name     " "
+			item-path     " " ;; has / prepended to deal with toplevel tests
+			actual-state  " "
+			actual-status " "
+			event-time
+			))
+	 (prev-nbfake-log (get-environment-variable "NBFAKE_LOG")))
+    (setenv "NBFAKE_LOG" (conc (cond
+				((and (directory-exists? test-rundir)
+				      (file-write-access? test-rundir))
+				 test-rundir)
+				((and (directory-exists? *toppath*)
+				      (file-write-access? *toppath*))
+				 *toppath*)
+				(else (conc "/tmp/" (current-user-name))))
+			       "/" logname))
+    (debug:print-info 0 *default-log-port* "TRIGGERED on " trigger ", running command " fullcmd " output at " (get-environment-variable "NBFAKE_LOG"))
+    ;; (call-with-environment-variables
+    ;;  `(("NBFAKE_LOG" . ,(conc test-rundir "/" logname)))
+    ;;  (lambda ()
+    (process-run fullcmd)
+    (if prev-nbfake-log
+	(setenv "NBFAKE_LOG" prev-nbfake-log)
+	(unsetenv "NBFAKE_LOG"))
+    )) ;; ))
+
 (define (mt:process-triggers dbstruct run-id test-id newstate newstatus)
-  (let* ((test-dat      (db:get-test-info-by-id dbstruct run-id test-id)))
-    (if test-dat
-	(let* ((test-rundir   ;; (rmt:sdb-qry 'getstr ;; (filedb:get-path *fdb*
-		(db:test-get-rundir test-dat)) ;; ) ;; )
-	       (test-name     (db:test-get-testname test-dat))
-	       (tconfig       #f)
-	       (state         (if newstate  newstate  (db:test-get-state  test-dat)))
-	       (status        (if newstatus newstatus (db:test-get-status test-dat))))
-	  (if (and test-name
-		   test-rundir   ;; #f means no dir set yet
-		   (file-exists? test-rundir)
-		   (directory? test-rundir))
-	      (call-with-environment-variables
-	       (list (cons "MT_TEST_NAME" test-name)
-		     (cons "MT_TEST_RUN_DIR" test-rundir)
-		     (cons "MT_ITEMPATH"     (db:test-get-item-path test-dat)))
-	       (lambda ()
-		 (push-directory test-rundir)
-		 (set! tconfig (mt:lazy-read-test-config test-name))
-		 (for-each (lambda (trigger)
-			     (let ((cmd  (configf:lookup tconfig "triggers" trigger))
-				   (logf (conc  test-rundir "/last-trigger.log")))
-			       (if cmd
-				   ;; Putting the commandline into ( )'s means no control over the shell. 
-				   ;; stdout and stderr will be caught in the NBFAKE or mt_launch.log files
-				   ;; or equivalent. No need to do this. Just run it?
-				   (let ((fullcmd (conc cmd " " test-id " " test-rundir " " trigger "&")))
-				     (debug:print-info 0 *default-log-port* "TRIGGERED on " trigger ", running command " fullcmd)
-				     (process-run fullcmd)))))
-			   (list
-			    (conc state "/" status)
-			    (conc state "/")
-			    (conc "/" status)))
-		 (pop-directory))
-	       ))))))
+  (if test-id 
+      (let* ((test-dat      (db:get-test-info-by-id dbstruct run-id test-id)))
+	(if test-dat
+	    (let* ((test-rundir   (db:test-get-rundir       test-dat)) ;; ) ;; )
+		   (test-name     (db:test-get-testname     test-dat))
+		   (item-path     (db:test-get-item-path    test-dat))
+		   (duration      (db:test-get-run_duration test-dat))
+		   (comment       (db:test-get-comment      test-dat))
+		   (event-time    (db:test-get-event_time   test-dat))
+		   (tconfig       #f)
+		   (state         (if newstate  newstate  (db:test-get-state  test-dat)))
+		   (status        (if newstatus newstatus (db:test-get-status test-dat))))
+	      ;; (mutex-lock! *triggers-mutex*)
+	      (if (and test-name
+		       test-rundir)   ;; #f means no dir set yet
+		       ;; (common:file-exists? test-rundir)
+		       ;; (directory? test-rundir))
+		  (call-with-environment-variables
+		   (list (cons "MT_TEST_NAME"    (or test-name "no such test"))
+			 (cons "MT_TEST_RUN_DIR" (or test-rundir "no test directory yet"))
+			 (cons "MT_ITEMPATH"     (or item-path "")))
+		   (lambda ()
+		     (if (directory-exists? test-rundir)
+			 (push-directory test-rundir)
+			 (push-directory *toppath*))
+		     (set! tconfig (mt:lazy-read-test-config test-name))
+		     (for-each (lambda (trigger)
+				 (let* ((munged-trigger (string-translate trigger "/ " "--"))
+					(logname        (conc "last-trigger-" munged-trigger ".log")))
+				   ;; first any triggers from the testconfig
+				   (let ((cmd  (configf:lookup tconfig "triggers" trigger)))
+				     (if cmd (mt:run-trigger cmd test-id test-rundir trigger (conc "tconfig-" logname) test-name item-path event-time state status)))
+				   ;; next any triggers from megatest.config
+				   (let ((cmd  (configf:lookup *configdat* "triggers" trigger)))
+				     (if cmd (mt:run-trigger cmd test-id test-rundir trigger (conc "mtconfig-" logname) test-name item-path event-time state status)))))
+			       (list
+				(conc state "/" status)
+				(conc state "/")
+				(conc "/" status)))
+		     (pop-directory))
+		   ))
+	      ;; (mutex-unlock! *triggers-mutex*)
+	      )))))
 
 ;;======================================================================
 ;;  S T A T E   A N D   S T A T U S   F O R   T E S T S 
@@ -208,7 +251,7 @@
 		     (tal (cdr test-dirs)))
 	    ;; Setting MT_LINKTREE here is almost certainly unnecessary. 
 	    (let ((tconfig-file (conc hed "/" test-name "/testconfig")))
-	      (if (and (file-exists? tconfig-file)
+	      (if (and (common:file-exists? tconfig-file)
 		       (file-read-access? tconfig-file))
 		  (let ((link-tree-path (common:get-linktree)) ;; (configf:lookup *configdat* "setup" "linktree"))
 			(old-link-tree  (get-environment-variable "MT_LINKTREE")))

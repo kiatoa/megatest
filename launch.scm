@@ -60,7 +60,7 @@
 ;;
 (define (launch:load-logpro-dat run-id test-id stepname)
   (let ((cname (conc stepname ".dat")))
-    (if (file-exists? cname)
+    (if (common:file-exists? cname)
 	(let* ((dat  (read-config cname #f #f))
 	       (csvr (db:logpro-dat->csv dat stepname))
 	       (csvt (let-values (((fmt-cell fmt-record fmt-csv) (make-format ",")))
@@ -89,7 +89,7 @@
 	 (html-file      (conc stepname ".html"))
 	 (dat-file       (conc stepname ".dat"))
 	 (tconfig-logpro (configf:lookup testconfig "logpro" stepname))
-	 (logpro-used    (file-exists? logpro-file)))
+	 (logpro-used    (common:file-exists? logpro-file)))
 
     (if (and tconfig-logpro
 	     (not logpro-used)) ;; no logpro file found but have a defn in the testconfig
@@ -108,7 +108,7 @@
     ;; ;; first source the previous environment
     ;; (let ((prev-env (conc ".ezsteps/" prevstep (if (string-search (regexp "csh") 
     ;;      							 (get-environment-variable "SHELL")) ".csh" ".sh"))))
-    ;;   (if (and prevstep (file-exists? prev-env))
+    ;;   (if (and prevstep (common:file-exists? prev-env))
     ;;       (set! script (conc script "source " prev-env))))
     
     ;; call the command using mt_ezstep
@@ -127,7 +127,7 @@
            (lambda ()
              (print stepname ".log :")
              (print "\t" cmd)
-             (if (file-exists? (conc stepname ".logpro"))
+             (if (common:file-exists? (conc stepname ".logpro"))
                  (print "\tlogpro " stepname ".logpro " stepname ".html < " stepname ".log"))
              (print)
              (print stepname " : " stepname ".log")
@@ -171,7 +171,7 @@
       (if logpro-used
 	  (let ((datfile (conc stepname ".dat")))
 	    ;; load the .dat file into the test_data table if it exists
-	    (if (file-exists? datfile)
+	    (if (common:file-exists? datfile)
 		(set! comment (launch:load-logpro-dat run-id test-id stepname)))
 	    (rmt:test-set-log! run-id test-id (conc stepname ".html"))))
       (rmt:teststep-set-status! run-id test-id stepname "end" exinfo comment logfna))
@@ -295,7 +295,7 @@
 	    (begin
 	      (debug:print-error 0 *default-log-port* "Failed to resolve megatest.config, runconfigs.config and testconfig issues. Giving up now")
 	      (exit 1)))
-	(if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
+	(if (not (common:file-exists? ".ezsteps"))(create-directory ".ezsteps"))
 	;; if ezsteps was defined then we are sure to have at least one step but check anyway
 	(if (not (> (length ezstepslst) 0))
 	    (debug:print-error 0 *default-log-port* "ezsteps defined but ezstepslst is zero length")
@@ -307,7 +307,7 @@
 		  (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig))
 			(stepname    (car ezstep)))
 		    ;; if logpro-used read in the stepname.dat file
-		    (if (and logpro-used (file-exists? (conc stepname ".dat")))
+		    (if (and logpro-used (common:file-exists? (conc stepname ".dat")))
 			(launch:load-logpro-dat run-id test-id stepname))
 		    (if (steprun-good? logpro-used (launch:einf-exit-code exit-info))
 			(if (not (null? tal))
@@ -316,7 +316,8 @@
 		  (debug:print 4 *default-log-port* "WARNING: a prior step failed, stopping at " ezstep)))))))
 
 (define (launch:monitor-job run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m work-area runtlim misc-flags)
-  (let* ((start-seconds (current-seconds))
+  (let* ((update-period (string->number (or (configf:lookup *configdat* "setup" "test-stats-update-period") "30")))
+         (start-seconds (current-seconds))
 	 (calc-minutes  (lambda ()
 			  (inexact->exact 
 			   (round 
@@ -329,17 +330,24 @@
     (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
     (let loop ((minutes   (calc-minutes))
 	       (cpu-load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
-	       (disk-free (get-df (current-directory))))
-      (let ((new-cpu-load (let* ((load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
-				 (delta (abs (- load cpu-load))))
-			    (if (> delta 0.1) ;; don't bother updating with small changes
-				load
-				#f)))
-	    (new-disk-free (let* ((df    (get-df (current-directory)))
-				  (delta (abs (- df disk-free))))
-			     (if (> delta 200) ;; ignore changes under 200 Meg
-				 df
-				 #f))))
+	       (disk-free (get-df (current-directory)))
+               (last-sync (current-seconds)))
+      (let* ((over-time     (> (current-seconds) (+ last-sync update-period)))
+             (new-cpu-load  (let* ((load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
+                                   (delta (abs (- load cpu-load))))
+                              (if (> delta 0.1) ;; don't bother updating with small changes
+                                  load
+                                  #f)))
+             (new-disk-free (let* ((df    (if over-time ;; only get df every 30 seconds
+                                              (get-df (current-directory))
+                                              disk-free))
+                                   (delta (abs (- df disk-free))))
+                              (if (and (> df 0)
+                                       (> (/ delta df) 0.1)) ;; (> delta 200) ;; ignore changes under 200 Meg
+                                  df
+                                  #f)))
+             (do-sync       (or new-cpu-load new-disk-free over-time)))
+        (debug:print 4 *default-log-port* "cpu: " new-cpu-load " disk: " new-disk-free " last-sync: " last-sync " do-sync: " do-sync)
 	(set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
 			    (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
 						(time-exceeded (> run-seconds runtlim)))
@@ -348,7 +356,8 @@
 						 (debug:print-info 0 *default-log-port* "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
 						 #t)
 					       #f)))))
-	(tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f)
+        (if do-sync
+            (tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f))
 	(if kill-job? 
 	    (begin
 	      (mutex-lock! m)
@@ -396,7 +405,10 @@
 	    (begin
 	      (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
 	      (if (hash-table-ref/default misc-flags 'keep-going #f)  ;; keep originals for cpu-load and disk-free unless they change more than the allowed delta
-		  (loop (calc-minutes) (or new-cpu-load cpu-load) (or new-disk-free disk-free)))))))
+		  (loop (calc-minutes)
+                        (or new-cpu-load cpu-load)
+                        (or new-disk-free disk-free)
+                        (if do-sync (current-seconds) last-sync)))))))
     (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f))) ;; NOTE: Checking twice for keep-going is intentional
 
 
@@ -439,7 +451,7 @@
                                   (if (substring-index "/" runscript)
                                       runscript ;; use unadultered if contains slashes
                                       (let ((fulln (conc testpath "/" runscript)))
-	                                  (if (and (file-exists? fulln)
+	                                  (if (and (common:file-exists? fulln)
                                                    (file-execute-access? fulln))
                                               fulln
                                               runscript))))) ;; assume it is on the path
@@ -504,7 +516,7 @@
 		  
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
-	    (if (or (file-exists? top-path)
+	    (if (or (common:file-exists? top-path)
 		    (> count 10))
 		(change-directory top-path)
 		(begin
@@ -539,7 +551,11 @@
 	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
 	  ;;
 	  (let* ((test-info (rmt:get-test-info-by-id run-id test-id))
-		 (test-host (db:test-get-host        test-info))
+		 (test-host (if test-info
+				(db:test-get-host        test-info)
+				(begin
+				  (debug:print 0 *default-log-port* "ERROR: failed to find a record for test-id " test-id ", exiting.")
+				  (exit))))
 		 (test-pid  (db:test-get-process_id  test-info)))
 	    (cond
 	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
@@ -596,7 +612,7 @@
 
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
-	    (if (or (file-exists? work-area)
+	    (if (or (common:file-exists? work-area)
 		    (> count 10))
 		(change-directory work-area)
 		(begin
@@ -655,7 +671,10 @@
           ;;(bb-check-path msg: "launch:execute post block 42")
 	  (set-item-env-vars itemdat)
           ;;(bb-check-path msg: "launch:execute post block 43")
-	  (save-environment-as-files "megatest")
+          (let ((blacklist (configf:lookup *configdat* "setup" "blacklistvars")))
+            (if blacklist
+                (save-environment-as-files "megatest" ignorevars: (string-split blacklist))
+                (save-environment-as-files "megatest")))
           ;;(bb-check-path msg: "launch:execute post block 44")
 	  ;; open-run-close not needed for test-set-meta-info
 	  ;; (tests:set-full-meta-info #f test-id run-id 0 work-area)
@@ -667,7 +686,7 @@
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
 	      (if (and fullrunscript 
-		       (file-exists? fullrunscript)
+		       (common:file-exists? fullrunscript)
 		       (not (file-execute-access? fullrunscript)))
 		  (system (conc "chmod ug+x " fullrunscript))))
 
@@ -743,6 +762,8 @@
 		(exit 4))))
         )))
 
+;; DO NOT USE - caching of configs is handled in launch:setup now.
+;;
 (define (launch:cache-config)
   ;; if we have a linktree and -runtests and -target and the directory exists dump the config
   ;; to megatest-(current-seconds).cfg and symlink it to megatest.cfg
@@ -758,18 +779,18 @@
 	     (fulldir  (conc linktree "/"
 			     target "/"
 			     runname)))
-	(if (and linktree (file-exists? linktree)) ;; can't proceed without linktree
+	(if (and linktree (common:file-exists? linktree)) ;; can't proceed without linktree
 	    (begin
 	      (debug:print-info 0 *default-log-port* "Have -run with target=" target ", runname=" runname ", fulldir=" fulldir ", testpatt=" (or (args:get-arg "-testpatt") "%"))
-	      (if (not (file-exists? fulldir))
+	      (if (not (common:file-exists? fulldir))
 		  (create-directory fulldir #t)) ;; need to protect with exception handler 
 	      (if (and target
 		       runname
-		       (file-exists? fulldir))
+		       (common:file-exists? fulldir))
 		  (let ((tmpfile  (conc fulldir "/.megatest.cfg." (current-seconds)))
 			(targfile (conc fulldir "/.megatest.cfg-"  megatest-version "-" megatest-fossil-hash))
 			(rconfig  (conc fulldir "/.runconfig." megatest-version "-" megatest-fossil-hash)))
-		    (if (file-exists? rconfig) ;; only cache megatest.config AFTER runconfigs has been cached
+		    (if (common:file-exists? rconfig) ;; only cache megatest.config AFTER runconfigs has been cached
 			(begin
 			  (debug:print-info 0 *default-log-port* "Caching megatest.config in " tmpfile)
                           (if (not (common:in-running-test?))
@@ -844,14 +865,24 @@
 	     (sections (if target (list "default" target) #f)) ;; for runconfigs
 	     (mtconfig (or (args:get-arg "-config") "megatest.config")) ;; allow overriding megatest.config 
              (cachefiles (launch:get-cache-file-paths areapath toppath target mtconfig))
-	     (mtcachef   (car cachefiles)) ;; (and cachedir (conc cachedir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
-	     (rccachef   (cdr cachefiles)) ;; (and cachedir (conc cachedir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
-	     ) ;; (cancreate (and cachedir (common:file-exists? cachedir)(file-write-access? cachedir) (not (common:in-running-test?)))))
+	     ;; checking for null cachefiles should not be necessary, I was seeing error car of '(), might be a chicken bug or a red herring ...
+	     (mtcachef   (if (null? cachefiles)
+			     #f
+			     (car cachefiles))) ;; (and cachedir (conc cachedir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
+	     (rccachef   (if (null? cachefiles)
+			     #f
+			     (cdr cachefiles)))) ;; (and cachedir (conc cachedir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
+	      ;; (cancreate (and cachedir (common:file-exists? cachedir)(file-write-access? cachedir) (not (common:in-running-test?)))))
 	(set! *toppath* toppath) ;; This is needed when we are running as a test using CMDINFO as a datasource
         ;;(BB> "launch:setup-body -- cachefiles="cachefiles)
 	(cond
 	 ;; if mtcachef exists just read it, however we need to assume toppath is available in $MT_RUN_AREA_HOME
-	 ((and (not force-reread) mtcachef (common:file-exists? mtcachef) (get-environment-variable "MT_RUN_AREA_HOME") use-cache)
+	 ((and (not force-reread)
+	       mtcachef  rccachef
+	       use-cache
+	       (get-environment-variable "MT_RUN_AREA_HOME")
+	       (common:file-exists? mtcachef)
+	       (common:file-exists? rccachef))
           ;;(BB> "launch:setup-body -- cond branch 1 - use-cache")
           (set! *configdat*    (configf:read-alist mtcachef))
           ;;(BB> "launch:setup-body -- 1 set! *configdat*="*configdat*)
@@ -860,8 +891,11 @@
 	  (set! *configstatus* 'fulldata)
 	  (set! *toppath*      (get-environment-variable "MT_RUN_AREA_HOME"))
 	  *toppath*)
+	 ;; there are no existing cached configs, do full reads of the configs and cache them
 	 ;; we have all the info needed to fully process runconfigs and megatest.config
-	 ((and (not force-reread) mtcachef) ;; BB- why are we doing this without asking if caching is desired?
+	 ((and ;; (not force-reread) ;; force-reread is irrelevant in the AND, could however OR it?
+	       mtcachef
+	       rccachef) ;; BB- why are we doing this without asking if caching is desired?
           ;;(BB> "launch:setup-body -- cond branch 2")
 	  (let* ((first-pass    (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect
 				 mtconfig
@@ -914,15 +948,15 @@
                          (mtcachef     (car cachefiles))
                          (rccachef     (cdr cachefiles)))
 		    (if rccachef (configf:write-alist runconfigdat rccachef))
-		    (set! *runconfigdat* runconfigdat)
 		    (if mtcachef (configf:write-alist *configdat* mtcachef))
+		    (set! *runconfigdat* runconfigdat)
 		    (if (and rccachef mtcachef) (set! *configstatus* 'fulldata))))
 		;; no configs found? should not happen but let's try to recover gracefully, return an empty hash-table
-		(begin (set! *configdat* (make-hash-table))
-                       ;;(BB> "launch:setup-body -- 3 set! *configdat*="*configdat*)
-                       )
+		(set! *configdat* (make-hash-table))
 		)))
+
 	 ;; else read what you can and set the flag accordingly
+	 ;; here we don't have either mtconfig or rccachef
 	 (else
           ;;(BB> "launch:setup-body -- cond branch 3 - else")
 	  (let* ((cfgdat   (find-and-read-config 
@@ -943,6 +977,8 @@
 		(begin
 		  (debug:print-error 0 *default-log-port* "No " mtconfig " file found. Giving up.")
 		  (exit 2))))))
+	;; COND ends here.
+	
 	;; additional house keeping
 	(let* ((linktree (common:get-linktree)))
 	  (if linktree
@@ -962,7 +998,7 @@
 		      (debug:print-error 0 *default-log-port* "Something went wrong when trying to create link to linktree at " *toppath*)
 		      (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn)))
 		  (let ((tlink (conc *toppath* "/lt")))
-		    (if (not (file-exists? tlink))
+		    (if (not (common:file-exists? tlink))
 			(create-symbolic-link linktree tlink)))))
 	      (begin
 		(debug:print-error 0 *default-log-port* "linktree not defined in [setup] section of megatest.config")
@@ -974,16 +1010,15 @@
 	      (setenv "MT_TESTSUITENAME" (common:get-testsuite-name)))
 	    (begin
 	      (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")
-	      ;;(exit 1)
 	      (set! *toppath* #f) ;; force it to be false so we return #f
-	      #f
-	      ))
+	      #f))
+	
         ;; one more attempt to cache the configs for future reading
         (let* ((cachefiles   (launch:get-cache-file-paths areapath toppath target mtconfig))
                (mtcachef     (car cachefiles))
                (rccachef     (cdr cachefiles)))
-          (if (and rccachef *runconfigdat*) (configf:write-alist *runconfigdat* rccachef))
-          (if (and mtcachef *configdat*)    (configf:write-alist *configdat* mtcachef))
+          (if (and rccachef *runconfigdat* (not (common:file-exists? rccachef))) (configf:write-alist *runconfigdat* rccachef))
+          (if (and mtcachef *configdat*    (not (common:file-exists? mtcachef))) (configf:write-alist *configdat* mtcachef))
           (if (and rccachef mtcachef *runconfigdat* *configdat*)
               (set! *configstatus* 'fulldata)))
 
@@ -1101,7 +1136,7 @@
 	   (exit 1))
 	 (delete-file lnkpath)))
 
-    (if (not (or (file-exists? lnkpath)
+    (if (not (or (common:file-exists? lnkpath)
 		 (symbolic-link? lnkpath)))
 	(handle-exceptions
 	 exn
@@ -1126,7 +1161,7 @@
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?
 	  (rmt:general-call 'test-set-rundir-shortdir run-id lnkpath 
-			    (if (file-exists? lnkpath)
+			    (if (common:file-exists? lnkpath)
 				;; (resolve-pathname lnkpath)
 				(common:nice-path lnkpath)
 				lnkpath)
@@ -1165,7 +1200,7 @@
 	     (debug:print-error 0 *default-log-port* " Failed to re-create link " lnktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	     (exit))
 	   (if (symbolic-link? lnktarget)     (delete-file lnktarget))
-	   (if (not (file-exists? lnktarget)) (create-symbolic-link test-path lnktarget)))))
+	   (if (not (common:file-exists? lnktarget)) (create-symbolic-link test-path lnktarget)))))
 
     (if (not (directory? test-path))
 	(create-directory test-path #t)) ;; this is a hack, I don't know why out of the blue this path does not exist sometimes
@@ -1208,7 +1243,8 @@
 	       (launch-delay (configf:lookup-number *configdat* "setup" "launch-delay" default: 1)))
       (if (> launch-delay delta)
 	  (begin
-	    (debug:print-info 0 *default-log-port* "Delaying launch of " test-name " for " (- launch-delay delta) " seconds")
+	    (if (common:low-noise-print 1200 "test launch delay") ;; every two hours or so remind the user about launch delay.
+		(debug:print-info 0 *default-log-port* "NOTE: test launches are delayed by " launch-delay " seconds. See megatest.config launch-delay setting to adjust.")) ;; launch of " test-name " for " (- launch-delay delta) " seconds"))
 	    (thread-sleep! (- launch-delay delta))
 	    (loop (- (current-seconds) *last-launch*) launch-delay))))
     (change-directory *toppath*)
@@ -1331,7 +1367,7 @@
       ;; clean out step records from previous run if they exist
       ;; (rmt:delete-test-step-records run-id test-id)
       ;; if the dir does not exist we may have a itempath where individual variables are a path, launch anyway
-      (if (file-exists? work-area)
+      (if (common:file-exists? work-area)
 	  (change-directory work-area)) ;; so that log files from the launch process don't clutter the test dir
       (cond
        ;; ((and launcher hosts) ;; must be using ssh hostname
