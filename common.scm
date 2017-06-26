@@ -10,10 +10,8 @@
 ;;======================================================================
 
 (use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
-     matchable)
-(require-extension regex posix)
-
-(require-extension (srfi 18) extras tcp rpc)
+     matchable regex posix srfi-18 extras
+     pkts (prefix dbi dbi:))
 
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
@@ -47,7 +45,7 @@
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
 
-;; GLOBAL GLETCHES
+;; GLOBALS
 
 ;; CONTEXTS
 (defstruct cxt
@@ -112,6 +110,8 @@
 (define *db-cache-path*       #f)
 (define *db-with-db-mutex*    (make-mutex))
 (define *db-api-call-time*    (make-hash-table)) ;; hash of command => (list of times)
+;; no sync db
+(define *no-sync-db*          #f)
 
 ;; SERVER
 (define *my-client-signature* #f)
@@ -130,6 +130,7 @@
 (define *heartbeat-mutex*   (make-mutex))
 (define *api-process-request-count* 0)
 (define *max-api-process-requests* 0)
+(define *server-overloaded*  #f)
 
 ;; client
 (define *rmt-mutex*         (make-mutex))     ;; remote access calls mutex 
@@ -240,22 +241,23 @@
 
 (define (common:api-changed?)
   (not (equal? (substring (->string megatest-version) 0 4)
-               (substring (common:get-last-run-version) 0 4))))
+               (substring (conc (common:get-last-run-version)) 0 4))))
   
 ;; Move me elsewhere ...
 ;; RADT => Why do we meed the version check here, this is called only if version misma
 ;;
-(define (common:cleanup-db dbstruct)
-  (db:multi-db-sync 
+(define (common:cleanup-db dbstruct #!key (full #f))
+  (apply db:multi-db-sync 
    dbstruct
    'schema
    ;; 'new2old
    'killservers
-   'dejunk
    'adj-target
    ;; 'old2new
    'new2old
-   )
+   (if full
+       '(dejunk)
+       '()))
   (if (common:api-changed?)
       (common:set-last-run-version)))
 
@@ -280,7 +282,7 @@
                      (> (- (current-seconds) (file-modification-time fullname))
                         (* 8 60 60))))
             (let ((gzfile (conc fullname ".gz")))
-              (if (file-exists? gzfile)
+              (if (common:file-exists? gzfile)
                   (begin
                     (debug:print-info 0 *default-log-port* "removing " gzfile)
                     (delete-file gzfile)))
@@ -310,7 +312,7 @@
 			 "   got:      " (common:get-last-run-version))
             (cond
              ((get-environment-variable "MT_SKIP_DB_MIGRATE") #t)
-             ((and (file-exists? mtconf) (file-exists? dbfile) (not read-only)
+             ((and (common:file-exists? mtconf) (common:file-exists? dbfile) (not read-only)
                    (eq? (current-user-id)(file-owner mtconf))) ;; safe to run -cleanup-db
               (debug:print 0 *default-log-port* "   I see you are the owner of megatest.config, attempting to cleanup and reset to new version")
               (handle-exceptions
@@ -321,10 +323,10 @@
                  (print-call-chain (current-error-port))
                  (exit 1))
                (common:cleanup-db dbstruct)))
-             ((not (file-exists? mtconf))
+             ((not (common:file-exists? mtconf))
               (debug:print 0 *default-log-port* "   megatest.config does not exist in this area.  Cannot proceed with megatest version migration.")
               (exit 1))
-             ((not (file-exists? dbfile))
+             ((not (common:file-exists? dbfile))
               (debug:print 0 *default-log-port* "   megatest.db does not exist in this area.  Cannot proceed with megatest version migration.")
               (exit 1))
              ((not (eq? (current-user-id)(file-owner mtconf)))
@@ -335,10 +337,10 @@
               (exit 1))
              (else
               (debug:print 0 *default-log-port* " to switch versions you can run: \"megatest -cleanup-db\"")
-              (exit 1)))))
-      (begin
-	(debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
-	(exit 1))))
+              (exit 1)))))))
+;;      (begin
+;;	(debug:print 0 *default-log-port* "ERROR: cannot migrate version unless on homehost. Exiting.")
+;;	(exit 1))))
 
 ;;======================================================================
 ;; S P A R S E   A R R A Y S
@@ -438,7 +440,7 @@
   (handle-exceptions
       exn
       #f ;; don't really care what went wrong right now. NOTE: I have not seen this one actually fail.
-    (if (file-exists? fname)
+    (if (common:file-exists? fname)
 	(if (> (- (current-seconds)(file-modification-time fname)) expire-time)
 	    (begin
 	      (delete-file* fname)
@@ -449,7 +451,7 @@
 	    (lambda ()
 	      (print key-string)))
 	  (thread-sleep! 0.25)
-	  (if (file-exists? fname)
+	  (if (common:file-exists? fname)
 	      (with-input-from-file fname
 		(lambda ()
 		  (equal? key-string (read-line))))
@@ -642,19 +644,6 @@
 ;;     (and ohh srv)))
     ;; (debug:print-info 0 *default-log-port* "common:run-sync? ohh=" ohh ", srv=" srv)
 
-;;;; run-ids
-;;    if #f use *db-local-sync* : or 'local-sync-flags
-;;    if #t use timestamps      : or 'timestamps
-(define (common:sync-to-megatest.db dbstruct) 
-  (let ((start-time         (current-seconds))
-	(res                (db:multi-db-sync dbstruct 'new2old)))
-    (let ((sync-time (- (current-seconds) start-time)))
-      (debug:print-info 3 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))
-      (if (common:low-noise-print 30 "sync new to old")
-	  (debug:print-info 0 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))))
-    res))
-
-
 
 
 (define *wdnum* 0)
@@ -684,82 +673,13 @@
         (if (not *time-to-exit*)
             (let ((golden-mtdb-mtime (file-modification-time golden-mtpath))
                   (tmp-mtdb-mtime    (file-modification-time tmp-mtpath)))
-              (if (> golden-mtdb-mtime tmp-mtdb-mtime)
-                  (let ((res (db:multi-db-sync dbstruct 'old2new)))
-                    (debug:print-info 13 *default-log-port* "rosync called, " res " records transferred.")))
+	      (if (> golden-mtdb-mtime tmp-mtdb-mtime)
+		  (if (< golden-mtdb-mtime (- (current-seconds) 3)) ;; file has NOT been touched in past three seconds, this way multiple servers won't fight to sync back
+		      (let ((res (db:multi-db-sync dbstruct 'old2new)))
+			(debug:print-info 13 *default-log-port* "rosync called, " res " records transferred."))))
               (loop (current-seconds)))
             #t)))
     (debug:print-info 0 *default-log-port* "Exiting readonly-watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" mtpath="golden-mtpath)))
-
-
-        
-(define (common:writable-watchdog dbstruct)
-  (thread-sleep! 0.05) ;; delay for startup
-  (let ((legacy-sync (common:run-sync?))
-	(debug-mode  (debug:debug-mode 1))
-	(last-time   (current-seconds))
-        (this-wd-num     (begin (mutex-lock! *wdnum*mutex) (let ((x *wdnum*)) (set! *wdnum* (add1 *wdnum*)) (mutex-unlock! *wdnum*mutex) x))))
-    (debug:print-info 2 *default-log-port* "Periodic sync thread started.")
-    (debug:print-info 3 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id)" this-wd-num="this-wd-num)
-    (if (and legacy-sync (not *time-to-exit*))
-	(let* (;;(dbstruct (db:setup))
-	       (mtdb     (dbr:dbstruct-mtdb dbstruct))
-	       (mtpath   (db:dbdat-get-path mtdb)))
-	  (debug:print-info 0 *default-log-port* "Server running, periodic sync started.")
-	  (let loop ()
-	    ;; sync for filesystem local db writes
-	    ;;
-	    (mutex-lock! *db-multi-sync-mutex*)
-	    (let* ((need-sync        (>= *db-last-access* *db-last-sync*)) ;; no sync since last write
-		   (sync-in-progress *db-sync-in-progress*)
-		   (should-sync      (and (not *time-to-exit*)
-                                          (> (- (current-seconds) *db-last-sync*) 5))) ;; sync every five seconds minimum
-		   (start-time       (current-seconds))
-		   (mt-mod-time      (file-modification-time mtpath))
-		   (recently-synced  (< (- start-time mt-mod-time) 4))
-		   (will-sync        (and (or need-sync should-sync)
-					  (not sync-in-progress)
-					  (not recently-synced))))
-              (debug:print-info 13 *default-log-port* "WD writable-watchdog top of loop.  need-sync="need-sync" sync-in-progress="sync-in-progress" should-sync="should-sync" start-time="start-time" mt-mod-time="mt-mod-time" recently-synced="recently-synced" will-sync="will-sync)
-	      ;; (if recently-synced (debug:print-info 0 *default-log-port* "Skipping sync due to recently-synced flag=" recently-synced))
-	      ;; (debug:print-info 0 *default-log-port* "need-sync: " need-sync " sync-in-progress: " sync-in-progress " should-sync: " should-sync " will-sync: " will-sync)
-	      (if will-sync (set! *db-sync-in-progress* #t))
-	      (mutex-unlock! *db-multi-sync-mutex*)
-	      (if will-sync
-		  (let ((res (common:sync-to-megatest.db dbstruct))) ;; did we sync any data? If so need to set the db touched flag to keep the server alive
-		    (if (> res 0) ;; some records were transferred, keep the db alive
-			(begin
-			  (mutex-lock! *heartbeat-mutex*)
-			  (set! *db-last-access* (current-seconds))
-			  (mutex-unlock! *heartbeat-mutex*)
-			  (debug:print-info 0 *default-log-port* "sync called, " res " records transferred."))
-			(debug:print-info 2 *default-log-port* "sync called but zero records transferred"))))
-	      (if will-sync
-		  (begin
-		    (mutex-lock! *db-multi-sync-mutex*)
-		    (set! *db-sync-in-progress* #f)
-		    (set! *db-last-sync* start-time)
-		    (mutex-unlock! *db-multi-sync-mutex*)))
-	      (if (and debug-mode
-		       (> (- start-time last-time) 60))
-		  (begin
-		    (set! last-time start-time)
-		    (debug:print-info 4 *default-log-port* "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
-	    
-	    ;; keep going unless time to exit
-	    ;;
-	    (if (not *time-to-exit*)
-		(let delay-loop ((count 0))
-                  ;;(debug:print-info 13 *default-log-port* "delay-loop top; count="count" pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
-                                                            
-		  (if (and (not *time-to-exit*)
-			   (< count 4)) ;; was 11, changing to 4. 
-		      (begin
-			(thread-sleep! 1)
-			(delay-loop (+ count 1))))
-		  (if (not *time-to-exit*) (loop))))
-	    (if (common:low-noise-print 30)
-		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id)" this-wd-num="this-wd-num)))))))
 
 ;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
 (define (common:watchdog)
@@ -774,7 +694,7 @@
 	      (common:readonly-watchdog dbstruct))
 	     (else
 	      (debug:print-info 13 *default-log-port* "loading writable-watchdog.")
-	      (common:writable-watchdog dbstruct)))
+	      (server:writable-watchdog dbstruct)))
 	    (debug:print-info 13 *default-log-port* "watchdog done."))
 	  (debug:print-info 13 *default-log-port* "no need for watchdog on non-homehost"))))
 
@@ -800,10 +720,11 @@
 					  (sqlite3:finalize! db #t)
 					  ;; (vector-set! *task-db* 0 #f)
 					  (set! *task-db* #f)))))
-                              (if (and *runremote*
-                                       (remote-conndat *runremote*))
-                                  (begin
-                                    (http-client#close-all-connections!))) ;; for http-client
+                              (http-client#close-all-connections!)
+                              ;; (if (and *runremote*
+                              ;;          (remote-conndat *runremote*))
+                              ;;     (begin
+                              ;;       (http-client#close-all-connections!))) ;; for http-client
                               (if (not (eq? *default-log-port* (current-error-port)))
                                   (close-output-port *default-log-port*))
 			      (set! *default-log-port* (current-error-port))) "Cleanup db exit thread"))
@@ -882,7 +803,7 @@
 		 (tal (cdr cmds)))
 	(let ((res (with-input-from-pipe (conc "which " hed) read-line)))
 	  (if (and (string? res)
-		   (file-exists? res))
+		   (common:file-exists? res))
 	      res
 	      (if (null? tal)
 		  #f
@@ -890,7 +811,7 @@
   
 (define (common:get-install-area)
   (let ((exe-path (car (argv))))
-    (if (file-exists? exe-path)
+    (if (common:file-exists? exe-path)
 	(handle-exceptions
 	 exn
 	 #f
@@ -1056,8 +977,12 @@
     ;; (if res (set-environment-variable "MT_RUNNAME" res)) ;; not sure if this is a good idea. side effect and all ...
     res))
 
+(define (common:get-fields cfgdat)
+  (let ((fields (hash-table-ref/default cfgdat "fields" '())))
+    (map car fields)))
+
 (define (common:args-get-target #!key (split #f)(exit-if-bad #f))
-  (let* ((keys    (if (hash-table? *configdat*) (keys:config-get-fields *configdat*) '()))
+  (let* ((keys    (if (hash-table? *configdat*) (common:get-fields *configdat*) '()))
 	 (numkeys (length keys))
 	 (target  (or (args:get-arg "-reqtarg")
 		      (args:get-arg "-target")
@@ -1127,7 +1052,7 @@
 				   (debug:print 0 *default-log-port* "ERROR: Failed to read .homehost file after trying five times. Giving up and exiting, message: "  ((condition-property-accessor 'exn 'message) exn))
 				   (exit 1)))
 			   (let ((hhf (conc *toppath* "/.homehost")))
-			     (if (file-exists? hhf)
+			     (if (common:file-exists? hhf)
 				 (with-input-from-file hhf read-line)
 				 (if (file-write-access? *toppath*)
 				     (begin
@@ -1156,7 +1081,7 @@
 ;;
 (define (common:use-cache?)
   (let ((res #t)) ;; priority by order of evaluation
-    (if *configdat*
+    (if *configdat* ;; sillyness here. can't use setup/use-cache to know if we can use the cached files!
 	(if (equal? (configf:lookup *configdat* "setup" "use-cache") "no")
 	    (set! res #f)
 	    (if (equal? (configf:lookup *configdat* "setup" "use-cache") "yes")
@@ -1560,9 +1485,6 @@
      hosts)
     best-host))
 
-
-
-
 (define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
   (let* ((loadavg (common:get-cpu-load remote-host))
 	 (first   (car loadavg))
@@ -1572,7 +1494,7 @@
     (cond
      ((and (> first adjload)
 	   (> count 0))
-      (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload (if msg msg ""))
+      (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload " " (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
      ((and (> loadjmp numcpus)
@@ -1580,6 +1502,14 @@
       (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
+
+(define (common:wait-for-homehost-load maxload msg)
+  (let* ((hh-dat (if (common:on-homehost?) ;; if we are on the homehost then pass in #f so the calls are local.
+                     #f
+                     (common:get-homehost)))
+         (hh     (if hh-dat (car hh-dat) #f))
+         (numcpus (common:get-num-cpus hh)))
+    (common:wait-for-normalized-load maxload msg: msg remote-host: hh)))
 
 (define (common:get-num-cpus remote-host)
   (let ((proc (lambda ()
@@ -1601,7 +1531,7 @@
 ;;
 (define (common:wait-for-normalized-load maxload #!key (msg #f)(remote-host #f))
   (let ((num-cpus (common:get-num-cpus remote-host)))
-    (common:wait-for-cpuload maxload num-cpus 15 msg: msg)))
+    (common:wait-for-cpuload maxload num-cpus 15 msg: msg remote-host: remote-host)))
 
 (define (get-uname . params)
   (let* ((uname-res (process:cmd-run->list (conc "uname " (if (null? params) "-a" (car params)))))
@@ -2144,17 +2074,25 @@
              (string-split instr)))
    "/"))
 
-(define (common:faux-lock keyname)
-  (if (rmt:get-var keyname)
-      #f
+(define (common:faux-lock keyname #!key (wait-time 8))
+  (if (rmt:no-sync-get/default keyname #f) ;; do not be tempted to compare to pid. locking is a one-shot action, if already locked for this pid it doesn't actually count
+      (if (> wait-time 0)
+	  (begin
+	    (thread-sleep! 1)
+	    (if (eq? wait-time 1) ;; only one second left, steal the lock
+		(begin
+		  (debug:print-info 0 *default-log-port* "stealing lock for " keyname)
+		  (common:faux-unlock keyname force: #t)))
+	    (common:faux-lock keyname wait-time: (- wait-time 1)))
+	  #f)
       (begin
-        (rmt:set-var keyname (conc (current-process-id)))
-        (equal? (conc (current-process-id)) (conc (rmt:get-var keyname))))))
+        (rmt:no-sync-set keyname (conc (current-process-id)))
+        (equal? (conc (current-process-id)) (conc (rmt:no-sync-get/default keyname #f))))))
 
 (define (common:faux-unlock keyname #!key (force #f))
-  (if (or force (equal? (conc (current-process-id)) (conc (rmt:get-var keyname))))
+  (if (or force (equal? (conc (current-process-id)) (conc (rmt:no-sync-get/default keyname #f))))
       (begin
-        (if (rmt:get-var keyname) (rmt:del-var keyname))
+        (if (rmt:no-sync-get/default keyname #f) (rmt:no-sync-del! keyname))
         #t)
       #f))
 
@@ -2173,89 +2111,77 @@
    ((equal? status "ABORT")   "brown")
    (else "black")))
 
-;;======================================================================
-;; N A N O M S G   C L I E N T
-;;======================================================================
-
-(define (server:get-best-guess-address hostname)
-  (let ((res #f))
-    (for-each 
-     (lambda (adr)
-       (if (not (eq? (u8vector-ref adr 0) 127))
-	   (set! res adr)))
-     ;; NOTE: This can fail when there is no mention of the host in /etc/hosts. FIXME
-     (vector->list (hostinfo-addresses (hostname->hostinfo hostname))))
-    (string-intersperse 
-     (map number->string
-	  (u8vector->list
-	   (if res res (hostname->ip hostname)))) ".")))
-
-
-(define (common:send-dboard-main-changed)
-  (let* ((dashboard-ips (mddb:get-dashboards)))
-    (for-each
-     (lambda (ipadr)
-       (let* ((soc (common:open-nm-req (conc "tcp://" ipadr)))
-	      (msg (conc "main " *toppath*))
-	      (res (common:nm-send-receive-timeout soc msg)))
-	 (if (not res) ;; couldn't reach that dashboard - remove it from db
-	     (print "ERROR: couldn't reach dashboard " ipadr))
-	 res))
-     dashboard-ips)))
-    
-    
-;;======================================================================
-;; D A S H B O A R D   D B 
-;;======================================================================
-
-(define (mddb:open-db)
-  (let* ((db (open-database (conc (get-environment-variable "HOME") "/.dashboard.db"))))
-    (set-busy-handler! db (busy-timeout 10000))
-    (for-each
-     (lambda (qry)
-       (exec (sql db qry)))
-     (list 
-      "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
-      "CREATE TABLE IF NOT EXISTS dashboards (
-          id         INTEGER PRIMARY KEY,
-          pid        INTEGER,
-          username   TEXT,
-          hostname   TEXT,
-          ipaddr     TEXT,
-          portnum    INTEGER,
-          start_time TIMESTAMP DEFAULT (strftime('%s','now')),
-             CONSTRAINT hostport UNIQUE (hostname,portnum)
-        );"
-      ))
-    db))
-
-;; register a dashboard 
-;;
-(define (mddb:register-dashboard port)
-  (let* ((pid      (current-process-id))
-	 (hostname (get-host-name))
-	 (ipaddr   (server:get-best-guess-address hostname))
-	 (username (current-user-name)) ;; (car userinfo)))
-	 (db      (mddb:open-db)))
-    (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
-    (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,username,hostname,ipaddr,portnum) VALUES (?,?,?,?,?);")
-	   pid username hostname ipaddr port)
-    (close-database db)))
-
-;; unregister a monitor
-;;
-(define (mddb:unregister-dashboard host port)
-  (let* ((db      (mddb:open-db)))
-    (print "Register unregister monitor, host:port=" host ":" port)
-    (exec (sql db "DELETE FROM dashboards WHERE hostname=? AND portnum=?;") host port)
-    (close-database db)))
-
-;; get registered dashboards
-;;
-(define (mddb:get-dashboards)
-  (let ((db (mddb:open-db)))
-    (query fetch-column
-	   (sql db "SELECT ipaddr || ':' || portnum FROM dashboards;"))))
+;; ;;======================================================================
+;; ;; N A N O M S G   C L I E N T
+;; ;;======================================================================
+;; 
+;; 
+;; 
+;; (define (common:send-dboard-main-changed)
+;;   (let* ((dashboard-ips (mddb:get-dashboards)))
+;;     (for-each
+;;      (lambda (ipadr)
+;;        (let* ((soc (common:open-nm-req (conc "tcp://" ipadr)))
+;; 	      (msg (conc "main " *toppath*))
+;; 	      (res (common:nm-send-receive-timeout soc msg)))
+;; 	 (if (not res) ;; couldn't reach that dashboard - remove it from db
+;; 	     (print "ERROR: couldn't reach dashboard " ipadr))
+;; 	 res))
+;;      dashboard-ips)))
+;;     
+;;     
+;; ;;======================================================================
+;; ;; D A S H B O A R D   D B 
+;; ;;======================================================================
+;; 
+;; (define (mddb:open-db)
+;;   (let* ((db (open-database (conc (get-environment-variable "HOME") "/.dashboard.db"))))
+;;     (set-busy-handler! db (busy-timeout 10000))
+;;     (for-each
+;;      (lambda (qry)
+;;        (exec (sql db qry)))
+;;      (list 
+;;       "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
+;;       "CREATE TABLE IF NOT EXISTS dashboards (
+;;           id         INTEGER PRIMARY KEY,
+;;           pid        INTEGER,
+;;           username   TEXT,
+;;           hostname   TEXT,
+;;           ipaddr     TEXT,
+;;           portnum    INTEGER,
+;;           start_time TIMESTAMP DEFAULT (strftime('%s','now')),
+;;              CONSTRAINT hostport UNIQUE (hostname,portnum)
+;;         );"
+;;       ))
+;;     db))
+;; 
+;; ;; register a dashboard 
+;; ;;
+;; (define (mddb:register-dashboard port)
+;;   (let* ((pid      (current-process-id))
+;; 	 (hostname (get-host-name))
+;; 	 (ipaddr   (server:get-best-guess-address hostname))
+;; 	 (username (current-user-name)) ;; (car userinfo)))
+;; 	 (db      (mddb:open-db)))
+;;     (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
+;;     (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,username,hostname,ipaddr,portnum) VALUES (?,?,?,?,?);")
+;; 	   pid username hostname ipaddr port)
+;;     (close-database db)))
+;; 
+;; ;; unregister a monitor
+;; ;;
+;; (define (mddb:unregister-dashboard host port)
+;;   (let* ((db      (mddb:open-db)))
+;;     (print "Register unregister monitor, host:port=" host ":" port)
+;;     (exec (sql db "DELETE FROM dashboards WHERE hostname=? AND portnum=?;") host port)
+;;     (close-database db)))
+;; 
+;; ;; get registered dashboards
+;; ;;
+;; (define (mddb:get-dashboards)
+;;   (let ((db (mddb:open-db)))
+;;     (query fetch-column
+;; 	   (sql db "SELECT ipaddr || ':' || portnum FROM dashboards;"))))
     
 ;;======================================================================
 ;;  T E S T   L A U N C H I N G   P E R   I T E M   W I T H   H O S T   T Y P E S
@@ -2324,10 +2250,111 @@
   (let* ((view-cfgdat    (make-hash-table))
 	 (home-cfgfile   (conc (get-environment-variable "HOME") "/.mtviews.config"))
 	 (mthome-cfgfile (conc *toppath* "/.mtviews.config")))
-    (if (file-exists? mthome-cfgfile)
+    (if (common:file-exists? mthome-cfgfile)
 	(read-config mthome-cfgfile view-cfgdat #t))
     ;; we load the home dir file AFTER the MTRAH file so the user can clobber settings when running the dashboard in read-only areas
-    (if (file-exists? home-cfgfile)
+    (if (common:file-exists? home-cfgfile)
 	(read-config home-cfgfile view-cfgdat #t))
     view-cfgdat))
+
+;;======================================================================
+;; Manage pkts, used in servers, tests and likely other contexts so put
+;; in common
+;;======================================================================
+
+(define common:pkt-spec
+  '((server . ((action    . a)
+	       (pid       . d)
+	       (ipaddr    . i)
+	       (port      . p)))
+    			  
+    (test   . ((cpuuse    . c)
+	       (diskuse   . d)
+	       (item-path . i)
+	       (runname   . r)
+	       (state     . s)
+	       (target    . t)
+	       (status    . u)))))
+
+(define (common:get-pkts-dirs mtconf use-lt)
+  (let* ((pktsdirs-str (or (configf:lookup mtconf "setup"  "pktsdirs")
+			   (and use-lt
+				(conc *toppath* "/lt/.pkts"))))
+	 (pktsdirs  (if pktsdirs-str
+			(string-split pktsdirs-str " ")
+			#f)))
+    pktsdirs))
+
+;; use-lt is use linktree "lt" link to find pkts dir
+(define (common:with-queue-db mtconf proc #!key (use-lt #f)(toppath-in #f))
+  (let* ((pktsdirs (common:get-pkts-dirs mtconf use-lt))
+	 (pktsdir  (if pktsdirs (car pktsdirs) #f))
+	 (toppath  (or (configf:lookup mtconf "scratchdat" "toppath")
+		       toppath-in))
+	 (pdbpath  (or (configf:lookup mtconf "setup"  "pdbpath") pktsdir)))
+    (cond
+     ((not (and  pktsdir toppath pdbpath))
+      (debug:print 0 *default-log-port* "ERROR: settings are missing in your megatest.config for area management.")
+      (debug:print  0 *default-log-port* "  you need to have pktsdir in the [setup] section."))
+     ((not (common:file-exists? pktsdir))
+      (debug:print 0 *default-log-port* "ERROR: pkts directory not found " pktsdir))
+     ((not (equal? (file-owner pktsdir)(current-effective-user-id)))
+      (debug:print 0 *default-log-port* "ERROR: directory " pktsdir " is not owned by " (current-effective-user-name)))
+     (else
+	(let* ((pdb  (open-queue-db pdbpath "pkts.db"
+				    schema: '("CREATE TABLE groups (id INTEGER PRIMARY KEY,groupname TEXT, CONSTRAINT group_constraint UNIQUE (groupname));"))))
+	  (proc pktsdirs pktsdir pdb)
+	  (dbi:close pdb))))))
+
+(define (common:load-pkts-to-db mtconf)
+  (common:with-queue-db
+   mtconf
+   (lambda (pktsdirs pktsdir pdb)
+     (for-each
+      (lambda (pktsdir) ;; look at all
+	(cond
+	 ((not (common:file-exists? pktsdir))
+	  (debug:print 0 *default-log-port* "ERROR: packets directory " pktsdir " does not exist."))
+	 ((not (directory? pktsdir))
+	  (debug:print 0 *default-log-port* "ERROR: packets directory path " pktsdir " is not a directory."))
+	 ((not (file-read-access? pktsdir))
+	  (debug:print 0 *default-log-port* "ERROR: packets directory path " pktsdir " is not readable."))
+	 (else
+	  (debug:print-info 0 *default-log-port* "Loading packets found in " pktsdir)
+	  (let ((pkts (glob (conc pktsdir "/*.pkt"))))
+	    (for-each
+	     (lambda (pkt)
+	       (let* ((uuid    (cadr (string-match ".*/([0-9a-f]+).pkt" pkt)))
+		      (exists  (lookup-by-uuid pdb uuid #f)))
+		 (if (not exists)
+		     (let* ((pktdat (string-intersperse
+				     (with-input-from-file pkt read-lines)
+				     "\n"))
+			    (apkt   (pkt->alist pktdat))
+			    (ptype  (alist-ref 'T apkt)))
+		       (add-to-queue pdb pktdat uuid (or ptype 'cmd) #f 0)
+		       (debug:print 4 *default-log-port* "Added " uuid " of type " ptype " to queue"))
+		     (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
+		     )))
+	     pkts)))))
+      pktsdirs))))
+
+(define (common:get-pkt-alists pkts)
+  (map (lambda (x)
+	 (alist-ref 'apkt x)) ;; 'pkta pulls out the alist from the read pkt
+       pkts))
+
+;; given list of pkts (alist mode) return list of D cards as Unix epoch, sorted descending
+;; also delete duplicates by target i.e. (car pkt)
+;;
+(define (common:get-pkt-times pkts)
+  (delete-duplicates
+   (sort 
+    (map (lambda (x)
+	   `(,(alist-ref 't x) . ,(string->number (alist-ref 'D x))))
+	 pkts)
+    (lambda (a b)(> (cdr a)(cdr b))))      ;; sort descending
+   (lambda (a b)(equal? (car a)(car b))))) ;; remove duplicates by target
+
+
 

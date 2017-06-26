@@ -13,16 +13,14 @@
 ;; fake out readline usage of toplevel-command
 (define (toplevel-command . a) #f)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
-     http-client srfi-18 extras format) ;;  zmq extras)
+(use (prefix sqlite3 sqlite3:) srfi-1 posix regex regex-case srfi-69 (prefix base64 base64:)
+     readline apropos json http-client directory-utils typed-records
+     http-client srfi-18 extras format)
 
 ;; Added for csv stuff - will be removed
 ;;
 (use sparse-vectors)
 
-(import (prefix sqlite3 sqlite3:))
-(import (prefix base64 base64:))
-(import (prefix rpc rpc:))
 (require-library mutils)
 
 ;; (use zmq)
@@ -56,7 +54,7 @@
 (include "megatest-fossil-hash.scm")
 
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.megatestrc")))
-  (if (file-exists? debugcontrolf)
+  (if (common:file-exists? debugcontrolf)
       (load debugcontrolf)))
 
 ;; Disabled help items
@@ -377,7 +375,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; before doing anything else change to the start-dir if provided
 ;;
 (if (args:get-arg "-start-dir")
-    (if (file-exists? (args:get-arg "-start-dir"))
+    (if (common:file-exists? (args:get-arg "-start-dir"))
         (let ((fullpath (common:real-path (args:get-arg "-start-dir"))))
           (setenv "PWD" fullpath)
           (change-directory fullpath))
@@ -471,7 +469,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (install-home  (common:get-install-area))
 	   (manual-html   (conc install-home "/share/docs/megatest_manual.html")))
       (if (and install-home
-	       (file-exists? manual-html))
+	       (common:file-exists? manual-html))
 	  (system (conc "(" htmlviewercmd " " manual-html " ) &"))
 	  (system (conc "(" htmlviewercmd " http://www.kiatoa.com/cgi-bin/fossils/megatest/doc/tip/docs/manual/megatest_manual.html ) &")))
       (exit)))
@@ -566,7 +564,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-clean-cache")
     (let ((toppath  (launch:setup)))
       (set! *didsomething* #t) ;; suppress the help output.
-      (runs:clean-cache (getenv "MT_TARGET")(args:get-arg "-runname") toppath)))
+      (runs:clean-cache (or (getenv "MT_TARGET")
+			    (args:get-arg "-target")
+			    (args:get-arg "-remtarg"))
+			(args:get-arg "-runname")
+			toppath)))
 	  
 (if (args:get-arg "-env2file")
     (begin
@@ -722,7 +724,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (hash-table-keys results))))
 		((sqlite3)
 		 (let* ((db-file   (or out-file (pathname-file input-db)))
-			(db-exists (file-exists? db-file))
+			(db-exists (common:file-exists? db-file))
 			(db        (sqlite3:open-database db-file)))
 		   (if (not db-exists)(sqlite3:execute db "CREATE TABLE data (sheet,section,var,val);"))
 		   (configf:map-all-hier-alist
@@ -870,7 +872,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		     #f))
 	 (cfgf   (if rundir (conc rundir "/.runconfig." megatest-version "-" megatest-fossil-hash) #f)))
     (if (and cfgf
-	     (file-exists? cfgf)
+	     (common:file-exists? cfgf)
 	     (file-write-access? cfgf)
 	     (common:use-cache?))
 	(configf:read-alist cfgf)
@@ -894,7 +896,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
                     (configf:write-alist data cfgf))
 		;; force re-read of megatest.config - this resolves circular references between megatest.config
 		(launch:setup force-reread: #t)
-		(launch:cache-config))) ;; we can safely cache megatest.config since we have a valid runconfig
+		;; (launch:cache-config) ;; there are two independent config cache locations, turning this one off for now. MRW.
+		)) ;; we can safely cache megatest.config since we have a valid runconfig
 	  data))))
 
 (if (args:get-arg "-show-runconfig")
@@ -1697,7 +1700,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 (paths    (tests:test-get-paths-matching keys target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
-			(if (file-exists? path)
+			(if (common:file-exists? path)
 			(print path)))	
 		      paths)))
 	;; else do a general-run-call
@@ -1987,7 +1990,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
       ;; keep this one local
-      (open-run-close patch-db #f)
+      ;; (open-run-close patch-db #f)
+      (let ((dbstruct (db:setup #f areapath: *toppath*)))
+        (common:cleanup-db dbstruct full: #t))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-cleanup-db")

@@ -13,9 +13,7 @@
 
 (declare (unit rmt))
 (declare (uses api))
-(declare (uses tdb))
 (declare (uses http-transport))
-;;(declare (uses nmsg-transport))
 (include "common_records.scm")
 
 ;;
@@ -126,25 +124,23 @@
       (debug:print 0 *default-log-port* "WARNING: write transaction requested on a readonly area.  cmd="cmd" params="params)
       #f)
 
-     ;;DOT CASE4 [label="reset\nconnection"];
-     ;;DOT MUTEXLOCK -> CASE4 [label="have connection,\nlast_access > expire_time"]; {rank=same "case 4" CASE4}
-     ;;DOT CASE4 -> "rmt:send-receive";
-     ;; reset the connection if it has been unused too long
-     ((and runremote
-           (remote-conndat runremote)
-	   (let ((expire-time (+ (- start-time (remote-server-timeout runremote))(random 10)))) ;; Subtract or add the random value? Seems like it should be substract but Neither fixes the "WARNING: failure in with-input-from-request to #<request>.\n message: Server closed connection before sending response"
-	     (< (http-transport:server-dat-get-last-access (remote-conndat runremote)) expire-time)))
-      (debug:print-info 0 *default-log-port* "Connection to " (remote-server-url runremote) " expired due to no accesses, forcing new connection.")
-      (let ((old-conn (remote-conndat runremote)))
-	(handle-exceptions
-	    exn
-	    (begin
-	      (print-call-chain *default-log-port*)
-	      (debug:print-error 0 *default-log-port* " closing connection failed with error: " ((condition-property-accessor 'exn 'message) exn)))
-	  (http-transport:close-connections area-dat: runremote)))
-      (remote-conndat-set! runremote #f) ;; invalidate the connection, thus forcing a new connection.
-      (mutex-unlock! *rmt-mutex*)
-      (rmt:send-receive cmd rid params attemptnum: attemptnum))
+     ;; This block was for pre-emptively resetting the connection if there had been no communication for some time.
+     ;; I don't think it adds any value. If the server is not there, just fail and start a new connection.
+     ;; also, the expire-time calculation might not be correct. We want, time-since-last-server-access > (server:get-timeout)
+     ;;
+     ;; ;;DOT CASE4 [label="reset\nconnection"];
+     ;; ;;DOT MUTEXLOCK -> CASE4 [label="have connection,\nlast_access > expire_time"]; {rank=same "case 4" CASE4}
+     ;; ;;DOT CASE4 -> "rmt:send-receive";
+     ;; ;; reset the connection if it has been unused too long
+     ;; ((and runremote
+     ;;       (remote-conndat runremote)
+     ;; 	   (let ((expire-time (+ (- start-time (remote-server-timeout runremote))(random 10)))) ;; Subtract or add the random value? Seems like it should be substract but Neither fixes the "WARNING: failure in with-input-from-request to #<request>.\n message: Server closed connection before sending response"
+     ;; 	     (< (http-transport:server-dat-get-last-access (remote-conndat runremote)) expire-time)))
+     ;;  (debug:print-info 0 *default-log-port* "Connection to " (remote-server-url runremote) " expired due to no accesses, forcing new connection.")
+     ;;  (http-transport:close-connections area-dat: runremote)
+     ;;  (remote-conndat-set! runremote #f) ;; invalidate the connection, thus forcing a new connection.
+     ;;  (mutex-unlock! *rmt-mutex*)
+     ;;  (rmt:send-receive cmd rid params attemptnum: attemptnum))
 
      ;;DOT CASE5 [label="local\nread"];
      ;;DOT MUTEXLOCK -> CASE5 [label="server not required,\non homehost,\nread-only query"]; {rank=same "case 5" CASE5};
@@ -258,6 +254,7 @@
 		(let ((wait-delay (+ attemptnum (* attemptnum 10))))
 		  (debug:print 0 *default-log-port* "WARNING: server is overloaded. Delaying " wait-delay " seconds and trying call again.")
 		  (mutex-lock! *rmt-mutex*)
+		  (http-transport:close-connections area-dat: runremote)
 		  (set! *runremote* #f) ;; force starting over
 		  (mutex-unlock! *rmt-mutex*)
 		  (thread-sleep! wait-delay)
@@ -266,10 +263,11 @@
 	    (begin
 	      (debug:print 0 *default-log-port* "WARNING: communication failed. Trying again, try num: " attemptnum)
 	      (remote-conndat-set!    runremote #f)
+	      (http-transport:close-connections area-dat: runremote)
 	      (remote-server-url-set! runremote #f)
 	      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
-	      (if (not (server:check-if-running *toppath*))
-		  (server:start-and-wait *toppath*))
+	      ;; (if (not (server:check-if-running *toppath*))
+	      ;; 	  (server:start-and-wait *toppath*))
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))))))))
 
     ;;DOT }
@@ -532,12 +530,12 @@
   (rmt:send-receive 'set-tests-state-status run-id (list run-id testnames currstate currstatus newstate newstatus)))
 
 (define (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)
-  (if (number? run-id)
-      (rmt:send-receive 'get-tests-for-run run-id (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode))
-      (begin
-	(debug:print-error 0 *default-log-port* "rmt:get-tests-for-run called with bad run-id=" run-id)
-	(print-call-chain (current-error-port))
-	'())))
+  ;; (if (number? run-id)
+  (rmt:send-receive 'get-tests-for-run run-id (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)))
+  ;;    (begin
+  ;;	(debug:print-error 0 *default-log-port* "rmt:get-tests-for-run called with bad run-id=" run-id)
+  ;;	(print-call-chain (current-error-port))
+  ;;	'())))
 
 ;; get stuff via synchash 
 (define (rmt:synchash-get run-id proc synckey keynum params)
@@ -816,10 +814,6 @@
 (define (rmt:read-test-data* run-id test-id categorypatt varpatt #!key (work-area #f)) 
   (rmt:send-receive 'read-test-data* run-id (list run-id test-id categorypatt varpatt)))
 
-;;   (let ((tdb  (rmt:open-test-db-by-test-id run-id test-id work-area: work-area)))
-;;     (if tdb
-;; 	(tdb:read-test-data tdb test-id categorypatt)
-;; 	'())))
 
 (define (rmt:testmeta-add-record testname)
   (rmt:send-receive 'testmeta-add-record #f (list testname)))
@@ -851,6 +845,19 @@
 
 (define (rmt:tasks-get-last target runname)
   (rmt:send-receive 'tasks-get-last #f (list target runname)))
+
+;;======================================================================
+;; N O   S Y N C   D B 
+;;======================================================================
+
+(define (rmt:no-sync-set var val)
+  (rmt:send-receive 'no-sync-set #f `(,var ,val)))
+
+(define (rmt:no-sync-get/default var default)
+  (rmt:send-receive 'no-sync-get/default #f `(,var ,default)))
+
+(define (rmt:no-sync-del! var)
+  (rmt:send-receive 'no-sync-del! #f `(,var)))
 
 ;;======================================================================
 ;; A R C H I V E S
