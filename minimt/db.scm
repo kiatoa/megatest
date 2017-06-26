@@ -57,6 +57,7 @@
 			       (exit 1))))
 	 (dbconn         (make-dbconn-dat)))
     (set-busy-handler! db (busy-timeout 30000)) ;; set a busy timeout
+    (exec (sql db "PRAGMA synchronous=0;"))
     (if (and init write-access (not already-exists))
 	(init db))
     (dbconn-dat-dbh-set!       dbconn db)
