@@ -860,7 +860,15 @@
                                BEGIN 
                                  UPDATE run_stats SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
-                               END;"))
+                               END;")
+  (sqlite3:execute maindb "CREATE TABLE IF NOT EXISTS test_rundat (
+                              id           INTEGER PRIMARY KEY,
+                              test_id      INTEGER,
+                              update_time  TIMESTAMP,
+                              cpuload      INTEGER DEFAULT -1,
+                              diskfree     INTEGER DEFAULT -1,
+                              diskusage    INTGER DEFAULT -1,
+                              run_duration INTEGER DEFAULT 0);"))
 
 (define (db:adj-target db)
   (let ((fields    (configf:get-section *configdat* "fields"))
