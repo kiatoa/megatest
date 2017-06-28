@@ -1680,6 +1680,10 @@
 	       "DELETE FROM runs WHERE state='deleted';"
 	       ;; delete empty runs
 	       "DELETE FROM runs WHERE id NOT IN (SELECT DISTINCT r.id FROM runs AS r INNER JOIN tests AS t ON t.run_id=r.id);"
+	       ;; remove orphaned test_rundat entries
+	       "DELETE FROM test_rundat where test_id NOT IN (SELECT id FROM tests);"
+	       ;; 
+	       "DELETE FROM test_steps WHERE test_id NOT IN (SELECT id FROM tests);"
 	       ))))
     ;; (db:delay-if-busy dbdat)
     (sqlite3:with-transaction 

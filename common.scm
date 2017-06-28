@@ -257,9 +257,10 @@
    'adj-target
    ;; 'old2new
    'new2old
-   (if full
+   ;; (if full
        '(dejunk)
-       '()))
+       ;; '())
+       )
   (if (common:api-changed?)
       (common:set-last-run-version)))
 
