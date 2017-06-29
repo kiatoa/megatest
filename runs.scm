@@ -1751,7 +1751,7 @@
 ;;
 ;; NB// should pass in keys?
 ;;
-(define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f)(mode 'remove-all)(options '()))
+(define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f)(mode #f)(options '()))
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
 	 ;; (tdbdat       (tasks:open-db))
@@ -1763,7 +1763,8 @@
 	 (statuses     (if status (string-split status ",") '()))
 	 (state-status (if (string? new-state-status) (string-split new-state-status ",") '(#f #f)))
 	 (rp-mutex     (make-mutex))
-	 (bup-mutex    (make-mutex)))
+	 (bup-mutex    (make-mutex))
+         (keep-records (args:get-arg "-keep-records"))) ;; used in conjunction with -remove-runs to keep the records, TODO: consolidate this with "mode".
 
     (let* ((write-access-actions '(remove-runs set-state-status archive run-wait))
            (dbfile             (conc  *toppath* "/megatest.db"))
@@ -1939,9 +1940,11 @@
 						(take dparts (- (length dparts) 1))
 						"/"))))
 		       (debug:print 1 *default-log-port* "Removing run: " runkey " " (db:get-value-by-header run header "runname") " and related record")
-		       (rmt:delete-run run-id)
-		       (rmt:delete-old-deleted-test-records)
-		       ;; (rmt:set-var "DELETED_TESTS" (current-seconds))
+                       (if (not keep-records)
+                           (begin
+                             (rmt:delete-run run-id)
+                             (rmt:delete-old-deleted-test-records)))
+                           ;; (rmt:set-var "DELETED_TESTS" (current-seconds))
 		       ;; need to figure out the path to the run dir and remove it if empty
 		       ;;    (if (null? (glob (conc runpath "/*")))
 		       ;;        (begin
@@ -1959,8 +1962,9 @@
 	 (real-dir      (if (common:file-exists? run-dir)
 			    ;; (resolve-pathname run-dir)
 			    (common:nice-path run-dir)
-			    #f)))
-    (case mode
+			    #f))
+         (clean-mode    (or mode 'remove-all)))
+    (case clean-mode
       ((remove-data-only)(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "CLEANING" "LOCKED" #f))
       ((remove-all)      (mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "REMOVING" "LOCKED" #f))
       ((archive-remove)  (mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "ARCHIVE_REMOVING" #f #f)))
@@ -1996,7 +2000,7 @@
 		(debug:print 0 *default-log-port* "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
 	    ))
     ;; Only delete the records *after* removing the directory. If things fail we have a record 
-    (case mode
+    (case clean-mode
       ((remove-data-only)(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "NOT_STARTED" "n/a" #f))
       ((archive-remove)  (mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "ARCHIVED" #f #f))
       (else (rmt:delete-test-records (db:test-get-run_id test) (db:test-get-id test))))))
