@@ -2001,7 +2001,7 @@
 	    ))
     ;; Only delete the records *after* removing the directory. If things fail we have a record 
     (case clean-mode
-      ((remove-data-only)(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "NOT_STARTED" "n/a" #f))
+      ((remove-data-only)(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) (db:test-get-state test)(db:test-get-status test) #f))
       ((archive-remove)  (mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "ARCHIVED" #f #f))
       (else (rmt:delete-test-records (db:test-get-run_id test) (db:test-get-id test))))))
 
