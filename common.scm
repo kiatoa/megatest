@@ -128,6 +128,7 @@
 (define *run-id*            #f)
 (define *server-kind-run*   (make-hash-table))
 (define *home-host*         #f)
+(define *queues*            (make-api:queues enable: #t)) ;; set up the queues for coalescing queries
 ;; (define *total-non-write-delay* 0)
 (define *heartbeat-mutex*   (make-mutex))
 (define *api-process-request-count* 0)
@@ -135,7 +136,7 @@
 (define *server-overloaded*  #f)
 
 ;; client
-(define *rmt-mutex*         (make-mutex))     ;; remote access calls mutex 
+(define *rmt-mutex*         (make-mutex))     ;; remote access calls mutex
 
 ;; RPC transport
 (define *rpc:listener*      #f)

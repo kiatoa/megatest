@@ -116,7 +116,7 @@
 ;;
 ;;    - returns #( flag result )
 ;;
-(define (api:execute-requests dbstruct dat)
+(define (api:execute-requests dbstruct dat queues)
   (handle-exceptions
    exn
    (let ((call-chain (get-call-chain)))
@@ -149,7 +149,9 @@
                    ;; READ/WRITE QUERIES
                    ;;===============================================
 
-                   ((get-keys-write)                        (db:get-keys dbstruct)) ;; force a dummy "write" query to force server; for debug in -repl
+                   ((get-keys-write)                  (api:queued-request queues 'write params
+									  (lambda ()
+									    (db:get-keys dbstruct)))) ;; force a dummy "write" query to force server; for debug in -repl
                    
                    ;; SERVERS
                    ((start-server)                    (apply server:kind-run params))
@@ -324,7 +326,7 @@
   (let* ((cmd     ($ 'cmd))
 	 (paramsj ($ 'params))
 	 (params  (db:string->obj paramsj transport: 'http)) ;; incoming data from the POST (or is it a GET?)
-	 (resdat  (api:execute-requests dbstruct (vector cmd params))) ;; process the request, resdat = #( flag result )
+	 (resdat  (api:execute-requests dbstruct (vector cmd params) *queues*)) ;; process the request, resdat = #( flag result ), we resort to a global here for the queues.
 	 (success (vector-ref resdat 0))
 	 (res     (vector-ref resdat 1))) ;; (vector flag payload), get the payload, ignore the flag (why?)
     (if (not success)
@@ -342,3 +344,91 @@
     ;;      (list "ERROR, not string, list, number or boolean" 1 cmd params res)))))
     (db:obj->string res transport: 'http)))
 
+(define api:queue-mutex (make-mutex))
+
+(defstruct api:queues
+  (enable      #f)
+  (dbstruct    #f)                   ;; must be initialized!
+  (mutex       (make-mutex))
+  (readq      '())
+  (writeq     '())
+  (last-read   (current-milliseconds))
+  (last-write  (current-milliseconds))
+  (read-cvar   (make-condition-variable "reads"))
+  (write-cvar  (make-condition-variable "writes"))
+  )
+
+;; api queued request handler
+;;
+;; qry-type: read write transaction
+;;
+(define (api:queued-request queues qry-type params proc)
+  ;; add proc to read, write queue or if transaction do it immediately (for now, not sure but might need to process differently.)
+  (if *queues*
+      (begin
+	(mutex-lock! (api:queue-mutex queues))
+	(let ((dat (vector proc params #f))) ;; #f is placeholder for the result
+	  (case qry-type
+	    ((read)
+	     (api:queue-readq-set!  queues (cons dat (api:queue-readq queues)))
+	     (mutex-unlock! (api:queue-mutex queues)(api:queue-read-cvar queues)) ;; unlock mutex and proceed when condition var is triggered
+	     (vector-ref dat 2)) ;; return the value from the query to the caller
+	    ((write)
+	     (api:queue-writeq-set! queues (cons dat (api:queue-writeq queues)))
+	     (mutex-unlock! (api:queue-mutex queues)(api:queue-write-cvar queues)) ;; unlock mutex and proceed when condition var is triggered
+	     (vector-ref dat 2))
+	    (else
+	     (proc)))))
+      (proc)))
+
+;; process queues
+;;
+(define (api:process-queues queues)
+  (mutex-lock (api:queues-mutex queues))
+  (let* ((now        (current-milliseconds))
+	 (due        (- now 500)) ;; we will process the queue if it has not been processed in 500 ms
+	 (reads      (api:queues-readq      queues))
+	 (writes     (api:queues-writeq     queues))
+	 (last-read  (api:queues-last-read  queues))
+	 (last-write (api:queues-last-write queues)))
+    (cond
+     ((and (>= last-read last-write) ;; nudge the system to toggle between processing the reads and processing the writes
+	   (not (null? reads))
+	   (> due last-read))
+      (db:with-db                    ;; process the procs inside a transaction
+       (api:queues-dbstruct queues)
+       #f
+       #f
+       (lambda (db)
+	 (sqlite3:with-transaction   ;; the transaction
+	  db
+	  (lambda ()
+	    (for-each
+	     (lambda (procdat)
+	       (vector-set! procdat 2 ((vector-ref procdat 0)))) ;; set vector 3rd pos to the result of calculating proc
+	     reads)))))
+      ;; now reset the queue values
+      (api:queues-read-set!      queues '())
+      (api:queues-last-read-set! queues now)
+      (condition-variable-broadcast! (api:queues-read-cvar queues)))
+     ((and (not (null? writes))
+	   (> due last-write))
+      (db:with-db
+       (api:queues-dbstruct queues)
+       #f
+       #f
+       (lambda (db)
+	 (sqlite3:with-transaction
+	  db
+	  (lambda ()
+	    (for-each
+	     (lambda (procdat)
+	       (vector-set! procdat 2 ((vector-ref procdat 0))))
+	     writes)))))
+      ;; now reset the queue values
+      (api:queues-write-set!    queues '())
+      (api:queues-last-write-set! queues now)
+      (condition-variable-broadcast! (api:queues-write-cvar queues))))
+    (mutex-unlock (api:queues-mutex queues))))
+      
+	 
