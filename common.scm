@@ -128,7 +128,7 @@
 (define *run-id*            #f)
 (define *server-kind-run*   (make-hash-table))
 (define *home-host*         #f)
-(define *queues*            (make-api:queues enable: #t)) ;; set up the queues for coalescing queries
+
 ;; (define *total-non-write-delay* 0)
 (define *heartbeat-mutex*   (make-mutex))
 (define *api-process-request-count* 0)
@@ -167,6 +167,21 @@
   (force-server      #f)
   (ro-mode           #f)  
   (ro-mode-checked   #f)) ;; flag that indicates we have checked for ro-mode
+
+;; api queued requests structure and global (temporary solution)
+(defstruct api:queues
+  (enable      #f)
+  (dbstruct    #f)                   ;; must be initialized!
+  (mutex       (make-mutex))
+  (readq      '())
+  (writeq     '())
+  (last-read   (current-milliseconds))
+  (last-write  (current-milliseconds))
+  (read-cvar   (make-condition-variable "reads"))
+  (write-cvar  (make-condition-variable "writes"))
+  )
+
+(define *queues*            (make-api:queues enable: #t)) ;; set up the queues for coalescing queries
 
 ;; launching and hosts
 (defstruct host

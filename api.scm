@@ -346,18 +346,6 @@
 
 (define api:queue-mutex (make-mutex))
 
-(defstruct api:queues
-  (enable      #f)
-  (dbstruct    #f)                   ;; must be initialized!
-  (mutex       (make-mutex))
-  (readq      '())
-  (writeq     '())
-  (last-read   (current-milliseconds))
-  (last-write  (current-milliseconds))
-  (read-cvar   (make-condition-variable "reads"))
-  (write-cvar  (make-condition-variable "writes"))
-  )
-
 ;; api queued request handler
 ;;
 ;; qry-type: read write transaction

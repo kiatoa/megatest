@@ -337,7 +337,7 @@
 	 (read-only      (not (file-write-access? db-file-path)))
 	 (start          (current-milliseconds))
 	 (resdat         (if (not (and read-only qry-is-write))
-			     (let ((v (api:execute-requests dbstruct-local (vector (symbol->string cmd) params *queues*))))
+			     (let ((v (api:execute-requests dbstruct-local (vector (symbol->string cmd) params) *queues*)))
 			       (handle-exceptions ;; there has been a long history of receiving strange errors from values returned by the client when things go wrong..
 				exn               ;;  This is an attempt to detect that situation and recover gracefully
 				(begin
