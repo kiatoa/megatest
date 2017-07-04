@@ -352,20 +352,21 @@
 ;;
 (define (api:queued-request queues qry-type params proc)
   ;; add proc to read, write queue or if transaction do it immediately (for now, not sure but might need to process differently.)
-  (if *queues*
+  (if queues
       (begin
-	(mutex-lock! (api:queue-mutex queues))
+	(mutex-lock! (api:queues-mutex queues))
 	(let ((dat (vector proc params #f))) ;; #f is placeholder for the result
 	  (case qry-type
 	    ((read)
-	     (api:queue-readq-set!  queues (cons dat (api:queue-readq queues)))
-	     (mutex-unlock! (api:queue-mutex queues)(api:queue-read-cvar queues)) ;; unlock mutex and proceed when condition var is triggered
+	     (api:queues-readq-set!  queues (cons dat (api:queues-readq queues)))
+	     (mutex-unlock! (api:queues-mutex queues)(api:queues-read-cvar queues)) ;; unlock mutex and proceed when condition var is triggered
 	     (vector-ref dat 2)) ;; return the value from the query to the caller
 	    ((write)
-	     (api:queue-writeq-set! queues (cons dat (api:queue-writeq queues)))
-	     (mutex-unlock! (api:queue-mutex queues)(api:queue-write-cvar queues)) ;; unlock mutex and proceed when condition var is triggered
+	     (api:queues-writeq-set! queues (cons dat (api:queues-writeq queues)))
+	     (mutex-unlock! (api:queues-mutex queues)(api:queues-write-cvar queues)) ;; unlock mutex and proceed when condition var is triggered
 	     (vector-ref dat 2))
 	    (else
+	     (mutex-unlock! (api:queues-mutex queues))
 	     (proc)))))
       (proc)))
 
