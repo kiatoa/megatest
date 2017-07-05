@@ -30,8 +30,12 @@
 	 (print"   STEP: " step-name " done.")))
       (if (< step-num *numsteps*)
 	  (loop (+ step-num 1))))
+    ;; we will do a large but bogus read to simulate the logic in Megatest
+    (rmt:test-get-tests dbconn `(,run-id) "%")
     (rmt:test-set-state-status dbconn test-id "COMPLETED" (if (> (random 10) 2) "PASS" "FAIL"))
     (print "TEST: " test-name " done.")
+    (print "Stats:")
+    (print-stats *stats*)
     test-id))
 
 ;; RUN A RUN
@@ -52,6 +56,7 @@
   runrun  target runname")
       (let ((cmd    (car args))
 	    (dbconn (rmt:open-create-db *homepath* "mt.db" init-db)))
+	(thread-sleep! 0.5) ;; be sure the db is written out to disk? Should really not be needed.
 	(change-directory *homepath*)
 	(case (string->symbol cmd)
 	  ((runtest)
@@ -74,6 +79,8 @@
 		(if (< run-num *numruns*)
 		    (loop (+ run-num 1)))))
 	    *targets*))
+	  ((server)
+	   (start-server dbconn))
 	  (else
 	   (print "Command: " cmd " not recognised. Run without params to see help.")))
 	(close-database (dbconn-dat-dbh dbconn)))))
