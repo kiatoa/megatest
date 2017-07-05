@@ -459,6 +459,7 @@
 	(debug-mode   (debug:debug-mode 1))
 	(last-time    (current-seconds))
 	(no-sync-db   (db:open-no-sync-db))
+        (sync-duration 0) ;; run time of the sync in milliseconds
         (this-wd-num  (begin (mutex-lock! *wdnum*mutex) (let ((x *wdnum*)) (set! *wdnum* (add1 *wdnum*)) (mutex-unlock! *wdnum*mutex) x))))
     (set! *no-sync-db* no-sync-db) ;; make the no sync db available to api calls
     (debug:print-info 2 *default-log-port* "Periodic sync thread started.")
@@ -488,14 +489,39 @@
 	      (if will-sync (set! *db-sync-in-progress* #t))
 	      (mutex-unlock! *db-multi-sync-mutex*)
 	      (if will-sync
-		  (let ((res (db:sync-to-megatest.db dbstruct no-sync-db: no-sync-db))) ;; did we sync any data? If so need to set the db touched flag to keep the server alive
-		    (if (> res 0) ;; some records were transferred, keep the db alive
-			(begin
-			  (mutex-lock! *heartbeat-mutex*)
-			  (set! *db-last-access* (current-seconds))
-			  (mutex-unlock! *heartbeat-mutex*)
-			  (debug:print-info 0 *default-log-port* "sync called, " res " records transferred."))
-			(debug:print-info 2 *default-log-port* "sync called but zero records transferred"))))
+                  (let ((sync-start (current-milliseconds)))
+                    (if (< sync-duration 300)
+                        (let ((res        (db:sync-to-megatest.db dbstruct no-sync-db: no-sync-db))) ;; did we sync any data? If so need to set the db touched flag to keep the server alive
+                          (set! sync-duration (- (current-milliseconds) sync-start))
+                          (if (> res 0) ;; some records were transferred, keep the db alive
+                              (begin
+                                (mutex-lock! *heartbeat-mutex*)
+                                (set! *db-last-access* (current-seconds))
+                                (mutex-unlock! *heartbeat-mutex*)
+                                (debug:print-info 0 *default-log-port* "sync called, " res " records transferred."))
+                              (debug:print-info 2 *default-log-port* "sync called but zero records transferred")))
+                        ;; TODO: factor this next routine out into a function
+                        (with-input-from-pipe ;; this should not block other threads but need to verify this
+                         "megatest -sync-to-megatest.db"
+                         (lambda ()
+                           (let loop ((inl (read-line))
+                                      (res #f))
+                             (if (eof-object? inl)
+                                 (begin
+                                   (set! sync-duration (- (current-milliseconds) sync-start))
+                                   (cond
+                                    ((not res)
+                                     (debug:print 0 *default-log-port* "ERROR: sync from /tmp db to megatest.db appears to have failed. Recommended that you stop your runs and run \"megatest -cleanup-db\""))
+                                    ((> res 0)
+                                     (mutex-lock! *heartbeat-mutex*)
+                                     (set! *db-last-access* (current-seconds))
+                                     (mutex-unlock! *heartbeat-mutex*))))
+                                 (let ((num-synced (let ((matches (string-match "^Synced (\\d+).*$" inl)))
+                                                     (if matches
+                                                         (string->number (cadr matches))
+                                                         #f))))
+                                   (loop (read-line)
+                                         (or num-synced res))))))))))
 	      (if will-sync
 		  (begin
 		    (mutex-lock! *db-multi-sync-mutex*)

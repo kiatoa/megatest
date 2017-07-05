@@ -2161,11 +2161,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-sync-to-megatest.db")
-    (begin
-      (db:multi-db-sync 
-       (db:setup #f)
-       'new2old
-       )
+    (let ((res (db:multi-db-sync 
+                (db:setup #f)
+                'new2old)))
+      (print "Synced " res " records to megatest.db")
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-sync-to")
