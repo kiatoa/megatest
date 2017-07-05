@@ -245,7 +245,11 @@
 			  (exit))))
 	     (success  (if (vector? dat) (vector-ref dat 0) #f))
 	     (res      (if (vector? dat) (vector-ref dat 1) #f)))
-	(if (vector? conninfo)(http-transport:server-dat-update-last-access conninfo)) ;; refresh access time
+	(if (and (vector? conninfo) (> 5 (vector-length conninfo)))
+            (http-transport:server-dat-update-last-access conninfo) ;; refresh access time
+            (begin
+              (set! conninfo #f)
+              (remote-conndat-set! runremote #f))) 
 	;; (mutex-unlock! *rmt-mutex*)
         (debug:print-info 13 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat " runremote = " runremote)
 	(mutex-unlock! *rmt-mutex*)
