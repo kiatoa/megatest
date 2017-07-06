@@ -114,7 +114,8 @@
 							   "")
 		      ;; " -log " logfile
 		      " -m testsuite:" testsuite)) ;; (conc " >> " logfile " 2>&1 &")))))
-	 (log-rotate  (make-thread common:rotate-logs  "server run, rotate logs thread")))
+	 (log-rotate  (make-thread common:rotate-logs  "server run, rotate logs thread"))
+         (load-limit  (configf:lookup-number *configdat* "server" "load-limit" default: 0.9)))
     ;; we want the remote server to start in *toppath* so push there
     (push-directory areapath)
     (debug:print 0 *default-log-port* "INFO: Trying to start server (" cmdln ") ...")
@@ -131,7 +132,7 @@
 	  (setenv "TARGETHOST" target-host)))
       
     (setenv "TARGETHOST_LOGF" logfile)
-    (common:wait-for-normalized-load 4 " delaying server start due to load" remote-host: (get-environment-variable "TARGETHOST")) ;; do not try starting servers on an already overloaded machine, just wait forever
+    (common:wait-for-normalized-load load-limit " delaying server start due to load" remote-host: (get-environment-variable "TARGETHOST")) ;; do not try starting servers on an already overloaded machine, just wait forever
     (system (conc "nbfake " cmdln))
     (unsetenv "TARGETHOST_LOGF")
     (if (get-environment-variable "TARGETHOST")(unsetenv "TARGETHOST"))

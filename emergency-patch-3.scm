@@ -26,6 +26,7 @@
  ;; to productize patch:
  ;;;;;;;;;;;;;;;;;;;;;;;;;
  ;; 
+(use directory-utils regex)
 
 (include "common_records.scm")
 (include "key_records.scm")
