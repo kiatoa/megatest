@@ -16,7 +16,7 @@
 (use srfi-1 posix srfi-69 readline ;;  regex regex-case srfi-69 apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
      srfi-18 extras format pkts regex regex-case
      (prefix dbi dbi:)
-     (prefix nanomsg nmsg:))
+     nanomsg)
 
 (declare (uses common))
 (declare (uses megatest-version))
@@ -373,7 +373,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (args:get-arg "-runstep")
 	       (args:get-arg "-envcap")
 	       (args:get-arg "-envdelta")
-	       (member *action* '("db"))   ;; very loose checks on db.
+	       (member *action* '("db" "tsend" "tlisten"))   ;; very loose checks on db and tsend/listen
 	       (equal? *action* "show")    ;; just keep going if list
 	       )))
     (debug:print-error 0 *default-log-port* "Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
@@ -383,6 +383,63 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (print help)
       (exit 1)))
+
+;;======================================================================
+;; Nanomsg transport
+;;======================================================================
+
+(define-inline (encode data)
+  (with-output-to-string
+    (lambda ()
+      (write data))))
+
+(define-inline (decode data)
+  (with-input-from-string
+      data
+    (lambda ()
+      (read))))
+
+;;start a server, returns the connection
+;;
+(define (start-nn-server portnum)
+  (let ((rep (nn-socket 'rep)))
+    (handle-exceptions
+     exn
+     (let ((emsg ((condition-property-accessor 'exn 'message) exn)))
+       (print "ERROR: Failed to start server \"" emsg "\"")
+       (exit 1))
+     (nn-bind rep (conc "tcp://*:" portnum)))
+    rep))
+
+;; open connection to server, send message, close connection
+;;
+(define (open-send-close-nn host-port msg #!key (timeout 3)) ;; default timeout is 3 seconds
+  (let ((req  (nn-socket 'req))
+        (uri  (conc "tcp://" host-port))
+        (res  #f)) 
+    (handle-exceptions
+     exn
+     (let ((emsg ((condition-property-accessor 'exn 'message) exn)))
+       (print "ERROR: Failed to connect/send to " uri " message was \"" emsg "\"")
+       #f)
+     (nn-connect req uri)
+     (nn-send req msg)
+     ;; NEED timer here!
+     (let* ((th1  (make-thread (lambda ()
+                                 (let ((resp (nn-recv req)))
+                                   (nn-close req)
+                                   (set! res (if (equal? resp "ok")
+                                                 #t
+                                                 #f))))
+                               "recv thread"))
+            (th2 (make-thread (lambda ()
+                                (thread-sleep! timeout)
+                                (thread-terminate! th1))
+                             "timer thread")))
+       (thread-start! th1)
+       (thread-start! th2)
+       (thread-join! th1)
+       res))))
 
 ;;======================================================================
 
@@ -1129,8 +1186,37 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ((tsend)
        (if (null? remargs)
 	   (print "ERROR: missing data to send to trigger listeners")
-	   (let ((cmd (car remargs)))
-	     (case (string->symbol subcmd)))))))
+	   (let* ((msg       (car remargs))
+                  (mtconfdat (simple-setup (args:get-arg "-start-dir")))
+                  (mtconf    (car mtconfdat))
+                  (listeners (configf:get-section mtconf "listeners"))
+                  (prev-seen (make-hash-table))) ;; catch duplicates
+             (for-each
+              (lambda (listener)
+                (let ((host-port (car listener))
+                      (remdat    (cdr listener)))
+                  (print "sending " msg " to " host-port)
+                  (open-send-close-nn host-port msg timeout: 2)))
+              listeners))))
+      ((tlisten)
+       (if (null? remargs)
+           (print "ERROR: useage for tlisten is \"mtutil tlisten portnum\"")
+           (let ((portnum (string->number (car remargs))))
+             (if (not portnum)
+                 (print "ERROR: the portnumber parameter must be a number, you gave: " (car remargs))
+                 (let* ((rep       (start-nn-server portnum))
+                        (mtconfdat (simple-setup (args:get-arg "-start-dir")))
+                        (mtconf    (car mtconfdat))
+                        (script    (configf:lookup mtconf "listener" "script")))
+                   (print "Listening on port " portnum " for messages")
+                   (let loop ((instr (nn-recv rep)))
+                     (print "received " instr ", running \"" script " " instr "\"")
+                     (system (conc script " " instr))
+                     (nn-send rep "ok")
+                     (loop (nn-recv rep))))))))
+      
+      )) ;; the end
+             
 
 ;; If HTTP_HOST is defined then we must be in the cgi environment
 ;; so run stml and exit
