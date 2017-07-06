@@ -120,6 +120,10 @@ Actions:
 
 Contour actions:
    process                   : runs import, rungen and dispatch 
+
+Trigger propagation actions:
+   tsend a=b,c=d...          : send trigger info to all recpients in the [listeners] section
+   tlisten -port N           : listen for trigger info on port N
 			     
 Selectors 		     
   -immediate                 : apply this action immediately, default is to queue up actions
@@ -965,7 +969,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (print "WARNING: cpuload too high, skipping processing of " uuid)
 		      (begin
 			(print "RUNNING: " fullcmd)
-			(system fullcmd)
+			(system fullcmd) ;; replace with process ...
 			(mark-processed pdb (list (alist-ref 'id pktdat)))
 			(let-values (((ack-uuid ack-pkt)
 				      (add-z-card
@@ -1121,7 +1125,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  (if (common:file-exists? schema-file)
 		      (system (conc "/bin/cat " schema-file)))))
 	       ((junk)
-		(rmt:get-keys))))))))
+		(rmt:get-keys))))))
+      ((tsend)
+       (if (null? remargs)
+	   (print "ERROR: missing data to send to trigger listeners")
+	   (let ((cmd (car remargs)))
+	     (case (string->symbol subcmd)))))))
 
 ;; If HTTP_HOST is defined then we must be in the cgi environment
 ;; so run stml and exit
