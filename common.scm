@@ -1501,7 +1501,7 @@
     (cond
      ((and (> first adjload)
 	   (> count 0))
-      (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload " " (if msg msg ""))
+      (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load " first " exceeding normalized max of " maxload "(adjusted load: " adjload ") " (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
      ((and (> loadjmp numcpus)

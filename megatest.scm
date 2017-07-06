@@ -75,7 +75,8 @@ Usage: megatest [options]
 Launching and managing runs
   -run                    : run all tests or as specified by -testpatt
   -remove-runs            : remove the data for a run, requires -runname and -testpatt
-                            Optionally use :state and :status
+                            Optionally use :state and :status, use -keep-records to remove only
+                            the run data.
   -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
   -rerun FAIL,WARN...     : force re-run for tests with specificed status(s)
   -rerun-clean            : set all tests not COMPLETED+PASS,WARN,WAIVED to NOT_STARTED,n/a
@@ -340,6 +341,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-runall"    ;; run all tests, respects -testpatt, defaults to %
 			"-run"       ;; alias for -runall
 			"-remove-runs"
+                        "-keep-records" ;; use with -remove-runs to remove only the run data
 			"-rebuild-db"
 			"-cleanup-db"
 			"-rollup"
@@ -963,7 +965,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; since several actions can be specified on the command line the removal
 ;; is done first
-(define (operate-on action)
+(define (operate-on action #!key (mode #f)) ;; #f is "use default"
   (let* ((runrec (runs:runrec-make-record))
 	 (target (common:args-get-target)))
     (cond
@@ -992,7 +994,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			      (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
 			      state: (common:args-get-state)
 			      status: (common:args-get-status)
-			      new-state-status: (args:get-arg "-set-state-status"))))
+			      new-state-status: (args:get-arg "-set-state-status")
+                              mode: mode)))
       (set! *didsomething* #t)))))
 
 (if (args:get-arg "-remove-runs")
@@ -1000,7 +1003,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      "-remove-runs"
      "remove runs"
      (lambda (target runname keys keyvals)
-       (operate-on 'remove-runs))))
+       (operate-on 'remove-runs mode: (if (args:get-arg "-keep-records")
+                                          'remove-data-only
+                                          'remove-all)))))
 
 (if (args:get-arg "-set-state-status")
     (general-run-call 
@@ -2159,11 +2164,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-sync-to-megatest.db")
-    (begin
-      (db:multi-db-sync 
-       (db:setup #f)
-       'new2old
-       )
+    (let ((res (db:multi-db-sync 
+                (db:setup #f)
+                'new2old)))
+      (print "Synced " res " records to megatest.db")
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-sync-to")
