@@ -2481,7 +2481,16 @@ Misc
          (conc "megatest -set-state-status KILLREQ,n/a -target " target
                " -runname " runname
                " -testpatt % "
-               "  -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))))
+               "  -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))
+     (iup:menu-item 
+      "Delete Run Data"
+      #:action
+      (lambda (obj)
+        (common:run-a-command
+         (conc "megatest -remove-runs -target " target
+               " -runname " runname
+               " -testpatt % "
+               "  -keep-records"))))))
    (iup:menu-item
     "Test"
     (iup:menu 
@@ -2504,6 +2513,15 @@ Misc
                " -runname " runname
 	       " -testpatt " item-test-path 
 	       " -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))
+     (iup:menu-item
+      (conc "Delete data : " item-test-path)
+      #:action
+      (lambda (obj)
+	(common:run-a-command
+	 (conc "megatest -remove-runs -target " target
+               " -runname " runname
+	       " -testpatt " item-test-path 
+	       " -keep-records"))))
      (iup:menu-item
       (conc "Clean "item-test-path)
       #:action
