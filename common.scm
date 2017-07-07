@@ -1493,7 +1493,7 @@
     (cond
      ((and (> first adjload)
 	   (> count 0))
-      (debug:print-info 0 *default-log-port* "server start waiting " waitdelay " seconds due to load " first " exceeding max of " adjload "(normalized load: " maxload ") " (if msg msg ""))
+      (debug:print-info 0 *default-log-port* "server start delayed " waitdelay " seconds due to load " first " exceeding max of " adjload " (normalized load-limit: " maxload ") " (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
      ((and (> loadjmp numcpus)
