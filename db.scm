@@ -1894,6 +1894,25 @@
 (define (db:no-sync-close-db db)
   (db:safely-close-sqlite3-db db))
 
+;; transaction protected lock aquisition
+;; either:
+;;    fails    returns  (#f . lock-creation-time)
+;;    succeeds (returns (#t . lock-creation-time)
+;; use (db:no-sync-del! db keyname) to release the lock
+;;
+(define (db:no-sync-get-lock db keyname)
+  (sqlite3:with-transaction
+   (db:no-sync-db db)
+   (lambda ()
+     (handle-exceptions
+	 exn
+	 (let ((lock-time (current-seconds)))
+	   (sqlite3:execute db "INSERT INTO no_sync_metadat (var,val) VALUES(?,?);" keyname lock-time)
+	   `(#t . ,lock-time))
+       `(#f . ,(sqlite3:first-result db "SELECT val FROM no_sync_metadat WHERE var=?;" keyname))))))
+
+
+
 ;; use a global for some primitive caching, it is just silly to
 ;; re-read the db over and over again for the keys since they never
 ;; change

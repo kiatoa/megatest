@@ -869,6 +869,9 @@
 (define (rmt:no-sync-del! var)
   (rmt:send-receive 'no-sync-del! #f `(,var)))
 
+(define (rmt:no-sync-get-lock keyname)
+  (rmt:send-receive 'no-sync-get-lock #f `(,keyname)))
+
 ;;======================================================================
 ;; A R C H I V E S
 ;;======================================================================

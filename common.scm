@@ -2073,7 +2073,13 @@
              (string-split instr)))
    "/"))
 
-(define (common:faux-lock keyname #!key (wait-time 8))
+;;======================================================================
+;; L O C K I N G   M E C H A N I S M S 
+;;======================================================================
+
+;; faux-lock is deprecated. Please use simple-lock below
+;;
+(define (common:faux-lock keyname #!key (wait-time 8)(allow-lock-steal #t))
   (if (rmt:no-sync-get/default keyname #f) ;; do not be tempted to compare to pid. locking is a one-shot action, if already locked for this pid it doesn't actually count
       (if (> wait-time 0)
 	  (begin
@@ -2095,7 +2101,15 @@
         #t)
       #f))
 
-  
+;; simple lock. improve and converge on this one.
+;;
+(define (common:simple-lock keyname)
+  (rmt:no-sync-get-lock keyname))
+
+;;======================================================================
+;;
+;;======================================================================
+
 (define (common:in-running-test?)
   (and (args:get-arg "-execute") (get-environment-variable "MT_CMDINFO")))
 

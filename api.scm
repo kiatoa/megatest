@@ -216,6 +216,7 @@
 		   ((no-sync-set)               (apply db:no-sync-set         *no-sync-db* params))
 		   ((no-sync-get/default)       (apply db:no-sync-get/default *no-sync-db* params))
 		   ((no-sync-del!)              (apply db:no-sync-del!        *no-sync-db* params))
+		   ((no-sync-get-lock)          (apply db:no-sync-get-lock    *no-sync-db* params))
 		 
                    ;; ARCHIVES
                    ;; ((archive-get-allocations)   
