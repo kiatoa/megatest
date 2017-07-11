@@ -1862,11 +1862,14 @@
 ;; finalize sqlite3 dbs with the sqlite3 egg.
 ;;
 (define (db:no-sync-db db-in)
-  (if db-in
-      db-in
-      (let ((db (db:open-no-sync-db)))
-	(set! *no-sync-db* db)
-	db)))
+  (mutex-lock! *db-access-mutex*)
+  (let ((res (if db-in
+                 db-in
+                 (let ((db (db:open-no-sync-db)))
+                   (set! *no-sync-db* db)
+                   db))))
+    (mutex-unlock! *db-access-mutex*)
+    res))
 
 (define (db:no-sync-set db var val)
   (sqlite3:execute (db:no-sync-db db) "INSERT OR REPLACE INTO no_sync_metadat (var,val) VALUES (?,?);" var val))

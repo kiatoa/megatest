@@ -1963,7 +1963,21 @@
 			    ;; (resolve-pathname run-dir)
 			    (common:nice-path run-dir)
 			    #f))
-         (clean-mode    (or mode 'remove-all)))
+         (clean-mode    (or mode 'remove-all))
+         (test-id       (db:test-get-id test))
+         (lock-key      (conc "test-" test-id))
+         (got-lock      (let loop ((lock        (rmt:no-sync-get-lock lock-key))
+				     (expire-time (+ (current-seconds) 30))) ;; give up on getting the lock and steal it after 15 seconds
+			    (if (car lock)
+				#t
+				(if (> (current-seconds) expire-time)
+				    (begin
+				      (debug:print-info 0 *default-log-port* "Timed out waiting for a lock to clean test with id " test-id)
+				      (rmt:no-sync-del! lock-key) ;; destroy the lock
+				      (loop (rmt:no-sync-get-lock lock-key) expire-time)) ;; 
+				    (begin
+				      (thread-sleep! 1)
+				      (loop (rmt:no-sync-get-lock lock-key) expire-time)))))))
     (case clean-mode
       ((remove-data-only)(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "CLEANING" "LOCKED" #f))
       ((remove-all)      (mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "REMOVING" "LOCKED" #f))
@@ -2003,7 +2017,8 @@
     (case clean-mode
       ((remove-data-only)(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) (db:test-get-state test)(db:test-get-status test) #f))
       ((archive-remove)  (mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "ARCHIVED" #f #f))
-      (else (rmt:delete-test-records (db:test-get-run_id test) (db:test-get-id test))))))
+      (else (rmt:delete-test-records (db:test-get-run_id test) (db:test-get-id test))))
+    (rmt:no-sync-del! lock-key)))
 
 ;;======================================================================
 ;; Routines for manipulating runs
