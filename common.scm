@@ -504,8 +504,9 @@
     (5 "WAIVED")
     (6 "CHECK")
     (7 "STUCK/DEAD")
-    (8 "FAIL")
-    (9 "ABORT")))
+    (8 "DEAD")
+    (9 "FAIL")
+    (10 "ABORT")))
 
 (define *common:ended-states*       ;; states which indicate the test is stopped and will not proceed
   '("COMPLETED" "ARCHIVED" "KILLED" "KILLREQ" "STUCK" "INCOMPLETE"))
