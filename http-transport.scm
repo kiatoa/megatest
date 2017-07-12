@@ -452,7 +452,7 @@
          ((and *server-run*
 	       (> (+ last-access server-timeout)
 		  (current-seconds))
-	       (< (- (current-seconds) server-start-time) 3600)) ;; do not update log or touch log if we've been running for more than one hour.
+	       (< (- (current-seconds) server-start-time) (configf:get-number *configdat* "server" "time-to-die-seconds" (* 3600 700 2) ) )) ;; do not update log or touch log if we've been running for more than one hour.
           (if (common:low-noise-print 120 "server continuing")
               (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
 	      (let ((curr-time (current-seconds)))
