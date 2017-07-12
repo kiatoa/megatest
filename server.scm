@@ -467,8 +467,11 @@
     (debug:print-info 3 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id)" this-wd-num="this-wd-num)
     (if (and legacy-sync (not *time-to-exit*))
 	(let* (;;(dbstruct (db:setup))
-	       (mtdb     (dbr:dbstruct-mtdb dbstruct))
-	       (mtpath   (db:dbdat-get-path mtdb)))
+	       (mtdb       (dbr:dbstruct-mtdb dbstruct))
+	       (mtpath     (db:dbdat-get-path mtdb))
+	       (tmp-area   (common:get-db-tmp-area))
+	       (start-file (conc tmp-area "/.start-sync"))
+	       (end-file   (conc tmp-area "/.end-sync")))
 	  (debug:print-info 0 *default-log-port* "Server running, periodic sync started.")
 	  (let loop ()
 	    ;; sync for filesystem local db writes
@@ -480,17 +483,32 @@
                                           (> (- (current-seconds) *db-last-sync*) 5))) ;; sync every five seconds minimum
 		   (start-time       (current-seconds))
 		   (mt-mod-time      (file-modification-time mtpath))
-		   (recently-synced  (< (- start-time mt-mod-time) 4))
+		   (last-sync-start  (if (common:file-exists? start-file)
+					 (file-modification-time start-file)
+					 0))
+		   (last-sync-end    (if (common:file-exists? end-file)
+					 (file-modification-time end-file)
+					 10))
+		   (recently-synced  (and (< (- start-time mt-mod-time) 4) ;; not useful if sync didn't modify megatest.db!
+					  (< mt-mod-time last-sync-start)))
+		   (sync-done        (<= last-sync-start last-sync-end))
 		   (will-sync        (and (or need-sync should-sync)
+					  sync-done
 					  (not sync-in-progress)
 					  (not recently-synced))))
-              (debug:print-info 13 *default-log-port* "WD writable-watchdog top of loop.  need-sync="need-sync" sync-in-progress="sync-in-progress" should-sync="should-sync" start-time="start-time" mt-mod-time="mt-mod-time" recently-synced="recently-synced" will-sync="will-sync)
+              (debug:print-info 13 *default-log-port* "WD writable-watchdog top of loop.  need-sync="need-sync" sync-in-progress=" sync-in-progress
+				" should-sync="should-sync" start-time="start-time" mt-mod-time="mt-mod-time" recently-synced="recently-synced" will-sync="will-sync
+				" sync-done=" sync-done)
 	      ;; (if recently-synced (debug:print-info 0 *default-log-port* "Skipping sync due to recently-synced flag=" recently-synced))
 	      ;; (debug:print-info 0 *default-log-port* "need-sync: " need-sync " sync-in-progress: " sync-in-progress " should-sync: " should-sync " will-sync: " will-sync)
 	      (if will-sync (set! *db-sync-in-progress* #t))
 	      (mutex-unlock! *db-multi-sync-mutex*)
 	      (if will-sync
                   (let ((sync-start (current-milliseconds)))
+		    (with-output-to-file start-file (lambda ()(print (current-process-id))))
+
+		    ;; put lock here
+		    
                     (if (< sync-duration 300)
                         (let ((res        (db:sync-to-megatest.db dbstruct no-sync-db: no-sync-db))) ;; did we sync any data? If so need to set the db touched flag to keep the server alive
                           (set! sync-duration (- (current-milliseconds) sync-start))
@@ -503,7 +521,7 @@
                               (debug:print-info 2 *default-log-port* "sync called but zero records transferred")))
                         ;; TODO: factor this next routine out into a function
                         (with-input-from-pipe ;; this should not block other threads but need to verify this
-                         "megatest -sync-to-megatest.db"
+                         (conc "megatest -sync-to-megatest.db -m testsuite:" (common:get-area-name) ":" *toppath*)
                          (lambda ()
                            (let loop ((inl (read-line))
                                       (res #f))
@@ -528,6 +546,10 @@
 		    (mutex-lock! *db-multi-sync-mutex*)
 		    (set! *db-sync-in-progress* #f)
 		    (set! *db-last-sync* start-time)
+		    (with-output-to-file end-file (lambda ()(print (current-process-id))))
+
+		    ;; release lock here
+
 		    (mutex-unlock! *db-multi-sync-mutex*)))
 	      (if (and debug-mode
 		       (> (- start-time last-time) 60))
