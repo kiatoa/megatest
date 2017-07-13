@@ -72,11 +72,15 @@
 	    
 ;; Generate a unique signature for this server
 (define (server:mk-signature)
-  (message-digest-string (md5-primitive) 
-			 (with-output-to-string
-			   (lambda ()
-			     (write (list (current-directory)
-					  (argv)))))))
+  (if *server-id*
+      *server-id*
+      (let ((sig (message-digest-string (md5-primitive) 
+                                        (with-output-to-string
+                                          (lambda ()
+                                            (write (list (current-directory)
+                                                         (argv))))))))
+        (set! *server-id* sig)
+        sig)))
 
 ;; When using zmq this would send the message back (two step process)
 ;; with spiffy or rpc this simply returns the return data to be returned
@@ -411,6 +415,11 @@
 		(begin
 		  ;; (print "LOGIN_OK")
 		  (if do-exit (exit 0))
+                  (if (> (length login-res) 2) ;; we are expecting ( #t "message" "serversig" )
+                      (begin
+                        (set! *server-id* (caddr login-res))
+                        (debug:print-info 1 *default-log-port* "Connected to server " *server-id*))
+                      (debug:print 0 *default-log-port* "ERROR: connected to server but no server signature provided."))
 		  #t)
 		(begin
 		  ;; (print "LOGIN_FAILED")

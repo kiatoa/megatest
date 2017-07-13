@@ -3715,7 +3715,7 @@
     (list #f "Login failed due to mismatch megatest version: " calling-version ", " megatest-version))
    (else
     (hash-table-set! *logged-in-clients* client-signature (current-seconds))
-    '(#t "successful login"))))
+    '(#t "successful login" (server:mk-signature)))))
 
 (define (db:general-call dbstruct stmtname params)
   (let ((query (let ((q (alist-ref (if (string? stmtname)
