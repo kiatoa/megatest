@@ -441,16 +441,14 @@
 	#t
 	#f)))
 
-;; timeout is in hours
-(define (server:get-timeout)
-  (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
+;; timeout is hms string: 1h 5m 3s, default is 1 minute
+;;
+(define (server:expiration-timeout)
+  (let ((tmo (configf:lookup *configdat* "server" "timeout")))
     (if (and (string? tmo)
-	     (string->number tmo))
-	(* 60 60 (string->number tmo))
-	;; (* 3 24 60 60) ;; default to three days
-	;;(* 60 60 1)     ;; default to one hour
-	(* 60 5)          ;; default to five minutes
-	)))
+	     (common:hms-string->seconds tmo))
+        (string->number tmo)
+	60)))
 
 ;; moving this here as it needs access to db and cannot be in common.
 ;;

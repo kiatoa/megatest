@@ -469,54 +469,54 @@
 	  (set! *toppath* top-path)
 	  (setenv "MT_TEST_RUN_DIR"  work-area)
 
-	  ;; On NFS it can be slow and unreliable to get needed startup information.
-	  ;;  i. Check if we are on the homehost, if so, proceed
-	  ;; ii. Check if host and port passed in via CMDINFO are valid and if
-	  ;;     possible use them.
-	  (let ((bestadrs (server:get-best-guess-address (get-host-name)))
-		(needcare #f))
-	    (if (equal? homehost bestadrs) ;; we are likely on the homehost
-		(debug:print-info 0 *default-log-port* "test " test-name " appears to be running on the homehost " homehost)
-		(let ((host-port (if serverurl (string-split serverurl ":") #f)))
-		  (if (not *runremote*)(set! *runremote* (make-remote))) ;; init *runremote*
-		  (if (string? homehost)
-		      (if (and host-port
-			       (> (length host-port) 1))
-			  (let* ((host      (car host-port))
-                                 (port      (cadr host-port))
-                                 (start-res (http-transport:client-connect host port))
-                                 (ping-res  (rmt:login-no-auto-client-setup start-res)))
-			    (if (and start-res
-				     ping-res)
-				;; (begin ;; let ((url  (http-transport:server-dat-make-url start-res)))
-				(begin
-				  (remote-conndat-set! *runremote* start-res)
-				  ;; (remote-server-url-set! *runremote* url)
-				  ;; (if (server:ping url)
-				  (debug:print-info 0 *default-log-port* "connected to " host ":" port " using CMDINFO data."))
-				(begin
-				  (debug:print-info 0 *default-log-port* "have CMDINFO data but failed to connect to " host ":" port)
-				  (set! *runremote* #f))
-				  ;; (remote-conndat-set! *runremote* #f))
-				))
-			  (begin
-			    (set! *runremote* #f)
-			    (debug:print-info 0 *default-log-port* (if host-port
-								       (conc "received invalid host-port information " host-port)
-								       "no host-port information received"))
-			    ;; potential for bad situation if simultaneous starting of hundreds of jobs on servers, set needcare.
-			    (set! needcare #t)))
-		      (begin
-			(set! *runremote* #f)
-			(debug:print-info 0 *default-log-port* "received no homehost information. Please report this to support as it should not happen.")
-			(set! needcare #t)))))
-	    (if needcare  ;; due to very slow NFS we will do a brute force mkdir to ensure that the directory inode it truly available on this host
-		(let ((logdir (conc top-path "/logs"))) ;; we'll try to create this directory
-		  (handle-exceptions
-		      exn
-		      (debug:print 0 *default-log-port* "Failed to create directory " logdir " expect problems, message: " ((condition-property-accessor 'exn 'message) exn))
-		    (create-directory logdir #t)))))
-		  
+	;;    ;; On NFS it can be slow and unreliable to get needed startup information.
+	;;    ;;  i. Check if we are on the homehost, if so, proceed
+	;;    ;; ii. Check if host and port passed in via CMDINFO are valid and if
+	;;    ;;     possible use them.
+	;;    (let ((bestadrs (server:get-best-guess-address (get-host-name)))
+	;;    	(needcare #f))
+	;;      (if (equal? homehost bestadrs) ;; we are likely on the homehost
+	;;    	(debug:print-info 0 *default-log-port* "test " test-name " appears to be running on the homehost " homehost)
+	;;    	(let ((host-port (if serverurl (string-split serverurl ":") #f)))
+	;;    	  (if (not *runremote*)(set! *runremote* (make-remote))) ;; init *runremote*
+	;;    	  (if (string? homehost)
+	;;    	      (if (and host-port
+	;;    		       (> (length host-port) 1))
+	;;    		  (let* ((host      (car host-port))
+        ;;                           (port      (cadr host-port))
+        ;;                           (start-res (http-transport:client-connect host port))
+        ;;                           (ping-res  (rmt:login-no-auto-client-setup start-res)))
+	;;    		    (if (and start-res
+	;;    			     ping-res)
+	;;    			;; (begin ;; let ((url  (http-transport:server-dat-make-url start-res)))
+	;;    			(begin
+	;;    			  (remote-conndat-set! *runremote* start-res)
+	;;    			  ;; (remote-server-url-set! *runremote* url)
+	;;    			  ;; (if (server:ping url)
+	;;    			  (debug:print-info 0 *default-log-port* "connected to " host ":" port " using CMDINFO data."))
+	;;    			(begin
+	;;    			  (debug:print-info 0 *default-log-port* "have CMDINFO data but failed to connect to " host ":" port)
+	;;    			  (set! *runremote* #f))
+	;;    			  ;; (remote-conndat-set! *runremote* #f))
+	;;    			))
+	;;    		  (begin
+	;;    		    (set! *runremote* #f)
+	;;    		    (debug:print-info 0 *default-log-port* (if host-port
+	;;    							       (conc "received invalid host-port information " host-port)
+	;;    							       "no host-port information received"))
+	;;    		    ;; potential for bad situation if simultaneous starting of hundreds of jobs on servers, set needcare.
+	;;    		    (set! needcare #t)))
+	;;    	      (begin
+	;;    		(set! *runremote* #f)
+	;;    		(debug:print-info 0 *default-log-port* "received no homehost information. Please report this to support as it should not happen.")
+	;;    		(set! needcare #t)))))
+	;;      (if needcare  ;; due to very slow NFS we will do a brute force mkdir to ensure that the directory inode it truly available on this host
+	;;    	(let ((logdir (conc top-path "/logs"))) ;; we'll try to create this directory
+	;;    	  (handle-exceptions
+	;;    	      exn
+	;;    	      (debug:print 0 *default-log-port* "Failed to create directory " logdir " expect problems, message: " ((condition-property-accessor 'exn 'message) exn))
+	;;    	    (create-directory logdir #t)))))
+	;;    	  
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
 	    (if (or (common:file-exists? top-path)

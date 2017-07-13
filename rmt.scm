@@ -130,20 +130,21 @@
      ;; I don't think it adds any value. If the server is not there, just fail and start a new connection.
      ;; also, the expire-time calculation might not be correct. We want, time-since-last-server-access > (server:get-timeout)
      ;;
-     ;; ;;DOT CASE4 [label="reset\nconnection"];
-     ;; ;;DOT MUTEXLOCK -> CASE4 [label="have connection,\nlast_access > expire_time"]; {rank=same "case 4" CASE4}
-     ;; ;;DOT CASE4 -> "rmt:send-receive";
-     ;; ;; reset the connection if it has been unused too long
-     ;; ((and runremote
-     ;;       (remote-conndat runremote)
-     ;; 	   (let ((expire-time (+ (- start-time (remote-server-timeout runremote))(random 10)))) ;; Subtract or add the random value? Seems like it should be substract but Neither fixes the "WARNING: failure in with-input-from-request to #<request>.\n message: Server closed connection before sending response"
-     ;; 	     (< (http-transport:server-dat-get-last-access (remote-conndat runremote)) expire-time)))
-     ;;  (debug:print-info 0 *default-log-port* "Connection to " (remote-server-url runremote) " expired due to no accesses, forcing new connection.")
-     ;;  (http-transport:close-connections area-dat: runremote)
-     ;;  (remote-conndat-set! runremote #f) ;; invalidate the connection, thus forcing a new connection.
-     ;;  (mutex-unlock! *rmt-mutex*)
-     ;;  (rmt:send-receive cmd rid params attemptnum: attemptnum))
-
+     ;;DOT CASE4 [label="reset\nconnection"];
+     ;;DOT MUTEXLOCK -> CASE4 [label="have connection,\nlast_access > expire_time"]; {rank=same "case 4" CASE4}
+     ;;DOT CASE4 -> "rmt:send-receive";
+     ;; reset the connection if it has been unused too long
+     ((and runremote
+           (remote-conndat runremote)
+	   (> (current-seconds) ;; if it has been more than server-timeout seconds since last contact, close this connection and start a new on
+	      (+ (http-transport:server-dat-get-last-access (remote-conndat runremote))
+		 (remote-server-timeout runremote))))
+      (debug:print-info 0 *default-log-port* "Connection to " (remote-server-url runremote) " expired due to no accesses, forcing new connection.")
+      (http-transport:close-connections area-dat: runremote)
+      (remote-conndat-set! runremote #f) ;; invalidate the connection, thus forcing a new connection.
+      (mutex-unlock! *rmt-mutex*)
+      (rmt:send-receive cmd rid params attemptnum: attemptnum))
+     
      ;;DOT CASE5 [label="local\nread"];
      ;;DOT MUTEXLOCK -> CASE5 [label="server not required,\non homehost,\nread-only query"]; {rank=same "case 5" CASE5};
      ;;DOT CASE5 -> "rmt:open-qry-close-locally";
@@ -246,8 +247,12 @@
 	     (success  (if (vector? dat) (vector-ref dat 0) #f))
 	     (res      (if (vector? dat) (vector-ref dat 1) #f)))
 	(if (and (vector? conninfo) (> 5 (vector-length conninfo)))
+
+	    
             (http-transport:server-dat-update-last-access conninfo) ;; refresh access time
-            (begin
+
+
+	    (begin
               (set! conninfo #f)
               (remote-conndat-set! runremote #f))) 
 	;; (mutex-unlock! *rmt-mutex*)

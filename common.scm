@@ -162,7 +162,7 @@
   (last-server-check 0)  ;; last time we checked to see if the server was alive
   (conndat           #f)
   (transport         *transport-type*)
-  (server-timeout    (server:get-timeout)) ;; default from server:get-timeout
+  (server-timeout    (server:expiration-timeout))
   (force-server      #f)
   (ro-mode           #f)  
   (ro-mode-checked   #f)) ;; flag that indicates we have checked for ro-mode

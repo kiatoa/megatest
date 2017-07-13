@@ -385,7 +385,7 @@
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)
-	 (server-timeout (server:get-timeout))
+	 (server-timeout (server:expiration-timeout))
 	 (server-going  #f)
 	 (server-log-file (args:get-arg "-log"))) ;; always set when we are a server
 
@@ -442,17 +442,11 @@
 	  (begin
 	    (debug:print 0 *default-log-port* "Server stats:")
 	    (db:print-current-query-stats)))
-      (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600))
-	     (adjusted-timeout (if (> hrs-since-start 1)
-				   (- server-timeout (inexact->exact (round (* hrs-since-start 60))))  ;; subtract 60 seconds per hour
-				   server-timeout)))
-	(if (common:low-noise-print 120 "server timeout")
-	    (debug:print-info 0 *default-log-port* "Adjusted server timeout: " adjusted-timeout))
+      (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600)))
 	(cond
          ((and *server-run*
 	       (> (+ last-access server-timeout)
-		  (current-seconds))
-	       (< (- (current-seconds) server-start-time) (configf:lookup-number *configdat* "server" "time-to-die-seconds" default: (* 3600 700 2) ) )) ;; do not update log or touch log if we've been running for more than one hour.
+		  (current-seconds)))
           (if (common:low-noise-print 120 "server continuing")
               (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
 	      (let ((curr-time (current-seconds)))
