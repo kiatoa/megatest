@@ -447,7 +447,7 @@
   (let ((tmo (configf:lookup *configdat* "server" "timeout")))
     (if (and (string? tmo)
 	     (common:hms-string->seconds tmo))
-        (string->number tmo)
+        (* 3600 (string->number tmo))
 	60)))
 
 ;; moving this here as it needs access to db and cannot be in common.
