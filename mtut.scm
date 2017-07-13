@@ -187,6 +187,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ("-msg"             . M)
     ("-start-dir"       . S)
     ("-set-vars"        . v)
+    ("-config"          . r)
     ))
 (define *switch-keys*
   '(
@@ -512,6 +513,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ;; we set some dynamic data in a section called "scratchdata"
     (if mtconf
 	(begin
+           
 	  (configf:section-var-set! mtconf "scratchdat" "toppath" start-dir)))
     ;; (print "TOPPATH: " (configf:lookup mtconf "scratchdat" "toppath"))
     mtconfdat))
@@ -1202,6 +1204,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        (if (null? remargs)
            (print "ERROR: useage for tlisten is \"mtutil tlisten portnum\"")
            (let ((portnum (string->number (car remargs))))
+              
              (if (not portnum)
                  (print "ERROR: the portnumber parameter must be a number, you gave: " (car remargs))
                  (let* ((rep       (start-nn-server portnum))
