@@ -1851,10 +1851,14 @@
 (define (db:open-no-sync-db)
   (let* ((dbpath (db:dbfile-path))
 	 (dbname (conc dbpath "/no-sync.db"))
+	 (db-exists (common:file-exists? dbname))
 	 (db     (sqlite3:open-database dbname)))
     (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-    (sqlite3:execute db "PRAGMA synchronous = 0;")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS no_sync_metadat (var TEXT,val TEXT, CONSTRAINT no_sync_metadat_constraint UNIQUE (var));")
+    (if (not db-exists)
+	(begin
+	  (sqlite3:execute db "PRAGMA synchronous = 0;")
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS no_sync_metadat (var TEXT,val TEXT, CONSTRAINT no_sync_metadat_constraint UNIQUE (var));")
+	  (sqlite3:execute db "PRAGMA journal_mode=WAL;")))
     db))
 
 ;; if we are not a server create a db handle. this is not finalized
