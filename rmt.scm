@@ -246,15 +246,13 @@
 			  (exit))))
 	     (success  (if (vector? dat) (vector-ref dat 0) #f))
 	     (res      (if (vector? dat) (vector-ref dat 1) #f)))
-	(if (and (vector? conninfo) (> 5 (vector-length conninfo)))
-
-	    
+	(if (and (vector? conninfo) (< 5 (vector-length conninfo)))
             (http-transport:server-dat-update-last-access conninfo) ;; refresh access time
-
-
 	    (begin
+              (debug:print 0 *default-log-port* "INFO: Should not get here! conninfo=" conninfo)
               (set! conninfo #f)
-              (remote-conndat-set! runremote #f))) 
+              (remote-conndat-set! *runremote* #f)
+              (http-transport:close-connections  area-dat: runremote)))
 	;; (mutex-unlock! *rmt-mutex*)
         (debug:print-info 13 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat " runremote = " runremote)
 	(mutex-unlock! *rmt-mutex*)
@@ -262,6 +260,8 @@
 	    (if (and (vector? res)
 		     (eq? (vector-length res) 2)
 		     (eq? (vector-ref res 1) 'overloaded)) ;; since we are looking at the data to carry the error we'll use a fairly obtuse combo to minimise the chances of some sort of collision.
+                ;; this is the case where the returned data is bad or the server is overloaded and we want
+                ;; to ease off the queries
 		(let ((wait-delay (+ attemptnum (* attemptnum 10))))
 		  (debug:print 0 *default-log-port* "WARNING: server is overloaded. Delaying " wait-delay " seconds and trying call again.")
 		  (mutex-lock! *rmt-mutex*)
@@ -273,10 +273,12 @@
 		res) ;; All good, return res
 	    (begin
 	      (debug:print 0 *default-log-port* "WARNING: communication failed. Trying again, try num: " attemptnum)
-	      (remote-conndat-set!    runremote #f)
+	      (mutex-lock! *rmt-mutex*)
+              (remote-conndat-set!    runremote #f)
 	      (http-transport:close-connections area-dat: runremote)
 	      (remote-server-url-set! runremote #f)
-	      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
+	      (mutex-unlock! *rmt-mutex*)
+              (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
 	      ;; (if (not (server:check-if-running *toppath*))
 	      ;; 	  (server:start-and-wait *toppath*))
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))))))))
