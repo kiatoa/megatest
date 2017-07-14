@@ -232,9 +232,9 @@
      ;;DOT CASE11 -> "RESULT" [label="call succeeded"];
      ;; not on homehost, do server query
      (else
-      (mutex-unlock! *rmt-mutex*)
+      ;; (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9")
-      (mutex-lock! *rmt-mutex*)
+      ;; (mutex-lock! *rmt-mutex*)
       (let* ((conninfo (remote-conndat runremote))
 	     (dat      (case (remote-transport runremote)
 			 ((http) (condition-case ;; handling here has caused a lot of problems. However it is needed to deal with attemtped communication to servers that have gone away

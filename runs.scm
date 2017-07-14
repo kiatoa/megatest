@@ -328,9 +328,9 @@
       (set-signal-handler! signal/int sighand)
       (set-signal-handler! signal/term sighand))
 
-    ;; force the starting of a server
-    (debug:print 0 *default-log-port* "waiting on server...")
-    (server:start-and-wait *toppath*)
+    ;; force the starting of a server -- removed BB 17ww28 - no longer needed.
+    ;;(debug:print 0 *default-log-port* "waiting on server...")
+    ;;(server:start-and-wait *toppath*)
     
     (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (set! runconf (if (common:file-exists? runconfigf)
@@ -598,6 +598,7 @@
 
 (define runs:nothing-left-in-queue-count 0)
 
+;; BB: for future reference - suspect target vars are not expanded to env vars at this point (item expansion using [items]\nwhatever [system echo $TARGETVAR] doesnt work right whereas [system echo #{targetvar}] does.. Tal and Randy have tix on this.  on first pass, var not set, on second pass, ok.  
 (define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmaps)
   (let* ((loop-list       (list hed tal reg reruns))
 	 (prereqs-not-met (let ((res (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps)))
@@ -1273,13 +1274,14 @@
 			   )))
 	(runs:dat-regfull-set! runsdat regfull)
 
+        ;; -- removed BB 17ww28 - no longer needed.
 	;; every 15 minutes verify the server is there for this run
-	(if (and (common:low-noise-print 240 "try start server"  run-id)
-		 (not (or (and *runremote*
-			       (remote-server-url *runremote*)
-			       (server:ping (remote-server-url *runremote*)))
-			  (server:check-if-running *toppath*))))
-	    (server:kind-run *toppath*))
+	;; (if (and (common:low-noise-print 240 "try start server"  run-id)
+	;; 	 (not (or (and *runremote*
+	;; 		       (remote-server-url *runremote*)
+	;; 		       (server:ping (remote-server-url *runremote*)))
+	;; 		  (server:check-if-running *toppath*))))
+	;;     (server:kind-run *toppath*))
 	
 	(if (> num-running 0)
 	  (set! last-time-some-running (current-seconds)))
@@ -1411,7 +1413,7 @@
 	 ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	 ;;    - but only do that if resources exist to kick off the job
 	 ;; EXPAND ITEMS
-	 ((or (procedure? items)(eq? items 'have-procedure))
+	 ((or (procedure? items)(eq? items 'have-procedure)) ;; BB - target vars are env vars here? to allow expansion of [items]\nsomething [system echo $SOMETARGVAR], which is wonky
 	  (let ((can-run-more    (runs:can-run-more-tests runsdat run-id jobgroup max-concurrent-jobs)))
 	    (if (and (list? can-run-more)
 		     (car can-run-more))

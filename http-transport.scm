@@ -308,6 +308,7 @@
 	      (print-call-chain *default-log-port*)
 	      (debug:print-error 0 *default-log-port* " closing connection failed with error: " ((condition-property-accessor 'exn 'message) exn)))
 	    (close-connection! api-dat)
+            (close-idle-connections!)
 	    #t))
 	#f)))
 
