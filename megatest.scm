@@ -55,7 +55,8 @@
 (include "run_records.scm")
 (include "megatest-fossil-hash.scm")
 
-(define *usage-log-file* #f) ;; put path to file for logging usage in this var in the ~/.megatestrc file
+(define *usage-log-file* #f)    ;; put path to file for logging usage in this var in the ~/.megatestrc file
+(define *usage-use-seconds* #f) ;; for Epoc seconds in usage logging change this to #t in ~/.megatestrc file
 
 ;; load the ~/.megatestrc file, put (use trace)(trace-call-sites #t)(trace function-you-want-to-trace) in this file
 ;;
@@ -71,10 +72,14 @@
 	  *usage-log-file*
 	(lambda ()
 	  (print
-	   (time->string
-	    (seconds->local-time (current-seconds))
-	    "%Yww%V.%w %H:%M:%S") " "
-	    (current-directory) " "
+           (if *usage-use-seconds*
+               (current-seconds)
+               (time->string
+                (seconds->local-time (current-seconds))
+                "%Yww%V.%w %H:%M:%S"))
+           " "
+           (current-user-name) " "
+           (current-directory) " "
 	    "\"" (string-intersperse (argv) " ") "\""))
 	#:append))
 

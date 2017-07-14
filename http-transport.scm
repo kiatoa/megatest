@@ -245,6 +245,7 @@
 						(debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
 						(debug:print 0 *default-log-port* " message: " msg)
 						(debug:print 0 *default-log-port* " cmd: " cmd " params: " params)
+                                                (debug:print 0 *default-log-port* " call-chain: " call-chain)
 						(if runremote
 						    (remote-conndat-set! runremote #f))
 						;; Killing associated server to allow clean retry.")
@@ -256,7 +257,7 @@
 						(db:obj->string #f))
 					    (with-input-from-request ;; was dat
 					     fullurl 
-					     (list (cons 'key "thekey")
+					     (list (cons 'key (or *server-id* "thekey"))
 						   (cons 'cmd cmd)
 						   (cons 'params sparams))
 					     read-string))

@@ -121,7 +121,7 @@
 (define *runremote*         #f)                ;; if set up for server communication this will hold <host port>
 ;; (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))
-;; (define *server-id*         #f)
+(define *server-id*         #f)
 (define *server-info*       #f)  ;; good candidate for easily convert to non-global
 (define *time-to-exit*      #f)
 (define *server-run*        #t)
