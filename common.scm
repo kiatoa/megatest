@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
+(use srfi-1 data-structures posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
      matchable)
 (require-extension regex posix)
 
@@ -46,6 +46,14 @@
 
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
+
+(define (get-file-descriptor-count #!key  (pid (current-process-id )))
+  (list
+    (length (glob (conc "/proc/" pid "/fd/*")))
+    (length  (filter identity (map socket? (glob (conc "/proc/" pid "/fd/*")))))
+  )
+)
+
 
 ;; GLOBALS
 
