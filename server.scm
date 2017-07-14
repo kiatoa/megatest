@@ -504,10 +504,10 @@
 	      (if will-sync
                   (let ((sync-start (current-milliseconds)))
 		    (with-output-to-file start-file (lambda ()(print (current-process-id))))
-
+		    
 		    ;; put lock here
 		    
-                    (if (< sync-duration 300)
+                    (if (< sync-duration 1000) ;; NOTE: db:sync-to-megatest.db keeps track of time of last sync and syncs incrementally
                         (let ((res        (db:sync-to-megatest.db dbstruct no-sync-db: no-sync-db))) ;; did we sync any data? If so need to set the db touched flag to keep the server alive
                           (set! sync-duration (- (current-milliseconds) sync-start))
                           (if (> res 0) ;; some records were transferred, keep the db alive

@@ -1050,16 +1050,28 @@
 ;;;; run-ids
 ;;    if #f use *db-local-sync* : or 'local-sync-flags
 ;;    if #t use timestamps      : or 'timestamps
+;;
+;;  NB// no-sync-db is the db handle, not a flag!
+;;
 (define (db:sync-to-megatest.db dbstruct #!key (no-sync-db #f)) 
   (let* ((start-time         (current-seconds))
-	 (last-update        (if no-sync-db
-				 (db:no-sync-get/default no-sync-db "LAST_UPDATE" 0)
-				 0)) ;; (or (db:get-var dbstruct "LAST_UPDATE") 0))
+	 (last-full-update   (if no-sync-db
+				 (db:no-sync-get/default no-sync-db "LAST_FULL_UPDATE" 0)
+				 0))
+	 (full-sync-needed   (> (- start-time last-full-update) 3600)) ;; every hour do a full sync
+	 (last-update        (if full-sync-needed
+				 0
+				 (if no-sync-db
+				     (db:no-sync-get/default no-sync-db "LAST_UPDATE" 0)
+				     0))) ;; (or (db:get-var dbstruct "LAST_UPDATE") 0))
 	 (sync-needed        (> (- start-time last-update) 6))
-	 (res                (if sync-needed ;; don't sync if a sync already occurred in the past 6 seconds
+	 (res                (if (or sync-needed ;; don't sync if a sync already occurred in the past 6 seconds
+				     full-sync-needed)
 				 (begin
 				   (if no-sync-db
-				       (db:no-sync-set no-sync-db "LAST_UPDATE" start-time))
+				       (begin
+					 (if full-sync-needed (db:no-sync-set no-sync-db "LAST_FULL_UPDATE" start-time))
+					 (db:no-sync-set no-sync-db "LAST_UPDATE" start-time)))
 				   (db:tmp->megatest.db-sync dbstruct last-update))
 				 0))
 	 (sync-time           (- (current-seconds) start-time)))
