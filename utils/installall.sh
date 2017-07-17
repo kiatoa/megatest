@@ -216,7 +216,7 @@ done
 # $CHICKEN_INSTALL $PROX -keep-installed matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client spiffy-request-vars md5 message-digest http-client spiffy-directory-listing
 for egg in matchable readline apropos base64 regex-literals format "regex-case" "test" \
 	coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo \
-	tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client \
+	tcp rpc csv-xml fmt json md5 awful http-client:0.7.1 spiffy uri-common intarweb http-client \
 	spiffy-request-vars s md5 message-digest spiffy-directory-listing ssax sxml-serializer \
 	sxml-modifications logpro z3 call-with-environment-variables \
 	pathname-expand typed-records simple-exceptions numbers crypt parley srfi-42 \
