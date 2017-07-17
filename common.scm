@@ -2330,3 +2330,49 @@
 	(read-config home-cfgfile view-cfgdat #t))
     view-cfgdat))
 
+;;======================================================================
+;; H I E R A R C H I C A L   H A S H   T A B L E S
+;;======================================================================
+
+;; Every element including top element is a vector:
+;;   <vector subhash value>
+
+(define (hh:make-hh #!key (ht #f)(value #f))
+  (vector (or ht    (make-hash-table)) value))
+
+;; used internally
+(define-inline (hh:set-ht! hh ht)       (vector-set! hh 0 ht))
+(define-inline (hh:get-ht hh)           (vector-ref  hh 0))
+(define-inline (hh:set-value! hh value) (vector-set! hh 1 value))
+(define-inline (hh:get-value  hh value) (vector-ref  hh 1))
+
+;; given a hierarchial hash and some keys look up the value ...
+;;
+(define (hh:get hh . keys)
+  (if (null? keys)
+      (vector-ref hh 1) ;; we have reached the end of the line, return the value sought
+      (let ((sub-ht (hh:get-ht hh)))
+	(if sub-ht ;; yes, there is more hierarchy
+	    (let ((sub-hh (hash-table-ref/default sub-ht (car keys) #f)))
+	      (if sub-hh
+		  (apply hh:get sub-hh (cdr keys))
+		  #f))
+	    #f))))
+
+;; given a hierarchial hash, a value and some keys, add needed hierarcy and insert the value
+;;
+(define (hh:set! hh value . keys)
+  (if (null? keys)
+      (hh:set-value! hh value) ;; we have reached the end of the line, store the value
+      (let ((sub-ht (hh:get-ht hh)))
+	(if sub-ht ;; yes, there is more hierarchy
+	    (let ((sub-hh (hash-table-ref/default sub-ht (car keys) #f)))
+	      (if (not sub-hh) ;; we'll need to add the next level of hierarchy
+		  (let ((new-sub-hh (hh:make-hh)))
+		    (hash-table-set! sub-ht (car keys) new-sub-hh)
+		    (apply hh:set! new-sub-hh value (cdr keys)))
+		  (apply hh:set! sub-hh value (cdr keys))))    ;; call the sub-hierhash with remaining keys
+	    (begin
+	      (hh:set-ht! hh (make-hash-table))
+	      (apply hh:set! hh value keys))))))
+  
