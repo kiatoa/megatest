@@ -455,6 +455,7 @@
 (define (server:writable-watchdog dbstruct)
   (thread-sleep! 0.05) ;; delay for startup
   (let ((legacy-sync  (common:run-sync?))
+        (sync-stale-seconds (configf:lookup-number *configdat* "server" "sync-stale-seconds" default: 300))
 	(debug-mode   (debug:debug-mode 1))
 	(last-time    (current-seconds))
 	(no-sync-db   (db:open-no-sync-db))
@@ -492,9 +493,10 @@
 		   (recently-synced  (and (< (- start-time mt-mod-time) sync-period) ;; not useful if sync didn't modify megatest.db!
 					  (< mt-mod-time last-sync-start)))
 		   (sync-done        (<= last-sync-start last-sync-end))
+                   (sync-stale       (> start-time (+ last-sync-start sync-stale-seconds)))
 		   (will-sync        (and (not *time-to-exit*)       ;; do not start a sync if we are in the process of exiting
                                           (or need-sync should-sync)
-					  sync-done
+					  (or sync-done sync-stale)
 					  (not sync-in-progress)
 					  (not recently-synced))))
               (debug:print-info 13 *default-log-port* "WD writable-watchdog top of loop.  need-sync="need-sync" sync-in-progress=" sync-in-progress
