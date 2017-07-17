@@ -176,6 +176,7 @@ if ! [[ -e $PREFIX/lib64/libnanomsg.so.1.0.0 ]]; then
 	./configure --prefix=$PREFIX
 	make
 	make install
+	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL $PROX nanomsg
 fi
 cd $BUILDHOME
 
