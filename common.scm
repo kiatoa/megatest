@@ -47,6 +47,8 @@
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
 
+
+;; returns list of fd count, socket count
 (define (get-file-descriptor-count #!key  (pid (current-process-id )))
   (list
     (length (glob (conc "/proc/" pid "/fd/*")))
