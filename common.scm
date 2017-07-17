@@ -9,14 +9,13 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 data-structures posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
-     matchable)
-(require-extension regex posix)
-
-(require-extension (srfi 18) extras tcp rpc)
-
-(import (prefix sqlite3 sqlite3:))
-(import (prefix base64 base64:))
+(use srfi-1 data-structures posix regex-case (prefix base64 base64:)
+     format dot-locking csv-xml z3 ;; sql-de-lite
+     hostinfo md5 message-digest typed-records directory-utils stack
+     matchable regex posix (srfi 18) extras ;; tcp 
+     (prefix nanomsg nmsg:)
+     (prefix sqlite3 sqlite3:)
+     )
 
 (declare (unit common))
 
@@ -2273,7 +2272,47 @@
 			  fallback-launcher
 			  (loop (car tal)(cdr tal))))))))
 	fallback-launcher)))
+
+;;======================================================================
+;; NMSG AND NEW API
+;;======================================================================
+
+;; nm based server
+;;
+(define (nm:start-server dbconn #!key (given-host-name #f))
+  (let* ((srvdat    (start-raw-server given-host-name: given-host-name))
+	 (host-name (srvdat-host srvdat))
+	 (soc       (srvdat-soc srvdat)))
+    
+    ;; start the queue processor (save for second round of development)
+    ;;
+    ;; (thread-start! (queue-processory dbconn) "Queue processor")
+    ;; msg is an alist
+    ;;  'r host:port  <== where to return the data
+    ;;  'p params     <== data to apply the command to
+    ;;  'e j|s|l      <== encoding of the params. default is s (sexp), if not specified is assumed to be default
+    ;;  'c command    <== look up the function to call using this key
+    ;;
+    (let loop ((msg-in (nn-recv soc)))
+      (if (not (equal? msg-in "quit"))
+	  (let* ((dat        (decode msg-in))
+		 (host-port  (alist-ref 'r dat)) ;; this is for the reverse req rep where the server is a client of the original client
+		 (params     (alist-ref 'p dat))
+		 (command    (let ((c (alist-ref 'c dat)))(if c (string->symbol c) #f)))
+		 (all-good   (and host-port params command (hash-table-exists? *commands* command))))
+	    (if all-good
+		(let ((cmddat (make-qitem
+			       command:   command
+			       host-port: host-port
+			       params:    params)))
+		  (queue-push cmddat) 		;; put request into the queue
+		  (nn-send soc "queued"))         ;; reply with "queued"
+		(print "ERROR: BAD request " dat))
+	    (loop (nn-recv soc)))))
+    (nn-close soc)))
   
+
+
 ;;======================================================================
 ;; D A S H B O A R D   U S E R   V I E W S
 ;;======================================================================
