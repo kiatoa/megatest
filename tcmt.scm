@@ -84,7 +84,7 @@
 		     (case (string->symbol newstat)
 		       ((UNK)       ) ;; do nothing
 		       ((RUNNING)   (print "##teamcity[testStarted name='" tctname "']"))
-		       ((PASS SKIP) (print "##teamcity[testFinished name='" tctname "' duration='" (* 1e3 duration) "'" cmtstr details " ]"))
+		       ((PASS SKIP WARN WAIVED) (print "##teamcity[testFinished name='" tctname "' duration='" (* 1e3 duration) "'" cmtstr details " ]"))
 		       (else
 			(print "##teamcity[testFailed name='" tctname "' " cmtstr details " ]")))
 		     (flush-output)

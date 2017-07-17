@@ -466,54 +466,54 @@
 	  (set! *toppath* top-path)
 	  (setenv "MT_TEST_RUN_DIR"  work-area)
 
-	  ;; On NFS it can be slow and unreliable to get needed startup information.
-	  ;;  i. Check if we are on the homehost, if so, proceed
-	  ;; ii. Check if host and port passed in via CMDINFO are valid and if
-	  ;;     possible use them.
-	  (let ((bestadrs (server:get-best-guess-address (get-host-name)))
-		(needcare #f))
-	    (if (equal? homehost bestadrs) ;; we are likely on the homehost
-		(debug:print-info 0 *default-log-port* "test " test-name " appears to be running on the homehost " homehost)
-		(let ((host-port (if serverurl (string-split serverurl ":") #f)))
-		  (if (not *runremote*)(set! *runremote* (make-remote))) ;; init *runremote*
-		  (if (string? homehost)
-		      (if (and host-port
-			       (> (length host-port) 1))
-			  (let* ((host      (car host-port))
-                                 (port      (cadr host-port))
-                                 (start-res (http-transport:client-connect host port))
-                                 (ping-res  (rmt:login-no-auto-client-setup start-res)))
-			    (if (and start-res
-				     ping-res)
-				;; (begin ;; let ((url  (http-transport:server-dat-make-url start-res)))
-				(begin
-				  (remote-conndat-set! *runremote* start-res)
-				  ;; (remote-server-url-set! *runremote* url)
-				  ;; (if (server:ping url)
-				  (debug:print-info 0 *default-log-port* "connected to " host ":" port " using CMDINFO data."))
-				(begin
-				  (debug:print-info 0 *default-log-port* "have CMDINFO data but failed to connect to " host ":" port)
-				  (set! *runremote* #f))
-				  ;; (remote-conndat-set! *runremote* #f))
-				))
-			  (begin
-			    (set! *runremote* #f)
-			    (debug:print-info 0 *default-log-port* (if host-port
-								       (conc "received invalid host-port information " host-port)
-								       "no host-port information received"))
-			    ;; potential for bad situation if simultaneous starting of hundreds of jobs on servers, set needcare.
-			    (set! needcare #t)))
-		      (begin
-			(set! *runremote* #f)
-			(debug:print-info 0 *default-log-port* "received no homehost information. Please report this to support as it should not happen.")
-			(set! needcare #t)))))
-	    (if needcare  ;; due to very slow NFS we will do a brute force mkdir to ensure that the directory inode it truly available on this host
-		(let ((logdir (conc top-path "/logs"))) ;; we'll try to create this directory
-		  (handle-exceptions
-		      exn
-		      (debug:print 0 *default-log-port* "Failed to create directory " logdir " expect problems, message: " ((condition-property-accessor 'exn 'message) exn))
-		    (create-directory logdir #t)))))
-		  
+	;;    ;; On NFS it can be slow and unreliable to get needed startup information.
+	;;    ;;  i. Check if we are on the homehost, if so, proceed
+	;;    ;; ii. Check if host and port passed in via CMDINFO are valid and if
+	;;    ;;     possible use them.
+	;;    (let ((bestadrs (server:get-best-guess-address (get-host-name)))
+	;;    	(needcare #f))
+	;;      (if (equal? homehost bestadrs) ;; we are likely on the homehost
+	;;    	(debug:print-info 0 *default-log-port* "test " test-name " appears to be running on the homehost " homehost)
+	;;    	(let ((host-port (if serverurl (string-split serverurl ":") #f)))
+	;;    	  (if (not *runremote*)(set! *runremote* (make-remote))) ;; init *runremote*
+	;;    	  (if (string? homehost)
+	;;    	      (if (and host-port
+	;;    		       (> (length host-port) 1))
+	;;    		  (let* ((host      (car host-port))
+        ;;                           (port      (cadr host-port))
+        ;;                           (start-res (http-transport:client-connect host port))
+        ;;                           (ping-res  (rmt:login-no-auto-client-setup start-res)))
+	;;    		    (if (and start-res
+	;;    			     ping-res)
+	;;    			;; (begin ;; let ((url  (http-transport:server-dat-make-url start-res)))
+	;;    			(begin
+	;;    			  (remote-conndat-set! *runremote* start-res)
+	;;    			  ;; (remote-server-url-set! *runremote* url)
+	;;    			  ;; (if (server:ping url)
+	;;    			  (debug:print-info 0 *default-log-port* "connected to " host ":" port " using CMDINFO data."))
+	;;    			(begin
+	;;    			  (debug:print-info 0 *default-log-port* "have CMDINFO data but failed to connect to " host ":" port)
+	;;    			  (set! *runremote* #f))
+	;;    			  ;; (remote-conndat-set! *runremote* #f))
+	;;    			))
+	;;    		  (begin
+	;;    		    (set! *runremote* #f)
+	;;    		    (debug:print-info 0 *default-log-port* (if host-port
+	;;    							       (conc "received invalid host-port information " host-port)
+	;;    							       "no host-port information received"))
+	;;    		    ;; potential for bad situation if simultaneous starting of hundreds of jobs on servers, set needcare.
+	;;    		    (set! needcare #t)))
+	;;    	      (begin
+	;;    		(set! *runremote* #f)
+	;;    		(debug:print-info 0 *default-log-port* "received no homehost information. Please report this to support as it should not happen.")
+	;;    		(set! needcare #t)))))
+	;;      (if needcare  ;; due to very slow NFS we will do a brute force mkdir to ensure that the directory inode it truly available on this host
+	;;    	(let ((logdir (conc top-path "/logs"))) ;; we'll try to create this directory
+	;;    	  (handle-exceptions
+	;;    	      exn
+	;;    	      (debug:print 0 *default-log-port* "Failed to create directory " logdir " expect problems, message: " ((condition-property-accessor 'exn 'message) exn))
+	;;    	    (create-directory logdir #t)))))
+	;;    	  
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
 	    (if (or (common:file-exists? top-path)
@@ -1237,7 +1237,20 @@
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
   (mutex-lock! *launch-setup-mutex*) ;; setting variables and processing the testconfig is NOT thread-safe, reuse the launch-setup mutex
-  (let* ((item-path       (item-list->path itemdat))
+  (let* ( ;; (lock-key        (conc "test-" test-id))
+	;; (got-lock        (let loop ((lock        (rmt:no-sync-get-lock lock-key))
+	;; 			     (expire-time (+ (current-seconds) 15))) ;; give up on getting the lock and steal it after 15 seconds
+	;; 		    (if (car lock)
+	;; 			#t
+	;; 			(if (> (current-seconds) expire-time)
+	;; 			    (begin
+	;; 			      (debug:print-info 0 *default-log-port* "Timed out waiting for a lock to launch test " keyvals " " runname " " test-name " " test-path)
+	;; 			      (rmt:no-sync-del! lock-key) ;; destroy the lock
+	;; 			      (loop (rmt:no-sync-get-lock lock-key) expire-time)) ;; 
+	;; 			    (begin
+	;; 			      (thread-sleep! 1)
+	;; 			      (loop (rmt:no-sync-get-lock lock-key) expire-time))))))
+	 (item-path       (item-list->path itemdat))
 	 (contour         #f)) ;; NOT READY FOR THIS (args:get-arg "-contour")))
     (let loop ((delta        (- (current-seconds) *last-launch*))
 	       (launch-delay (configf:lookup-number *configdat* "setup" "launch-delay" default: 1)))
@@ -1413,6 +1426,7 @@
 					'()
 					(cdr fullcmd)))))
         (mutex-unlock! *launch-setup-mutex*) ;; yes, really should mutex all the way to here. Need to put this entire process into a fork.
+	;; (rmt:no-sync-del! lock-key)         ;; release the lock for starting this test
 	(if (not launchwait) ;; give the OS a little time to allow the process to start
 	    (thread-sleep! 0.01))
 	(with-output-to-file "mt_launch.log"

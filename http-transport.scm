@@ -58,8 +58,11 @@
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname))) 
 	 (start-port      (portlogger:open-run-close portlogger:find-port))
-	 (link-tree-path  (common:get-linktree))) ;; (configf:lookup *configdat* "setup" "linktree")))
+	 (link-tree-path  (common:get-linktree))
+	 (tmp-area        (common:get-db-tmp-area))
+	 (start-file      (conc tmp-area "/.server-start")))
     (debug:print-info 0 *default-log-port* "portlogger recommended port: " start-port)
+    ;; set some parameters for the server
     (root-path     (if link-tree-path 
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
@@ -105,6 +108,7 @@
 				   (send-response body: "hey there!\n"
 						  headers: '((content-type text/plain))))
 				  (else (continue))))))))
+    (with-output-to-file start-file (lambda ()(print (current-process-id))))
     (http-transport:try-start-server ipaddrstr start-port)))
 
 ;; This is recursively run by http-transport:run until sucessful
@@ -240,6 +244,7 @@
 						(debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
 						(debug:print 0 *default-log-port* " message: " msg)
 						(debug:print 0 *default-log-port* " cmd: " cmd " params: " params)
+                                                (debug:print 0 *default-log-port* " call-chain: " call-chain)
 						(if runremote
 						    (remote-conndat-set! runremote #f))
 						;; Killing associated server to allow clean retry.")
@@ -251,7 +256,7 @@
 						(db:obj->string #f))
 					    (with-input-from-request ;; was dat
 					     fullurl 
-					     (list (cons 'key "thekey")
+					     (list (cons 'key (or *server-id* "thekey"))
 						   (cons 'cmd cmd)
 						   (cons 'params sparams))
 					     read-string))
@@ -302,6 +307,7 @@
 	      (print-call-chain *default-log-port*)
 	      (debug:print-error 0 *default-log-port* " closing connection failed with error: " ((condition-property-accessor 'exn 'message) exn)))
 	    (close-connection! api-dat)
+            (close-idle-connections!)
 	    #t))
 	#f)))
 
@@ -349,7 +355,9 @@
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
   (debug:print-info 0 *default-log-port* "Starting the sync-back, keep alive thread in server")
-  (let* ((server-start-time (current-seconds))
+  (let* ((tmp-area          (common:get-db-tmp-area))
+	 (started-file      (conc tmp-area "/.server-started"))
+	 (server-start-time (current-seconds))
 	 (server-info (let loop ((start-time (current-seconds))
 				 (changed    #t)
 				 (last-sdat  "not this"))
@@ -378,9 +386,12 @@
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)
-	 (server-timeout (server:get-timeout))
+	 (server-timeout (server:expiration-timeout))
 	 (server-going  #f)
 	 (server-log-file (args:get-arg "-log"))) ;; always set when we are a server
+
+    (with-output-to-file started-file (lambda ()(print (current-process-id))))
+
     (let loop ((count         0)
 	       (server-state 'available)
 	       (bad-sync-count 0)
@@ -432,17 +443,11 @@
 	  (begin
 	    (debug:print 0 *default-log-port* "Server stats:")
 	    (db:print-current-query-stats)))
-      (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600))
-	     (adjusted-timeout (if (> hrs-since-start 1)  ;; never used!
-				   (- server-timeout (inexact->exact (round (* hrs-since-start 60))))  ;; subtract 60 seconds per hour
-				   server-timeout)))
-	(if (common:low-noise-print 120 "server timeout")
-	    (debug:print-info 0 *default-log-port* "Adjusted server timeout: " adjusted-timeout))
+      (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600)))
 	(cond
          ((and *server-run*
 	       (> (+ last-access server-timeout)
-		  (current-seconds))
-	       (< (- (current-seconds) server-start-time) 3600)) ;; do not update log or touch log if we've been running for more than one hour.
+		  (current-seconds)))
           (if (common:low-noise-print 120 "server continuing")
               (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
 	      (let ((curr-time (current-seconds)))
@@ -493,6 +498,19 @@
 ;; start_server? 
 ;;
 (define (http-transport:launch)
+  ;; check that a server start is in progress, pause or exit if so
+  (let* ((tmp-area            (common:get-db-tmp-area))
+	 (server-start        (conc tmp-area "/.server-start"))
+	 (server-started      (conc tmp-area "/.server-started"))
+	 (start-time          (common:lazy-modification-time server-start))
+	 (started-time        (common:lazy-modification-time server-started))
+	 (server-starting     (< start-time started-time)) ;; if start-time is less than started-time then a server is still starting
+	 (start-time-old      (> (- (current-seconds) start-time) 5)))
+    (if (and (not start-time-old) ;; last server start try was less than five seconds ago
+	     (not server-starting))
+	(begin
+	  (debug:print-info 0 *default-log-port* "NOT starting server, there is either a recently started server or a server in process of starting")
+	  (exit))))
   ;; lets not even bother to start if there are already three or more server files ready to go
   (let* ((num-alive   (server:get-num-alive (server:get-list *toppath*))))
     (if (> num-alive 3)
@@ -517,23 +535,23 @@
     (thread-join! th2)
     (exit)))
 
-(define (http-transport:server-signal-handler signum)
-  (signal-mask! signum)
-  (handle-exceptions
-   exn
-   (debug:print 0 *default-log-port* " ... exiting ...")
-   (let ((th1 (make-thread (lambda ()
-			     (thread-sleep! 1))
-			   "eat response"))
-	 (th2 (make-thread (lambda ()
-			     (debug:print-error 0 *default-log-port* "Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
-			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
-			     (debug:print 0 *default-log-port* "       Done.")
-			     (exit 4))
-			   "exit on ^C timer")))
-     (thread-start! th2)
-     (thread-start! th1)
-     (thread-join! th2))))
+;; (define (http-transport:server-signal-handler signum)
+;;   (signal-mask! signum)
+;;   (handle-exceptions
+;;    exn
+;;    (debug:print 0 *default-log-port* " ... exiting ...")
+;;    (let ((th1 (make-thread (lambda ()
+;; 			     (thread-sleep! 1))
+;; 			   "eat response"))
+;; 	 (th2 (make-thread (lambda ()
+;; 			     (debug:print-error 0 *default-log-port* "Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
+;; 			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
+;; 			     (debug:print 0 *default-log-port* "       Done.")
+;; 			     (exit 4))
+;; 			   "exit on ^C timer")))
+;;      (thread-start! th2)
+;;      (thread-start! th1)
+;;      (thread-join! th2))))
 
 ;;======================================================================
 ;; web pages

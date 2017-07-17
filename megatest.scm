@@ -53,9 +53,33 @@
 (include "run_records.scm")
 (include "megatest-fossil-hash.scm")
 
+(define *usage-log-file* #f)    ;; put path to file for logging usage in this var in the ~/.megatestrc file
+(define *usage-use-seconds* #f) ;; for Epoc seconds in usage logging change this to #t in ~/.megatestrc file
+
+;; load the ~/.megatestrc file, put (use trace)(trace-call-sites #t)(trace function-you-want-to-trace) in this file
+;;
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.megatestrc")))
   (if (common:file-exists? debugcontrolf)
       (load debugcontrolf)))
+
+;; usage logging, careful with this, it is not designed to deal with all real world challenges!
+;;
+(if (and (common:file-exists? *usage-log-file*)
+	   (file-write-access? *usage-log-file*))
+      (with-output-to-file
+	  *usage-log-file*
+	(lambda ()
+	  (print
+           (if *usage-use-seconds*
+               (current-seconds)
+               (time->string
+                (seconds->local-time (current-seconds))
+                "%Yww%V.%w %H:%M:%S"))
+           " "
+           (current-user-name) " "
+           (current-directory) " "
+	    "\"" (string-intersperse (argv) " ") "\""))
+	#:append))
 
 ;; Disabled help items
 ;;  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)

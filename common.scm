@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
+(use srfi-1 data-structures posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
      matchable regex posix srfi-18 extras
      pkts (prefix dbi dbi:))
 
@@ -44,6 +44,14 @@
 
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
+
+(define (get-file-descriptor-count #!key  (pid (current-process-id )))
+  (list
+    (length (glob (conc "/proc/" pid "/fd/*")))
+    (length  (filter identity (map socket? (glob (conc "/proc/" pid "/fd/*")))))
+  )
+)
+
 
 ;; GLOBALS
 
@@ -119,7 +127,7 @@
 (define *runremote*         #f)                ;; if set up for server communication this will hold <host port>
 ;; (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))
-;; (define *server-id*         #f)
+(define *server-id*         #f)
 (define *server-info*       #f)  ;; good candidate for easily convert to non-global
 (define *time-to-exit*      #f)
 (define *server-run*        #t)
@@ -160,7 +168,7 @@
   (last-server-check 0)  ;; last time we checked to see if the server was alive
   (conndat           #f)
   (transport         *transport-type*)
-  (server-timeout    (server:get-timeout)) ;; default from server:get-timeout
+  (server-timeout    (server:expiration-timeout))
   (force-server      #f)
   (ro-mode           #f)  
   (ro-mode-checked   #f)) ;; flag that indicates we have checked for ro-mode
@@ -502,8 +510,9 @@
     (5 "WAIVED")
     (6 "CHECK")
     (7 "STUCK/DEAD")
-    (8 "FAIL")
-    (9 "ABORT")))
+    (8 "DEAD")
+    (9 "FAIL")
+    (10 "ABORT")))
 
 (define *common:ended-states*       ;; states which indicate the test is stopped and will not proceed
   '("COMPLETED" "ARCHIVED" "KILLED" "KILLREQ" "STUCK" "INCOMPLETE"))
@@ -2081,7 +2090,13 @@
              (string-split instr)))
    "/"))
 
-(define (common:faux-lock keyname #!key (wait-time 8))
+;;======================================================================
+;; L O C K I N G   M E C H A N I S M S 
+;;======================================================================
+
+;; faux-lock is deprecated. Please use simple-lock below
+;;
+(define (common:faux-lock keyname #!key (wait-time 8)(allow-lock-steal #t))
   (if (rmt:no-sync-get/default keyname #f) ;; do not be tempted to compare to pid. locking is a one-shot action, if already locked for this pid it doesn't actually count
       (if (> wait-time 0)
 	  (begin
@@ -2103,7 +2118,15 @@
         #t)
       #f))
 
-  
+;; simple lock. improve and converge on this one.
+;;
+(define (common:simple-lock keyname)
+  (rmt:no-sync-get-lock keyname))
+
+;;======================================================================
+;;
+;;======================================================================
+
 (define (common:in-running-test?)
   (and (args:get-arg "-execute") (get-environment-variable "MT_CMDINFO")))
 

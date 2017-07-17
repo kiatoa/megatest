@@ -1050,16 +1050,28 @@
 ;;;; run-ids
 ;;    if #f use *db-local-sync* : or 'local-sync-flags
 ;;    if #t use timestamps      : or 'timestamps
+;;
+;;  NB// no-sync-db is the db handle, not a flag!
+;;
 (define (db:sync-to-megatest.db dbstruct #!key (no-sync-db #f)) 
   (let* ((start-time         (current-seconds))
-	 (last-update        (if no-sync-db
-				 (db:no-sync-get/default no-sync-db "LAST_UPDATE" 0)
-				 0)) ;; (or (db:get-var dbstruct "LAST_UPDATE") 0))
+	 (last-full-update   (if no-sync-db
+				 (db:no-sync-get/default no-sync-db "LAST_FULL_UPDATE" 0)
+				 0))
+	 (full-sync-needed   (> (- start-time last-full-update) 3600)) ;; every hour do a full sync
+	 (last-update        (if full-sync-needed
+				 0
+				 (if no-sync-db
+				     (db:no-sync-get/default no-sync-db "LAST_UPDATE" 0)
+				     0))) ;; (or (db:get-var dbstruct "LAST_UPDATE") 0))
 	 (sync-needed        (> (- start-time last-update) 6))
-	 (res                (if sync-needed ;; don't sync if a sync already occurred in the past 6 seconds
+	 (res                (if (or sync-needed ;; don't sync if a sync already occurred in the past 6 seconds
+				     full-sync-needed)
 				 (begin
 				   (if no-sync-db
-				       (db:no-sync-set no-sync-db "LAST_UPDATE" start-time))
+				       (begin
+					 (if full-sync-needed (db:no-sync-set no-sync-db "LAST_FULL_UPDATE" start-time))
+					 (db:no-sync-set no-sync-db "LAST_UPDATE" start-time)))
 				   (db:tmp->megatest.db-sync dbstruct last-update))
 				 0))
 	 (sync-time           (- (current-seconds) start-time)))
@@ -1851,10 +1863,14 @@
 (define (db:open-no-sync-db)
   (let* ((dbpath (db:dbfile-path))
 	 (dbname (conc dbpath "/no-sync.db"))
+	 (db-exists (common:file-exists? dbname))
 	 (db     (sqlite3:open-database dbname)))
     (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-    (sqlite3:execute db "PRAGMA synchronous = 0;")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS no_sync_metadat (var TEXT,val TEXT, CONSTRAINT no_sync_metadat_constraint UNIQUE (var));")
+    (if (not db-exists)
+	(begin
+	  (sqlite3:execute db "PRAGMA synchronous = 0;")
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS no_sync_metadat (var TEXT,val TEXT, CONSTRAINT no_sync_metadat_constraint UNIQUE (var));")
+	  (sqlite3:execute db "PRAGMA journal_mode=WAL;")))
     db))
 
 ;; if we are not a server create a db handle. this is not finalized
@@ -1862,11 +1878,14 @@
 ;; finalize sqlite3 dbs with the sqlite3 egg.
 ;;
 (define (db:no-sync-db db-in)
-  (if db-in
-      db-in
-      (let ((db (db:open-no-sync-db)))
-	(set! *no-sync-db* db)
-	db)))
+  (mutex-lock! *db-access-mutex*)
+  (let ((res (if db-in
+                 db-in
+                 (let ((db (db:open-no-sync-db)))
+                   (set! *no-sync-db* db)
+                   db))))
+    (mutex-unlock! *db-access-mutex*)
+    res))
 
 (define (db:no-sync-set db var val)
   (sqlite3:execute (db:no-sync-db db) "INSERT OR REPLACE INTO no_sync_metadat (var,val) VALUES (?,?);" var val))
@@ -1893,6 +1912,26 @@
 
 (define (db:no-sync-close-db db)
   (db:safely-close-sqlite3-db db))
+
+;; transaction protected lock aquisition
+;; either:
+;;    fails    returns  (#f . lock-creation-time)
+;;    succeeds (returns (#t . lock-creation-time)
+;; use (db:no-sync-del! db keyname) to release the lock
+;;
+(define (db:no-sync-get-lock db-in keyname)
+  (let ((db (db:no-sync-db db-in)))
+    (sqlite3:with-transaction
+     db
+     (lambda ()
+       (handle-exceptions
+	   exn
+	   (let ((lock-time (current-seconds)))
+	     (sqlite3:execute db "INSERT INTO no_sync_metadat (var,val) VALUES(?,?);" keyname lock-time)
+	     `(#t . ,lock-time))
+	 `(#f . ,(sqlite3:first-result db "SELECT val FROM no_sync_metadat WHERE var=?;" keyname)))))))
+
+
 
 ;; use a global for some primitive caching, it is just silly to
 ;; re-read the db over and over again for the keys since they never
