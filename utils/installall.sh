@@ -37,6 +37,7 @@ echo
 echo "Set additional_libpath to help find gtk or other libraries, don't forget a leading :"
 
 SYSTEM_TYPE=$(lsb_release -irs |tr ' ' '_' |tr '\n' '-')$(uname -i)-$OPTION
+
 CHICKEN_VERSION=4.11.0
 CHICKEN_BASEVER=4.11.0
 
@@ -56,6 +57,8 @@ Ubuntu-16.04-i686-std)
 	CDVER=5.10
 	IUPVER=3.17
 	IMVER=3.11
+        CHICKEN_VERSION=4.12.0
+        CHICKEN_BASEVER=4.12.0
 	;;
 SUSE_LINUX_11-x86_64-std)
   KTYPE=26g4 
@@ -71,10 +74,14 @@ CentOS_5.11-x86_64-std)
   ;; 
 esac
 
+echo SYSTEM_TYPE=$SYSTEM_TYPE
 echo KTYPE=$KTYPE			  
 echo CDVER=$CDVER
 echo IUPVER=$IUPVER
 echo IMVER=$IMVER	
+echo CHICKEN_VERSION=$CHICKEN_VERSION
+echo CHICKEN_BASEVER=$CHICKEN_BASEVER
+
 # NOTES:
 #
 # Centos with security setup may need to do commands such as following as root:
