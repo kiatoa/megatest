@@ -703,7 +703,7 @@
                       (handle-exceptions
                        exn
                        #f
-                       (debug:print 0 *default-log-port* "WARNING: content " dat " for cache " fname " is not readable. Deleting generated file.")
+                       (debug:print 0 *default-log-port* "WARNING: content read from cache " fname " is not readable. Deleting generated file.")
                        (delete-file fname))
                       #f))
                 #f))))

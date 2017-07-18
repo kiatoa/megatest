@@ -414,6 +414,27 @@
                         (if do-sync (current-seconds) last-sync)))))))
     (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f))) ;; NOTE: Checking twice for keep-going is intentional
 
+(define (launch:test-execute-exit-handler run-id test-id)
+  (let ((sighand (lambda (signum)
+                   ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
+                   (if (eq? signum signal/stop)
+                       (debug:print-error 0 *default-log-port* "attempt to STOP process. Exiting."))
+                   (set! *time-to-exit* #t)
+                   (print "Received signal " signum ", cleaning up before exit. Please wait...")
+                   (let ((th1 (make-thread (lambda ()
+                                             (rmt:test-set-state-status run-id test-id "INCOMPLETE" "KILLED" #f)
+                                             (print "Killed by signal " signum ". Exiting")
+                                             (thread-sleep! 1)
+                                             (exit 1))))
+                         (th2 (make-thread (lambda ()
+                                             (thread-sleep! 2)
+                                             (debug:print 0 *default-log-port* "Done")
+                                             (exit 4)))))
+                     (thread-start! th2)
+                     (thread-start! th1)
+                     (thread-join! th2)))))
+    (set-signal-handler! signal/int sighand)
+    (set-signal-handler! signal/term sighand)))
 
 (define (launch:execute encoded-cmd)
   (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
@@ -424,7 +445,7 @@
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
 	(let* ((testpath  (assoc/default 'testpath  cmdinfo))  ;; testpath is the test spec area
 	       (top-path  (assoc/default 'toppath   cmdinfo))
-	       (work-area (assoc/default 'work-area cmdinfo))  ;; work-area is the test run area
+	       (work-area #f) ;; (assoc/default 'work-area cmdinfo))  ;; work-area is the test run area
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
 	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
@@ -448,7 +469,7 @@
 	       (item-path (item-list->path itemdat))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 	       (keys      #f)
-	       (keyvals   #f)
+	       ;; (keyvals   (assoc/default 'keyvals   cmdinfo))
 	       (fullrunscript (if (not runscript)
                                   #f
                                   (if (substring-index "/" runscript)
@@ -467,56 +488,7 @@
 	  (setenv "MT_TESTSUITENAME" areaname)
 	  (setenv "MT_RUN_AREA_HOME" top-path)
 	  (set! *toppath* top-path)
-	  (setenv "MT_TEST_RUN_DIR"  work-area)
 
-	;;    ;; On NFS it can be slow and unreliable to get needed startup information.
-	;;    ;;  i. Check if we are on the homehost, if so, proceed
-	;;    ;; ii. Check if host and port passed in via CMDINFO are valid and if
-	;;    ;;     possible use them.
-	;;    (let ((bestadrs (server:get-best-guess-address (get-host-name)))
-	;;    	(needcare #f))
-	;;      (if (equal? homehost bestadrs) ;; we are likely on the homehost
-	;;    	(debug:print-info 0 *default-log-port* "test " test-name " appears to be running on the homehost " homehost)
-	;;    	(let ((host-port (if serverurl (string-split serverurl ":") #f)))
-	;;    	  (if (not *runremote*)(set! *runremote* (make-remote))) ;; init *runremote*
-	;;    	  (if (string? homehost)
-	;;    	      (if (and host-port
-	;;    		       (> (length host-port) 1))
-	;;    		  (let* ((host      (car host-port))
-        ;;                           (port      (cadr host-port))
-        ;;                           (start-res (http-transport:client-connect host port))
-        ;;                           (ping-res  (rmt:login-no-auto-client-setup start-res)))
-	;;    		    (if (and start-res
-	;;    			     ping-res)
-	;;    			;; (begin ;; let ((url  (http-transport:server-dat-make-url start-res)))
-	;;    			(begin
-	;;    			  (remote-conndat-set! *runremote* start-res)
-	;;    			  ;; (remote-server-url-set! *runremote* url)
-	;;    			  ;; (if (server:ping url)
-	;;    			  (debug:print-info 0 *default-log-port* "connected to " host ":" port " using CMDINFO data."))
-	;;    			(begin
-	;;    			  (debug:print-info 0 *default-log-port* "have CMDINFO data but failed to connect to " host ":" port)
-	;;    			  (set! *runremote* #f))
-	;;    			  ;; (remote-conndat-set! *runremote* #f))
-	;;    			))
-	;;    		  (begin
-	;;    		    (set! *runremote* #f)
-	;;    		    (debug:print-info 0 *default-log-port* (if host-port
-	;;    							       (conc "received invalid host-port information " host-port)
-	;;    							       "no host-port information received"))
-	;;    		    ;; potential for bad situation if simultaneous starting of hundreds of jobs on servers, set needcare.
-	;;    		    (set! needcare #t)))
-	;;    	      (begin
-	;;    		(set! *runremote* #f)
-	;;    		(debug:print-info 0 *default-log-port* "received no homehost information. Please report this to support as it should not happen.")
-	;;    		(set! needcare #t)))))
-	;;      (if needcare  ;; due to very slow NFS we will do a brute force mkdir to ensure that the directory inode it truly available on this host
-	;;    	(let ((logdir (conc top-path "/logs"))) ;; we'll try to create this directory
-	;;    	  (handle-exceptions
-	;;    	      exn
-	;;    	      (debug:print 0 *default-log-port* "Failed to create directory " logdir " expect problems, message: " ((condition-property-accessor 'exn 'message) exn))
-	;;    	    (create-directory logdir #t)))))
-	;;    	  
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
 	    (if (or (common:file-exists? top-path)
@@ -528,28 +500,9 @@
 		  (loop (+ count 1)))))
 	  (launch:setup) ;; should be properly in the top-path now
 	  (set! tconfigreg (tests:get-all))
-	  (let ((sighand (lambda (signum)
-			   ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
-			   (if (eq? signum signal/stop)
-			       (debug:print-error 0 *default-log-port* "attempt to STOP process. Exiting."))
-			   (set! *time-to-exit* #t)
-			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
-			   (let ((th1 (make-thread (lambda ()
-						     (rmt:test-set-state-status run-id test-id "INCOMPLETE" "KILLED" #f)
-						     (print "Killed by signal " signum ". Exiting")
-						     (thread-sleep! 1)
-						     (exit 1))))
-				 (th2 (make-thread (lambda ()
-						     (thread-sleep! 2)
-						     (debug:print 0 *default-log-port* "Done")
-						     (exit 4)))))
-			     (thread-start! th2)
-			     (thread-start! th1)
-			     (thread-join! th2)))))
-	    (set-signal-handler! signal/int sighand)
-	    (set-signal-handler! signal/term sighand)
-	    ) ;; (set-signal-handler! signal/stop sighand)
-	  
+
+          (launch:test-execute-exit-handler run-id test-id)
+          
 	  ;; Do not run the test if it is REMOVING, RUNNING, KILLREQ or REMOTEHOSTSTART,
 	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
 	  ;;
@@ -560,16 +513,11 @@
 				  (debug:print 0 *default-log-port* "ERROR: failed to find a record for test-id " test-id ", exiting.")
 				  (exit))))
 		 (test-pid  (db:test-get-process_id  test-info)))
-	    ;; if work-area was pre-ordained, use it, else create and then use
-	    (if (not (and work-area
-			  (file-exists? work-area)
-			  (file-is-directory? work-area)))
-		;; (if (configf:var-is? *configdat* "setup" "early-setup" "yes")
-		(let ((dat  (create-work-area run-id runname keyvals test-id test-path #f test-name itemdat tconfig: tconfig)))
-		  (set! work-area (car dat))
-		  ;; (set! toptest-work-area (cadr dat)) ;; not used
-		  (debug:print-info 2 *default-log-port* "Using work area " work-area)))
-	    
+            
+            (let ((dat (create-work-area run-id runname target test-id testpath #f test-name itemdat)))
+              (set! work-area (car dat)))
+            (debug:print-info 2 *default-log-port* "Using work area " work-area)
+            
 	    (setenv "MT_TEST_RUN_DIR"  work-area)
 	    
 	    (cond
@@ -1241,7 +1189,7 @@
 	    (begin
 	      (debug:print-error 0 *default-log-port* "Failed to create work area at " test-path " with link at " lnktarget ", remaining attempts " remtries)
 	      ;; 
-	      (create-work-area run-id run-info target test-id test-src-path disk-path-in testname itemdat tconfig: tconfig remtries: (- remtries 1)))
+	      (create-work-area run-id run-info target test-id test-src-path disk-path-in testname itemdat remtries: (- remtries 1)))
 	    (list #f #f)))))
 
 ;; 1. look though disks list for disk with most space
@@ -1251,22 +1199,9 @@
 ;;    - could be ssh to host from hosts table (update regularly with load)
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
-(define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
+(define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-source-path itemdat params)
   (mutex-lock! *launch-setup-mutex*) ;; setting variables and processing the testconfig is NOT thread-safe, reuse the launch-setup mutex
-  (let* ( ;; (lock-key        (conc "test-" test-id))
-	;; (got-lock        (let loop ((lock        (rmt:no-sync-get-lock lock-key))
-	;; 			     (expire-time (+ (current-seconds) 15))) ;; give up on getting the lock and steal it after 15 seconds
-	;; 		    (if (car lock)
-	;; 			#t
-	;; 			(if (> (current-seconds) expire-time)
-	;; 			    (begin
-	;; 			      (debug:print-info 0 *default-log-port* "Timed out waiting for a lock to launch test " keyvals " " runname " " test-name " " test-path)
-	;; 			      (rmt:no-sync-del! lock-key) ;; destroy the lock
-	;; 			      (loop (rmt:no-sync-get-lock lock-key) expire-time)) ;; 
-	;; 			    (begin
-	;; 			      (thread-sleep! 1)
-	;; 			      (loop (rmt:no-sync-get-lock lock-key) expire-time))))))
-	 (item-path       (item-list->path itemdat))
+  (let* ((item-path       (item-list->path itemdat))
 	 (contour         #f)) ;; NOT READY FOR THIS (args:get-arg "-contour")))
     (let loop ((delta        (- (current-seconds) *last-launch*))
 	       (launch-delay (configf:lookup-number *configdat* "setup" "launch-delay" default: 1)))
@@ -1321,7 +1256,7 @@
 				      ((dashboard) "megatest")
 				      (else exe)))))
 	   (launcher        (common:get-launcher *configdat* test-name item-path)) ;; (config-lookup *configdat* "jobtools"     "launcher"))
-	   (test-sig        (conc (common:get-testsuite-name) ":" test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
+	   (test-sig        (conc (common:get-testsuite-name) ":" test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-source-path is the full path including the item-path
 	   (work-area       #f)
 	   (toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
 	   (cmdparms   #f)
@@ -1349,16 +1284,16 @@
       (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
       (rmt:set-state-status-and-roll-up-items run-id test-name item-path #f "LAUNCHED" #f)
       ;; (pp (hash-table->alist tconfig))
-      (if (configf:var-is? *configdat* "setup" "early-setup" "yes")
-	  (let ((dat  (create-work-area run-id run-info keyvals test-id test-path #f test-name itemdat tconfig: tconfig)))
-	    (set! work-area (car dat))
-	    (set! toptest-work-area (cadr dat))
-	    (debug:print-info 2 *default-log-port* "Using work area " work-area)))
+;;(if (configf:var-is? *configdat* "setup" "early-setup" "yes")
+;;    (let ((dat  (create-work-area run-id run-info keyvals test-id test-source-path #f test-name itemdat tconfig: tconfig)))
+;;      (set! work-area (car dat))
+;;      (set! toptest-work-area (cadr dat))
+;;      (debug:print-info 2 *default-log-port* "Using work area " work-area)))
       (set! cmdparms (base64:base64-encode 
 		      (z3:encode-buffer 
 		       (with-output-to-string
 			 (lambda () ;; (list 'hosts     hosts)
-			   (write (list (list 'testpath  test-path)
+			   (write (list (list 'testpath  test-source-path)
 					;; (list 'transport (conc *transport-type*))
 					;; (list 'serverinf *server-info*)
 					(list 'homehost  (let* ((hhdat (common:get-homehost)))
@@ -1370,7 +1305,7 @@
 							     #f)) ;;
 					(list 'areaname  (common:get-testsuite-name))
 					(list 'toppath   *toppath*)
-					(list 'work-area work-area)
+					;; (list 'work-area work-area)
 					(list 'test-name test-name) 
 					(list 'runscript runscript) 
 					(list 'run-id    run-id   )
@@ -1381,6 +1316,7 @@
 					(list 'ezsteps   ezsteps) 
 					(list 'target    mt_target)
 					(list 'contour   contour)
+                                        ;; (list 'keyvals   keyvals)
 					(list 'runtlim   (if run-time-limit (common:hms-string->seconds run-time-limit) #f))
 					(list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
 					(list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
@@ -1390,8 +1326,10 @@
       ;; clean out step records from previous run if they exist
       ;; (rmt:delete-test-step-records run-id test-id)
       ;; if the dir does not exist we may have a itempath where individual variables are a path, launch anyway
-      (if (and work-area (common:file-exists? work-area))
-	  (change-directory work-area)) ;; so that log files from the launch process don't clutter the test dir
+      
+      ;; (if (and work-area (common:file-exists? work-area))
+      ;;    (change-directory work-area)) ;; so that log files from the launch process don't clutter the test dir
+
       (cond
        ;; ((and launcher hosts) ;; must be using ssh hostname
        ;;    (set! fullcmd (append launcher (car hosts)(list remote-megatest "-m" test-sig "-execute" cmdparms) debug-param)))
@@ -1404,14 +1342,14 @@
 	(set! fullcmd (append (list remote-megatest "-m" test-sig "-execute" cmdparms) debug-param (list (if useshell "&" ""))))))
       ;; (set! fullcmd (list remote-megatest test-sig "-execute" cmdparms (if useshell "&" "")))))
       (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
-      (debug:print 1 *default-log-port* "Launching " work-area)
+      ;; (debug:print 1 *default-log-port* "Launching " work-area)
       ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
       (debug:print 4 *default-log-port* "fullcmd: " fullcmd)
       (set! *last-launch* (current-seconds)) ;; all that junk above takes time, set this as late as possible.
       (let* ((commonprevvals (alist->env-vars
 			      (hash-table-ref/default *configdat* "env-override" '())))
 	     (miscprevvals   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
-			      (append (list (list "MT_TEST_RUN_DIR" (if work-area work-area "no-test-run-area-set-yet"))
+			      (append (list ;; (list "MT_TEST_RUN_DIR" (if work-area work-area "no-test-run-area-set-yet"))
 					    (list "MT_TEST_NAME" test-name)
 					    (list "MT_ITEM_INFO" (conc itemdat)) ;; GET RID OF THIS ONE
 					    (list "MT_RUNNAME"   runname)
