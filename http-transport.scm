@@ -515,8 +515,12 @@
   ;; lets not even bother to start if there are already three or more server files ready to go
   (let* ((num-alive   (server:get-num-alive (server:get-list *toppath*))))
     (if (> num-alive 3)
-	(begin
+	(let* ((serv-fname      (conc "server-" (current-process-id) "-" (get-host-name) ".log"))
+               (full-serv-fname (conc *toppath* "/logs/" serv-fname))
+               (new-serv-fname  (conc *toppath* "/logs/" "defunct-" serv-fname)))
 	  (debug:print 0 *default-log-port* "ERROR: Aborting server start because there are already " num-alive " possible servers either running or starting up")
+          (if (common:file-exists? serv-fname)
+              (system (conc "sleep 1;mv -f " full-serv-fname " " new-serv-fname)))
 	  (exit))))
   (let* ((th2 (make-thread (lambda ()
 			     (debug:print-info 0 *default-log-port* "Server run thread started")
