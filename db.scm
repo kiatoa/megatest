@@ -51,8 +51,23 @@
   (homehost    #f) ;; not used yet
   (on-homehost #f) ;; not used yet
   (read-only   #f)
+  ;; db-type:
+  ;;  'local   => normal, local, area
+  ;; 'locked   => locked runs
+  ;; 'alt-area => db for another area
+  (db-type     'local)
+  (other-dbs  (make-hash-table))   ;; hash-table of other dbdats, foo => (db . dbpath)) ... 
+  (current-other #f) ;; use this to set *which* other db to use in various calls
   )                ;; goal is to converge on one struct for an area but for now it is too confusing
   
+(define (dbr:dbstruct-add-other-db dbstruct area-name db)
+  (dbr:dbstruct-other-db-set! dbstruct
+			      (hash-table-set! (dbr:dbstruct-other-dbs dbstruct)
+					       area-name
+					       (cons area-name db))))
+
+(define (dbr:dbstruct-lookup-other-db dbstruct area-name)
+  (hash-table-ref/default (dbr:dbstruct-other-dbs dbstruct) area-name #f))
 
 ;; record for keeping state,status and count for doing roll-ups in
 ;; iterated tests
@@ -95,14 +110,37 @@
 ;;    if db not open, open inmem, rundb and sync then return inmem
 ;;    inuse gets set automatically for rundb's
 ;;
-(define (db:get-db dbstruct) ;;  run-id) 
-  (if (stack? (dbr:dbstruct-dbstack dbstruct))
-      (if (stack-empty? (dbr:dbstruct-dbstack dbstruct))
-          (let ((newdb (db:open-megatest-db path: (db:dbfile-path))))
-            ;; (stack-push! (dbr:dbstruct-dbstack dbstruct) newdb)
-            newdb)
-          (stack-pop! (dbr:dbstruct-dbstack dbstruct)))
-      (db:open-db dbstruct)))
+(define (db:get-db dbstruct #!key (alt-db #f)) ;;  run-id)
+  (case (dbr:dbstruct-db-type dbstruct)
+    ((local)
+     (if (stack? (dbr:dbstruct-dbstack dbstruct))
+	 (if (stack-empty? (dbr:dbstruct-dbstack dbstruct))
+	     (let ((newdb (db:open-megatest-db path: (db:dbfile-path))))
+	       ;; (stack-push! (dbr:dbstruct-dbstack dbstruct) newdb)
+	       newdb)
+	     (stack-pop! (dbr:dbstruct-dbstack dbstruct)))
+	 (db:open-db dbstruct)))
+    ((locked)
+     (let* ((current-other (dbr:dbstruct-current-other dbstruct)) ;; contains the name of the current "other" db to work with
+	    (locked-db     (dbr:dbstruct-lookup-other-db dbstruct current-other)))
+       (if locked-db
+	   locked-db
+	   (let* ((link-tree (common:get-link-tree))
+		  (dbdir     (conc link-tree "/.db")) ;; sure, let's use the old .db dir
+		  (dbdat     (db:open-megatest-db
+			      path: dbdir
+			      name: (conc (time->string (seconds->local-time sec) "%Y")
+					  "-q" (seconds->quarter sec)  ".db"))))
+	     (hash-table-set! (dbr:dbstruct-other-dbs dbstruct) current-other dbdat)
+	     dbdat))))
+    (else
+     ;; we should NEVER get here. Exit with message.
+     (with-output-to-port *default-log-port* print-call-chain)
+     (debug:print 0 *default-log-port* "ERROR: bad call to db:get-db, dbstruct contents:")
+     (with-output-to-port *default-log-port*
+       (lambda ()
+	 (pp (dbr:dbstruct->alist dbstruct)))))))
+
 
 ;; ;; legacy handling of structure for managing db's. Refactor this into dbr:?
 (define (db:dbdat-get-db dbdat)
@@ -165,31 +203,6 @@
 ;; K E E P   F I L E D B   I N   dbstruct
 ;;======================================================================
 
-;; (define (db:get-filedb dbstruct run-id)
-;;   (let ((db (vector-ref dbstruct 2)))
-;;     (if db
-;; 	db
-;; 	(let ((fdb (filedb:open-db (conc *toplevel* "/db/files.db"))))
-;; 	  (vector-set! dbstruct 2 fdb)
-;; 	  fdb))))
-;; 
-;; ;; Can also be used to save arbitrary strings
-;; ;;
-;; (define (db:save-path dbstruct path)
-;;   (let ((fdb (db:get-filedb dbstruct)))b
-;;     (filedb:register-path fdb path)))
-;; 
-;; ;; Use to get a path. To get an arbitrary string see next define
-;; ;;
-;; (define (db:get-path dbstruct id)
-;;   (let ((fdb (db:get-filedb dbstruct)))
-;;     (filedb:get-path db id)))
-
-;; NB// #f => return dbdir only
-;;      (was planned to be;  zeroth db with name=main.db)
-;; 
-;; If run-id is #f return to create and retrieve the path where the db will live.
-;;
 (define db:dbfile-path common:get-db-tmp-area)
 
 (define (db:set-sync db)
@@ -257,47 +270,6 @@
          (exn () (debug:print 0 *default-log-port* "ERROR: Unknown error with database " fname " message: " ((condition-property-accessor 'exn 'message) exn))))
 	)))
 
-
-
-
-
-
-;; ;; This routine creates the db. It is only called if the db is not already opened
-;; ;; 
-;; (define (db:open-rundb dbstruct run-id #!key (attemptnum 0)(do-not-open #f)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-;;   (let* ((dbfile       (db:dbfile-path run-id)) ;; (conc toppath "/db/" run-id ".db"))
-;;          (dbexists     (common:file-exists? dbfile))
-;;          (db           (db:lock-create-open dbfile (lambda (db)
-;;                                                      (handle-exceptions
-;;                                                       exn
-;;                                                       (begin
-;;                                                         ;; (release-dot-lock dbpath)
-;;                                                         (if (> attemptnum 2)
-;;                                                             (debug:print-error 0 *default-log-port* "tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
-;;                                                             (db:open-rundb dbstruct run-id attemptnum (+ attemptnum 1))))
-;;                                                       (db:initialize-run-id-db db)
-;;                                                       (sqlite3:execute 
-;;                                                        db
-;;                                                        "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
-;;                                                        (* run-id 30000) ;; allow for up to 30k tests per run
-;;                                                        run-id)
-;;                                                       ;; do a dummy query to test that the table exists and the db is truly readable
-;;                                                       (sqlite3:execute db "SELECT * FROM tests WHERE id=?;" (* run-id 30000))
-;;                                                       )))) ;; add strings db to rundb, not in use yet
-;;          (olddb        (if *megatest-db*
-;;                            *megatest-db* 
-;;                            (let ((db (db:open-megatest-db)))
-;;                              (set! *megatest-db* db)
-;;                              db)))
-;;          (write-access (file-write-access? dbfile)))
-;;     (if (and dbexists (not write-access))
-;;         (set! *db-write-access* #f)) ;; only unset so other db's also can use this control
-;;     (dbr:dbstruct-rundb-set!  dbstruct (cons db dbfile))
-;;     (dbr:dbstruct-inuse-set!  dbstruct #t)
-;;     (dbr:dbstruct-olddb-set!  dbstruct olddb)
-;;     ;;; (mutex-unlock! *rundb-mutex*) ;;; why did we need a mutex on opening db's?
-;;     (db:sync-tables db:sync-tests-only *megatest-db* db)
-;;     db))
 
 ;; This routine creates the db if not already present. It is only called if the db is not already opened
 ;;
@@ -386,6 +358,7 @@
     (if (and dbexists (not write-access))
 	(set! *db-write-access* #f))
     (cons db dbpath)))
+
 
 ;; sync run to disk if touched
 ;;
