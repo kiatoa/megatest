@@ -524,8 +524,9 @@
     ;; lets not even bother to start if there are already three or more server files ready to go
     (let* ((num-alive   (server:get-num-alive (server:get-list *toppath*))))
       (if (> num-alive 3)
-          (cleanup-proc (conc "ERROR: Aborting server start because there are already " num-alive " possible servers either running or starting up"))
-          (exit)))
+          (begin
+            (cleanup-proc (conc "ERROR: Aborting server start because there are already " num-alive " possible servers either running or starting up"))
+            (exit))))
     (let* ((th2 (make-thread (lambda ()
                                (debug:print-info 0 *default-log-port* "Server run thread started")
                                (http-transport:run 
