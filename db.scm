@@ -481,7 +481,8 @@
 	 '("event_time"     #f)
 	 '("fail_count"     #f)
 	 '("pass_count"     #f)
-	 '("archived"       #f))
+	 '("archived"       #f)
+         '("last_update"    #f))
   (list "test_steps"
 	 '("id"             #f)
 	 '("test_id"        #f)
@@ -490,7 +491,8 @@
 	 '("status"         #f)
 	 '("event_time"     #f)
 	 '("comment"        #f)
-	 '("logfile"        #f))
+	 '("logfile"        #f)
+         '("last_update"    #f))
    (list "test_data"
 	 '("id"             #f)
 	 '("test_id"        #f)
@@ -502,7 +504,8 @@
 	 '("units"          #f)
 	 '("comment"        #f)
 	 '("status"         #f)
-	 '("type"           #f))))
+	 '("type"           #f)
+         '("last_update"    #f))))
 
 ;; needs db to get keys, this is for syncing all tables
 ;;
@@ -518,7 +521,7 @@
 		   '("id"  #f))
 	     (map (lambda (k)(list k #f))
 		  (append keys
-			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count" "contour"))))
+			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count" "contour" "last_update"))))
      (list "test_meta"
 	   '("id"             #f)
 	   '("testname"       #f)

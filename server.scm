@@ -478,8 +478,9 @@
 	    (mutex-lock! *db-multi-sync-mutex*)
 	    (let* ((need-sync        (>= *db-last-access* *db-last-sync*)) ;; no sync since last write
 		   (sync-in-progress *db-sync-in-progress*)
+                   (min-intersync-delay (configf:lookup-number *configdat* "server" "minimum-intersync-delay" default: 5))
 		   (should-sync      (and (not *time-to-exit*)
-                                          (> (- (current-seconds) *db-last-sync*) 5))) ;; sync every five seconds minimum, deprecated logic, can probably be removed
+                                          (> (- (current-seconds) *db-last-sync*) min-intersync-delay))) ;; sync every five seconds minimum, deprecated logic, can probably be removed
 		   (start-time       (current-seconds))
                    (cpu-load-adj     (alist-ref 'adj-proc-load (common:get-normalized-cpu-load #f)))
 		   (mt-mod-time      (file-modification-time mtpath))

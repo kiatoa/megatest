@@ -56,7 +56,7 @@
 (include "megatest-fossil-hash.scm")
 
 (define *usage-log-file* #f)    ;; put path to file for logging usage in this var in the ~/.megatestrc file
-(define *usage-use-seconds* #f) ;; for Epoc seconds in usage logging change this to #t in ~/.megatestrc file
+(define *usage-use-seconds* #t) ;; for Epoc seconds in usage logging change this to #t in ~/.megatestrc file
 
 ;; load the ~/.megatestrc file, put (use trace)(trace-call-sites #t)(trace function-you-want-to-trace) in this file
 ;;
@@ -66,22 +66,22 @@
 
 ;; usage logging, careful with this, it is not designed to deal with all real world challenges!
 ;;
-(if (and (common:file-exists? *usage-log-file*)
-	   (file-write-access? *usage-log-file*))
-      (with-output-to-file
-	  *usage-log-file*
-	(lambda ()
-	  (print
-           (if *usage-use-seconds*
-               (current-seconds)
-               (time->string
-                (seconds->local-time (current-seconds))
-                "%Yww%V.%w %H:%M:%S"))
-           " "
-           (current-user-name) " "
-           (current-directory) " "
-	    "\"" (string-intersperse (argv) " ") "\""))
-	#:append))
+(if (and *usage-log-file*
+         (file-write-access? *usage-log-file*))
+    (with-output-to-file
+        *usage-log-file*
+      (lambda ()
+        (print
+         (if *usage-use-seconds*
+             (current-seconds)
+             (time->string
+              (seconds->local-time (current-seconds))
+              "%Yww%V.%w %H:%M:%S"))
+         " "
+         (current-user-name) " "
+         (current-directory) " "
+         "\"" (string-intersperse (argv) " ") "\""))
+      #:append))
 
 ;; Disabled help items
 ;;  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
@@ -91,7 +91,7 @@
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
-  license GPL, Copyright Matt Welland 2006-2015
+  license GPL, Copyright Matt Welland 2006-2017
 
 Usage: megatest [options]
   -h                      : this help
@@ -1707,7 +1707,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
 	       (transport (assoc/default 'transport cmdinfo))
-	       (testpath  (assoc/default 'testpath  cmdinfo))
+	       ;; (testpath  (assoc/default 'testpath  cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
 	       (db-host   (assoc/default 'db-host   cmdinfo))
@@ -1819,7 +1819,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(exit 5))
       (let* ((cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
 	     (transport (assoc/default 'transport cmdinfo))
-	     (testpath  (assoc/default 'testpath  cmdinfo))
+	     ;; (testpath  (assoc/default 'testpath  cmdinfo))
 	     (test-name (assoc/default 'test-name cmdinfo))
 	     (runscript (assoc/default 'runscript cmdinfo))
 	     (db-host   (assoc/default 'db-host   cmdinfo))
@@ -1827,12 +1827,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (test-id   (assoc/default 'test-id   cmdinfo))
 	     (itemdat   (assoc/default 'itemdat   cmdinfo))
 	     (work-area (assoc/default 'work-area cmdinfo))
-	     (db        #f))
-	(change-directory testpath)
+	     (db        #f)
+	     (testpath  #f))
 	(if (not (launch:setup))
 	    (begin
 	      (debug:print 0 *default-log-port* "Failed to setup, exiting")
 	      (exit 1)))
+	(set! testpath (db:test-get-rundir testdat))
+	(change-directory testpath)
 	(if (and state status)
 	    (let ((comment (launch:load-logpro-dat run-id test-id step)))
 	      ;; (rmt:test-set-log! run-id test-id (conc stepname ".html"))))
@@ -1868,7 +1870,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
 	       (transport (assoc/default 'transport cmdinfo))
-	       (testpath  (assoc/default 'testpath  cmdinfo))
+	       ;; (testpath  (assoc/default 'testpath  cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
 	       (db-host   (assoc/default 'db-host   cmdinfo))
@@ -1879,12 +1881,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (db        #f) ;; (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status"))
-	       (stepname  (args:get-arg "-step")))
+	       (stepname  (args:get-arg "-step"))
+	       (testdat   (rmt:get-test-info-by-id run-id test-id))
+	       (testpath  #f)) ;; fill in missing data below
 	  (if (not (launch:setup))
 	      (begin
 		(debug:print 0 *default-log-port* "Failed to setup, exiting")
 		(exit 1)))
-
+	  (set! testpath (db:test-get-rundir testdat))
 	  (if (args:get-arg "-runstep")(debug:print-info 1 *default-log-port* "Running -runstep, first change to directory " work-area))
 	  (change-directory work-area)
 	  ;; can setup as client for server mode now
