@@ -1584,7 +1584,7 @@
   (let* ((incompleted '())
 	 (oldlaunched '())
 	 (toplevels   '())
-	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
+	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime")) ;; FIXME suspect test run time & deadtime are not well matched; resulting in COMPLETED/DEAD status of an a-ok running test
 	 (deadtime     (if (and deadtime-str
 				(string->number deadtime-str))
 			   (string->number deadtime-str)
