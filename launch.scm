@@ -1031,7 +1031,7 @@
 ;;
 (define (create-work-area run-id run-info target test-id test-src-path disk-path-in test-name itemdat #!key (tconfig #f)(remtries 2)(tregistery #f))
   (let* ((item-path (if (string? itemdat) itemdat (item-list->path itemdat))) ;; if pass in string - just use it
-	 (testconf  (or tconfig (tests:get-testconfig test-name item-path (or tregistery (make-hash-table)) #t force-create: #t)))
+	 (testconf  (or tconfig (tests:forced-get-testconfig test-name item-path))) ;; (tests:get-testconfig test-name item-path (or tregistery (make-hash-table)) #t force-create: #t)))
 	 (disk-path (if disk-path-in disk-path-in (get-best-disk *configdat* tconfig))) ;; NOTE: You'd better have tconfig defined!
 	 (runname   (if (string? run-info) ;; if we pass in a string as run-info use it as run-name.
 			run-info

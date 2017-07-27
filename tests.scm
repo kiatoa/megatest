@@ -1209,7 +1209,35 @@ EOF
                       (if (not (common:in-running-test?))
                           (configf:write-alist tcfg tpath))))
 		tcfg))))))
-  
+
+;; forced read and write of cache of testconfig for the exection of the test
+;;
+(define (tests:forced-get-testconfig  test-name item-path)
+  (let* ((cache-path   (tests:get-test-path-from-environment))
+	 (cache-file   (and cache-path (conc cache-path "/.testconfig")))
+	 (test-full-name (if (and item-path (not (string-null? item-path)))
+                             (conc test-name "/" item-path)
+                             test-name)))
+    ;; no cached data available
+    (let* ((treg         (tests:get-all)) ;; we need the tests info from all the possible tests paths
+	   (test-path    (or (hash-table-ref/default treg test-name #f)
+			     (conc *toppath* "/tests/" test-name)))
+	   (test-configf (conc test-path "/testconfig"))
+	   (testexists   (file-read-access? test-configf))
+	   (tcfg         (if testexists
+			     (read-config test-configf #f #t ;; system-allowed
+					  environ-patt: "pre-launch-env-vars"
+					  )
+			     #f)))
+      (if tcfg (hash-table-set! tcfg "have fulldata" #t)) ;; mark this as fully read data
+      (if tcfg (hash-table-set! *testconfigs* test-full-name tcfg))
+      (if (and testexists
+	       (file-write-access? cache-path))
+	  (let ((tpath (conc cache-path "/.testconfig")))
+	    (debug:print-info 1 *default-log-port* "Caching testconfig for " test-name " in " tpath)
+	    (configf:write-alist tcfg tpath)))
+      tcfg)))
+
 ;; sort tests by priority and waiton
 ;; Move test specific stuff to a test unit FIXME one of these days
 (define (tests:sort-by-priority-and-waiton test-records)
