@@ -514,12 +514,10 @@
 				  (exit))))
 		 (test-pid  (db:test-get-process_id  test-info)))
             
-            (let ((dat (create-work-area run-id runname target test-id testpath #f test-name itemdat)))
-              (set! work-area (car dat)))
-            (debug:print-info 2 *default-log-port* "Using work area " work-area)
-            
-	    (setenv "MT_TEST_RUN_DIR"  work-area)
-	    
+
+	    ;; was here
+
+
 	    (cond
 	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
 	      (debug:print 0 *default-log-port* "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
@@ -574,14 +572,15 @@
           ;;(bb-check-path msg: "launch:execute post block 1")
 
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
-	  (let loop ((count 0))
-	    (if (or (common:file-exists? work-area)
-		    (> count 10))
-		(change-directory work-area)
-		(begin
-		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " work-area " not found")
-		  (thread-sleep! 10)
-		  (loop (+ count 1)))))
+	;; (let loop ((count 0))
+	;;   (if (or (common:file-exists? work-area)
+	;; 	    (> count 10))
+	;; 	(change-directory work-area)
+	;; 	(begin
+	;; 	  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " work-area " not found")
+	;; 	  (thread-sleep! 10)
+	  ;; 	  (loop (+ count 1)))))
+	  
           ;;(bb-check-path msg: "launch:execute post block 1.5")
 	  ;; (change-directory work-area) 
 	  (set! keyvals    (keys:target->keyval keys target))
@@ -609,7 +608,7 @@
 		     (debug:print-error 0 *default-log-port* "required variable " var " does not have a valid value. Exiting")
 		     (exit)))))
 	     (list 
-	      (list  "MT_TEST_RUN_DIR" work-area)
+	      ;; (list  "MT_TEST_RUN_DIR" work-area)
 	      (list  "MT_TEST_NAME" test-name)
 	      (list  "MT_ITEM_INFO" (conc itemdat))
 	      (list  "MT_ITEMPATH"  item-path)
@@ -634,6 +633,15 @@
           ;;(bb-check-path msg: "launch:execute post block 42")
 	  (set-item-env-vars itemdat)
           ;;(bb-check-path msg: "launch:execute post block 43")
+
+	  ;; we have deferred creating the work-area as far as possible. have to do it now
+	  (let ((dat (create-work-area run-id runname target test-id testpath #f test-name itemdat tregistery: tconfigreg)))
+	    (set! work-area (car dat)))
+	  (debug:print-info 2 *default-log-port* "Using work area " work-area)
+	  
+	  (setenv "MT_TEST_RUN_DIR"  work-area)
+	  (change-directory work-area)
+	  
           (let ((blacklist (configf:lookup *configdat* "setup" "blacklistvars")))
             (if blacklist
                 (save-environment-as-files "megatest" ignorevars: (string-split blacklist))
@@ -1021,9 +1029,10 @@
 ;;  
 ;; <target> - <testname> [ - <itempath> ] 
 ;;
-(define (create-work-area run-id run-info target test-id test-src-path disk-path-in testname itemdat #!key (tconfig #f)(remtries 2))
-  (let* ((disk-path (if disk-path-in disk-path-in (get-best-disk *configdat* tconfig))) ;; NOTE: You'd better have tconfig defined!
-	 (item-path (if (string? itemdat) itemdat (item-list->path itemdat))) ;; if pass in string - just use it
+(define (create-work-area run-id run-info target test-id test-src-path disk-path-in test-name itemdat #!key (tconfig #f)(remtries 2)(tregistery #f))
+  (let* ((item-path (if (string? itemdat) itemdat (item-list->path itemdat))) ;; if pass in string - just use it
+	 (testconf  (or tconfig (tests:get-testconfig test-name item-path (or tregistery (make-hash-table)) #t force-create: #t)))
+	 (disk-path (if disk-path-in disk-path-in (get-best-disk *configdat* tconfig))) ;; NOTE: You'd better have tconfig defined!
 	 (runname   (if (string? run-info) ;; if we pass in a string as run-info use it as run-name.
 			run-info
 			(db:get-value-by-header (db:get-rows run-info)
@@ -1036,7 +1045,7 @@
 	 (not-iterated  (equal? "" item-path))
 
 	 ;; all tests are found at <rundir>/test-base or <linkdir>/test-base
-	 (testtop-base (conc target "/" runname "/" testname))
+	 (testtop-base (conc target "/" runname "/" test-name))
 	 (test-base    (conc testtop-base (if not-iterated "" "/") item-path))
 
 	 ;; nb// if itempath is not "" then it is prefixed with "/"
@@ -1050,13 +1059,13 @@
 	 ;; which seems wrong ...
 
 	 (lnkbase   (conc linktree (if contour (conc "/" contour) "") "/" target "/" runname))
-	 (lnkpath   (conc lnkbase "/" testname))
+	 (lnkpath   (conc lnkbase "/" test-name))
 	 (lnkpathf  (conc lnkpath (if not-iterated "" "/") item-path))
 	 (lnktarget (conc lnkpath "/" item-path)))
 
     ;; Update the rundir path in the test record for all, rundir=physical, shortdir=logical
     ;;                                                 rundir   shortdir
-    (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path run-id)
+    (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path test-name item-path run-id)
 
     (debug:print 2 *default-log-port* "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (common:file-exists? linktree))
@@ -1115,22 +1124,22 @@
     ;; be set to the real directory location. This is safer for future clean up if the link
     ;; tree is damaged or lost.
     ;; 
-    (if (not (hash-table-ref/default *toptest-paths* testname #f))
-	(let* ((testinfo       (rmt:get-test-info-by-id run-id test-id)) ;;  run-id testname item-path))
+    (if (not (hash-table-ref/default *toptest-paths* test-name #f))
+	(let* ((testinfo       (rmt:get-test-info-by-id run-id test-id)) ;;  run-id test-name item-path))
 	       (curr-test-path (if testinfo ;; (filedb:get-path *fdb*
 							     ;; (db:get-path dbstruct
 				   ;; (rmt:sdb-qry 'getstr 
 				   (db:test-get-rundir testinfo) ;; ) ;; )
 				   #f)))
-	  (hash-table-set! *toptest-paths* testname curr-test-path)
+	  (hash-table-set! *toptest-paths* test-name curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?
 	  (rmt:general-call 'test-set-rundir-shortdir run-id lnkpath 
 			    (if (common:file-exists? lnkpath)
 				;; (resolve-pathname lnkpath)
 				(common:nice-path lnkpath)
 				lnkpath)
-			    testname "" run-id)
-	  ;; (rmt:general-call 'test-set-rundir run-id lnkpath testname "") ;; toptest-path)
+			    test-name "" run-id)
+	  ;; (rmt:general-call 'test-set-rundir run-id lnkpath test-name "") ;; toptest-path)
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
 	      (begin
@@ -1139,7 +1148,7 @@
 		 exn
 		 #f ;; don't care to catch and deal with errors here for now.
 		 (create-directory toptest-path #t))
-		(hash-table-set! *toptest-paths* testname toptest-path)))))
+		(hash-table-set! *toptest-paths* test-name toptest-path)))))
 
     ;; The toptest path has been created, the link to the test in the linktree has
     ;; been created. Now, if this is an iterated test the real test dir must be created
@@ -1189,7 +1198,7 @@
 	    (begin
 	      (debug:print-error 0 *default-log-port* "Failed to create work area at " test-path " with link at " lnktarget ", remaining attempts " remtries)
 	      ;; 
-	      (create-work-area run-id run-info target test-id test-src-path disk-path-in testname itemdat remtries: (- remtries 1)))
+	      (create-work-area run-id run-info target test-id test-src-path disk-path-in test-name itemdat remtries: (- remtries 1)))
 	    (list #f #f)))))
 
 ;; 1. look though disks list for disk with most space
@@ -1265,7 +1274,22 @@
 	   (testinfo   (rmt:get-test-info-by-id run-id test-id))
 	   (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	   (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
-				(if (args:get-arg "-logging")(list "-logging") '()))))
+				(if (args:get-arg "-logging")(list "-logging") '())))
+	   (log-path-1     (conc *toppath* "/lt/" mt_target "/" runname)) ;;  (string-intersperse (map cadr keyvals) "/"))
+	   (log-path-2     (conc *toppath* "/lt/" mt_target "/" runname "/" test-name))
+	   (log-file       (conc (cond
+				  ((and (file-write-access? log-path-2)(directory? log-path-2)(not (symbolic-link? log-path-2))) log-path-2)
+				  ((and (file-write-access? log-path-1)(directory? log-path-1))                                  log-path-1)
+				  (else
+				   (debug:print 0 *default-log-port* "INFO: path \"" log-path-1 "\" and \"" log-path-2 "\" not available to write output to. Directing output to logs dir.")
+				   (conc *toppath* "/logs/")))
+				 (string-intersperse (map cadr keyvals) "-") "-"
+				 runname "-"
+				 test-name
+				 (if (null? itemdat)
+				     (conc "-" (string-intersperse (map cdr itemdat) "-"))
+				     "")
+				 ".log")))
       ;; (if hosts (set! hosts (string-split hosts)))
       ;; set the megatest to be called on the remote host
       (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))
@@ -1321,7 +1345,8 @@
 					(list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
 					(list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
 					(list 'runname   runname)
-					(list 'mt-bindir-path mt-bindir-path))))))))
+					(list 'mt-bindir-path mt-bindir-path)
+					(list 'log-file  log-file))))))))
       
       ;; clean out step records from previous run if they exist
       ;; (rmt:delete-test-step-records run-id test-id)
@@ -1355,6 +1380,7 @@
 					    (list "MT_RUNNAME"   runname)
 					    (list "MT_TARGET"    mt_target)
 					    (list "MT_ITEMPATH"  item-path)
+					    (list "MT_LAUNCH_LOGF" log-file)
 					    )
 				      itemdat)))
 	     (testprevvals   (alist->env-vars
@@ -1368,7 +1394,7 @@
 					(let ((cmdstr (string-intersperse fullcmd " ")))
 					  (if launchwait
 					      cmdstr
-					      (conc cmdstr " >> mt_launch.log 2>&1 &")))
+					      (conc cmdstr " >> " log-file " 2>&1 &")))
 					(car fullcmd))
 				    (if useshell
 					'()
@@ -1377,7 +1403,7 @@
 	;; (rmt:no-sync-del! lock-key)         ;; release the lock for starting this test
 	(if (not launchwait) ;; give the OS a little time to allow the process to start
 	    (thread-sleep! 0.01))
-	(with-output-to-file "mt_launch.log"
+	(with-output-to-file log-file ;; "mt_launch.log"
 	  (lambda ()
 	    (print "LAUNCHCMD: " (string-intersperse fullcmd " "))
 	    (if (list? launch-results)

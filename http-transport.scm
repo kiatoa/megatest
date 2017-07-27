@@ -520,28 +520,30 @@
 	     (not server-starting))
 	(begin
 	  (cleanup-proc "NOT starting server, there is either a recently started server or a server in process of starting")
-	  (exit))))
-  ;; lets not even bother to start if there are already three or more server files ready to go
-  (let* ((num-alive   (server:get-num-alive (server:get-list *toppath*))))
-    (if (> num-alive 3)
-        (cleanup-proc "ERROR: Aborting server start because there are already " num-alive " possible servers either running or starting up")))
-  (let* ((th2 (make-thread (lambda ()
-			     (debug:print-info 0 *default-log-port* "Server run thread started")
-			     (http-transport:run 
-			      (if (args:get-arg "-server")
-				  (args:get-arg "-server")
-				  "-")
-			      )) "Server run"))
-	 (th3 (make-thread (lambda ()
-			     (debug:print-info 0 *default-log-port* "Server monitor thread started")
-			     (http-transport:keep-running)
-			   "Keep running"))))
-    (thread-start! th2)
-    (thread-sleep! 0.25) ;; give the server time to settle before starting the keep-running monitor.
-    (thread-start! th3)
-    (set! *didsomething* #t)
-    (thread-join! th2)
-    (exit)))
+	  (exit)))
+    ;; lets not even bother to start if there are already three or more server files ready to go
+    (let* ((num-alive   (server:get-num-alive (server:get-list *toppath*))))
+      (if (> num-alive 3)
+          (begin
+            (cleanup-proc (conc "ERROR: Aborting server start because there are already " num-alive " possible servers either running or starting up"))
+            (exit))))
+    (let* ((th2 (make-thread (lambda ()
+                               (debug:print-info 0 *default-log-port* "Server run thread started")
+                               (http-transport:run 
+                                (if (args:get-arg "-server")
+                                    (args:get-arg "-server")
+                                    "-")
+                                )) "Server run"))
+           (th3 (make-thread (lambda ()
+                               (debug:print-info 0 *default-log-port* "Server monitor thread started")
+                               (http-transport:keep-running)
+                               "Keep running"))))
+      (thread-start! th2)
+      (thread-sleep! 0.25) ;; give the server time to settle before starting the keep-running monitor.
+      (thread-start! th3)
+      (set! *didsomething* #t)
+      (thread-join! th2)
+      (exit))))
 
 ;; (define (http-transport:server-signal-handler signum)
 ;;   (signal-mask! signum)

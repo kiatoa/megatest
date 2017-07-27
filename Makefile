@@ -40,7 +40,8 @@ ARCHSTR=$(shell lsb_release -sr)
 
 PNGFILES = $(shell cd docs/manual;ls *png)
 
-all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut ndboard
+all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut
+# ndboard
 
 mtest: $(OFILES) readline-fix.scm megatest.o
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
@@ -236,9 +237,9 @@ install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bi
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
 	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/viewscreen $(PREFIX)/bin/mt_xterm \
 	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun $(PREFIX)/bin/mtutil \
-          $(PREFIX)/share/db/mt-pg.sql $(PREFIX)/bin/.$(ARCHSTR)/ndboard  $(PREFIX)/bin/tcmt
+          $(PREFIX)/share/db/mt-pg.sql  $(PREFIX)/bin/tcmt
 
-# $(PREFIX)/bin/newdashboard
+# $(PREFIX)/bin/newdashboard $(PREFIX)/bin/.$(ARCHSTR)/ndboard
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)
