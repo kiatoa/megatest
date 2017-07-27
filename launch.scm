@@ -950,6 +950,7 @@
                          (cachefiles   (launch:get-cache-file-paths areapath toppath target mtconfig))
                          (mtcachef     (car cachefiles))
                          (rccachef     (cdr cachefiles)))
+                    ;; TODO - trap exception due to stale NFS handle -- Error: (open-output-file) cannot open file - Stale NFS file handle: "/p/fdk/gwa/lefkowit/mtTesting/qa/primbeqa/links/p1222/11/PDK_r1.1.1/prim/clean/pcell_testgen/.runconfigs.cfg-1.6427-7d1e789cb3f62f9cde719a4865bb51b3c17ea853" - ticket 220546342
 		    (if rccachef (configf:write-alist runconfigdat rccachef))
 		    (if mtcachef (configf:write-alist *configdat* mtcachef))
 		    (set! *runconfigdat* runconfigdat)
@@ -1020,6 +1021,8 @@
         (let* ((cachefiles   (launch:get-cache-file-paths areapath toppath target mtconfig))
                (mtcachef     (car cachefiles))
                (rccachef     (cdr cachefiles)))
+
+          ;; TODO - trap exception due to stale NFS handle -- Error: (open-output-file) cannot open file - Stale NFS file handle: "/p/fdk/gwa/lefkowit/mtTesting/qa/primbeqa/links/p1222/11/PDK_r1.1.1/prim/clean/pcell_testgen/.runconfigs.cfg-1.6427-7d1e789cb3f62f9cde719a4865bb51b3c17ea853" - ticket 220546342
           (if (and rccachef *runconfigdat* (not (common:file-exists? rccachef))) (configf:write-alist *runconfigdat* rccachef))
           (if (and mtcachef *configdat*    (not (common:file-exists? mtcachef))) (configf:write-alist *configdat* mtcachef))
           (if (and rccachef mtcachef *runconfigdat* *configdat*)
