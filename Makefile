@@ -228,7 +228,7 @@ $(PREFIX)/bin/mtest-reaper: helpers/mtest-reaper.scm helpers/ducttape-lib.scm he
 mtest-reaper: $(PREFIX)/bin/mtest-reaper
 
 # install dashboard as dboard so wrapper script can be called dashboard
-$(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
+$(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper dashboard-areas.scm
 	utils/mk_wrapper $(PREFIX) dboard $(PREFIX)/bin/dashboard
 	chmod a+x $(PREFIX)/bin/dashboard
 	$(INSTALL) dboard $(PREFIX)/bin/.$(ARCHSTR)/dboard

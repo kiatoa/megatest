@@ -1885,6 +1885,7 @@ Misc
                 ;; (print "runs-summary-updater, changed: " changed " pass-num: " pass-num)
                 (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL")))))))))
 
+
 ;;======================================================================
 ;; S U M M A R Y 
 ;;======================================================================
@@ -2062,8 +2063,6 @@ Misc
       res
       )))
 
-
-
 ;;======================================================================
 ;; R U N
 ;;======================================================================
@@ -2184,6 +2183,8 @@ Misc
       tb
       run-matrix)
      (dboard:make-controls commondat tabdat extra-widget: runs-summary-control-panel))))
+
+(include "dashboard-areas.scm")
 
 ;;======================================================================
 ;; R U N S 
@@ -2569,6 +2570,7 @@ Misc
 	 (onerun-dat      (dboard:tabdat-make-data)) ;; name for run-summary structure 
 	 (runcontrols-dat (dboard:tabdat-make-data))
 	 (runtimes-dat    (dboard:tabdat-make-data))
+	 (areas-dat       (dboard:tabdat-make-data))
 	 (nruns           (dboard:tabdat-numruns runs-dat))
 	 (ntests          (dboard:tabdat-num-tests runs-dat))
 	 (keynames        (dboard:tabdat-dbkeys runs-dat))
@@ -2742,7 +2744,7 @@ Misc
 			 ))
 	     (views-cfgdat (common:load-views-config))
 	     (additional-tabnames '())
-	     (tab-start-num       5)   ;; DON'T FORGET TO UPDATE THIS WHEN CHANGING THE STANDARD TABS BELOW
+	     (tab-start-num       6)   ;; DON'T FORGET TO UPDATE THIS WHEN CHANGING THE STANDARD TABS BELOW
 	     ;; (data (dboard:tabdat-init (make-d:data)))
 	     (additional-views 	;; process views-dat
 	      (let ((tab-num tab-start-num)
@@ -2787,6 +2789,7 @@ Misc
 			  (dashboard:run-controls commondat runcontrols-dat tab-num: 3)
 			  (dashboard:run-times commondat runtimes-dat tab-num: 4)
 			  ;; (dashboard:runs-summary commondat onerun-dat tab-num: 4)
+			  (dashboard:areas-summary commondat stats-dat tab-num: 5)
 			  additional-views)))
 	;; (set! (iup:callback tabs tabchange-cb:) (lambda (a b c)(print "SWITCHED TO TAB: " a " " b " " c)))
 	(iup:attribute-set! tabs "TABTITLE0" "Summary")
@@ -2794,6 +2797,7 @@ Misc
 	(iup:attribute-set! tabs "TABTITLE2" "Run Summary")
 	(iup:attribute-set! tabs "TABTITLE3" "Run Control")
 	(iup:attribute-set! tabs "TABTITLE4" "Run Times")
+	(iup:attribute-set! tabs "TABTITLE5" "Areas Summary")
 	;; (iup:attribute-set! tabs "TABTITLE3" "New View")
 	;; (iup:attribute-set! tabs "TABTITLE4" "Run Control")
 
@@ -2812,6 +2816,7 @@ Misc
 	(dboard:common-set-tabdat! commondat 2 onerun-dat)
 	(dboard:common-set-tabdat! commondat 3 runcontrols-dat)
 	(dboard:common-set-tabdat! commondat 4 runtimes-dat)
+	(dboard:common-set-tabdat! commondat 5 areas-dat)
 
 	(iup:vbox
 	 tabs
