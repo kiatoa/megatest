@@ -32,6 +32,23 @@
 ;;       (old-exit)
 ;;       (old-exit code)))
 
+
+;; execute thunk, return value.  If exception thrown, trap exception, return #f, and emit nonfatal condition note to *default-log-port* .
+;; arguments - thunk, message
+(define (common:fail-safe thunk warning-message-on-exception)
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print-info 0 *default-log-port* "notable but nonfatal condition - "warning-message-on-exception)
+     (debug:print-info 0 *default-log-port*
+                       (string-substitute "\n?Error:" "nonfatal condition:"
+                                          (with-output-to-string
+                                            (lambda ()
+                                              (print-error-message exn) ))))
+     (debug:print-info 0 *default-log-port* "    -- continuing after nonfatal condition...")
+     #f)
+   (thunk)))
+
 (define getenv get-environment-variable)
 (define (safe-setenv key val)
   (if (substring-index ":" key) ;; variables containing : are for internal use and cannot be environment variables.
