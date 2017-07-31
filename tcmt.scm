@@ -43,8 +43,9 @@
 ;; ##teamcity[testFailed name='suite.testName' message='failure message' details='message and stack trace']
 ;; ##teamcity[testFinished name='suite.testName' duration='50']
 ;; 
-
-(define (print-changes-since data run-ids last-update tsname target runname)
+;; flush; #f, normal call. #t, last call, print out something for NOT_STARTED, etc.
+;;
+(define (print-changes-since data run-ids last-update tsname target runname flowid flush) ;; 
   (let ((now   (current-seconds)))
     (handle-exceptions
      exn
@@ -65,14 +66,18 @@
 		    (comment  (db:test-get-comment      testdat))
 		    (logfile  (db:test-get-final_logf   testdat))
 		    (prevstat (hash-table-ref/default data testn #f))
-		    (newstat  (if (equal? state "RUNNING")
-				  "RUNNING"
-				  (if (equal? state "COMPLETED")
-				      status
-				      "UNK")))
-		    (cmtstr   (if comment
+		    (newstat  (cond
+			       ((equal? state "RUNNING")   "RUNNING")
+			       ((equal? state "COMPLETED") status)
+			       (flush   (conc state "/" status))
+			       (else "UNK")))
+		    (cmtstr   (if (and (not flush) comment)
 				  (conc " message='" comment "' ")
-				  " "))
+				  (if flush
+				      (conc "message='Test ended in state/status=" state "/" status  (if  (string-match "^\\s*$" comment)
+													  ", no Megatest comment found.' "
+													  (conc ", Megatest comment='" comment "' "))) ;; special case, we are handling stragglers
+				      " ")))
 		    (details  (if (string-match ".*html$" logfile)
 				  (conc " details='" *toppath* "/lt/" target "/" runname "/" testname (if (equal? itempath "") "/" (conc "/" itempath "/")) logfile "' ")
 				  "")))
@@ -83,10 +88,10 @@
 		   (begin
 		     (case (string->symbol newstat)
 		       ((UNK)       ) ;; do nothing
-		       ((RUNNING)   (print "##teamcity[testStarted name='" tctname "']"))
-		       ((PASS SKIP WARN WAIVED) (print "##teamcity[testFinished name='" tctname "' duration='" (* 1e3 duration) "'" cmtstr details " ]"))
+		       ((RUNNING)   (print "##teamcity[testStarted name='" tctname "' flowId='" flowid "']"))
+		       ((PASS SKIP WARN WAIVED) (print "##teamcity[testFinished name='" tctname "' duration='" (* 1e3 duration) "'" cmtstr details " flowId='" flowid "']"))
 		       (else
-			(print "##teamcity[testFailed name='" tctname "' " cmtstr details " ]")))
+			(print "##teamcity[testFailed name='" tctname "' " cmtstr details " flowId='" flowid "']")))
 		     (flush-output)
 		     (hash-table-set! data testn newstat)))))
 	   tests)))
@@ -94,20 +99,21 @@
     now))
 
 (define (monitor pid)
-  (let ((run-ids #f)
-	(testdat (make-hash-table))
-	(keys    #f)
-	(last-update 0)
-	(target  (or (args:get-arg "-target")
-		     (args:get-arg "-reqtarg")))
-	(runname (args:get-arg "-runname"))
-	(tsname  #f))
+  (let* ((run-ids #f)
+	 (testdat (make-hash-table))
+	 (keys    #f)
+	 (last-update 0)
+	 (target  (or (args:get-arg "-target")
+		      (args:get-arg "-reqtarg")))
+	 (runname (args:get-arg "-runname"))
+	 (tsname  #f)
+	 (flowid  (conc target "/" runname)))
     (if (and target runname)
 	(begin
 	  (launch:setup)
 	  (set! keys (rmt:get-keys))))
     (set! tsname  (common:get-testsuite-name))
-    (print "TCMT: for testsuite=" tsname " found runname=" runname ", target=" target ", keys=" keys " and successfully ran launch:setup.")
+    (print "TCMT: for testsuite=" tsname " found runname=" runname ", target=" target ", keys=" keys " and successfully ran launch:setup. Using " flowid " as the flowId.")
     (let loop ()
       (handle-exceptions
        exn
@@ -133,14 +139,16 @@
 				     rows)))
 	       (set! run-ids run-ids-in)))
 	 ;; (print "TCMT: pidres=" pidres " exittype=" exittype " exitstatus=" exitstatus " run-ids=" run-ids)
-	 (if keys
-	     (set! last-update (print-changes-since testdat run-ids last-update tsname target runname)))
 	 (if (eq? pidres 0)
 	     (begin
+	       (if keys
+		   (set! last-update (print-changes-since testdat run-ids last-update tsname target runname flowid #f)))
 	       (thread-sleep! 3)
 	       (loop))
 	     (begin
 	       ;; (print "TCMT: pidres=" pidres " exittype=" exittype " exitstatus=" exitstatus " run-ids=" run-ids)
+	       (print "TCMT: processing any tests that did not formally complete.")
+	       (print-changes-since testdat run-ids 0 tsname target runname flowid #t) ;; call in flush mode
 	       (print "TCMT: All done.")
 	       )))))))
 
