@@ -804,7 +804,15 @@ Misc
 	      (if (or (null? tal)
 		      (> elapsed-time 2)) ;; stop loading data after 5 seconds, on the next call more data *should* be loaded since get-tests-for-run uses last update
 		  (begin
-		    (if (> elapsed-time 2)(print "NOTE: updates are taking a long time, " elapsed-time "s elapsed."))
+		    (when (> elapsed-time 2)   
+                      (debug:print 0 *default-log-port* "NOTE: updates are taking a long time, " elapsed-time "s elapsed.")
+                      (let* ((old-val (iup:attribute *tim* "TIME"))
+                             (new-val (number->string (inexact->exact (floor (* 2  (string->number old-val)))))))
+                        (debug:print 0 *default-log-port* "NOTE: increasing poll interval from "old-val" to "new-val)
+                        (iup:attribute-set! *tim* "TIME" new-val))
+
+
+                      )
 		    (dboard:tabdat-allruns-set! tabdat new-res)
 		    maxtests)
 		  (if (> (dboard:rundat-run-data-offset run-struct) 0)
@@ -1633,31 +1641,31 @@ Misc
       (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) path #f)
       #f))
 
-(define (dboard:get-tests-dat tabdat run-id last-update)
-  (let* ((access-mode     (dboard:tabdat-access-mode tabdat))
-         (tdat (if run-id (db:dispatch-query access-mode rmt:get-tests-for-run db:get-tests-for-run
-                                             run-id 
-					     (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
-					     (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat))  ;; '()
-					     (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)) ;; '()
-					     #f #f                                                       ;; offset limit
-					     (dboard:tabdat-hide-not-hide tabdat)                        ;; not-in
-					     #f #f                                                       ;; sort-by sort-order
-					     #f ;; get all? "id,testname,item_path,state,status,event_time,run_duration"                        ;; qryval
-                                             (if (dboard:tabdat-filters-changed tabdat)
-					         0
-					         last-update)
-					     *dashboard-mode*)
-		  '()))) ;; get 'em all
-    ;; (debug:print 0 *default-log-port* "dboard:get-tests-dat: got " (length tdat) " test records for run " run-id)
-    (sort tdat (lambda (a b)
-		 (let* ((aval (vector-ref a 2))
-			(bval (vector-ref b 2))
-			(anum (string->number aval))
-			(bnum (string->number bval)))
-		   (if (and anum bnum)
-		       (< anum bnum)
-		       (string<= aval bval)))))))
+;; (define (dboard:get-tests-dat tabdat run-id last-update)
+;;   (let* ((access-mode     (dboard:tabdat-access-mode tabdat))
+;;          (tdat (if run-id (db:dispatch-query access-mode rmt:get-tests-for-run db:get-tests-for-run
+;;                                              run-id 
+;; 					     (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "test-name" "%/%")
+;; 					     (hash-table-keys (dboard:tabdat-state-ignore-hash tabdat))  ;; '()
+;; 					     (hash-table-keys (dboard:tabdat-status-ignore-hash tabdat)) ;; '()
+;; 					     #f #f                                                       ;; offset limit
+;; 					     (dboard:tabdat-hide-not-hide tabdat)                        ;; not-in
+;; 					     #f #f                                                       ;; sort-by sort-order
+;; 					     #f ;; get all? "id,testname,item_path,state,status,event_time,run_duration"                        ;; qryval
+;;                                              (if (dboard:tabdat-filters-changed tabdat)
+;; 					         0
+;; 					         last-update)
+;; 					     *dashboard-mode*)
+;; 		  '()))) ;; get 'em all
+;;     ;; (debug:print 0 *default-log-port* "dboard:get-tests-dat: got " (length tdat) " test records for run " run-id)
+;;     (sort tdat (lambda (a b)
+;; 		 (let* ((aval (vector-ref a 2))
+;; 			(bval (vector-ref b 2))
+;; 			(anum (string->number aval))
+;; 			(bnum (string->number bval)))
+;; 		   (if (and anum bnum)
+;; 		       (< anum bnum)
+;; 		       (string<= aval bval)))))))
 
 
 (define (dashboard:safe-cadr-assoc name lst)
@@ -2439,7 +2447,7 @@ Misc
        (conc "megatest -set-state-status KILLREQ,n/a -target " target
              " -runname " runname
              " -testpatt " item-test-path 
-             " -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))
+             " -state RUNNING,REMOTEHOSTSTART,LAUNCHED,NOT_STARTED"))))
 
    
    (iup:menu-item
@@ -2481,7 +2489,7 @@ Misc
          (conc "megatest -set-state-status KILLREQ,n/a -target " target
                " -runname " runname
                " -testpatt % "
-               "  -state RUNNING,REMOTEHOSTSTART,LAUNCHED"))))
+               "  -state RUNNING,REMOTEHOSTSTART,LAUNCHED,NOT_STARTED"))))
      (iup:menu-item 
       "Delete Run Data"
       #:action

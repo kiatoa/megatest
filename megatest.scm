@@ -54,7 +54,7 @@
 (include "megatest-fossil-hash.scm")
 
 (define *usage-log-file* #f)    ;; put path to file for logging usage in this var in the ~/.megatestrc file
-(define *usage-use-seconds* #f) ;; for Epoc seconds in usage logging change this to #t in ~/.megatestrc file
+(define *usage-use-seconds* #t) ;; for Epoc seconds in usage logging change this to #t in ~/.megatestrc file
 
 ;; load the ~/.megatestrc file, put (use trace)(trace-call-sites #t)(trace function-you-want-to-trace) in this file
 ;;
@@ -64,22 +64,22 @@
 
 ;; usage logging, careful with this, it is not designed to deal with all real world challenges!
 ;;
-(if (and (common:file-exists? *usage-log-file*)
-	   (file-write-access? *usage-log-file*))
-      (with-output-to-file
-	  *usage-log-file*
-	(lambda ()
-	  (print
-           (if *usage-use-seconds*
-               (current-seconds)
-               (time->string
-                (seconds->local-time (current-seconds))
-                "%Yww%V.%w %H:%M:%S"))
-           " "
-           (current-user-name) " "
-           (current-directory) " "
-	    "\"" (string-intersperse (argv) " ") "\""))
-	#:append))
+(if (and *usage-log-file*
+         (file-write-access? *usage-log-file*))
+    (with-output-to-file
+        *usage-log-file*
+      (lambda ()
+        (print
+         (if *usage-use-seconds*
+             (current-seconds)
+             (time->string
+              (seconds->local-time (current-seconds))
+              "%Yww%V.%w %H:%M:%S"))
+         " "
+         (current-user-name) " "
+         (current-directory) " "
+         "\"" (string-intersperse (argv) " ") "\""))
+      #:append))
 
 ;; Disabled help items
 ;;  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
@@ -89,7 +89,7 @@
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
-  license GPL, Copyright Matt Welland 2006-2015
+  license GPL, Copyright Matt Welland 2006-2017
 
 Usage: megatest [options]
   -h                      : this help

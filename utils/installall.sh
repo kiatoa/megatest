@@ -45,6 +45,14 @@ CHICKEN_BASEVER=4.11.0
 # Set up variables
 #
 case $SYSTEM_TYPE in
+Ubuntu-17.04-x86_64-std)
+	KTYPE=32
+	CDVER=5.10
+	IUPVER=3.17
+	IMVER=3.11
+	CHICKEN_VERSION=4.12.0
+	CHICKEN_BASEVER=4.12.0
+	;;
 Ubuntu-16.04-x86_64-std)
 	KTYPE=32
 	CDVER=5.10
@@ -164,18 +172,19 @@ if ! [[ -e $PREFIX/bin/csi ]]; then
     cd $BUILDHOME
 fi
 cd $BUILDHOME
-if [[ ! -e 1.0.0.tar.gz ]];then
-  wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
-  mv 1.0.0 1.0.0.tar.gz
-fi
+#if [[ ! -e 1.0.0.tar.gz ]];then
+#  wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
+#  mv 1.0.0 1.0.0.tar.gz
+#fi
 if ! [[ -e $PREFIX/lib64/libnanomsg.so.1.0.0 ]]; then
         wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
-        mv 1.0.0 1.0.0.tar.gz
+        #mv 1.0.0 1.0.0.tar.gz
 	tar xf 1.0.0.tar.gz 
 	cd nanomsg-1.0.0
 	./configure --prefix=$PREFIX
 	make
 	make install
+	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL $PROX nanomsg
 fi
 cd $BUILDHOME
 
@@ -215,7 +224,7 @@ done
 # $CHICKEN_INSTALL $PROX -keep-installed matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client spiffy-request-vars md5 message-digest http-client spiffy-directory-listing
 for egg in matchable readline apropos base64 regex-literals format "regex-case" "test" \
 	coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo \
-	tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client \
+	tcp rpc csv-xml fmt json md5 awful http-client:0.7.1 spiffy uri-common intarweb http-client \
 	spiffy-request-vars s md5 message-digest spiffy-directory-listing ssax sxml-serializer \
 	sxml-modifications logpro z3 call-with-environment-variables \
 	pathname-expand typed-records simple-exceptions numbers crypt parley srfi-42 \
