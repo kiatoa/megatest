@@ -2789,7 +2789,7 @@ Misc
 			  (dashboard:run-controls commondat runcontrols-dat tab-num: 3)
 			  (dashboard:run-times commondat runtimes-dat tab-num: 4)
 			  ;; (dashboard:runs-summary commondat onerun-dat tab-num: 4)
-			  (dashboard:areas-summary commondat stats-dat tab-num: 5)
+			  (dashboard:areas-summary commondat areas-dat tab-num: 5)
 			  additional-views)))
 	;; (set! (iup:callback tabs tabchange-cb:) (lambda (a b c)(print "SWITCHED TO TAB: " a " " b " " c)))
 	(iup:attribute-set! tabs "TABTITLE0" "Summary")

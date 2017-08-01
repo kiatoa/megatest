@@ -114,13 +114,72 @@
                 ;; (print "runs-summary-updater, changed: " changed " pass-num: " pass-num)
                 (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL")))))))))
 
+(define (dboard:areas-make-matrix commondat tabdat )
+  (iup:matrix
+   #:expand "YES"
+   #:click-cb
+   
+   (lambda (obj lin col status)
+     (debug:catch-and-dump
+      (lambda ()
+	
+	;; Bummer - we dont have the global get/set api mapped in chicken
+	;; (let* ((modkeys (iup:global "MODKEYSTATE")))
+	;;   (BB> "modkeys="modkeys))
+	
+	(debug:print-info 13 *default-log-port* "click-cb: obj="obj" lin="lin" col="col" status="status)
+	;; status is corrupted on Brandon's home machine.  will have to wait until after shutdown to see if it is still broken in PDX SLES
+	(let* ((toolpath (car (argv)))
+	       (key      (conc lin ":" col))
+	       (test-id   (hash-table-ref/default cell-lookup key -1))
+	       (run-id   (dboard:tabdat-curr-run-id tabdat))
+	       (run-info (rmt:get-run-info run-id))
+	       (target   (rmt:get-target run-id))
+	       (runname  (db:get-value-by-header (db:get-rows run-info)
+						 (db:get-header run-info) "runname"))
+	       (test-info  (rmt:get-test-info-by-id run-id test-id))
+	       (test-name (db:test-get-testname test-info))
+	       (testpatt  (let ((tlast (rmt:tasks-get-last target runname)))
+			    (if tlast
+				(let ((tpatt (tasks:task-get-testpatt tlast)))
+				  (if (member tpatt '("0" 0)) ;; known bad historical value - remove in 2017
+				      "%"
+				      tpatt))
+				"%")))
+	       (item-path (db:test-get-item-path (rmt:get-test-info-by-id run-id test-id)))
+	       (item-test-path (conc test-name "/" (if (equal? item-path "")
+						       "%" 
+						       item-path)))
+	       (status-chars (char-set->list (string->char-set status)))
+	       (testpanel-cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id " &")))
+	  (debug:print-info 13 *default-log-port* "status-chars=["status-chars"] status=["status"]")
+	  (cond
+	   ((member #\1 status-chars) ;; 1 is left mouse button
+	    (system testpanel-cmd))
+	   
+	   ((member #\2 status-chars) ;; 2 is middle mouse button
+	    
+	    (debug:print-info 13 *default-log-port* "mmb- test-name="test-name" testpatt="testpatt)
+	    (iup:show (dashboard:areas-popup-menu run-id test-id target runname test-name testpatt item-test-path test-info) ;; popup-menu
+		      #:x 'mouse
+		      #:y 'mouse
+		      #:modal? "NO")
+	    )
+	   (else
+	    (debug:print-info 13 *default-log-port* "unhandled status in run-summary-click-cb.  Doing right click action. (status is corrupted on Brandon's ubuntu host - bad/buggy  iup install??" )
+	    (iup:show (dashboard:areas-popup-menu run-id test-id target runname test-name testpatt item-test-path test-info) ;; popup-menu
+		      #:x 'mouse
+		      #:y 'mouse
+		      #:modal? "NO")
+	    )))) "runs-summary-click-callback"))))
+
 ;; This is the Areas Summary tab
 ;; 
 (define (dashboard:areas-summary commondat tabdat #!key (tab-num #f))
   (let* ((update-mutex (dboard:commondat-update-mutex commondat))
 	 (tb      (iup:treebox
 		   #:value 0
-		   #:name "Runs"
+		   #:name "Areas"
 		   #:expand "YES"
 		   #:addexpanded "YES"
 		   #:selection-cb
@@ -142,97 +201,129 @@
 				)
 			      ;; (debug:print-error 0 *default-log-port* "tree-path->run-id returned non-number " run-id)
 			      )))
-		      "selection-cb in runs-summary")
+		      "selection-cb in areas-summary")
 		     ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		     )))
-	 (cell-lookup (make-hash-table))
-	 (run-matrix (iup:matrix
-		      #:expand "YES"
-		      #:click-cb
-                      
-		      (lambda (obj lin col status)
-                        (debug:catch-and-dump
-                         (lambda ()
-
-                           ;; Bummer - we dont have the global get/set api mapped in chicken
-                           ;; (let* ((modkeys (iup:global "MODKEYSTATE")))
-                           ;;   (BB> "modkeys="modkeys))
-
-                           (debug:print-info 13 *default-log-port* "click-cb: obj="obj" lin="lin" col="col" status="status)
-                           ;; status is corrupted on Brandon's home machine.  will have to wait until after shutdown to see if it is still broken in PDX SLES
-                           (let* ((toolpath (car (argv)))
-                                  (key      (conc lin ":" col))
-                                  (test-id   (hash-table-ref/default cell-lookup key -1))
-                                  (run-id   (dboard:tabdat-curr-run-id tabdat))
-                                  (run-info (rmt:get-run-info run-id))
-                                  (target   (rmt:get-target run-id))
-                                  (runname  (db:get-value-by-header (db:get-rows run-info)
-                                                                    (db:get-header run-info) "runname"))
-				  (test-info  (rmt:get-test-info-by-id run-id test-id))
-                                  (test-name (db:test-get-testname test-info))
-                                  (testpatt  (let ((tlast (rmt:tasks-get-last target runname)))
-                                                (if tlast
-                                                    (let ((tpatt (tasks:task-get-testpatt tlast)))
-                                                      (if (member tpatt '("0" 0)) ;; known bad historical value - remove in 2017
-                                                          "%"
-                                                          tpatt))
-                                                    "%")))
-                                  (item-path (db:test-get-item-path (rmt:get-test-info-by-id run-id test-id)))
-                                  (item-test-path (conc test-name "/" (if (equal? item-path "")
-									"%" 
-									item-path)))
-                                  (status-chars (char-set->list (string->char-set status)))
-                                  (testpanel-cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id " &")))
-                             (debug:print-info 13 *default-log-port* "status-chars=["status-chars"] status=["status"]")
-                             (cond
-                              ((member #\1 status-chars) ;; 1 is left mouse button
-                               (system testpanel-cmd))
-                              
-                              ((member #\2 status-chars) ;; 2 is middle mouse button
-                               
-                               (debug:print-info 13 *default-log-port* "mmb- test-name="test-name" testpatt="testpatt)
-                               (iup:show (dashboard:areas-popup-menu run-id test-id target runname test-name testpatt item-test-path test-info) ;; popup-menu
-                                         #:x 'mouse
-                                         #:y 'mouse
-                                         #:modal? "NO")
-                               )
-                              (else
-                               (debug:print-info 13 *default-log-port* "unhandled status in run-summary-click-cb.  Doing right click action. (status is corrupted on Brandon's ubuntu host - bad/buggy  iup install??" )
-                               (iup:show (dashboard:areas-popup-menu run-id test-id target runname test-name testpatt item-test-path test-info) ;; popup-menu
-                                         #:x 'mouse
-                                         #:y 'mouse
-                                         #:modal? "NO")
-                               )
-                              )
-                            
-                             )) "runs-summary-click-callback"))))
-	 (runs-summary-updater  
-          (lambda ()
-	    (mutex-lock! update-mutex)
-            (if  (or (dashboard:areas-database-changed? commondat tabdat context-key: 'runs-summary-updater)
-                     (dboard:tabdat-view-changed tabdat))
-                 (debug:catch-and-dump
-                  (lambda () ;; check that run-matrix is initialized before calling the updater
-		    (if run-matrix 
-			(dashboard:areas-summary-updater commondat tabdat tb cell-lookup run-matrix)))
-                  "dashboard:areas-summary-updater")
-                 )
-	    (mutex-unlock! update-mutex)))
-         (runs-summary-control-panel (dashboard:areas-summary-control-panel tabdat))
-         )
-    (dboard:commondat-add-updater commondat runs-summary-updater tab-num: tab-num)
+	 (cell-lookup            (make-hash-table))
+	 (areas-matrix           (dboard:areas-make-matrix commondat tabdat))
+	 (areas-summary-updater  (lambda ()
+				   (mutex-lock! update-mutex)
+				   (if  (or (dashboard:areas-database-changed? commondat tabdat context-key: 'runs-summary-updater)
+					    (dboard:tabdat-view-changed tabdat))
+					(debug:catch-and-dump
+					 (lambda () ;; check that areas-matrix is initialized before calling the updater
+					   (if areas-matrix 
+					       (dashboard:areas-summary-updater commondat tabdat tb cell-lookup areas-matrix)))
+					 "dashboard:areas-summary-updater")
+					)
+				   (mutex-unlock! update-mutex)))
+         (runs-summary-control-panel (dashboard:areas-summary-control-panel tabdat)))
+    (dboard:commondat-add-updater commondat areas-summary-updater tab-num: tab-num)
     (dboard:tabdat-runs-tree-set! tabdat tb)
     (iup:vbox
      (iup:split
       #:value 200
       tb
-      run-matrix)
+      areas-matrix)
      (dboard:make-controls commondat tabdat extra-widget: runs-summary-control-panel))))
+
+;; this calls dboard:get-tests-for-run-duplicate for each run
+;;
+;; create a virtual table of all the tests
+;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
+;;
+(define (dboard:areas-update-rundat tabdat runnamepatt numruns testnamepatt keypatts)
+  (let* ((access-mode      (dboard:tabdat-access-mode tabdat))
+         (keys             (dboard:tabdat-keys tabdat)) ;; (db:dispatch-query access-mode rmt:get-keys db:get-keys)))
+	 (last-runs-update (- (dboard:tabdat-last-runs-update tabdat) 2))
+         (allruns          (db:dispatch-query access-mode rmt:get-runs db:get-runs
+                                              runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
+         ;;(allruns-tree (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
+         (allruns-tree    (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt
+                                             keys "%" #f #f #f #f 0)) ;; last-runs-update));;'("id" "runname")
+	 (header      (db:get-header allruns))
+	 (runs        (db:get-rows   allruns)) ;; RA => Filtered as per runpatt selected
+         (runs-tree   (db:get-rows   allruns-tree)) ;; RA => Returns complete list of runs
+	 (start-time  (current-seconds))
+	 (runs-hash   (let ((ht (make-hash-table)))
+			 (for-each (lambda (run)
+				     (hash-table-set! ht (db:get-value-by-header run header "id") run))
+				   runs-tree) ;; (vector-ref runs-dat 1))
+			 ht))
+	 (tb          (dboard:tabdat-runs-tree tabdat)))
+    (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
+    (dboard:tabdat-header-set! tabdat header)
+    ;; 
+    ;; trim runs to only those that are changing often here
+    ;; 
+    (if (null? runs)
+	(begin
+	  (dboard:tabdat-allruns-set! tabdat '())
+	  (dboard:tabdat-all-test-names-set! tabdat '())
+	  (dboard:tabdat-item-test-names-set! tabdat '())
+	  (hash-table-clear! (dboard:tabdat-allruns-by-id tabdat)))
+	(let loop ((run      (car runs))
+		   (tal      (cdr runs))
+		   (res     '())
+		   (maxtests 0))
+	  (let* ((run-id       (db:get-value-by-header run header "id"))
+		 (run-struct   (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f))
+		 ;; (last-update  (if run-struct (dboard:rundat-last-update run-struct) 0))
+		 (key-vals     (rmt:get-key-vals run-id))
+		 (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
+		 ;; GET RID OF dboard:get-tests-dat - it is superceded by dboard:get-tests-for-run-duplicate
+		 ;;  dboard:get-tests-for-run-duplicate - returns a hash table
+		 ;;  (dboard:get-tests-dat tabdat run-id last-update))
+		 (all-test-ids (hash-table-keys tests-ht))
+		 (num-tests    (length all-test-ids)))
+	    ;; (print "run-struct: " run-struct)
+	    ;; NOTE: bubble-up also sets the global (dboard:tabdat-item-test-names tabdat)
+	    ;; (tests       (bubble-up tmptests priority: bubble-type))
+	    ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
+	    ;; (debug:print 0 *default-log-port* "Getting data for run " run-id " with key-vals=" key-vals)
+	    ;; Not sure this is needed?
+	    (let* ((newmaxtests (max num-tests maxtests))
+		   ;; (last-update (- (current-seconds) 10))
+		   (run-struct  (or run-struct
+				    (dboard:rundat-make-init
+				     run:         run 
+				     tests:       tests-ht
+				     key-vals:    key-vals)))
+		   (new-res     (if (null? all-test-ids)
+                                    res
+                                    (delete-duplicates
+                                     (cons run-struct res)
+                                     (lambda (a b)
+                                       (eq? (db:get-value-by-header (dboard:rundat-run a) header "id")
+                                            (db:get-value-by-header (dboard:rundat-run b) header "id"))))))
+		   (elapsed-time (- (current-seconds) start-time)))
+	      (if (null? all-test-ids)
+		  (hash-table-delete! (dboard:tabdat-allruns-by-id tabdat) run-id)
+		  (hash-table-set!    (dboard:tabdat-allruns-by-id tabdat) run-id run-struct))
+	      (if (or (null? tal)
+		      (> elapsed-time 2)) ;; stop loading data after 5 seconds, on the next call more data *should* be loaded since get-tests-for-run uses last update
+		  (begin
+		    (when (> elapsed-time 2)   
+                      (debug:print 0 *default-log-port* "NOTE: updates are taking a long time, " elapsed-time "s elapsed.")
+                      (let* ((old-val (iup:attribute *tim* "TIME"))
+                             (new-val (number->string (inexact->exact (floor (* 2  (string->number old-val)))))))
+                        (debug:print 0 *default-log-port* "NOTE: increasing poll interval from "old-val" to "new-val)
+                        (iup:attribute-set! *tim* "TIME" new-val))
+
+
+                      )
+		    (dboard:tabdat-allruns-set! tabdat new-res)
+		    maxtests)
+		  (if (> (dboard:rundat-run-data-offset run-struct) 0)
+		      (loop run tal new-res newmaxtests) ;; not done getting data for this run
+		      (loop (car tal)(cdr tal) new-res newmaxtests)))))))
+    (dboard:tabdat-filters-changed-set! tabdat #f)
+    (dboard:areas-update-tree tabdat runs-hash header tb)))
 
 ;; runs update-rundat using the various filters from the gui
 ;;
 (define (dashboard:areas-do-update-rundat tabdat)
-  (dboard:update-rundat
+  (dboard:areas-update-rundat
    tabdat
    (hash-table-ref/default (dboard:tabdat-searchpatts tabdat) "runname" "%")
    (dboard:tabdat-numruns tabdat)
@@ -311,7 +402,7 @@
                         ;;    		 (conc rownum ":" colnum) col-name)
                         ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
                         ;; Here we update the tests treebox and tree keys
-                        (tree:add-node tb "Runs" run-path) ;; (append key-vals (list run-name))
+                        (tree:add-node tb "Areas" run-path) ;; (append key-vals (list run-name))
                         ;;                                             userdata: (conc "run-id: " run-id))))
                         (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
                         ;; (set! colnum (+ colnum 1))

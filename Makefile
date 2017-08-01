@@ -46,7 +46,7 @@ all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut
 mtest: $(OFILES) readline-fix.scm megatest.o
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
 
-dboard : $(OFILES) $(GOFILES) dashboard.scm
+dboard : $(OFILES) $(GOFILES) dashboard.scm dashboard-areas.scm
 	csc $(CSCOPTS) $(OFILES) dashboard.scm $(GOFILES) -o dboard
 
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
@@ -228,7 +228,7 @@ $(PREFIX)/bin/mtest-reaper: helpers/mtest-reaper.scm helpers/ducttape-lib.scm he
 mtest-reaper: $(PREFIX)/bin/mtest-reaper
 
 # install dashboard as dboard so wrapper script can be called dashboard
-$(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper dashboard-areas.scm
+$(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 	utils/mk_wrapper $(PREFIX) dboard $(PREFIX)/bin/dashboard
 	chmod a+x $(PREFIX)/bin/dashboard
 	$(INSTALL) dboard $(PREFIX)/bin/.$(ARCHSTR)/dboard
