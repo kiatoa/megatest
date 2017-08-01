@@ -1684,9 +1684,9 @@ Misc
 				 (time-b   (db:get-value-by-header record-b runs-header "event_time")))
 			    (< time-a time-b)))))
          (changed      #f)
-	 (last-runs-update  (dboard:tabdat-last-runs-update tabdat))
-	 (runs-dat     (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt
-                                          (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update)))
+	 (last-runs-update  (dboard:tabdat-last-runs-update tabdat)))
+    ;; (runs-dat     (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt
+       ;;                                   (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update)))
     (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
     (for-each (lambda (run-id)
 		(let* ((run-record (hash-table-ref/default runs-hash run-id #f))
