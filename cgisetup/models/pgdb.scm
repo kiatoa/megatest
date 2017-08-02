@@ -125,7 +125,7 @@
 ;; given all needed info create run record
 ;;
 (define (pgdb:insert-run dbh ttype-id target run-name state status owner event-time comment fail-count pass-count)
-  (dbi:exec
+    (dbi:exec
    dbh
    "INSERT INTO runs (ttype_id,target,run_name,state,status,owner,event_time,comment,fail_count,pass_count)
       VALUES (?,?,?,?,?,?,?,?,?,?);"

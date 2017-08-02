@@ -651,8 +651,10 @@
 
 	       ;; (area-id    (db:get-value-by-header row header "area_id)"))
 	       )
+           
 	  (if new-run-id
 	      (begin ;; let ((run-record (pgdb:get-run-info dbh new-run-id))
+                
 		(hash-table-set! runs-ht run-id new-run-id)
 		;; ensure key fields are up to date
 		(pgdb:refresh-run-info
@@ -662,11 +664,14 @@
 		new-run-id)
 	      (if (handle-exceptions
 		      exn
-		      (begin (print-call-chain) #f)
+		      (begin (print-call-chain)
+                              (print ((condition-property-accessor 'exn 'message) exn))     
+#f)
+                     
 		    (pgdb:insert-run
 		     dbh
 		     spec-id target run-name state status owner event-time comment fail-count pass-count)) ;; area-id))
-		  (tasks:run-id->mtpg-run-id dbh cached-info run-id)
+		       (tasks:run-id->mtpg-run-id dbh cached-info run-id)
 		  #f))))))
 
 (define (tasks:sync-tests-data dbh cached-info test-ids)
@@ -691,16 +696,24 @@
 	      (event-time   (db:test-get-event_time test-info))
 	      (archived     (db:test-get-archived  test-info))
 	      (pgdb-run-id  (tasks:run-id->mtpg-run-id dbh cached-info run-id))
-	      (pgdb-test-id (pgdb:get-test-id dbh pgdb-run-id test-name item-path)))
+                
+	      (pgdb-test-id (if pgdb-run-id 
+				(begin
+                                  (print pgdb-run-id)    
+                                 (pgdb:get-test-id dbh pgdb-run-id test-name item-path))
+                                 #f)))
 	 ;; "id"           "run_id"        "testname"  "state"      "status"      "event_time"
 	 ;; "host"         "cpuload"       "diskfree"  "uname"      "rundir"      "item_path"
 	 ;; "run_duration" "final_logf"    "comment"   "shortdir"   "attemptnum"  "archived"
-	 (if pgdb-test-id ;; have a record
+         (if pgdb-run-id
+           (begin
+	   (if pgdb-test-id ;; have a record
 	     (begin ;; let ((key-name (conc run-id "/" test-name "/" item-path)))
 	       (hash-table-set! test-ht test-id pgdb-test-id)
 	       (print "Updating existing test with run-id: " run-id " and test-id: " test-id)
 	       (pgdb:update-test dbh pgdb-test-id pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived))
-	     (pgdb:insert-test dbh pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived))
+	     (pgdb:insert-test dbh pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived)))
+              (print "Skipping run with run-id:" run-id ". This run was created after privious sync and removed before this sync."))   
 	 ))
      test-ids)))
 
