@@ -15,7 +15,7 @@
 ;;  2. Every five seconds check for state/status changes and print the info
 ;;
 
-(use srfi-1 posix srfi-69 srfi-18 regex)
+(use srfi-1 posix srfi-69 srfi-18 regex defstruct)
 
 (declare (uses margs))
 (declare (uses rmt))
@@ -36,6 +36,35 @@
 		   )
 		 args:arg-hash
 		 0))
+
+(defstruct testdat
+  tc-type
+  state
+  status
+  flowid
+  tctname
+  event_time
+  details
+  comment
+  duration)
+
+(define (tcmt:print tdat)
+  (let ((comment (if (testdat-comment tdat)
+                     (conc " message='" (testdat-comment tdat))
+                     ""))
+        (details (if (testdat-details tdat)
+                     (conc " details='" (testdat-details tdat))
+                     "")))
+    (case (testdat-tc-type tdat)
+      ((test-start)
+       (print "##teamcity[testStarted name='" (testdat-tctname tdat) "' flowId='" (testdat-flowid tdat) "']"))
+      ((test-end)
+       (print "##teamcity[testFinished name='" (testdat-tctname tdat) "' duration='" (* 1e3 (testdat-duration tdat)) "'"
+              comment
+              details
+              " flowId='" flowid "']"))
+      ((test-failed)
+       (print "##teamcity[testFailed name='" (testdat-tctname tdat) "' " comment details " flowId='" flowid "']")))))
 
 ;; ##teamcity[testStarted name='suite.testName']
 ;; ##teamcity[testStdOut name='suite.testName' out='text']
