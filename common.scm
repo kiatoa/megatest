@@ -2286,7 +2286,7 @@
     
     ;; start the queue processor (save for second round of development)
     ;;
-    ;; (thread-start! (queue-processory dbconn) "Queue processor")
+    (thread-start! (queue-processory dbconn) "Queue processor")
     ;; msg is an alist
     ;;  'r host:port  <== where to return the data
     ;;  'p params     <== data to apply the command to

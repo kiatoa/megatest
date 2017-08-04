@@ -17,7 +17,7 @@
      srfi-18 extras format pkts pkts regex regex-case
      (prefix dbi dbi:)
      (prefix nanomsg nmsg:))
-
+test
 (declare (uses common))
 (declare (uses megatest-version))
 (declare (uses margs))
