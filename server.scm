@@ -247,7 +247,7 @@
 				(and start-time mod-time
 				     (> (- now start-time) 0)    ;; been running at least 0 seconds
 				     (< (- now mod-time)   16)   ;; still alive - file touched in last 16 seconds
-				     (< (- now start-time) 
+				     (< (- now start-time)       
 					(+ (- (string->number (or (configf:lookup *configdat* "server" "runtime") "3600"))
 					      180)
 					   (random 360))) ;; under one hour running time +/- 180
@@ -446,7 +446,7 @@
 (define (server:expiration-timeout)
   (let ((tmo (configf:lookup *configdat* "server" "timeout")))
     (if (and (string? tmo)
-	     (common:hms-string->seconds tmo))
+	     (common:hms-string->seconds tmo)) ;; BUG: hms-string->seconds is broken, if given "10" returns 0. Also, it doesn't belong in this logic unless the string->number is changed below
         (* 3600 (string->number tmo))
 	60)))
 

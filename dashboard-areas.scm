@@ -6,9 +6,7 @@
   (dashboard:areas-do-update-rundat tabdat) ;; )
   (dboard:areas-summary-control-panel-updater tabdat)
   (let* ((last-runs-update  (dboard:tabdat-last-runs-update tabdat))
-	 (runs-dat     (db:dispatch-query (dboard:tabdat-access-mode tabdat)
-                                          rmt:get-runs-by-patt db:get-runs-by-patt
-                                          (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
+	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
          (runs         (vector-ref runs-dat 1))
 	 (run-id       (dboard:tabdat-curr-run-id tabdat))
@@ -234,13 +232,11 @@
 ;;
 (define (dboard:areas-update-rundat tabdat runnamepatt numruns testnamepatt keypatts)
   (let* ((access-mode      (dboard:tabdat-access-mode tabdat))
-         (keys             (dboard:tabdat-keys tabdat)) ;; (db:dispatch-query access-mode rmt:get-keys db:get-keys)))
+         (keys             (dboard:tabdat-keys tabdat))
 	 (last-runs-update (- (dboard:tabdat-last-runs-update tabdat) 2))
-         (allruns          (db:dispatch-query access-mode rmt:get-runs db:get-runs
-                                              runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
+         (allruns          (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
          ;;(allruns-tree (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
-         (allruns-tree    (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt
-                                             keys "%" #f #f #f #f 0)) ;; last-runs-update));;'("id" "runname")
+         (allruns-tree    (rmt:get-runs-by-patt keys "%" #f #f #f #f 0)) ;; last-runs-update));;'("id" "runname")
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns)) ;; RA => Filtered as per runpatt selected
          (runs-tree   (db:get-rows   allruns-tree)) ;; RA => Returns complete list of runs
@@ -345,8 +341,7 @@
 (define (dashboard:areas-get-runs-hash tabdat)
   (let* ((access-mode       (dboard:tabdat-access-mode tabdat))
          (last-runs-update  0);;(dboard:tabdat-last-runs-update tabdat))
-	 (runs-dat     (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt 
-                                          (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
+	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
          (runs         (vector-ref runs-dat 1))
 	 (run-id       (dboard:tabdat-curr-run-id tabdat))

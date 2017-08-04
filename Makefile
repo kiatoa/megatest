@@ -236,8 +236,9 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
 	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/viewscreen $(PREFIX)/bin/mt_xterm \
-	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun $(PREFIX)/bin/mtutil
-#          $(PREFIX)/share/db/mt-pg.sql $(PREFIX)/bin/.$(ARCHSTR)/ndboard  $(PREFIX)/bin/tcmt
+	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun $(PREFIX)/bin/mtutil \
+	  $(PREFIX)/bin/tcmt $(PREFIX)/share/db/mt-pg.sql
+#         $(PREFIX)/bin/.$(ARCHSTR)/ndboard
 
 # $(PREFIX)/bin/newdashboard
 

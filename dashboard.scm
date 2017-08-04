@@ -351,7 +351,7 @@ Misc
   ;; HACK ALERT: this is a hack, please fix.
   (dboard:tabdat-ro-set! tabdat (not (file-read-access? (dboard:tabdat-dbfpath tabdat))))
   
-  (dboard:tabdat-keys-set! tabdat (db:dispatch-query (db:get-access-mode) rmt:get-keys db:get-keys))
+  (dboard:tabdat-keys-set! tabdat (rmt:get-keys))
   (dboard:tabdat-dbkeys-set! tabdat (append (dboard:tabdat-keys tabdat) (list "runname")))
   (dboard:tabdat-tot-runs-set! tabdat (rmt:get-num-runs "%"))
   )
@@ -579,8 +579,7 @@ Misc
 	 (tmptests     (if (or do-not-use-db-file-timestamps
 			       (dboard:tabdat-filters-changed tabdat)
 			       db-modified)
-			   (db:dispatch-query access-mode rmt:get-tests-for-run db:get-tests-for-run
-					      run-id testnamepatt states statuses     ;; run-id testpatt states statuses
+			   (rmt:get-tests-for-run run-id testnamepatt states statuses     ;; run-id testpatt states statuses
 					      (dboard:rundat-run-data-offset run-dat) ;; query offset
 					      num-to-get
 					      (dboard:tabdat-hide-not-hide tabdat) ;; no-in
@@ -654,13 +653,11 @@ Misc
 ;;
 (define (update-rundat tabdat runnamepatt numruns testnamepatt keypatts)
   (let* ((access-mode      (dboard:tabdat-access-mode tabdat))
-         (keys             (db:dispatch-query access-mode rmt:get-keys db:get-keys))
+         (keys             (rmt:get-keys))
 	 (last-runs-update (- (dboard:tabdat-last-runs-update tabdat) 2))
-         (allruns          (db:dispatch-query access-mode rmt:get-runs db:get-runs
-                                              runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
+         (allruns          (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
          ;;(allruns-tree (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
-         (allruns-tree    (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt
-                                             keys "%" #f #f #f #f last-runs-update));;'("id" "runname")
+         (allruns-tree    (rmt:get-runs-by-patt keys "%" #f #f #f #f last-runs-update)) ;;'("id" "runname")
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns)) ;; RA => Filtered as per runpatt selected
          (runs-tree   (db:get-rows   allruns-tree)) ;; RA => Returns complete list of runs
@@ -737,11 +734,9 @@ Misc
   (let* ((access-mode      (dboard:tabdat-access-mode tabdat))
          (keys             (dboard:tabdat-keys tabdat)) ;; (db:dispatch-query access-mode rmt:get-keys db:get-keys)))
 	 (last-runs-update (- (dboard:tabdat-last-runs-update tabdat) 2))
-         (allruns          (db:dispatch-query access-mode rmt:get-runs db:get-runs
-                                              runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
+         (allruns          (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
          ;;(allruns-tree (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
-         (allruns-tree    (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt
-                                             keys "%" #f #f #f #f 0)) ;; last-runs-update));;'("id" "runname")
+         (allruns-tree    (rmt:get-runs-by-patt keys "%" #f #f #f #f 0)) ;; last-runs-update));;'("id" "runname")
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns)) ;; RA => Filtered as per runpatt selected
          (runs-tree   (db:get-rows   allruns-tree)) ;; RA => Returns complete list of runs
@@ -1685,8 +1680,7 @@ Misc
 			    (< time-a time-b)))))
          (changed      #f)
 	 (last-runs-update  (dboard:tabdat-last-runs-update tabdat)))
-    ;; (runs-dat     (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt
-       ;;                                   (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update)))
+	 ;; (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update)))
     (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
     (for-each (lambda (run-id)
 		(let* ((run-record (hash-table-ref/default runs-hash run-id #f))
@@ -1757,8 +1751,7 @@ Misc
 (define (dashboard:get-runs-hash tabdat)
   (let* ((access-mode       (dboard:tabdat-access-mode tabdat))
          (last-runs-update  0);;(dboard:tabdat-last-runs-update tabdat))
-	 (runs-dat     (db:dispatch-query access-mode rmt:get-runs-by-patt db:get-runs-by-patt 
-                                          (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
+	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
          (runs         (vector-ref runs-dat 1))
 	 (run-id       (dboard:tabdat-curr-run-id tabdat))
@@ -1774,9 +1767,7 @@ Misc
   (dashboard:do-update-rundat tabdat) ;; )
   (dboard:runs-summary-control-panel-updater tabdat)
   (let* ((last-runs-update  (dboard:tabdat-last-runs-update tabdat))
-	 (runs-dat     (db:dispatch-query (dboard:tabdat-access-mode tabdat)
-                                          rmt:get-runs-by-patt db:get-runs-by-patt
-                                          (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
+	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
          (runs         (vector-ref runs-dat 1))
 	 (run-id       (dboard:tabdat-curr-run-id tabdat))
@@ -2230,6 +2221,16 @@ Misc
 					     (exit))
 		      #:expand "NO" #:size "40x15")
 	  (iup:button "Refresh"   #:action (lambda (obj)
+                                             (dboard:tabdat-last-data-update-set! tabdat 0)
+                                             (dboard:tabdat-last-runs-update-set! tabdat 0)
+                                             (dboard:tabdat-run-update-times-set! tabdat (make-hash-table))
+                                             (dboard:tabdat-last-test-dat-set!    tabdat (make-hash-table))
+                                             (dboard:tabdat-allruns-set!          tabdat '())
+                                             (dboard:tabdat-allruns-by-id-set!    tabdat (make-hash-table))
+                                             (dboard:tabdat-done-runs-set!        tabdat '())
+                                             (dboard:tabdat-not-done-runs-set!    tabdat '())
+                                             (dboard:tabdat-view-changed-set!     tabdat #t)
+                                             (dboard:commondat-please-update-set! commondat #t)
 					     (mark-for-update tabdat))
 		      #:expand "NO" #:size "40x15")
 	  (iup:button "Collapse"  #:action (lambda (obj)
@@ -2991,9 +2992,7 @@ Misc
 (define (dashboard:run-times-tab-run-data-updater commondat tabdat tab-num)
   (let* ((access-mode      (dboard:tabdat-access-mode tabdat))
          (last-runs-update (dboard:tabdat-last-runs-update tabdat))
-         (runs-dat      (db:dispatch-query access-mode
-                                           rmt:get-runs-by-patt db:get-runs-by-patt
-                                           (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
+         (runs-dat      (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
 	 (runs-header   (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 	 (runs-hash     (let ((ht (make-hash-table)))
 			  (for-each (lambda (run)
