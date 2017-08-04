@@ -124,7 +124,7 @@
      (let* ((current-other (dbr:dbstruct-current-other dbstruct)) ;; contains the name of the current "other" db to work with
 	    (locked-db     (dbr:dbstruct-lookup-other-db dbstruct current-other)))
        (if locked-db
-	   locked-db
+	   locked-db ;; problem here is we don't know which locked db to open
 	   (let* ((link-tree (common:get-link-tree))
 		  (dbdir     (conc link-tree "/.db")) ;; sure, let's use the old .db dir
 		  (dbdat     (db:open-megatest-db
