@@ -11,7 +11,7 @@ SRCFILES = common.scm items.scm launch.scm \
    http-transport.scm filedb.scm \
    client.scm daemon.scm mt.scm \
    ezsteps.scm lock-queue.scm sdb.scm \
-   rmt.scm api.scm tdb.scm rpc-transport.scm \
+   rmt.scm mrmt.scm api.scm tdb.scm rpc-transport.scm \
    portlogger.scm archive.scm env.scm diff-report.scm cgisetup/models/pgdb.scm
 
 # Eggs to install (straightforward ones)

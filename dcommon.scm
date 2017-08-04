@@ -20,7 +20,8 @@
 
 (declare (uses megatest-version))
 (declare (uses gutils))
-(declare (uses db))
+;; (declare (uses db))
+(declare (uses mrmt))
 ;; (declare (uses synchash))
 
 (include "common_records.scm")
@@ -429,7 +430,7 @@
           res))))
 
 (define (dcommon:examine-xterm run-id test-id)
-  (let* ((testdat (rmt:get-test-info-by-id run-id test-id)))
+  (let* ((testdat (mrmt:get-test-info-by-id run-id test-id)))
     (if (not testdat)
         (begin
           (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
@@ -546,7 +547,7 @@
 	 (changed      #f)
 	 (stats-updater (lambda ()
 			 (if (dashboard:database-changed? commondat tabdat context-key: 'run-stats)
-			     (let* ((run-stats    (rmt:get-run-stats))
+			     (let* ((run-stats    (mrmt:get-run-stats))
 				    (indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
 				    (row-indices  (car indices))
 				    (col-indices  (cadr indices))
@@ -1092,7 +1093,7 @@
 	  (refresh-runs-list (lambda ()
 			       (if (dashboard:database-changed? commondat tabdat context-key: 'runname-selector-runs-list)
 				   (let* (;; (target        (dboard:tabdat-target-string tabdat))
-					  (runs-for-targ (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f 0))
+					  (runs-for-targ (mrmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f 0))
 					  (runs-header   (vector-ref runs-for-targ 0))
 					  (runs-dat      (vector-ref runs-for-targ 1))
 					  (run-names     (cons default-run-name 
