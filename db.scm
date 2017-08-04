@@ -1048,7 +1048,8 @@
   (let* ((mtdb        (dbr:dbstruct-mtdb dbstruct))
 	 (tmpdb       (db:get-db dbstruct))
 	 (refndb      (dbr:dbstruct-refndb dbstruct)))
-    (db:sync-tables (db:sync-all-tables-list dbstruct) last-update tmpdb refndb mtdb)))
+    (db:sync-tables (db:sync-all-tables-list dbstruct) last-update tmpdb refndb mtdb)
+    (stack-push! (dbr:dbstruct-dbstack dbstruct) dbdat)))
 
 ;;;; run-ids
 ;;    if #f use *db-local-sync* : or 'local-sync-flags
