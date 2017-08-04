@@ -63,6 +63,32 @@
   (count  0)) 
 
 ;;======================================================================
+;; DASHBOARD DIRECT INTERFACE
+;;======================================================================
+
+;; return dbstruct with:
+;;   read-only   - flag
+;;   tmpdb       - local to this machine, all reads to this
+;;   mtdb        - full db from mtrah
+;;   no-sync-db  -
+;;   on-homehost - enable reading from other users /tmp db if files are readable
+;;
+;;   areas is hash of areas => dbstruct, the dashboard-open-db will register the dbstruct in that hash
+;;
+(define (db:dashboard-open-db areas area-path)
+  #f)
+
+;; sync all the areas listed in area-paths
+;;
+(define (db:dashboard-sync-dbs areas area-paths)
+  #f)
+
+;; close all area db's
+;;
+(define (db:dashboard-close-dbs areas)
+  #f)
+
+;;======================================================================
 ;; SQLITE3 HELPERS
 ;;======================================================================
 
