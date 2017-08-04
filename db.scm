@@ -1073,7 +1073,7 @@
 				 (begin
 				   (if no-sync-db
 				       (begin
-					 (if full-sync-needed (db:no-sync-set no-sync-db "LAST_FULL_UPDATE" start-time))
+					 (if full-sync-needed (db:no-sync-set no-sync-db "LAST_FULL_UPDATE" 0)) ;; This should force a *full* sync, doesn't make sense it would set to start-time
 					 (db:no-sync-set no-sync-db "LAST_UPDATE" start-time)))
 				   (db:tmp->megatest.db-sync dbstruct last-update))
 				 0))
