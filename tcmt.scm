@@ -38,9 +38,10 @@
 		 0))
 
 (defstruct testdat
-  tc-type
-  state
-  status
+  (tc-type #f)
+  (state   #f)
+  (status  #f)
+  (overall #f)
   flowid
   tctname
   event_time
@@ -49,22 +50,19 @@
   duration)
 
 (define (tcmt:print tdat)
-  (let ((comment (if (testdat-comment tdat)
-                     (conc " message='" (testdat-comment tdat))
-                     ""))
-        (details (if (testdat-details tdat)
-                     (conc " details='" (testdat-details tdat))
-                     "")))
+  (let ((comment  (if (testdat-comment tdat)
+                      (conc " message='" (testdat-comment tdat))
+                      ""))
+        (details  (if (testdat-details tdat)
+                      (conc " details='" (testdat-details tdat))
+                      ""))
+        (flowid   (conc " flowId='" (testdat-flowid   tdat) "'"))
+        (duration (conc " duration='" (* 1e3 (testdat-duration tdat)) "'"))
+        (tcname   (conc " name='" (testdat-tctname  tdat) "'")))
     (case (testdat-tc-type tdat)
-      ((test-start)
-       (print "##teamcity[testStarted name='" (testdat-tctname tdat) "' flowId='" (testdat-flowid tdat) "']"))
-      ((test-end)
-       (print "##teamcity[testFinished name='" (testdat-tctname tdat) "' duration='" (* 1e3 (testdat-duration tdat)) "'"
-              comment
-              details
-              " flowId='" flowid "']"))
-      ((test-failed)
-       (print "##teamcity[testFailed name='" (testdat-tctname tdat) "' " comment details " flowId='" flowid "']")))))
+      ((test-start)    (print "##teamcity[testStarted "  tctname flowid "]"))
+      ((test-end)      (print "##teamcity[testFinished " tctname flowid comment details duration "]"))
+      ((test-failed)   (print "##teamcity[testFailed "   tctname flowid comment details "]")))))
 
 ;; ##teamcity[testStarted name='suite.testName']
 ;; ##teamcity[testStdOut name='suite.testName' out='text']
@@ -84,34 +82,43 @@
 	(let* ((tests (rmt:get-tests-for-run run-id "%" '() '() #f #f #f #f #f #f last-update #f)))
 	  ;; (print "DEBUG: got tests=" tests)
 	  (for-each
-	   (lambda (testdat)
-	     (let* ((testn    (db:test-get-fullname     testdat))
-		    (testname (db:test-get-testname     testdat))
-		    (itempath (db:test-get-item-path    testdat))
+	   (lambda (test-rec)
+	     (let* ((testn    (db:test-get-fullname     test-rec))
+		    (testname (db:test-get-testname     test-rec))
+		    (itempath (db:test-get-item-path    test-rec))
 		    (tctname  (if (string=? itempath "") testname (conc testname "." (string-translate itempath "/" "."))))
-		    (state    (db:test-get-state        testdat))
-		    (status   (db:test-get-status       testdat))
-		    (duration (or (any->number (db:test-get-run_duration testdat)) 0))
-		    (comment  (db:test-get-comment      testdat))
-		    (logfile  (db:test-get-final_logf   testdat))
-		    (prevstat (hash-table-ref/default data testn #f))
+		    (state    (db:test-get-state        test-rec))
+		    (status   (db:test-get-status       test-rec))
+		    (duration (or (any->number (db:test-get-run_duration test-rec)) 0))
+		    (comment  (db:test-get-comment      test-rec))
+		    (logfile  (db:test-get-final_logf   test-rec))
 		    (newstat  (cond
 			       ((equal? state "RUNNING")   "RUNNING")
 			       ((equal? state "COMPLETED") status)
 			       (flush   (conc state "/" status))
 			       (else "UNK")))
 		    (cmtstr   (if (and (not flush) comment)
-				  (conc " message='" comment "' ")
+				  comment
 				  (if flush
-				      (conc "message='Test ended in state/status=" state "/" status  (if  (string-match "^\\s*$" comment)
-													  ", no Megatest comment found.' "
-													  (conc ", Megatest comment='" comment "' "))) ;; special case, we are handling stragglers
-				      " ")))
+				      (conc "Test ended in state/status=" state "/" status  (if  (string-match "^\\s*$" comment)
+                                                                                                 ", no Megatest comment found."
+                                                                                                 (conc ", Megatest comment=\"" comment "\""))) ;; special case, we are handling stragglers
+				      #f)))
 		    (details  (if (string-match ".*html$" logfile)
-				  (conc " details='" *toppath* "/lt/" target "/" runname "/" testname (if (equal? itempath "") "/" (conc "/" itempath "/")) logfile "' ")
-				  "")))
-		    
+				  (conc *toppath* "/lt/" target "/" runname "/" testname (if (equal? itempath "") "/" (conc "/" itempath "/")) logfile)
+				  #f))
+                    (tdat     (hash-table-ref/default data testn
+                                                      (let ((new (make-testdat)))
+                                                        (testdat-flowid-set!   new flowid)
+                                                        (testdat-tctname-set!  new tctname)
+                                                        (testdat-event_time-set! new (current-seconds))
+                                                        (hash-table-set! data testn new))))
+                    (prevstat (testdat-overall tdat)))
 	       ;; (print "DEBUG: testn=" testn " state=" state " status=" status " prevstat=" prevstat " newstat=" newstat)
+               (cond
+                ((and (not (testdat-state tdat))  ;; first time through
+                      (equal? state "COMPLETED")) ;; 
+
 	       (if (or (not prevstat)
 		       (not (equal? prevstat newstat)))
 		   (begin
@@ -128,8 +135,8 @@
     now))
 
 (define (monitor pid)
-  (let* ((run-ids #f)
-	 (testdat (make-hash-table))
+  (let* ((run-ids '())
+	 (testdats (make-hash-table))  ;; each entry is a list of testdat structs
 	 (keys    #f)
 	 (last-update 0)
 	 (target  (or (args:get-arg "-target")
@@ -171,13 +178,13 @@
 	 (if (eq? pidres 0)
 	     (begin
 	       (if keys
-		   (set! last-update (print-changes-since testdat run-ids last-update tsname target runname flowid #f)))
+		   (set! last-update (print-changes-since testdats run-ids last-update tsname target runname flowid #f)))
 	       (thread-sleep! 3)
 	       (loop))
 	     (begin
 	       ;; (print "TCMT: pidres=" pidres " exittype=" exittype " exitstatus=" exitstatus " run-ids=" run-ids)
 	       (print "TCMT: processing any tests that did not formally complete.")
-	       (print-changes-since testdat run-ids 0 tsname target runname flowid #t) ;; call in flush mode
+	       (print-changes-since testdats run-ids 0 tsname target runname flowid #t) ;; call in flush mode
 	       (print "TCMT: All done.")
 	       )))))))
 
