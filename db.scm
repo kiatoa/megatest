@@ -1047,9 +1047,10 @@
 (define (db:tmp->megatest.db-sync dbstruct last-update)
   (let* ((mtdb        (dbr:dbstruct-mtdb dbstruct))
 	 (tmpdb       (db:get-db dbstruct))
-	 (refndb      (dbr:dbstruct-refndb dbstruct)))
-    (db:sync-tables (db:sync-all-tables-list dbstruct) last-update tmpdb refndb mtdb)
-    (stack-push! (dbr:dbstruct-dbstack dbstruct) dbdat)))
+	 (refndb      (dbr:dbstruct-refndb dbstruct))
+	 (res         (db:sync-tables (db:sync-all-tables-list dbstruct) last-update tmpdb refndb mtdb)))
+    (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb)
+    res))
 
 ;;;; run-ids
 ;;    if #f use *db-local-sync* : or 'local-sync-flags
@@ -1380,6 +1381,7 @@
              WHERE b.id IN (" (string-intersperse (map conc res) ",") ") AND
          last_df > ?;")
 	 dneeded))
+    (stack-push! (dbr:dbstruct-dbstack dbstruct) dbdat)
     blocks))
     
 ;; returns id of the record, register a disk allocated to archiving and record it's last known
@@ -1436,7 +1438,9 @@
 	  (sqlite3:execute db "INSERT OR REPLACE INTO archive_blocks (archive_disk_id,disk_path,last_du)
                                                         VALUES (?,?,?);"
 			   bdisk-id archive-path (or du 0))
-	  (db:archive-register-block-name dbstruct bdisk-id archive-path du: du)))))
+	  (db:archive-register-block-name dbstruct bdisk-id archive-path du: du)))
+    (stack-push! (dbr:dbstruct-dbstack dbstruct) dbdat)
+    res))
 
 
 ;; The "archived" field in tests is overloaded; 0 = not archived, > 0 archived in block with given id
@@ -4284,6 +4288,7 @@
 	   (conc (current-directory) "/" outputfile)))
      results)
     ;; brutal clean up
+    (stack-push! (dbr:dbstruct-dbstack dbstruct) dbdat)
     (system "rm -rf tempdir")))
 
 ;; (db:extract-ods-file db "outputfile.ods" '(("sysname" "%")("fsname" "%")("datapath" "%")) "%")
