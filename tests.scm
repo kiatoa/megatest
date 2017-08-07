@@ -1162,7 +1162,7 @@ EOF
 ;; else read the testconfig file
 ;;   if have path to test directory save the config as .testconfig and return it
 ;;
-(define (tests:get-testconfig test-name item-path test-registry system-allowed #!key (force-create #f))
+(define (tests:get-testconfig test-name item-path test-registry system-allowed #!key (force-create #f)(allow-write-cache #t))
   (let* ((use-cache    (common:use-cache?))
 	 (cache-path   (tests:get-test-path-from-environment))
 	 (cache-file   (and cache-path (conc cache-path "/.testconfig")))
@@ -1203,7 +1203,8 @@ EOF
 		(if tcfg (hash-table-set! *testconfigs* test-full-name tcfg))
 		(if (and testexists
 			 cache-file
-			 (file-write-access? cache-path))
+			 (file-write-access? cache-path)
+			 allow-write-cache)
 		    (let ((tpath (conc cache-path "/.testconfig")))
 		      (debug:print-info 1 *default-log-port* "Caching testconfig for " test-name " in " tpath)
                       (if (not (common:in-running-test?))
