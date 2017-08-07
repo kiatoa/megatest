@@ -48,7 +48,12 @@
   (event-time #f)
   details
   comment
-  duration)
+  duration
+  (printed #f))
+
+(defstruct testrecord
+  last-tdat
+  
 
 (define (tcmt:print tdat)
   (let* ((comment  (if (testdat-comment tdat)
@@ -70,6 +75,67 @@
       (else            (print "ERROR: tc-type \"" (testdat-tc-type tdat) "\" not recognised for " tcname)))
     (flush-output)))
 
+;; process the queue of tests gathered so far. List includes one entry for every test so far seen
+;; the last record for a test is preserved. Items are only removed from the list if over 15 seconds
+;; have passed since it happened. This allows for compression of COMPLETED/FAIL followed by some other
+;; state/status
+;;
+(define (process-queue data flush-mode)
+  ;; here we process tqueue and gather those over 15 seconds (configurable?) old
+  (let* ((tqueue (reverse (hash-table-ref/default data 'tqueue '()))) ;; need oldest to newest
+         (newtq '())
+         (pqueue (make-hash-table)) ;; ( tname => ( tdat1 tdat2 ... ) ... )
+         ;; (items  '())
+         (targtm (- now 15))
+         (leftov (if (null? tqueue)
+                     '()
+                     (let loop ((hed (car tqueue))
+                                (tal  (cdr tqueue))
+                                (new '()))
+                       (let ((event-time (testdat-event-time hed))
+                             (tname      (testdat-tname      hed))
+                             (state      (testdat-state      hed))
+                             (status     (testdat-status     hed)))
+                         (cond
+                          ((or flush-mode             ;; handle everything if we are in flush mode
+                               (> event-time targtm)) ;; print this one
+                           ;; (hash-table-set! pqueue tname (cons hed (hash-table-ref/default pqueue tname '())))
+                           (set! newtq (cons hed newtq))
+                           (if (null? tal)
+                               new
+                               (loop (car tal)
+                                     (cdr tal)
+                                     (if (and (equal? state "COMPLETED")
+                                              (member? status '("ABORT" "CHECK" "FAIL"))) ;; keep these around
+                                         (cons hed new)
+                                         new))))
+                          (else
+                           (if (null? tal)
+                               new
+                               (loop (car tal)(cdr tal)(cons hed new))))))))))
+    (hash-table-set! data '
+    
+    ;; Now have:
+    ;;   leftov - items not processed, put these back in tqueue
+    ;;   pqueue - candidates for printing. print but filter for COMPLETED changes
+    (hash-table-set! data 'tqueue leftov) ;; handle in the future
+    (hash-table-for-each
+     pqueue
+     (lambda (k v) ;; v is a list of tdats, if only one, just print it!
+       (let ((compressed (compress-state-status v)))
+         (for-each
+          (lambda (tdat)
+            (tcmt:print tdat))
+          
+
+
+         ;; (hash-table-set! data k (car (reverse v))) ;; not needed, the pqueue data is thrown away ...
+             )))))
+    now))
+
+
+
+
 ;; ##teamcity[testStarted name='suite.testName']
 ;; ##teamcity[testStdOut name='suite.testName' out='text']
 ;; ##teamcity[testStdErr name='suite.testName' out='error text']
@@ -88,7 +154,7 @@
 ;;;;;;; 	(print "##teamcity[testFailed name='" tctname "' " cmtstr details " flowId='" flowid "']")))
 ;;;;;;;     (flush-output)
 
-(define (print-changes-since data run-ids last-update tsname target runname flowid flush) ;; 
+(define (update-queue-since data run-ids last-update tsname target runname flowid flush) ;; 
   (let ((now   (current-seconds)))
 ;; (handle-exceptions
 ;; 	exn
@@ -124,7 +190,7 @@
 		     (details  (if (string-match ".*html$" logfile)
 				   (conc *toppath* "/lt/" target "/" runname "/" testname (if (equal? itempath "") "/" (conc "/" itempath "/")) logfile)
 				   #f))
-		     (prev-tdat (hash-table-ref/default data tname #f)) 
+		     ;; (prev-tdat (hash-table-ref/default data tname #f)) 
 		     (tdat      (let ((new (make-testdat)))
 				  (testdat-flowid-set!     new flowid)
 				  (testdat-tctname-set!    new tctname)
@@ -135,56 +201,12 @@
 				  (testdat-event-time-set! new (current-seconds))
 				  (testdat-overall-set!    new newstat)
 				  (hash-table-set! data tname new)
-				  new))
-		     (prevstat (if prev-tdat (testdat-overall prev-tdat) #f)))
-		;; (print "DEBUG: tname=" tname " state=" state " status=" status " prevstat=" prevstat " newstat=" newstat)
-		(if (or (not prevstat)
-			(not (equal? prevstat newstat)))
-		    ;; save this in the queue
-		    (begin
-		      (hash-table-set! data 'tqueue (cons tdat tqueue))
-		      (hash-table-set! data tname tdat))))) ;; newstat
-	    tests)))
-       run-ids)
-      ;; )
-
-    ;; here we process tqueue and gather those over 15 seconds (configurable?) old
-    (let* ((tqueue (hash-table-ref/default data 'tqueue '()))
-	   (pqueue (make-hash-table)) ;; ( tname => ( tdat1 tdat2 ... ) ... )
-	   (targtm (- now 15))
-	   (leftov (if (null? tqueue)
-		       '()
-		       (let loop ((hed (car tqueue))
-				  (tal  (cdr tqueue))
-				  (new '()))
-			 (let ((event-time (testdat-event-time hed))
-			       (tname      (testdat-tname      hed)))
-			   (if (> event-time targtm) ;; print this one
-			       (begin
-				 (hash-table-set! pqueue tname (cons hed (hash-table-ref/default pqueue tname '()))))
-			       (if (null? tal)
-				   new
-				   (loop (car tal)(cdr tal) new)))
-			   (if (null? tal)
-			       new
-			       (loop (car tal)(cdr tal)(cons hed new))))))))
-      ;; Now have:
-      ;;   leftov - items not processed, put these back in tqueue
-      ;;   pqueue - candidates for printing. print but filter for COMPLETED changes
-      (hash-table-set! data 'tqueue leftov)
-      (hash-table-for-each
-       pqueue
-       (lambda (k v) ;; v is a list of tdats, if only one, just print it!
-	 (if (eq? (length v) 1)
-	     (tcmt:print (car v))
-	     (begin
-	       (print "MULTI: " v)
-	       (for-each
-		(lambda (tdat)
-		  (tcmt:print tdat))
-		v))))))
-    now))
-
+				  new)))
+                (hash-table-set! data 'tqueue (cons tdat tqueue))
+                (hash-table-set! data tname tdat)))
+            tests)))
+       run-ids)))
+      
 (define (monitor pid)
   (let* ((run-ids '())
 	 (testdats (make-hash-table))  ;; each entry is a list of testdat structs
@@ -229,13 +251,16 @@
 	 (if (eq? pidres 0)
 	     (begin
 	       (if keys
-		   (set! last-update (print-changes-since testdats run-ids last-update tsname target runname flowid #f)))
-	       (thread-sleep! 3)
+                   (begin
+                     (set! last-update (update-queue-since testdats run-ids last-update tsname target runname flowid #f))
+                     (process-queue data #f)))
+               (thread-sleep! 3)
 	       (loop))
 	     (begin
 	       ;; (print "TCMT: pidres=" pidres " exittype=" exittype " exitstatus=" exitstatus " run-ids=" run-ids)
 	       (print "TCMT: processing any tests that did not formally complete.")
 	       (print-changes-since testdats run-ids 0 tsname target runname flowid #t) ;; call in flush mode
+               (process-queue data #t)
 	       (print "TCMT: All done.")
 	       ))))))
 ;;;;; )
