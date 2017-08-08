@@ -78,20 +78,22 @@
 	 (status   (string->symbol (testdat-status tdat)))
 	 (startp   (testdat-start-printed tdat))
 	 (endp     (testdat-end-printed   tdat))
+	 (etime    (testdat-event-time    tdat))
 	 (overall  (case state
 		     ((RUNNING)   state)
 		     ((COMPLETED) state)
-		     (else 'UNK))))
+		     (else 'UNK)))
+	 (tstmp    (conc " timestamp='" etime "'")))
     (case overall
       ((RUNNING)
        (if (not startp)
 	   (begin
-	     (print "##teamcity[testStarted "  tcname flowid "]")
+	     (print "##teamcity[testStarted "  tcname flowid tstmp "]")
 	     (testdat-start-printed-set! tdat #t))))
       ((COMPLETED)
        (if (not startp) ;; start stanza never printed
 	   (begin
-	     (print "##teamcity[testStarted " tcname flowid "]")
+	     (print "##teamcity[testStarted " tcname flowid tstmp "]")
 	     (testdat-start-printed-set! tdat #t)))
        (if (not endp)
 	   (begin
@@ -104,7 +106,7 @@
 	   (begin
 	     (if (not startp)
 		 (begin
-		   (print "##teamcity[testStarted " tcname flowid "]")
+		   (print "##teamcity[testStarted " tcname flowid tstmp "]")
 		   (testdat-started-printed-set! tdat #t)))
 	     (if (not endp)
 		 (begin
@@ -154,7 +156,7 @@
            (if (> print-time (testdat-event-time hed)) ;; event happened over 15 seconds ago
                (begin
                  (tcmt:print hed flush-mode)
-                 (if (null? tqueue)
+                 (if (null? tal)
                      rem ;; return rem to be processed in the future
                      (loop (car tal)(cdr tal) rem)))
                (if (null? tal)
@@ -200,6 +202,7 @@
 		     (tctname  (if (string=? itempath "") testname (conc testname "." (string-translate itempath "/" "."))))
 		     (state    (db:test-get-state        test-rec))
 		     (status   (db:test-get-status       test-rec))
+		     (etime    (db:test-get-event_time   test-rec))
 		     (duration (or (any->number (db:test-get-run_duration test-rec)) 0))
 		     (comment  (db:test-get-comment      test-rec))
 		     (logfile  (db:test-get-final_logf   test-rec))
@@ -230,7 +233,7 @@
 				      (testdat-comment-set!    new cmtstr)
 				      (testdat-details-set!    new details)
 				      (testdat-duration-set!   new duration)
-				      (testdat-event-time-set! new (current-seconds))
+				      (testdat-event-time-set! new etime) ;; (current-seconds))
 				      (testdat-overall-set!    new newstat)
 				      (hash-table-set! data tname new)
 				      new))))
