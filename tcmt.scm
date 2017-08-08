@@ -46,7 +46,7 @@
   (state   #f)
   (status  #f)
   (overall #f)
-  flowid
+  (flowid  #f)
   tctname
   tname
   (event-time #f)
@@ -205,6 +205,8 @@
 		     (duration (or (any->number (db:test-get-run_duration test-rec)) 0))
 		     (comment  (db:test-get-comment      test-rec))
 		     (logfile  (db:test-get-final_logf   test-rec))
+                     (hostn    (db:test-get-host         test-rec))
+                     (pid      (db:test-get-process_id   test-rec))
 		     (newstat  (cond
 				((equal? state "RUNNING")   "RUNNING")
 				((equal? state "COMPLETED") status)
@@ -224,7 +226,10 @@
 		     (tdat      (if is-top
 				    #f
 				    (let ((new (or prev-tdat (make-testdat)))) ;; recycle the record so we keep track of already printed items
-				      (testdat-flowid-set!     new flowid)
+				      (testdat-flowid-set!     new (or (testdat-flowid new)
+                                                                       (if (eq? pid 0)
+                                                                           tctname
+                                                                           (conc hostn "-" pid))))
 				      (testdat-tctname-set!    new tctname)
 				      (testdat-tname-set!      new tname)
 				      (testdat-state-set!      new state)
