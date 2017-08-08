@@ -62,7 +62,7 @@
 ;;
 (define *global* (make-hash-table))
 
-(define (tcmt:print tdat)
+(define (tcmt:print tdat flush-mode)
   (let* ((comment  (if (testdat-comment tdat)
 		       (conc " message='" (testdat-comment tdat))
 		       ""))
@@ -71,15 +71,23 @@
 		       ""))
 	 (flowid   (conc " flowId='" (testdat-flowid   tdat) "'"))
 	 (duration (conc " duration='" (* 1e3 (testdat-duration tdat)) "'"))
-	 (tcname   (conc " name='" (testdat-tctname  tdat) "'")))
-    (case (string->symbol (testdat-overall tdat)) ;; (testdat-tc-type tdat)
+	 (tcname   (conc " name='" (testdat-tctname  tdat) "'"))
+	 (state    (string->symbol (testdat-state tdat)))
+	 (status   (string->symbol (testdat-status tdat)))
+	 (overall  (case state
+		     ((RUNNING)   state)
+		     ((COMPLETED) state)
+		     (else 'UNK))))
+    (case overall
       ((RUNNING)      (print "##teamcity[testStarted "  tcname flowid "]"))
       ((COMPLETED)
-       (if (member (testdat-status tdat) '("PASS" "WARN" "SKIP" "WAIVED"))
+       (if (member status '(PASS WARN SKIP WAIVED))
 	   (print "##teamcity[testFinished " tcname flowid comment details duration "]")
 	   (print "##teamcity[testFailed "   tcname flowid comment details "]")))
-      ((ignore)        #f)
-      (else            (print "ERROR: tc-type \"" (testdat-tc-type tdat) "\" not recognised for " tcname)))
+      (else
+       (if flush-mode
+	   (print "##teamcity[testFailed "   tcname flowid comment details "]"))))
+    ;; (print "ERROR: tc-type \"" (testdat-tc-type tdat) "\" not recognised for " tcname)))
     (flush-output)))
 
 ;; ;; returns values: flag newlst
@@ -122,7 +130,7 @@
                     (rem '()))
            (if (> print-time (testdat-event-time hed)) ;; event happened over 15 seconds ago
                (begin
-                 (tcmt:print hed)
+                 (tcmt:print hed flush-mode)
                  (if (null? tqueue)
                      rem ;; return rem to be processed in the future
                      (loop (car tal)(cdr tal) rem)))
@@ -148,7 +156,7 @@
 ;;;;;;; 	(print "##teamcity[testFailed name='" tctname "' " cmtstr details " flowId='" flowid "']")))
 ;;;;;;;     (flush-output)
 
-(trace rmt:get-tests-for-run)
+;; (trace rmt:get-tests-for-run)
 
 (define (update-queue-since data run-ids last-update tsname target runname flowid flush) ;; 
   (let ((now   (current-seconds)))
@@ -191,6 +199,8 @@
 				  (testdat-flowid-set!     new flowid)
 				  (testdat-tctname-set!    new tctname)
 				  (testdat-tname-set!      new tname)
+				  (testdat-state-set!      new state)
+				  (testdat-status-set!     new status)
 				  (testdat-comment-set!    new cmtstr)
 				  (testdat-details-set!    new details)
 				  (testdat-duration-set!   new duration)
@@ -258,7 +268,7 @@
 	       ;; (print "TCMT: pidres=" pidres " exittype=" exittype " exitstatus=" exitstatus " run-ids=" run-ids)
 	       (print "TCMT: processing any tests that did not formally complete.")
 	       (update-queue-since testdats run-ids 0 tsname target runname flowid #t) ;; call in flush mode
-               (process-queue data 0 #t)
+               (process-queue testdats 0 #t)
 	       (print "TCMT: All done.")
 	       ))))))
 ;;;;; )
