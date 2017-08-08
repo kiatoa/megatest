@@ -83,7 +83,7 @@
 		     ((RUNNING)   state)
 		     ((COMPLETED) state)
 		     (else 'UNK)))
-	 (tstmp    (conc " timestamp='" (time->string (seconds->local-time etime) "%F %T") "'")))
+	 (tstmp    (conc " timestamp='" (time->string (seconds->local-time etime) "%FT%T.000") "'")))
     (case overall
       ((RUNNING)
        (if (not startp)
