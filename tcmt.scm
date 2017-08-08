@@ -34,6 +34,7 @@
 		 `( "-target"
 		    "-reqtarg"
 		    "-runname"
+		    "-delay"   ;; how long to wait for unexpected changes to 
 		    )
 		 `("-tc-repl"
 		   )
@@ -52,7 +53,8 @@
   details
   comment
   duration
-  (printed #f))
+  (start-printed #f)
+  (end-printed   #f))
 
 ;;======================================================================
 ;; GLOBALS
@@ -64,29 +66,50 @@
 
 (define (tcmt:print tdat flush-mode)
   (let* ((comment  (if (testdat-comment tdat)
-		       (conc " message='" (testdat-comment tdat))
+		       (conc " message='" (testdat-comment tdat) "'")
 		       ""))
 	 (details  (if (testdat-details tdat)
-		       (conc " details='" (testdat-details tdat))
+		       (conc " details='" (testdat-details tdat) "'")
 		       ""))
 	 (flowid   (conc " flowId='" (testdat-flowid   tdat) "'"))
 	 (duration (conc " duration='" (* 1e3 (testdat-duration tdat)) "'"))
 	 (tcname   (conc " name='" (testdat-tctname  tdat) "'"))
 	 (state    (string->symbol (testdat-state tdat)))
 	 (status   (string->symbol (testdat-status tdat)))
+	 (startp   (testdat-start-printed tdat))
+	 (endp     (testdat-end-printed   tdat))
 	 (overall  (case state
 		     ((RUNNING)   state)
 		     ((COMPLETED) state)
 		     (else 'UNK))))
     (case overall
-      ((RUNNING)      (print "##teamcity[testStarted "  tcname flowid "]"))
+      ((RUNNING)
+       (if (not startp)
+	   (begin
+	     (print "##teamcity[testStarted "  tcname flowid "]")
+	     (testdat-start-printed-set! tdat #t))))
       ((COMPLETED)
-       (if (member status '(PASS WARN SKIP WAIVED))
-	   (print "##teamcity[testFinished " tcname flowid comment details duration "]")
-	   (print "##teamcity[testFailed "   tcname flowid comment details "]")))
+       (if (not startp) ;; start stanza never printed
+	   (begin
+	     (print "##teamcity[testStarted " tcname flowid "]")
+	     (testdat-start-printed-set! tdat #t)))
+       (if (not endp)
+	   (begin
+	     (if (member status '(PASS WARN SKIP WAIVED))
+		 (print "##teamcity[testFinished" tcname flowid comment details duration "]")
+		 (print "##teamcity[testFailed  " tcname flowid comment details "]"))
+	     (testdat-end-printed-set! tdat #t))))
       (else
        (if flush-mode
-	   (print "##teamcity[testFailed "   tcname flowid comment details "]"))))
+	   (begin
+	     (if (not startp)
+		 (begin
+		   (print "##teamcity[testStarted " tcname flowid "]")
+		   (testdat-started-printed-set! tdat #t)))
+	     (if (not endp)
+		 (begin
+		   (print "##teamcity[testFailed  " tcname flowid comment details "]")
+		   (testdat-end-printed-set! tdat #t)))))))
     ;; (print "ERROR: tc-type \"" (testdat-tc-type tdat) "\" not recognised for " tcname)))
     (flush-output)))
 
@@ -170,6 +193,7 @@
 	   (for-each
 	    (lambda (test-rec)
 	      (let* ((tqueue   (hash-table-ref/default data 'tqueue '())) ;; NOTE: the key is a symbol! This allows keeping disparate info in the one hash, lazy but a quick solution for right now.
+		     (is-top   (db:test-get-is-toplevel  test-rec))
 		     (tname    (db:test-get-fullname     test-rec))
 		     (testname (db:test-get-testname     test-rec))
 		     (itempath (db:test-get-item-path    test-rec))
@@ -194,22 +218,25 @@
 		     (details  (if (string-match ".*html$" logfile)
 				   (conc *toppath* "/lt/" target "/" runname "/" testname (if (equal? itempath "") "/" (conc "/" itempath "/")) logfile)
 				   #f))
-		     ;; (prev-tdat (hash-table-ref/default data tname #f)) 
-		     (tdat      (let ((new (make-testdat)))
-				  (testdat-flowid-set!     new flowid)
-				  (testdat-tctname-set!    new tctname)
-				  (testdat-tname-set!      new tname)
-				  (testdat-state-set!      new state)
-				  (testdat-status-set!     new status)
-				  (testdat-comment-set!    new cmtstr)
-				  (testdat-details-set!    new details)
-				  (testdat-duration-set!   new duration)
-				  (testdat-event-time-set! new (current-seconds))
-				  (testdat-overall-set!    new newstat)
-				  (hash-table-set! data tname new)
-				  new)))
-                (hash-table-set! data 'tqueue (cons tdat tqueue))
-                ;; (hash-table-set! data tname tdat) ;; PUT IN THE DATA HASH ONLY WHEN PRINTED
+		     (prev-tdat (hash-table-ref/default data tname #f)) 
+		     (tdat      (if is-top
+				    #f
+				    (let ((new (or prev-tdat (make-testdat)))) ;; recycle the record so we keep track of already printed items
+				      (testdat-flowid-set!     new flowid)
+				      (testdat-tctname-set!    new tctname)
+				      (testdat-tname-set!      new tname)
+				      (testdat-state-set!      new state)
+				      (testdat-status-set!     new status)
+				      (testdat-comment-set!    new cmtstr)
+				      (testdat-details-set!    new details)
+				      (testdat-duration-set!   new duration)
+				      (testdat-event-time-set! new (current-seconds))
+				      (testdat-overall-set!    new newstat)
+				      (hash-table-set! data tname new)
+				      new))))
+		(if (not is-top)
+		    (hash-table-set! data 'tqueue (cons tdat tqueue)))
+                (hash-table-set! data tname tdat)
                 ))
             tests)))
        run-ids)
@@ -224,7 +251,8 @@
 		      (args:get-arg "-reqtarg")))
 	 (runname (args:get-arg "-runname"))
 	 (tsname  #f)
-	 (flowid  (conc target "/" runname)))
+	 (flowid  (conc target "/" runname))
+	 (tdelay  (string->number (or (args:get-arg "-delay") "15"))))
     (if (and target runname)
 	(begin
 	  (launch:setup)
@@ -260,8 +288,8 @@
 	     (begin
 	       (if keys
                    (begin
-                     (set! last-update (update-queue-since testdats run-ids last-update tsname target runname flowid #f))
-                     (process-queue testdats 15 #f)))
+                     (set! last-update (- (update-queue-since testdats run-ids last-update tsname target runname flowid #f) 5))
+                     (process-queue testdats tdelay #f)))
                (thread-sleep! 3)
 	       (loop))
 	     (begin
