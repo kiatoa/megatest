@@ -14,7 +14,7 @@
 (define (toplevel-command . a) #f)
 
 (use srfi-1 posix srfi-69 readline ;;  regex regex-case srfi-69 apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
-     srfi-18 extras format pkts regex regex-case
+     srfi-18 extras format pkts regex regex-case 
      (prefix dbi dbi:)
      nanomsg)
 
@@ -400,15 +400,30 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (lambda ()
       (read))))
 
+(define (is-port-in-use port-num)
+ (let* ((ret #f))
+     (let-values (((inp oup pid)
+                (process "netstat" (list  "-tulpn" ))))
+      (let loop ((inl (read-line inp)))
+        (if (not (eof-object? inl))
+            (begin 
+                (if (string-search (regexp (conc ":" port-num)) inl)
+                 (begin
+                 ;(print "Output: "  inl)
+                  (set! ret  #t))
+                 (loop (read-line inp)))))))
+ret))
+
 ;;start a server, returns the connection
 ;;
-(define (start-nn-server portnum)
+(define (start-nn-server portnum )
   (let ((rep (nn-socket 'rep)))
     (handle-exceptions
      exn
      (let ((emsg ((condition-property-accessor 'exn 'message) exn)))
        (print "ERROR: Failed to start server \"" emsg "\"")
        (exit 1))
+      
      (nn-bind rep (conc "tcp://*:" portnum)))
     rep))
 
@@ -1207,16 +1222,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
               
              (if (not portnum)
                  (print "ERROR: the portnumber parameter must be a number, you gave: " (car remargs))
-                 (let* ((rep       (start-nn-server portnum))
-                        (mtconfdat (simple-setup (args:get-arg "-start-dir")))
-                        (mtconf    (car mtconfdat))
-                        (script    (configf:lookup mtconf "listener" "script")))
-                   (print "Listening on port " portnum " for messages")
-                   (let loop ((instr (nn-recv rep)))
-                     (print "received " instr ", running \"" script " " instr "\"")
-                     (system (conc script " " instr))
-                     (nn-send rep "ok")
-                     (loop (nn-recv rep))))))))
+                 (begin
+                   (if (not (is-port-in-use portnum))  
+                       (let* ((rep       (start-nn-server portnum))
+                           (mtconfdat (simple-setup (args:get-arg "-start-dir")))
+                           (mtconf    (car mtconfdat))
+                           (script    (configf:lookup mtconf "listener" "script")))
+                           (print "Listening on port " po:setrtnum " for messages")
+                           (let loop ((instr (nn-recv rep)))
+                               (print "received " instr ", running \"" script " " instr "\"")
+                               (system (conc script " " instr))
+                               (nn-send rep "ok")
+                               (loop (nn-recv rep))))
+                     (print "ERROR: Port " portnum " already in use. Try another port")))))))
       
       )) ;; the end
              
