@@ -83,7 +83,7 @@
 		     ((RUNNING)   state)
 		     ((COMPLETED) state)
 		     (else 'UNK)))
-	 (tstmp    (conc " timestamp='" etime "'")))
+	 (tstmp    (conc " timestamp='" (time->string (seconds->local-time etime) "%F %T") "'")))
     (case overall
       ((RUNNING)
        (if (not startp)
@@ -107,7 +107,7 @@
 	     (if (not startp)
 		 (begin
 		   (print "##teamcity[testStarted " tcname flowid tstmp "]")
-		   (testdat-started-printed-set! tdat #t)))
+		   (testdat-start-printed-set! tdat #t)))
 	     (if (not endp)
 		 (begin
 		   (print "##teamcity[testFailed  " tcname flowid comment details "]")
@@ -145,8 +145,7 @@
                                                    (and (equal? (testdat-tname a)(testdat-tname b))        ;; need oldest to newest
                                                         (equal? (testdat-state a) (testdat-state b)))))))) ;; "COMPLETED")
     ;; (equal? (testdat-state b) "COMPLETED")))))))
-    (if (null? tqueue)
-        (print "Nothing to do!")
+    (if (not (null? tqueue))
         (hash-table-set!
          data
          'tqueue
