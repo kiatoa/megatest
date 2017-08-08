@@ -17,6 +17,9 @@
 
 (use srfi-1 posix srfi-69 srfi-18 regex defstruct)
 
+(use trace)
+;; (trace-call-sites #t)
+
 (declare (uses margs))
 (declare (uses rmt))
 (declare (uses common))
@@ -51,9 +54,13 @@
   duration
   (printed #f))
 
-(defstruct testrecord
-  last-tdat
-  
+;;======================================================================
+;; GLOBALS
+;;======================================================================
+
+;; Gotta have a global? Stash it in the *global* hash table.
+;;
+(define *global* (make-hash-table))
 
 (define (tcmt:print tdat)
   (let* ((comment  (if (testdat-comment tdat)
@@ -75,68 +82,55 @@
       (else            (print "ERROR: tc-type \"" (testdat-tc-type tdat) "\" not recognised for " tcname)))
     (flush-output)))
 
+;; ;; returns values: flag newlst
+;; (define (remove-duplicate-completed  tdats)
+;;   (let* ((flag       #f)
+;;          (state      (testdat-state      tdat))
+;;          (status     (testdat-status     tdat))
+;;          (event-time (testdat-event-time tdat))
+;;          (tname      (testdat-tname      tdat)))
+;;     (let loop ((hed (car tdats))
+;;                (tal (cdr tdats))
+;;                (new '()))
+;;       (if (and (equal? state "COMPLETED")
+;;                (equal? tname (testdat-tname hed))
+;;                (equal? state (testdat-state hed))) ;; we have a duplicate COMPLETED call
+;;           (begin
+;;             (set! flag #t) ;; A changed completed
+            
 ;; process the queue of tests gathered so far. List includes one entry for every test so far seen
 ;; the last record for a test is preserved. Items are only removed from the list if over 15 seconds
 ;; have passed since it happened. This allows for compression of COMPLETED/FAIL followed by some other
 ;; state/status
 ;;
-(define (process-queue data flush-mode)
+(define (process-queue data age flush-mode)
   ;; here we process tqueue and gather those over 15 seconds (configurable?) old
-  (let* ((tqueue (reverse (hash-table-ref/default data 'tqueue '()))) ;; need oldest to newest
-         (newtq '())
-         (pqueue (make-hash-table)) ;; ( tname => ( tdat1 tdat2 ... ) ... )
-         ;; (items  '())
-         (targtm (- now 15))
-         (leftov (if (null? tqueue)
-                     '()
-                     (let loop ((hed (car tqueue))
-                                (tal  (cdr tqueue))
-                                (new '()))
-                       (let ((event-time (testdat-event-time hed))
-                             (tname      (testdat-tname      hed))
-                             (state      (testdat-state      hed))
-                             (status     (testdat-status     hed)))
-                         (cond
-                          ((or flush-mode             ;; handle everything if we are in flush mode
-                               (> event-time targtm)) ;; print this one
-                           ;; (hash-table-set! pqueue tname (cons hed (hash-table-ref/default pqueue tname '())))
-                           (set! newtq (cons hed newtq))
-                           (if (null? tal)
-                               new
-                               (loop (car tal)
-                                     (cdr tal)
-                                     (if (and (equal? state "COMPLETED")
-                                              (member? status '("ABORT" "CHECK" "FAIL"))) ;; keep these around
-                                         (cons hed new)
-                                         new))))
-                          (else
-                           (if (null? tal)
-                               new
-                               (loop (car tal)(cdr tal)(cons hed new))))))))))
-    (hash-table-set! data '
-    
-    ;; Now have:
-    ;;   leftov - items not processed, put these back in tqueue
-    ;;   pqueue - candidates for printing. print but filter for COMPLETED changes
-    (hash-table-set! data 'tqueue leftov) ;; handle in the future
-    (hash-table-for-each
-     pqueue
-     (lambda (k v) ;; v is a list of tdats, if only one, just print it!
-       (let ((compressed (compress-state-status v)))
-         (for-each
-          (lambda (tdat)
-            (tcmt:print tdat))
-          
+  (let* ((print-time (- (current-seconds) age)) ;; print stuff over 15 seconds old
+         (tqueue-raw (hash-table-ref/default data 'tqueue '()))
+         (tqueue     (reverse (delete-duplicates tqueue-raw     ;; REMOVE duplicates by testname and state
+                                                 (lambda (a b)
+                                                   (and (equal? (testdat-tname a)(testdat-tname b))        ;; need oldest to newest
+                                                        (equal? (testdat-state a) (testdat-state b)))))))) ;; "COMPLETED")
+    ;; (equal? (testdat-state b) "COMPLETED")))))))
+    (if (null? tqueue)
+        (print "Nothing to do!")
+        (hash-table-set!
+         data
+         'tqueue
+         (let loop ((hed (car tqueue)) ;; by this point all duplicates by state COMPLETED are removed
+                    (tal (cdr tqueue))
+                    (rem '()))
+           (if (> print-time (testdat-event-time hed)) ;; event happened over 15 seconds ago
+               (begin
+                 (tcmt:print hed)
+                 (if (null? tqueue)
+                     rem ;; return rem to be processed in the future
+                     (loop (car tal)(cdr tal) rem)))
+               (if (null? tal)
+                   (cons hed rem) ;; return rem + hed for future processing
+                   (loop (car tal)(cdr tal)(cons hed rem)))))))))
 
-
-         ;; (hash-table-set! data k (car (reverse v))) ;; not needed, the pqueue data is thrown away ...
-             )))))
-    now))
-
-
-
-
-;; ##teamcity[testStarted name='suite.testName']
+                            ;; ##teamcity[testStarted name='suite.testName']
 ;; ##teamcity[testStdOut name='suite.testName' out='text']
 ;; ##teamcity[testStdErr name='suite.testName' out='error text']
 ;; ##teamcity[testFailed name='suite.testName' message='failure message' details='message and stack trace']
@@ -153,6 +147,8 @@
 ;;;;;;;       (else
 ;;;;;;; 	(print "##teamcity[testFailed name='" tctname "' " cmtstr details " flowId='" flowid "']")))
 ;;;;;;;     (flush-output)
+
+(trace rmt:get-tests-for-run)
 
 (define (update-queue-since data run-ids last-update tsname target runname flowid flush) ;; 
   (let ((now   (current-seconds)))
@@ -203,9 +199,11 @@
 				  (hash-table-set! data tname new)
 				  new)))
                 (hash-table-set! data 'tqueue (cons tdat tqueue))
-                (hash-table-set! data tname tdat)))
+                ;; (hash-table-set! data tname tdat) ;; PUT IN THE DATA HASH ONLY WHEN PRINTED
+                ))
             tests)))
-       run-ids)))
+       run-ids)
+      now))
       
 (define (monitor pid)
   (let* ((run-ids '())
@@ -253,14 +251,14 @@
 	       (if keys
                    (begin
                      (set! last-update (update-queue-since testdats run-ids last-update tsname target runname flowid #f))
-                     (process-queue data #f)))
+                     (process-queue testdats 15 #f)))
                (thread-sleep! 3)
 	       (loop))
 	     (begin
 	       ;; (print "TCMT: pidres=" pidres " exittype=" exittype " exitstatus=" exitstatus " run-ids=" run-ids)
 	       (print "TCMT: processing any tests that did not formally complete.")
-	       (print-changes-since testdats run-ids 0 tsname target runname flowid #t) ;; call in flush mode
-               (process-queue data #t)
+	       (update-queue-since testdats run-ids 0 tsname target runname flowid #t) ;; call in flush mode
+               (process-queue data 0 #t)
 	       (print "TCMT: All done.")
 	       ))))))
 ;;;;; )
