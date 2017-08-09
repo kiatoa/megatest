@@ -9,14 +9,13 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 data-structures posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
-     matchable)
-(require-extension regex posix)
-
-(require-extension (srfi 18) extras tcp rpc)
-
-(import (prefix sqlite3 sqlite3:))
-(import (prefix base64 base64:))
+(use srfi-1 data-structures posix regex-case (prefix base64 base64:)
+     format dot-locking csv-xml z3 ;; sql-de-lite
+     hostinfo md5 message-digest typed-records directory-utils stack
+     matchable regex posix (srfi 18) extras ;; tcp 
+     (prefix nanomsg nmsg:)
+     (prefix sqlite3 sqlite3:)
+     )
 
 (declare (unit common))
 
@@ -2292,7 +2291,47 @@
 			  fallback-launcher
 			  (loop (car tal)(cdr tal))))))))
 	fallback-launcher)))
+
+;;======================================================================
+;; NMSG AND NEW API
+;;======================================================================
+
+;; nm based server
+;;
+(define (nm:start-server dbconn #!key (given-host-name #f))
+  (let* ((srvdat    (start-raw-server given-host-name: given-host-name))
+	 (host-name (srvdat-host srvdat))
+	 (soc       (srvdat-soc srvdat)))
+    
+    ;; start the queue processor (save for second round of development)
+    ;;
+    ;; (thread-start! (queue-processory dbconn) "Queue processor")
+    ;; msg is an alist
+    ;;  'r host:port  <== where to return the data
+    ;;  'p params     <== data to apply the command to
+    ;;  'e j|s|l      <== encoding of the params. default is s (sexp), if not specified is assumed to be default
+    ;;  'c command    <== look up the function to call using this key
+    ;;
+    (let loop ((msg-in (nn-recv soc)))
+      (if (not (equal? msg-in "quit"))
+	  (let* ((dat        (decode msg-in))
+		 (host-port  (alist-ref 'r dat)) ;; this is for the reverse req rep where the server is a client of the original client
+		 (params     (alist-ref 'p dat))
+		 (command    (let ((c (alist-ref 'c dat)))(if c (string->symbol c) #f)))
+		 (all-good   (and host-port params command (hash-table-exists? *commands* command))))
+	    (if all-good
+		(let ((cmddat (make-qitem
+			       command:   command
+			       host-port: host-port
+			       params:    params)))
+		  (queue-push cmddat) 		;; put request into the queue
+		  (nn-send soc "queued"))         ;; reply with "queued"
+		(print "ERROR: BAD request " dat))
+	    (loop (nn-recv soc)))))
+    (nn-close soc)))
   
+
+
 ;;======================================================================
 ;; D A S H B O A R D   U S E R   V I E W S
 ;;======================================================================
@@ -2310,3 +2349,49 @@
 	(read-config home-cfgfile view-cfgdat #t))
     view-cfgdat))
 
+;;======================================================================
+;; H I E R A R C H I C A L   H A S H   T A B L E S
+;;======================================================================
+
+;; Every element including top element is a vector:
+;;   <vector subhash value>
+
+(define (hh:make-hh #!key (ht #f)(value #f))
+  (vector (or ht    (make-hash-table)) value))
+
+;; used internally
+(define-inline (hh:set-ht! hh ht)       (vector-set! hh 0 ht))
+(define-inline (hh:get-ht hh)           (vector-ref  hh 0))
+(define-inline (hh:set-value! hh value) (vector-set! hh 1 value))
+(define-inline (hh:get-value  hh value) (vector-ref  hh 1))
+
+;; given a hierarchial hash and some keys look up the value ...
+;;
+(define (hh:get hh . keys)
+  (if (null? keys)
+      (vector-ref hh 1) ;; we have reached the end of the line, return the value sought
+      (let ((sub-ht (hh:get-ht hh)))
+	(if sub-ht ;; yes, there is more hierarchy
+	    (let ((sub-hh (hash-table-ref/default sub-ht (car keys) #f)))
+	      (if sub-hh
+		  (apply hh:get sub-hh (cdr keys))
+		  #f))
+	    #f))))
+
+;; given a hierarchial hash, a value and some keys, add needed hierarcy and insert the value
+;;
+(define (hh:set! hh value . keys)
+  (if (null? keys)
+      (hh:set-value! hh value) ;; we have reached the end of the line, store the value
+      (let ((sub-ht (hh:get-ht hh)))
+	(if sub-ht ;; yes, there is more hierarchy
+	    (let ((sub-hh (hash-table-ref/default sub-ht (car keys) #f)))
+	      (if (not sub-hh) ;; we'll need to add the next level of hierarchy
+		  (let ((new-sub-hh (hh:make-hh)))
+		    (hash-table-set! sub-ht (car keys) new-sub-hh)
+		    (apply hh:set! new-sub-hh value (cdr keys)))
+		  (apply hh:set! sub-hh value (cdr keys))))    ;; call the sub-hierhash with remaining keys
+	    (begin
+	      (hh:set-ht! hh (make-hash-table))
+	      (apply hh:set! hh value keys))))))
+  

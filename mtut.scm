@@ -989,7 +989,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  (if (common:file-exists? schema-file)
 		      (system (conc "/bin/cat " schema-file)))))
 	       ((junk)
-		(rmt:get-keys))))))))
+		(rmt:get-keys))))))
+      ))
 
 ;; If HTTP_HOST is defined then we must be in the cgi environment
 ;; so run stml and exit
