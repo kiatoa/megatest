@@ -1529,14 +1529,14 @@
     (cond
      ((and (> first adjload)
 	   (> count 0))
-      (debug:print-info 0 *default-log-port* "server start delayed " waitdelay " seconds due to load " first " exceeding max of " adjload " (normalized load-limit: " maxload ") " (if msg msg ""))
+      (debug:print-info 0 *default-log-port* "server start delayed " waitdelay " seconds due to load " first " exceeding max of " adjload " on server " (or remote-host (get-host-name)) " (normalized load-limit: " maxload ") " (if msg msg ""))
       (thread-sleep! waitdelay)
-      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
+      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1) msg: msg remote-host: remote-host))
      ((and (> loadjmp numcpus)
 	   (> count 0))
       (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus (if msg msg ""))
       (thread-sleep! waitdelay)
-      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
+      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1) msg: msg remote-host: remote-host)))))
 
 (define (common:wait-for-homehost-load maxload msg)
   (let* ((hh-dat (if (common:on-homehost?) ;; if we are on the homehost then pass in #f so the calls are local.
@@ -1544,7 +1544,7 @@
                      (common:get-homehost)))
          (hh     (if hh-dat (car hh-dat) #f))
          (numcpus (common:get-num-cpus hh)))
-    (common:wait-for-normalized-load maxload msg: msg remote-host: hh)))
+    (common:wait-for-normalized-load maxload msg hh)))
 
 (define (common:get-num-cpus remote-host)
   (let ((proc (lambda ()
@@ -1564,7 +1564,7 @@
 
 ;; wait for normalized cpu load to drop below maxload
 ;;
-(define (common:wait-for-normalized-load maxload #!key (msg #f)(remote-host #f))
+(define (common:wait-for-normalized-load maxload msg remote-host)
   (let ((num-cpus (common:get-num-cpus remote-host)))
     (common:wait-for-cpuload maxload num-cpus 15 msg: msg remote-host: remote-host)))
 
