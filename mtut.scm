@@ -1,4 +1,4 @@
-et; Copyright 2006-2017, Matthew Welland.
+; Copyright 2006-2017, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -1228,7 +1228,7 @@ ret))
                            (mtconfdat (simple-setup (args:get-arg "-start-dir")))
                            (mtconf    (car mtconfdat))
                            (script    (configf:lookup mtconf "listener" "script")))
-                           (print "Listening on port " po:setrtnum " for messages")
+                           (print "Listening on port " portnum " for messages")
                            (let loop ((instr (nn-recv rep)))
                                (print "received " instr ", running \"" script " " instr "\"")
                                (system (conc script " " instr))
