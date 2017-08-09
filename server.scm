@@ -132,7 +132,7 @@
 	  (setenv "TARGETHOST" target-host)))
       
     (setenv "TARGETHOST_LOGF" logfile)
-    (common:wait-for-normalized-load load-limit " delaying server start due to load" remote-host: (get-environment-variable "TARGETHOST")) ;; do not try starting servers on an already overloaded machine, just wait forever
+    (common:wait-for-normalized-load load-limit " delaying server start due to load" target-host) ;; do not try starting servers on an already overloaded machine, just wait forever
     (system (conc "nbfake " cmdln))
     (unsetenv "TARGETHOST_LOGF")
     (if (get-environment-variable "TARGETHOST")(unsetenv "TARGETHOST"))
@@ -505,7 +505,7 @@
 				" sync-done=" sync-done " sync-period=" sync-period)
               (if (and (> sync-period 5)
                        (common:low-noise-print 30 "sync-period"))
-                  (debug:print-info 0 *default-log-port* "Increased sync period due to load: " sync-period))
+                  (debug:print-info 0 *default-log-port* "Increased sync period due to long sync times, sync took: " sync-period " seconds."))
 	      ;; (if recently-synced (debug:print-info 0 *default-log-port* "Skipping sync due to recently-synced flag=" recently-synced))
 	      ;; (debug:print-info 0 *default-log-port* "need-sync: " need-sync " sync-in-progress: " sync-in-progress " should-sync: " should-sync " will-sync: " will-sync)
 	      (if will-sync (set! *db-sync-in-progress* #t))
