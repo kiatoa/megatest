@@ -51,6 +51,9 @@
   (homehost    #f) ;; not used yet
   (on-homehost #f) ;; not used yet
   (read-only   #f)
+  (configdat   #f)
+  (keys        #f)
+  (area-path   #f)
   )                ;; goal is to converge on one struct for an area but for now it is too confusing
   
 
@@ -75,8 +78,32 @@
 ;;
 ;;   areas is hash of areas => dbstruct, the dashboard-open-db will register the dbstruct in that hash
 ;;
+;;   NOTE: This returns the tmpdb path/handle pair.
+;;   NOTE: This does do a sync (the db:open-db proc only does an initial sync if called with do-sync: #t
+;;   NOTE: Longer term consider replacing db:open-db with this
+;;
 (define (db:dashboard-open-db areas area-path)
-  #f)
+  ;; 0. check for already existing dbstruct in areas hash, return it if found
+  ;; 1. do minimal read of megatest.config, store configdat, keys in dbstruct
+  ;; 2. get homehost
+  ;; 3. create /tmp db area  (if needed)
+  ;; 4. sync data to /tmp db (or update if exists)
+  ;; 5. return dbstruct
+  (if (hash-table-exists? areas area-path)
+      (hash-table-ref areas area-path)
+      (if (common:file-exists? (conc area-path "/megatest.config") quiet-mode: #t)
+	  (let* ((homehost (common:minimal-get-homehost toppath))
+		 (on-hh    (common:on-host? homehost))
+		 (mtconfig (common:simple-setup area-path)) ;; returns ( configdat toppath configfile configf-name )
+		 (dbstruct (make-dbr:dbstruct
+			    area-path: area-path
+			    homehost:  homehost
+			    configdat: (car mtconfig)))
+		 (tmpdb    (db:open-db dbstruct area-path: area-path do-sync: #t)))
+	    tmpdb)
+	  (begin
+	    (debug:print-info 0 *default-log-port* "attempt to open megatest.db in " area-path " but no megatest.config found.")
+	    #f))))
 
 ;; sync all the areas listed in area-paths
 ;;
@@ -327,17 +354,18 @@
 
 ;; This routine creates the db if not already present. It is only called if the db is not already opened
 ;;
-(define (db:open-db dbstruct #!key (areapath #f)(do-sync #t)) ;; TODO: actually use areapath
+(define (db:open-db dbstruct #!key (area-path #f)(do-sync #t)) ;; TODO: actually use areapath
   (let ((tmpdb-stack (dbr:dbstruct-dbstack dbstruct))) ;; RA => Returns the first reference in dbstruct
     (if (stack? tmpdb-stack)
 	(db:get-db tmpdb-stack) ;; get previously opened db (will create new db handle if all in the stack are already used
-        (let* ((dbpath       (db:dbfile-path ))      ;; path to tmp db area
+        (let* ((toppath      (or area-path (dbr:dbstruct-area-path dbstruct) *toppath*))
+	       (dbpath       (db:dbfile-path ))      ;; path to tmp db area
                (dbexists     (common:file-exists? dbpath))
 	       (tmpdbfname   (conc dbpath "/megatest.db"))
 	       (dbfexists    (common:file-exists? tmpdbfname))  ;; (conc dbpath "/megatest.db")))
-               (mtdbexists   (common:file-exists? (conc *toppath* "/megatest.db")))
+               (mtdbexists   (common:file-exists? (conc toppath "/megatest.db")))
                
-               (mtdb         (db:open-megatest-db))
+               (mtdb         (db:open-megatest-db path: area-path))
                (mtdbpath     (db:dbdat-get-path mtdb))
                (tmpdb        (db:open-megatest-db path: dbpath)) ;; lock-create-open dbpath db:initialize-main-db))
                (refndb       (db:open-megatest-db path: dbpath name: "megatest_ref.db"))

@@ -6,7 +6,7 @@
   (dashboard:areas-do-update-rundat tabdat) ;; )
   (dboard:areas-summary-control-panel-updater tabdat)
   (let* ((last-runs-update  (dboard:tabdat-last-runs-update tabdat))
-	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
+	 (runs-dat     (mrmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
          (runs         (vector-ref runs-dat 1))
 	 (run-id       (dboard:tabdat-curr-run-id tabdat))
@@ -131,20 +131,20 @@
 	       (key      (conc lin ":" col))
 	       (test-id   (hash-table-ref/default cell-lookup key -1))
 	       (run-id   (dboard:tabdat-curr-run-id tabdat))
-	       (run-info (rmt:get-run-info run-id))
-	       (target   (rmt:get-target run-id))
+	       (run-info (mrmt:get-run-info run-id))
+	       (target   (mrmt:get-target run-id))
 	       (runname  (db:get-value-by-header (db:get-rows run-info)
 						 (db:get-header run-info) "runname"))
-	       (test-info  (rmt:get-test-info-by-id run-id test-id))
+	       (test-info  (mrmt:get-test-info-by-id run-id test-id))
 	       (test-name (db:test-get-testname test-info))
-	       (testpatt  (let ((tlast (rmt:tasks-get-last target runname)))
+	       (testpatt  (let ((tlast (mrmt:tasks-get-last target runname)))
 			    (if tlast
 				(let ((tpatt (tasks:task-get-testpatt tlast)))
 				  (if (member tpatt '("0" 0)) ;; known bad historical value - remove in 2017
 				      "%"
 				      tpatt))
 				"%")))
-	       (item-path (db:test-get-item-path (rmt:get-test-info-by-id run-id test-id)))
+	       (item-path (db:test-get-item-path (mrmt:get-test-info-by-id run-id test-id)))
 	       (item-test-path (conc test-name "/" (if (equal? item-path "")
 						       "%" 
 						       item-path)))
@@ -234,9 +234,9 @@
   (let* ((access-mode      (dboard:tabdat-access-mode tabdat))
          (keys             (dboard:tabdat-keys tabdat))
 	 (last-runs-update (- (dboard:tabdat-last-runs-update tabdat) 2))
-         (allruns          (rmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
-         ;;(allruns-tree (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
-         (allruns-tree    (rmt:get-runs-by-patt keys "%" #f #f #f #f 0)) ;; last-runs-update));;'("id" "runname")
+         (allruns          (mrmt:get-runs runnamepatt numruns (dboard:tabdat-start-run-offset tabdat) keypatts))
+         ;;(allruns-tree (mrmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f))
+         (allruns-tree    (mrmt:get-runs-by-patt keys "%" #f #f #f #f 0)) ;; last-runs-update));;'("id" "runname")
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns)) ;; RA => Filtered as per runpatt selected
          (runs-tree   (db:get-rows   allruns-tree)) ;; RA => Returns complete list of runs
@@ -265,7 +265,7 @@
 	  (let* ((run-id       (db:get-value-by-header run header "id"))
 		 (run-struct   (hash-table-ref/default (dboard:tabdat-allruns-by-id tabdat) run-id #f))
 		 ;; (last-update  (if run-struct (dboard:rundat-last-update run-struct) 0))
-		 (key-vals     (rmt:get-key-vals run-id))
+		 (key-vals     (mrmt:get-key-vals run-id))
 		 (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
 		 ;; GET RID OF dboard:get-tests-dat - it is superceded by dboard:get-tests-for-run-duplicate
 		 ;;  dboard:get-tests-for-run-duplicate - returns a hash table
@@ -341,7 +341,7 @@
 (define (dashboard:areas-get-runs-hash tabdat)
   (let* ((access-mode       (dboard:tabdat-access-mode tabdat))
          (last-runs-update  0);;(dboard:tabdat-last-runs-update tabdat))
-	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
+	 (runs-dat     (mrmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f last-runs-update))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
          (runs         (vector-ref runs-dat 1))
 	 (run-id       (dboard:tabdat-curr-run-id tabdat))
@@ -378,7 +378,7 @@
 			    (< time-a time-b)))))
          (changed      #f)
 	 (last-runs-update  (dboard:tabdat-last-runs-update tabdat))
-	 (runs-dat     (rmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f 0)) ;; last-runs-update))
+	 (runs-dat     (mrmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f 0)) ;; last-runs-update))
 	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
          (runs         (vector-ref runs-dat 1))
 	 (new-run-ids  (map (lambda (run)
@@ -421,7 +421,7 @@
   
 (define (dashboard:areas-run-id->tests-mindat run-id tabdat runs-hash)
   (let* ((run          (hash-table-ref/default runs-hash run-id #f))
-         (key-vals     (rmt:get-key-vals run-id))
+         (key-vals     (mrmt:get-key-vals run-id))
          (testnamepatt (or (dboard:tabdat-test-patts tabdat) "%/%"))
          (tests-ht     (dboard:get-tests-for-run-duplicate tabdat run-id run testnamepatt key-vals))
          (tests-dat    (dashboard:tests-ht->tests-dat tests-ht)) 
@@ -505,7 +505,7 @@
     (conc "Kill " item-test-path)
     #:action
     (lambda (obj)
-      ;; (rmt:test-set-state-status-by-id run-id test-id "KILLREQ" #f #f)
+      ;; (mrmt:test-set-state-status-by-id run-id test-id "KILLREQ" #f #f)
       (common:run-a-command
        (conc "megatest -set-state-status KILLREQ,n/a -target " target
              " -runname " runname
@@ -578,7 +578,7 @@
       (conc "Kill " item-test-path)
       #:action
       (lambda (obj)
-        ;; (rmt:test-set-state-status-by-id run-id test-id "KILLREQ" #f #f)
+        ;; (mrmt:test-set-state-status-by-id run-id test-id "KILLREQ" #f #f)
 	(common:run-a-command
 	 (conc "megatest -set-state-status KILLREQ,n/a -target " target
                " -runname " runname
@@ -694,10 +694,10 @@
          (let* ((curr-run-id          (dboard:tabdat-curr-run-id tabdat))
                 (prev-run-id          (dboard:tabdat-prev-run-id tabdat))
                 (curr-runname (if curr-run-id
-                                  (rmt:get-run-name-from-id curr-run-id)
+                                  (mrmt:get-run-name-from-id curr-run-id)
                                   "None"))
                 (prev-runname (if prev-run-id
-                                  (rmt:get-run-name-from-id prev-run-id)
+                                  (mrmt:get-run-name-from-id prev-run-id)
                                   "None")))
            (iup:attribute-set! source-runname-label "TITLE" (conc " SRC: "prev-runname"  "))
            (iup:attribute-set! dest-runname-label "TITLE" (conc "DEST: "curr-runname"  "))))

@@ -965,19 +965,23 @@
                            (debug:print-info 0 *default-log-port* message))
                        #f) (thunk) ))
 
-(define (common:file-exists? path-string)
+(define (common:file-exists? path-string #!key (quiet-mode #f))
   ;; this avoids stack dumps in the case where 
 
   ;;;; TODO: catch permission denied exceptions and emit appropriate warnings, eg:  system error while trying to access file: "/nfs/pdx/disks/icf_env_disk001/bjbarcla/gwa/issues/mtdev/randy-slow/reproduce/q...
-  (common:false-on-exception (lambda () (file-exists? path-string))
-                             message: (conc "Unable to access path: " path-string)
-                             ))
+  (common:false-on-exception
+   (lambda () (file-exists? path-string))
+   message: (if quiet-mode
+		#f
+		(conc "Unable to access path: " path-string))))
 
-(define (common:directory-exists? path-string)
+(define (common:directory-exists? path-string #!key (quiet-mode #f))
   ;;;; TODO: catch permission denied exceptions and emit appropriate warnings, eg:  system error while trying to access file: "/nfs/pdx/disks/icf_env_disk001/bjbarcla/gwa/issues/mtdev/randy-slow/reproduce/q...
-  (common:false-on-exception (lambda () (directory-exists? path-string))
-                             message: (conc "Unable to access path: " path-string)
-                             ))
+  (common:false-on-exception
+   (lambda () (directory-exists? path-string))
+   message: (if quiet-mode
+		#f
+		(conc "Unable to access path: " path-string))))
 
 ;; does the directory exist and do we have write access?
 ;;
@@ -1095,6 +1099,20 @@
       (mutex-unlock! *homehost-mutex*)
       *home-host*))))
 
+;; get homehost info for a given area - but only if .homehost file already exists
+(define (common:minimal-get-homehost toppath)
+  (let ((hh-file (conc toppath "/.homehost")))
+    (if (common:file-exists? hh-file quiet-mode: #t)
+	(with-input-from-file hh-file read-line)
+	#f)))
+
+;; are we on the given host?
+(define (common:on-host? hh)
+  (let* ((currhost (get-host-name))
+	 (bestadrs (server:get-best-guess-address currhost)))
+    (or (equal? hh currhost)
+	(equal? hh bestadrs))))
+    
 ;; am I on the homehost?
 ;;
 (define (common:on-homehost?)
@@ -1102,6 +1120,21 @@
     (if hh
 	(cdr hh)
 	#f)))
+
+;; minimal loading of megatest.config
+;;
+(define (common:simple-setup toppath #!key (cfgf-ovrd #f))
+  (let* ((mtconfigf (or cfgf-ovrd "megatest.config"))
+	 (mtconfdat (find-and-read-config
+		     mtconfigf
+		     ;; environ-patt: "env-override"
+		     given-toppath: toppath
+		     ;; pathenvvar: "MT_RUN_AREA_HOME"
+		     ))
+	 (mtconf    (if mtconfdat (car mtconfdat) #f)))
+    (if mtconf
+	(configf:section-var-set! mtconf "dyndat" "toppath" start-dir))
+    mtconfdat))
 
 ;; do we honor the caches of the config files?
 ;;

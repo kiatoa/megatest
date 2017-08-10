@@ -441,10 +441,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (add-z-card
      (apply construct-sdat alldat))))
 
+;; merge/consolidate with common:simple-setup
 (define (simple-setup start-dir-in)
   (let* ((start-dir (or start-dir-in "."))
 	 (mtconfig  (or (args:get-arg "-config") "megatest.config"))
-	 (mtconfdat (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect
+	 (mtconfdat (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect -> NOPE! Not if pathenvvar is #f
 		     mtconfig
 		     ;; environ-patt: "env-override"
 		     given-toppath: start-dir
