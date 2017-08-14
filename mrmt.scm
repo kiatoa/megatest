@@ -343,7 +343,7 @@
 
 (define (mrmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
   (let* ((qry-is-write   (not (member cmd api:read-only-queries)))
-	 (db-file-path   (db:dbfile-path)) ;;  0))
+	 (db-file-path   (db:dbfile-path #f)) ;;  0))
 	 (dbstruct-local (db:setup #t))  ;; make-dbr:dbstruct path:  dbdir local: #t)))
 	 (read-only      (not (file-write-access? db-file-path)))
 	 (start          (current-milliseconds))

@@ -135,7 +135,7 @@
 (define *db-access-allowed*   #t) ;; flag to allow access
 (define *db-access-mutex*     (make-mutex))
 (define *db-transaction-mutex* (make-mutex))
-(define *db-cache-path*       #f)
+;; (define *db-cache-path*       #f)
 (define *db-with-db-mutex*    (make-mutex))
 (define *db-api-call-time*    (make-hash-table)) ;; hash of command => (list of times)
 ;; no sync db
@@ -637,23 +637,29 @@
 
 (define common:get-area-name common:get-testsuite-name)
 
-(define (common:get-db-tmp-area . junk)
-  (if *db-cache-path*
-      *db-cache-path*
-      (if *toppath* ;; common:get-create-writeable-dir
-	  (handle-exceptions
-	      exn
-	      (begin
-		(debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
-		(exit 1))
-	    (let ((dbpath (common:get-create-writeable-dir
-			   (list (conc "/tmp/" (current-user-name)
-				       "/megatest_localdb/"
-				       (common:get-testsuite-name) "/"
-				       (string-translate *toppath* "/" ".")))))) ;;  #t))))
-	      (set! *db-cache-path* dbpath)
-	      dbpath))
-	  #f)))
+;; WARNING: This code falls back to using the global Megatest
+;;          variable *toppath*
+;; 
+(define (common:get-db-tmp-area dbstruct)
+  (if (and dbstruct (dbr:dbstruct-tmpdb-path dbstruct)) ;; *db-cache-path*
+      (dbr:dbstruct-tmpdb-path) ;; *db-cache-path*
+      (let ((toppath (or (and dbstruct (dbr:dbstruct-area-path dbstruct)) *toppath*))
+	    (tsname  (or (and dbstruct (dbr:dbstruct-area-name dbstruct))(common:get-testsuite-name))))
+	(if toppath ;; common:get-create-writeable-dir
+	    (handle-exceptions
+		exn
+		(begin
+		  (debug:print-error 0 *default-log-port* "Couldn't create path to " dbdir)
+		  (exit 1))
+	      (let ((dbpath (common:get-create-writeable-dir
+			     (list (conc "/tmp/" (current-user-name)
+					 "/megatest_localdb/"
+					 tsname "/"
+					 (string-translate toppath "/" ".")))))) ;;  #t))))
+		;; (set! *db-cache-path* dbpath)
+		(if dbstruct (dbr:dbstruct-tmpdb-path-set! dbstruct dbpath))
+		dbpath))
+	    #f))))
 
 (define (common:get-area-path-signature)
   (message-digest-string (md5-primitive) *toppath*))

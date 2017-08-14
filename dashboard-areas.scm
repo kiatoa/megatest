@@ -409,23 +409,36 @@
     (dboard:commondat-please-update-set! commondat #f)
     recalc))
 
+;; open the area dbs, given list of areas that are "cared about"
+;;    areas: '( (area_name . path) ... ) ;; NOT necessarily the section [areas] from megatest.config
+;;
+(define (dboard:areas-open-areas commondat tabdat areas)
+  (let ((areas-ht (dboard:commondat-areas commondat)))
+    (for-each
+     (lambda (area-dat)
+       (db:dashboard-open-db areas (car area-dat)(cdr area-dat)))
+     areas)))
+
+
+
 (define (dboard:areas-update-tree tabdat runs-hash runs-header tb)
-  (let* ((access-mode   (dboard:tabdat-access-mode tabdat))
-         (run-ids (sort (filter number? (hash-table-keys runs-hash))
-			(lambda (a b)
-			  (let* ((record-a (hash-table-ref runs-hash a))
-				 (record-b (hash-table-ref runs-hash b))
-				 (time-a   (db:get-value-by-header record-a runs-header "event_time"))
-				 (time-b   (db:get-value-by-header record-b runs-header "event_time")))
-			    (< time-a time-b)))))
-         (changed      #f)
-	 (last-runs-update  (dboard:tabdat-last-runs-update tabdat))
-	 (runs-dat     (mrmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f 0)) ;; last-runs-update))
-	 (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
-         (runs         (vector-ref runs-dat 1))
-	 (new-run-ids  (map (lambda (run)
-			      (db:get-value-by-header run runs-header "id"))
-			    runs))
+  (let* ((tree-path     (dboard:tabdat-tree-path tabdat))
+	;; (access-mode   (dboard:tabdat-access-mode tabdat))
+        ;; (run-ids (sort (filter number? (hash-table-keys runs-hash))
+	;; 		(lambda (a b)
+	;; 		  (let* ((record-a (hash-table-ref runs-hash a))
+	;; 			 (record-b (hash-table-ref runs-hash b))
+	;; 			 (time-a   (db:get-value-by-header record-a runs-header "event_time"))
+	;; 			 (time-b   (db:get-value-by-header record-b runs-header "event_time")))
+	;; 		    (< time-a time-b)))))
+        ;; (changed      #f)
+	;; (last-runs-update  (dboard:tabdat-last-runs-update tabdat))
+	;; (runs-dat     (mrmt:get-runs-by-patt (dboard:tabdat-keys tabdat) "%" #f #f #f #f 0)) ;; last-runs-update))
+	;; (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
+        ;; (runs         (vector-ref runs-dat 1))
+	;; (new-run-ids  (map (lambda (run)
+	;; 		      (db:get-value-by-header run runs-header "id"))
+	;; 		    runs))
 	 (areas        (configf:get-section *configdat* "areas")))
     (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
     (for-each
@@ -437,30 +450,31 @@
 	       (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path 0)))))
      (map car areas))
     ;; here the local area
-    (for-each
-     (lambda (run-id)
-       (let* ((run-record (hash-table-ref/default runs-hash run-id #f))
-	      (key-vals   (map (lambda (key)(db:get-value-by-header run-record runs-header key))
-			       (dboard:tabdat-keys tabdat)))
-	      (run-name   (db:get-value-by-header run-record runs-header "runname"))
-	      (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
-	      (run-path   (cons "local " (append key-vals (list run-name)))))
-	 (if (not (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) run-path #f))
-	     ;; (let ((existing   (tree:find-node tb run-path)))
-	     ;;   (if (not existing)
-	     (begin
-	       (hash-table-set! (dboard:tabdat-run-keys tabdat) run-id run-path)
-	       ;; (iup:attribute-set! (dboard:tabdat-runs-matrix tabdat)
-	       ;;    		 (conc rownum ":" colnum) col-name)
-	       ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
-	       ;; Here we update the tests treebox and tree keys
-	       (tree:add-node tb "Areas" run-path) ;; (append key-vals (list run-name))
-	       ;;                                             userdata: (conc "run-id: " run-id))))
-	       (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
-	       ;; (set! colnum (+ colnum 1))
-	       ))))
-     (append new-run-ids run-ids)))) ;; for-each run-id
-  
+    ;;(for-each
+    ;; (lambda (run-id)
+    ;;   (let* ((run-record (hash-table-ref/default runs-hash run-id #f))
+    ;;	      (key-vals   (map (lambda (key)(db:get-value-by-header run-record runs-header key))
+    ;;			       (dboard:tabdat-keys tabdat)))
+    ;;	      (run-name   (db:get-value-by-header run-record runs-header "runname"))
+    ;;	      (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
+    ;;	      (run-path   (cons "local " (append key-vals (list run-name)))))
+    ;;	 (if (not (hash-table-ref/default (dboard:tabdat-path-run-ids tabdat) run-path #f))
+    ;;	     ;; (let ((existing   (tree:find-node tb run-path)))
+    ;;	     ;;   (if (not existing)
+    ;;	     (begin
+    ;;	       (hash-table-set! (dboard:tabdat-run-keys tabdat) run-id run-path)
+    ;;	       ;; (iup:attribute-set! (dboard:tabdat-runs-matrix tabdat)
+    ;;	       ;;    		 (conc rownum ":" colnum) col-name)
+    ;;	       ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
+    ;;	       ;; Here we update the tests treebox and tree keys
+    ;;	       (tree:add-node tb "Areas" run-path) ;; (append key-vals (list run-name))
+    ;;	       ;;                                             userdata: (conc "run-id: " run-id))))
+    ;;	       (hash-table-set! (dboard:tabdat-path-run-ids tabdat) run-path run-id)
+    ;;	       ;; (set! colnum (+ colnum 1))
+    ;;	       ))))
+    ;; (append new-run-ids run-ids)))) ;; for-each run-id
+    ))
+    
 (define (dashboard:areas-run-id->tests-mindat run-id tabdat runs-hash)
   (let* ((run          (hash-table-ref/default runs-hash run-id #f))
          (key-vals     (mrmt:get-key-vals run-id))

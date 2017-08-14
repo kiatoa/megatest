@@ -54,6 +54,8 @@
   (configdat   #f)
   (keys        #f)
   (area-path   #f)
+  (area-name   #f)
+  (tmpdb-path  #f)
   )                ;; goal is to converge on one struct for an area but for now it is too confusing
   
 
@@ -76,21 +78,26 @@
 ;;   no-sync-db  -
 ;;   on-homehost - enable reading from other users /tmp db if files are readable
 ;;
-;;   areas is hash of areas => dbstruct, the dashboard-open-db will register the dbstruct in that hash
+;;   areas is hash of area_names => dbstruct, the dashboard-open-db will register the dbstruct in that hash
 ;;
 ;;   NOTE: This returns the tmpdb path/handle pair.
 ;;   NOTE: This does do a sync (the db:open-db proc only does an initial sync if called with do-sync: #t
 ;;   NOTE: Longer term consider replacing db:open-db with this
 ;;
-(define (db:dashboard-open-db areas area-path)
+
+;; NOTE: loose ends!!
+;;    db:open-db              -> not properly using tmpdb path
+;;    common:get-db-tmp-area  -> using *toppath* and common:get-testsuite-area
+;;    
+(define (db:dashboard-open-db areas area-name area-path)
   ;; 0. check for already existing dbstruct in areas hash, return it if found
   ;; 1. do minimal read of megatest.config, store configdat, keys in dbstruct
   ;; 2. get homehost
   ;; 3. create /tmp db area  (if needed)
   ;; 4. sync data to /tmp db (or update if exists)
   ;; 5. return dbstruct
-  (if (hash-table-exists? areas area-path)
-      (hash-table-ref areas area-path)
+  (if (hash-table-exists? areas area-name)
+      (hash-table-ref areas area-name)
       (if (common:file-exists? (conc area-path "/megatest.config") quiet-mode: #t)
 	  (let* ((homehost (common:minimal-get-homehost area-path))
 		 (on-hh    (common:on-host? homehost))
@@ -100,7 +107,7 @@
 			    homehost:  homehost
 			    configdat: (car mtconfig)))
 		 (tmpdb    (db:open-db dbstruct area-path: area-path do-sync: #t)))
-	    (hash-table-set! areas area-path dbstruct)
+	    (hash-table-set! areas area-name dbstruct)
 	    tmpdb)
 	  (begin
 	    (debug:print-info 0 *default-log-port* "attempt to open megatest.db in " area-path " but no megatest.config found.")
@@ -143,16 +150,13 @@
    (apply sqlite3:first-result db stmt params)))
 
 ;; Get/open a database
-;;    if run-id => get run specific db
-;;    if #f     => get main db
-;;    if db already open - return inmem
-;;    if db not open, open inmem, rundb and sync then return inmem
-;;    inuse gets set automatically for rundb's
+;;
+;;  should always return ( dbh . path-to-db )
 ;;
 (define (db:get-db dbstruct) ;;  run-id) 
   (if (stack? (dbr:dbstruct-dbstack dbstruct))
       (if (stack-empty? (dbr:dbstruct-dbstack dbstruct))
-          (let ((newdb (db:open-megatest-db path: (db:dbfile-path))))
+          (let ((newdb (db:open-megatest-db path: (dbr:dbstruct-area-path dbstruct)))) ;; (db:dbfile-path))))
             ;; (stack-push! (dbr:dbstruct-dbstack dbstruct) newdb)
             newdb)
           (stack-pop! (dbr:dbstruct-dbstack dbstruct)))
@@ -354,13 +358,16 @@
 ;;     db))
 
 ;; This routine creates the db if not already present. It is only called if the db is not already opened
-;;
+;;   ALWAYS returns ( dbh . path-to-db )
 (define (db:open-db dbstruct #!key (area-path #f)(do-sync #t)) ;; TODO: actually use areapath
   (let ((tmpdb-stack (dbr:dbstruct-dbstack dbstruct))) ;; RA => Returns the first reference in dbstruct
     (if (stack? tmpdb-stack)
 	(db:get-db tmpdb-stack) ;; get previously opened db (will create new db handle if all in the stack are already used
-        (let* ((toppath      (or area-path (dbr:dbstruct-area-path dbstruct) *toppath*))
-	       (dbpath       (db:dbfile-path ))      ;; path to tmp db area
+        (let* ((toppath      (or area-path
+				 (dbr:dbstruct-area-path dbstruct)
+				 *toppath*))
+	       (dbpath       (or (dbr:dbstruct-tmpdb-path dbstruct)
+				 (db:dbfile-path dbstruct)))      ;; path to tmp db area
                (dbexists     (common:file-exists? dbpath))
 	       (tmpdbfname   (conc dbpath "/megatest.db"))
 	       (dbfexists    (common:file-exists? tmpdbfname))  ;; (conc dbpath "/megatest.db")))
@@ -1924,7 +1931,7 @@
 ;;======================================================================
 
 (define (db:open-no-sync-db)
-  (let* ((dbpath (db:dbfile-path))
+  (let* ((dbpath (db:dbfile-path #f))
 	 (dbname (conc dbpath "/no-sync.db"))
 	 (db-exists (common:file-exists? dbname))
 	 (db     (sqlite3:open-database dbname)))
@@ -2174,7 +2181,7 @@
 ;; TODO: Switch this to use max(update_time) from each run db? Then if using a server there is no disk traffic (using inmem db)
 ;;
 (define (db:get-changed-run-ids since-time)
-  (let* ((dbdir      (db:dbfile-path)) ;; (configf:lookup *configdat* "setup" "dbdir"))
+  (let* ((dbdir      (db:dbfile-path #f)) ;; (configf:lookup *configdat* "setup" "dbdir"))
 	 (alldbs     (glob (conc dbdir "/[0-9]*.db")))
 	 (changed    (filter (lambda (dbfile)
 			       (> (file-modification-time dbfile) since-time))

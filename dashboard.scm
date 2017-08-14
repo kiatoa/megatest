@@ -150,8 +150,8 @@ Misc
   uidat                                   ;; needs to move to tabdat at some time
   (hide-not-hide-tabs #f)
   (current-area-path  #f)                 ;; the area of the path where the dashboard was started, if it is a megatest area
-  (areas              (make-hash-table))  ;; area-name ==> area-path
-  (area-dbs           #f)                 ;; use db:dashboard-open-db to add areas to the areas hash  
+  (areas              (make-hash-table))  ;; area-name ==> dbstruct
+  ;; (area-dbs           #f)                 ;; use db:dashboard-open-db to add areas to the areas hash  
   )
 
 ;; RA => returns the tabdat stored at hashkey passed in commondat-tabdats table (e.g. 0 gives summary)
@@ -344,9 +344,9 @@ Misc
     dat))
 
 (define (dboard:setup-tabdat tabdat)
-  (dboard:tabdat-dbdir-set! tabdat (db:dbfile-path)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
-  (dboard:tabdat-dbfpath-set! tabdat (db:dbfile-path))
-  (dboard:tabdat-monitor-db-path-set! tabdat (conc (dboard:tabdat-dbdir tabdat) "/monitor.db"))
+  ;; (dboard:tabdat-dbdir-set! tabdat (db:dbfile-path)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+  ;; (dboard:tabdat-dbfpath-set! tabdat (db:dbfile-path))
+  ;; (dboard:tabdat-monitor-db-path-set! tabdat (conc (dboard:tabdat-dbdir tabdat) "/monitor.db"))
 
   ;; HACK ALERT: this is a hack, please fix.
   (if #f
