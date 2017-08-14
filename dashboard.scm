@@ -105,10 +105,10 @@ Misc
 
 ;; TODO: Move this inside (main)
 ;;
-(if (not (launch:setup))
-    (begin
-      (print "Failed to find megatest.config, exiting") 
-      (exit 1)))
+;; (if (not (launch:setup))
+;;     (begin
+;;       (print "Failed to find megatest.config, exiting") 
+;;       (exit 1)))
 
 ;; deal with RH 5.11 gtk lib or iup lib missing detachbox feature
 ;; first check for the switch
@@ -117,16 +117,20 @@ Misc
 	(configf:lookup *configdat* "dashboard" "no-detachbox"))
     (set! iup:detachbox iup:vbox))
 
-(if (not (common:on-homehost?))
-    (begin
-      (debug:print 0 *default-log-port* "WARNING: Current policy requires running dashboard on homehost: " (common:get-homehost))))
+;; (if (not (common:on-homehost?))
+;;     (begin
+;;       (debug:print 0 *default-log-port* "WARNING: Current policy requires running dashboard on homehost: " (common:get-homehost))))
     
 ;; RA => Might require revert for filters 
 ;; create a watch dog to move changes from lt/.db/*.db to megatest.db
 ;;
 ;;;(if (file-write-access? (conc *toppath* "/megatest.db"))
 ;;(debug:print-info 13 *default-log-port* "Before common:watchdog spawn")
-(thread-start! (make-thread common:watchdog "Watchdog thread"))
+
+
+;;  (thread-start! (make-thread common:watchdog "Watchdog thread"))
+
+
 ;;(debug:print-info 13 *default-log-port* "After common:watchdog spawn")
 ;; (if (not (args:get-arg "-use-db-cache"))
 ;;     (begin
@@ -139,24 +143,16 @@ Misc
 (defstruct dboard:commondat
   ((curr-tab-num 0) : number)
   please-update  
-  tabdats
-  update-mutex
-  updaters 
-  updating
-  uidat ;; needs to move to tabdat at some time
-  hide-not-hide-tabs
+  (tabdats            (make-hash-table))
+  (update-mutex       (make-mutex))
+  (updaters           (make-hash-table))
+  (updating           #f)
+  uidat                                   ;; needs to move to tabdat at some time
+  (hide-not-hide-tabs #f)
+  (current-area-path  #f)                 ;; the area of the path where the dashboard was started, if it is a megatest area
+  (areas              (make-hash-table))  ;; area-name ==> area-path
+  (area-dbs           #f)                 ;; use db:dashboard-open-db to add areas to the areas hash  
   )
-
-(define (dboard:commondat-make)
-  (make-dboard:commondat
-   curr-tab-num:         0
-   tabdats:              (make-hash-table)
-   please-update:        #t
-   update-mutex:         (make-mutex)
-   updaters:             (make-hash-table)
-   updating:             #f
-   hide-not-hide-tabs:   #f
-   ))
 
 ;; RA => returns the tabdat stored at hashkey passed in commondat-tabdats table (e.g. 0 gives summary)
 ;;
@@ -311,9 +307,12 @@ Misc
   ((runs-summary-mode-change-callbacks '()) : list)
   (runs-summary-source-runname-label #f)
   (runs-summary-dest-runname-label #f)
-  ;; runs summary view
-  
-  tests-tree       ;; used in newdashboard
+
+  ;; Areas summary view
+  (tree-path   '())
+  (pivots #f)
+  (filters #f)
+  (view-dat  (hh:make-hh)) ;; hierarchial hash of the data to view
   )
 
 ;; register tabdat with BBpp
@@ -350,7 +349,9 @@ Misc
   (dboard:tabdat-monitor-db-path-set! tabdat (conc (dboard:tabdat-dbdir tabdat) "/monitor.db"))
 
   ;; HACK ALERT: this is a hack, please fix.
-  (dboard:tabdat-ro-set! tabdat (not (file-read-access? (dboard:tabdat-dbfpath tabdat))))
+  (if #f
+      (dboard:tabdat-ro-set! tabdat (not (file-read-access? (dboard:tabdat-dbfpath tabdat))))
+      (print "FIXME on line 350"))
   
   (dboard:tabdat-keys-set! tabdat (mrmt:get-keys))
   (dboard:tabdat-dbkeys-set! tabdat (append (dboard:tabdat-keys tabdat) (list "runname")))
@@ -2338,21 +2339,34 @@ Misc
 				 (map cadr *common:std-states*))) ;; '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
 	    (num-toggle-cols (inexact->exact (round (/ (max (length status-toggles)(length state-toggles)) 3)))))
        (iup:vbox
-	(iup:hbox
-	 (iup:frame
-	  #:title "states"
-	  (apply
-	   iup:hbox
-	   (map (lambda (colgrp)
-		  (apply iup:vbox colgrp))
-		(dboard:squarify state-toggles 3))))
-	 (iup:frame
-	  #:title "statuses"
-	  (apply
-	   iup:hbox
-	   (map (lambda (colgrp)
-		  (apply iup:vbox colgrp))
-		(dboard:squarify status-toggles 3)))))
+	
+	(let ((filter-pivot (iup:tabs
+			     (iup:hbox
+			      (iup:frame
+			       #:title "states"
+			       (apply
+				iup:hbox
+				(map (lambda (colgrp)
+				       (apply iup:vbox colgrp))
+				     (dboard:squarify state-toggles 3))))
+			      (iup:frame
+			       #:title "statuses"
+			       (apply
+				iup:hbox
+				(map (lambda (colgrp)
+				       (apply iup:vbox colgrp))
+				     (dboard:squarify status-toggles 3)))))
+			     (iup:hbox
+			      (iup:frame
+			       #:title "Rows"
+			       (iup:button "Rows pivot"))
+			      (iup:frame
+			       #:title "Cols"
+			       (iup:button "Cols pivot"))))))
+	  (iup:attribute-set! filter-pivot "TABTITLE0" "Filters")
+	  (iup:attribute-set! filter-pivot "TABTITLE1" "Pivots ")
+	  filter-pivot)
+
 	;; 
 	;; (iup:frame 
 	;; 	#:title "state/status filter"
@@ -3578,63 +3592,63 @@ Misc
 ;;======================================================================
 
 (define (main)
-  (let ((mtdb-path (conc *toppath* "/megatest.db"))) ;; 
-    (if (and (common:file-exists? mtdb-path)
-	     (file-write-access? mtdb-path))
-	(if (not (args:get-arg "-skip-version-check"))
-            (common:exit-on-version-changed)))
-    (let* ((commondat       (dboard:commondat-make)))
-      ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
-      (cond 
-       ((args:get-arg "-test") ;; run-id,test-id
+  ;; (let* ((areas    (make-hash-table))) ;; mtdb-path (conc *toppath* "/megatest.db"))) ;; 
+  ;; (if (and (common:file-exists? mtdb-path)
+  ;; 	     (file-write-access? mtdb-path))
+  ;; 	(if (not (args:get-arg "-skip-version-check"))
+  ;;         (common:exit-on-version-changed)))
+  (let* ((commondat       (make-dboard:commondat)))
+    ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
+    (cond 
+     ((args:get-arg "-test") ;; run-id,test-id
       (let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-test") ",")))) 
-			  (if (> (length d) 1)
-			      d
-			      (list #f #f))))
-	       (run-id  (car dat))
-	       (test-id (cadr dat)))
-	  (if (and (number? run-id)
-		   (number? test-id)
+			(if (> (length d) 1)
+			    d
+			    (list #f #f))))
+	     (run-id  (car dat))
+	     (test-id (cadr dat)))
+	(if (and (number? run-id)
+		 (number? test-id)
 		   (>= test-id 0))
-	      (dashboard-tests:examine-test run-id test-id)
-	      (begin
-		(debug:print 3 *default-log-port* "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
-		(exit 1)))))
-       ;; ((args:get-arg "-guimonitor")
-       ;;  (gui-monitor (dboard:tabdat-dblocal tabdat)))
-       (else
-	(dboard:commondat-uidat-set! commondat (make-dashboard-buttons commondat))
-	(dboard:commondat-curr-tab-num-set! commondat 0)
-	(dboard:commondat-add-updater 
-	 commondat 
-	 (lambda ()
-	   (dashboard:runs-tab-updater commondat 1))
-	 tab-num: 1)
-	(iup:callback-set! *tim*
-			   "ACTION_CB"
-			   (lambda (time-obj)
-			     (let ((update-is-running #f))
-			       (mutex-lock! (dboard:commondat-update-mutex commondat))
-			       (set! update-is-running (dboard:commondat-updating commondat))
-			       (if (not update-is-running)
-				   (dboard:commondat-updating-set! commondat #t))
-			       (mutex-unlock! (dboard:commondat-update-mutex commondat))
-			       (if (not update-is-running) ;; we know that the update was not running and we now have a lock on doing an update
-				   (begin
-				     (dboard:common-run-curr-updaters commondat) ;; (dashboard:run-update commondat)
-				     (mutex-lock! (dboard:commondat-update-mutex commondat))
-				     (dboard:commondat-updating-set! commondat #f)
-				     (mutex-unlock! (dboard:commondat-update-mutex commondat)))
-				   ))
-			     1))))
-      
-      (let ((th1 (make-thread (lambda ()
-				(thread-sleep! 1)
-				(dboard:common-run-curr-updaters commondat 0) ;; force update of summary tab 
-				) "update buttons once"))
-	    (th2 (make-thread iup:main-loop "Main loop")))
-	(thread-start! th2)
-	(thread-join! th2)))))
+	    (dashboard-tests:examine-test run-id test-id)
+	    (begin
+	      (debug:print 3 *default-log-port* "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
+	      (exit 1)))))
+     ;; ((args:get-arg "-guimonitor")
+     ;;  (gui-monitor (dboard:tabdat-dblocal tabdat)))
+     (else
+      (dboard:commondat-uidat-set! commondat (make-dashboard-buttons commondat))
+      (dboard:commondat-curr-tab-num-set! commondat 0)
+      (dboard:commondat-add-updater 
+       commondat 
+       (lambda ()
+	 (dashboard:runs-tab-updater commondat 1))
+       tab-num: 1)
+      (iup:callback-set! *tim*
+			 "ACTION_CB"
+			 (lambda (time-obj)
+			   (let ((update-is-running #f))
+			     (mutex-lock! (dboard:commondat-update-mutex commondat))
+			     (set! update-is-running (dboard:commondat-updating commondat))
+			     (if (not update-is-running)
+				 (dboard:commondat-updating-set! commondat #t))
+			     (mutex-unlock! (dboard:commondat-update-mutex commondat))
+			     (if (not update-is-running) ;; we know that the update was not running and we now have a lock on doing an update
+				 (begin
+				   (dboard:common-run-curr-updaters commondat) ;; (dashboard:run-update commondat)
+				   (mutex-lock! (dboard:commondat-update-mutex commondat))
+				   (dboard:commondat-updating-set! commondat #f)
+				   (mutex-unlock! (dboard:commondat-update-mutex commondat)))
+				 ))
+			   1))))
+    
+    (let ((th1 (make-thread (lambda ()
+			      (thread-sleep! 1)
+			      (dboard:common-run-curr-updaters commondat 0) ;; force update of summary tab 
+			      ) "update buttons once"))
+	  (th2 (make-thread iup:main-loop "Main loop")))
+      (thread-start! th2)
+      (thread-join! th2))))
 
 ;; ease debugging by loading ~/.dashboardrc
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.dashboardrc")))

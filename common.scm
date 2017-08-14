@@ -101,7 +101,7 @@
 ;;
 (define *user-hash-data* (make-hash-table))
 
-(define *db-keys* #f)
+;; (define *db-keys* #f)
 
 (define *configinfo*   #f)   ;; raw results from setup, includes toppath and table from megatest.config
 (define *runconfigdat* #f)   ;; run configs data
@@ -1133,7 +1133,7 @@
 		     ))
 	 (mtconf    (if mtconfdat (car mtconfdat) #f)))
     (if mtconf
-	(configf:section-var-set! mtconf "dyndat" "toppath" start-dir))
+	(configf:section-var-set! mtconf "dyndat" "toppath" toppath))
     mtconfdat))
 
 ;; do we honor the caches of the config files?
@@ -2400,14 +2400,25 @@
 
 ;; given a hierarchial hash and some keys look up the value ...
 ;;
-(define (hh:get hh . keys)
+(define (hh:get-value hh . keys)
   (if (null? keys)
       (vector-ref hh 1) ;; we have reached the end of the line, return the value sought
       (let ((sub-ht (hh:get-ht hh)))
 	(if sub-ht ;; yes, there is more hierarchy
 	    (let ((sub-hh (hash-table-ref/default sub-ht (car keys) #f)))
 	      (if sub-hh
-		  (apply hh:get sub-hh (cdr keys))
+		  (apply hh:get-value sub-hh (cdr keys))
+		  #f))
+	    #f))))
+
+(define (hh:get-subhash hh . keys)
+  (if (null? keys)
+      (vector-ref hh 0) ;; we have reached the end of the line, return the value sought
+      (let ((sub-ht (hh:get-ht hh)))
+	(if sub-ht ;; yes, there is more hierarchy
+	    (let ((sub-hh (hash-table-ref/default sub-ht (car keys) #f)))
+	      (if sub-hh
+		  (apply hh:get-subhash sub-hh (cdr keys))
 		  #f))
 	    #f))))
 
@@ -2427,4 +2438,12 @@
 	    (begin
 	      (hh:set-ht! hh (make-hash-table))
 	      (apply hh:set! hh value keys))))))
+
+;; given a hierarchial hash and some keys, return the keys for that hash level
+;;
+(define (hh:get-keys hh . keys)
+  (let ((ht (apply hh:get-subhash hh keys)))
+    (if ht
+	(hash-table-keys ht)
+	'())))
   

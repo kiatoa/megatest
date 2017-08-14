@@ -92,7 +92,7 @@
   (if (hash-table-exists? areas area-path)
       (hash-table-ref areas area-path)
       (if (common:file-exists? (conc area-path "/megatest.config") quiet-mode: #t)
-	  (let* ((homehost (common:minimal-get-homehost toppath))
+	  (let* ((homehost (common:minimal-get-homehost area-path))
 		 (on-hh    (common:on-host? homehost))
 		 (mtconfig (common:simple-setup area-path)) ;; returns ( configdat toppath configfile configf-name )
 		 (dbstruct (make-dbr:dbstruct
@@ -100,6 +100,7 @@
 			    homehost:  homehost
 			    configdat: (car mtconfig)))
 		 (tmpdb    (db:open-db dbstruct area-path: area-path do-sync: #t)))
+	    (hash-table-set! areas area-path dbstruct)
 	    tmpdb)
 	  (begin
 	    (debug:print-info 0 *default-log-port* "attempt to open megatest.db in " area-path " but no megatest.config found.")
@@ -2003,7 +2004,8 @@
 ;; using keys:config-get-fields?
 
 (define (db:get-keys dbstruct)
-  (if *db-keys* *db-keys* 
+  (if (dbr:dbstruct-keys dbstruct)
+      (dbr:dbstruct-keys dbstruct)
       (let ((res '()))
 	(db:with-db dbstruct #f #f
 		    (lambda (db)
@@ -2012,7 +2014,7 @@
 			 (set! res (cons key res)))
 		       db
 		       "SELECT fieldname FROM keys ORDER BY id DESC;")))
-	(set! *db-keys* res)
+	(dbr:dbstruct-keys-set! dbstruct res)
 	res)))
 
 ;; look up values in a header/data structure

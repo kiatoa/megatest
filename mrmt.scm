@@ -479,14 +479,14 @@
   (mrmt:send-receive 'get-key-val-pairs run-id (list run-id)))
 
 (define (mrmt:get-keys)
-  (if *db-keys* *db-keys* 
-     (let ((res (mrmt:send-receive 'get-keys #f '())))
-       (set! *db-keys* res)
-       res)))
+  ;; (if *db-keys* *db-keys* 
+  (let ((res (mrmt:send-receive 'get-keys #f '())))
+    ;; (set! *db-keys* res)
+    res)) ;; )
 
 (define (mrmt:get-keys-write) ;; dummy query to force server start
   (let ((res (mrmt:send-receive 'get-keys-write #f '())))
-    (set! *db-keys* res)
+    ;; (set! *db-keys* res)
     res))
 
 ;; we don't reuse run-id's (except possibly *after* a db cleanup) so it is safe
