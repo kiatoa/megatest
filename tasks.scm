@@ -639,7 +639,11 @@
 	       (comment    (db:get-value-by-header row header "comment"))
 	       (fail-count (db:get-value-by-header row header "fail_count"))
 	       (pass-count (db:get-value-by-header row header "pass_count"))
-	       (contour    (if (args:get-arg "-prepend-contour") (db:get-value-by-header row header "contour")))
+               (db-contour (db:get-value-by-header row header "contour"))
+	       (contour    (if (args:get-arg "-prepend-contour") 
+                                 (if (> (string-length  db-contour) 0) 
+                                            db-contour
+					    (args:get-arg "-contour"))))
 	       (keytarg    (if (or (args:get-arg "-prepend-contour") (args:get-arg "-prefix-target"))
 	       			(conc "MT_CONTOUR/MT_AREA/" (string-intersperse (rmt:get-keys) "/")) (string-intersperse (rmt:get-keys) "/"))) ;; e.g. version/iteration/platform
 	       (target     (if (or (args:get-arg "-prepend-contour") (args:get-arg "-prefix-target")) 
@@ -651,8 +655,7 @@
 
 	       ;; (area-id    (db:get-value-by-header row header "area_id)"))
 	       )
-           
-	  (if new-run-id
+          (if new-run-id
 	      (begin ;; let ((run-record (pgdb:get-run-info dbh new-run-id))
                 
 		(hash-table-set! runs-ht run-id new-run-id)
@@ -699,7 +702,7 @@
                 
 	      (pgdb-test-id (if pgdb-run-id 
 				(begin
-                                  (print pgdb-run-id)    
+                                  ;(print pgdb-run-id)    
                                  (pgdb:get-test-id dbh pgdb-run-id test-name item-path))
                                  #f)))
 	 ;; "id"           "run_id"        "testname"  "state"      "status"      "event_time"
@@ -713,7 +716,7 @@
 	       (print "Updating existing test with run-id: " run-id " and test-id: " test-id)
 	       (pgdb:update-test dbh pgdb-test-id pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived))
 	     (pgdb:insert-test dbh pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived)))
-              (print "Skipping run with run-id:" run-id ". This run was created after privious sync and removed before this sync."))   
+              (print "WARNING: Skipping run with run-id:" run-id ". This run was created after privious sync and removed before this sync."))   
 	 ))
      test-ids)))
 
@@ -738,7 +741,7 @@
 	       (test-step-ids  (alist-ref 'test_steps changed))
 	       (test-data-ids  (alist-ref 'test_data  changed))
 	       (run-stat-ids   (alist-ref 'run_stats  changed)))
-	  (print "area-info: " area-info)
+	  ;(print "area-info: " area-info)
 	  (if (not (null? test-ids))
 	      (begin
 		(print "Syncing " (length test-ids) " changed tests")
