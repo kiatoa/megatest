@@ -111,6 +111,7 @@
 	     (if (not endp)
 		 (begin
 		   (print "##teamcity[testFailed  " tcname flowid comment details "]")
+                   (print "##teamcity[testFinished" tcname flowid comment details duration "]")
 		   (testdat-end-printed-set! tdat #t)))))))
     ;; (print "ERROR: tc-type \"" (testdat-tc-type tdat) "\" not recognised for " tcname)))
     (flush-output)))
