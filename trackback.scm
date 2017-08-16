@@ -147,10 +147,12 @@
                       (let* ((upcone-temp (filter (lambda (x)
                                                     (eq? procname (car x)))
                                                   xref))
-                             (upcone (begin
-                                       (cond
-                                        ((null? upcone-temp) '())
-                                        (else (cdar upcone-temp)))))
+                             (upcone-temp2 (cond
+                                            ((null? upcone-temp) '())
+                                            (else (cdar upcone-temp))))
+                             (upcone (filter
+                                      (lambda (x) (not (eq? x procname)))
+                                      upcone-temp2))
                              (uppath (cons procname path))
                              (updepth (add1 depth)))
                         (if (null? upcone)
