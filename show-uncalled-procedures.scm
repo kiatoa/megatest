@@ -131,7 +131,7 @@
          (callers (get-callers-alist all-procs+file+calls))) ;; this is a handy cross-reference of callees to callers.  could be used elsewhere
     callers))
 
-(define (main)
+(define (show-danglers)
   (let* ((all-scm-files (glob "*.scm"))
          (xref (get-xref all-scm-files))
          (dangling-procs
@@ -139,4 +139,19 @@
     (for-each print dangling-procs) ;; our product.
     ))
 
-(main)
+(define (traceback-proc procname)
+  (let* ((all-scm-files (glob "*.scm"))
+         (xref (get-xref all-scm-files))
+         (lookup (lambda (path procname depth)
+                   (let* ((upcone (alist-ref procname xref equal? '()))
+                          (uppath (conc procname "/" path))
+                          (updepth (add1 depth)))
+                     (if (null? upcode) (print uppath))
+                     (for-each (lambda (x)
+                                 (lookup uppath x updepth) )
+                               upcone)))))
+    (lookup "." procname 0)))
+
+
+;(traceback-proc "run:run-tests")
+    
