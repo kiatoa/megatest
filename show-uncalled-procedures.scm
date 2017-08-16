@@ -152,6 +152,6 @@
                                upcone)))))
     (lookup "." procname 0)))
 
+(show-danglers)
 
-;(traceback-proc "run:run-tests")
     
