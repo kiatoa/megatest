@@ -7,17 +7,22 @@
 ;; second param is list of regexs for functions to include in the map
 ;; third param is list of files to scan
 
-(use regex srfi-69 srfi-13)
+(use regex srfi-69 srfi-13 srfi-1 data-structures posix)
 
-(define targs #f) 
-(define files (cdr (cddddr (argv))))
+;;                 1                   2        remainder
+;; plot-code file1.scm,file2.scm... fn-regex file1.scm file2.scm ...
 
-(let ((targdat (cadddr (argv))))
+(define targs #f)
+
+(define args (argv))
+(define files (cdddr args))
+
+(let ((targdat (cadr args)))
   (if (equal? targdat "-")
       (set! targs files)
       (set! targs (string-split targdat ","))))
 
-(define function-patt (car (cdr (cdddr (argv)))))
+(define function-patt (caddr args))
 (define function-rx   (regexp function-patt))
 (define filedat-defns (make-hash-table))
 (define filedat-usages (make-hash-table))
