@@ -446,12 +446,12 @@
 	    
 	    ;; (items   (items:get-items-from-config config)))
 	    (if (not (hash-table-ref/default test-records hed #f))
-		(hash-table-set! test-records
-				 hed (vector hed     ;; 0
-					     config  ;; 1
-					     waitons ;; 2
+		(hash-table-set! test-records ;; BB: we are doing a manual make-tests:testqueue
+				 hed (vector hed     ;; 0 ;; testname
+					     config  ;; 1 
+					     waitons ;; 2 
 					     (config-lookup config "requirements" "priority")     ;; priority 3
-					     (tests:get-items config) ;; expand the [items] and or [itemstable] into explict items
+					     (tests:get-items config) ;; 4 ;; expand the [items] and or [itemstable] into explict items
 					     #f      ;; itemsdat 5
 					     #f      ;; spare - used for item-path
 					     waitors ;; 
@@ -1445,7 +1445,8 @@
 	  (loop (car reg)(cdr reg) '() reruns))
 	 (else
 	  (debug:print-info 4 *default-log-port* "Exiting loop with...\n  hed=" hed "\n  tal=" tal "\n  reruns=" reruns))
-	 )))
+	 ))) ;; end loop on sorted test names
+    
     ;; now *if* -run-wait we wait for all tests to be done
     ;; Now wait for any RUNNING tests to complete (if in run-wait mode)
     (thread-sleep! 5) ;; I think there is a race condition here. Let states/statuses settle
