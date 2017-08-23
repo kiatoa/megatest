@@ -519,28 +519,41 @@
 	;;    	  
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
-	    (if (or (common:file-exists? work-area)
+	    (if (or (common:directory-exists? work-area)
 		    (> count 10))
 		(change-directory work-area)
 		(begin
 		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " work-area " not found")
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
+
+          (if (not (string=?  (common:real-path work-area)(common:real-path (current-directory))))
+              (begin
+                (debug:print 0 *default-log-port*
+                             "INFO: we are expecting to be in directory " work-area "\n"
+                             "     but we are actually in the directory " (current-directory) "\n"
+                             "     doing another change dir.")
+                (change-directory work-area)))
+          
 	  ;; spot check that the files in testpath are available. Too often NFS delays cause problems here.
 	  (let ((files      (glob (conc testpath "/*")))
 		(bad-files '()))
 	    (for-each
 	     (lambda (fullname)
-	       (let* ((fname (pathname-strip-directory fullname)))
-		 (if (not (file-exists? fname))
+	       (let* ((fname (pathname-strip-directory fullname))
+                      (targn (conc work-area "/" fname)))
+		 (if (not (file-exists? targn))
 		     (set! bad-files (cons fname bad-files)))))
 	     files)
 	    (if (not (null? bad-files))
                 (begin
                   (debug:print 0 *default-log-port* "INFO: test data from " testpath " not copied properly or filesystem problems causing data to not be found. Re-running the copy command.")
-                  (debug:print 0 *default-log-port* "INFO: missing files from test run area: " (string-intersperse bad-files ", "))
+                  (debug:print 0 *default-log-port* "INFO: missing files from " work-area ": " (string-intersperse bad-files ", "))
                   (launch:test-copy testpath work-area))))
-		 
+
+          ;; one more time, change to the work-area directory
+          (change-directory work-area)
+          
 	  (launch:setup) ;; should be properly in the top-path now
 	  (set! tconfigreg (tests:get-all))
 	  (let ((sighand (lambda (signum)
