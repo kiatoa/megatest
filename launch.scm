@@ -453,7 +453,7 @@
                                   #f
                                   (if (substring-index "/" runscript)
                                       runscript ;; use unadultered if contains slashes
-                                      (let ((fulln (conc testpath "/" runscript)))
+                                      (let ((fulln (conc work-area "/" runscript)))
 	                                  (if (and (common:file-exists? fulln)
                                                    (file-execute-access? fulln))
                                               fulln
@@ -519,13 +519,25 @@
 	;;    	  
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
-	    (if (or (common:file-exists? top-path)
+	    (if (or (common:file-exists? work-area)
 		    (> count 10))
-		(change-directory top-path)
+		(change-directory work-area)
 		(begin
-		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " top-path " not found")
+		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " work-area " not found")
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
+	  ;; spot check that the files in testpath are available. Too often NFS delays cause problems here.
+	  (let ((files   (glob (conc testpath "/*")))
+		(allgood #t))
+	    (for-each
+	     (lambda (fullname)
+	       (let* ((fname (pathname-strip-directory fullname)))
+		 (if (not (file-exists? fname))
+		     (set! allgood #f))))
+	     files)
+	    (if (not allgood)
+		(launch:test-copy testpath work-area)))
+		 
 	  (launch:setup) ;; should be properly in the top-path now
 	  (set! tconfigreg (tests:get-all))
 	  (let ((sighand (lambda (signum)
@@ -1072,6 +1084,22 @@
 		    (debug:print-error 0 *default-log-port* "No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists and has enough space!\n    You can change minspace in the [setup] section of megatest.config. Current setting is: " minspace))
 		(exit 1))))))) ;; TODO - move the exit to the calling location and return #f
 
+(define (launch:test-copy test-src-path test-path)
+  (let* ((ovrcmd (let ((cmd (config-lookup *configdat* "setup" "testcopycmd")))
+		   (if cmd
+		       ;; substitute the TEST_SRC_PATH and TEST_TARG_PATH
+		       (string-substitute "TEST_TARG_PATH" test-path
+					  (string-substitute "TEST_SRC_PATH" test-src-path cmd #t) #t)
+		       #f)))
+	 (cmd    (if ovrcmd 
+		     ovrcmd
+		     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"
+			   " >> " test-path "/mt_launch.log 2>> " test-path "/mt_launch.log")))
+	 (status (system cmd)))
+    (if (not (eq? status 0))
+	(debug:print 2 *default-log-port* "ERROR: problem with running \"" cmd "\""))))
+
+
 ;; Desired directory structure:
 ;;
 ;;  <linkdir> - <target> - <testname> -.
@@ -1236,19 +1264,7 @@
 
     (if (and test-src-path (directory? test-path))
 	(begin
-	  (let* ((ovrcmd (let ((cmd (config-lookup *configdat* "setup" "testcopycmd")))
-			   (if cmd
-			       ;; substitute the TEST_SRC_PATH and TEST_TARG_PATH
-			       (string-substitute "TEST_TARG_PATH" test-path
-						  (string-substitute "TEST_SRC_PATH" test-src-path cmd #t) #t)
-			       #f)))
-		 (cmd    (if ovrcmd 
-			     ovrcmd
-			     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"
-				   " >> " test-path "/mt_launch.log 2>> " test-path "/mt_launch.log")))
-		 (status (system cmd)))
-	    (if (not (eq? status 0))
-		(debug:print 2 *default-log-port* "ERROR: problem with running \"" cmd "\"")))
+	  (launch:test-copy test-src-path test-path)
 	  (list lnkpathf lnkpath ))
 	(if (and test-src-path (> remtries 0))
 	    (begin
