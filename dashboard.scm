@@ -49,7 +49,7 @@
 (define help (conc 
 	      "Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
-  license GPL, Copyright (C) Matt Welland 2012-2016
+  license GPL, Copyright (C) Matt Welland 2012-2017
 
 Usage: dashboard [options]
   -h                    : this help
