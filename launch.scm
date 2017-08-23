@@ -527,16 +527,19 @@
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
 	  ;; spot check that the files in testpath are available. Too often NFS delays cause problems here.
-	  (let ((files   (glob (conc testpath "/*")))
-		(allgood #t))
+	  (let ((files      (glob (conc testpath "/*")))
+		(bad-files '()))
 	    (for-each
 	     (lambda (fullname)
 	       (let* ((fname (pathname-strip-directory fullname)))
 		 (if (not (file-exists? fname))
-		     (set! allgood #f))))
+		     (set! bad-files (cons fname bad-files)))))
 	     files)
-	    (if (not allgood)
-		(launch:test-copy testpath work-area)))
+	    (if (not (null? bad-files))
+                (begin
+                  (debug:print 0 *default-log-port* "INFO: test data from " testpath " not copied properly or filesystem problems causing data to not be found. Re-running the copy command.")
+                  (debug:print 0 *default-log-port* "INFO: missing files from test run area: " (string-intersperse bad-files ", "))
+                  (launch:test-copy testpath work-area))))
 		 
 	  (launch:setup) ;; should be properly in the top-path now
 	  (set! tconfigreg (tests:get-all))
@@ -573,7 +576,8 @@
 				  (exit))))
 		 (test-pid  (db:test-get-process_id  test-info)))
 	    (cond
-	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
+             ;; -mrw- I'm removing KILLREQ from this list so that a test in KILLREQ state is treated as a "do not run" flag.
+	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
 	      (debug:print 0 *default-log-port* "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
 	      ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
 	      (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
