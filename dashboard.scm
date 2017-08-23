@@ -56,7 +56,6 @@ Usage: dashboard [options]
   -h                    : this help
   -test run-id,test-id  : control test identified by testid
   -skip-version-check   : skip the version check
-  -use-db-cache         : access database via cache 
 
 Misc
   -rows R         : set number of rows
@@ -85,7 +84,7 @@ Misc
 			"-main"
 			"-v"
 			"-q"
-			"-use-db-cache"
+			;; "-use-db-cache"
 			"-skip-version-check"
 			"-repl"
                         "-rh5.11" ;; fix to allow running on rh5.11

@@ -15,6 +15,11 @@
 (define targs #f)
 
 (define args (argv))
+(if (< (length args) 2) ;; no args provided
+    (begin
+       (print "Usage: plot-code file1.scm,file2.scm... 'your.*regex' file3.scm file4.scm file5.scm  ...")
+       (exit)))
+
 (define files (cdddr args))
 
 (let ((targdat (cadr args)))
