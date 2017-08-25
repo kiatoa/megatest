@@ -2,13 +2,11 @@
 
 (define *numsamples* (or (and (> (length (argv)) 1)
                               (string->number (cadr (argv))))
-                         20))
-
-(print "Using " *numsamples* " as number of samples.")
+                         3))
 
 (define (topdata)
   (with-input-from-pipe
-   (conc "top -b -n " *numsamples* " -d 0.2")
+   (conc "top -b -n " *numsamples* " -d 0.1")
    read-lines))
 
 (define (cleanup-data topdat)list
@@ -24,6 +22,7 @@
           new-res
           (loop (car tal)(cdr tal) new-res)))))
 
+(print "Getting " *numsamples* " samples of cpu usage data.")
 (define data (cleanup-data (topdata)))
 (define pidhash  (make-hash-table))
 (define userhash (make-hash-table))

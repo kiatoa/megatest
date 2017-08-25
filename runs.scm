@@ -596,6 +596,13 @@
 	  '()
 	  reg)))
 
+
+(define (runs:loop-values tal reg reglen regfull reruns)
+  (list (runs:queue-next-hed tal reg reglen regfull)
+        (runs:queue-next-tal tal reg reglen regfull)
+        (runs:queue-next-reg tal reg reglen regfull)
+        reruns))
+
 (define runs:nothing-left-in-queue-count 0)
 
 ;; BB: for future reference - suspect target vars are not expanded to env vars at this point (item expansion using [items]\nwhatever [system echo $TARGETVAR] doesnt work right whereas [system echo #{targetvar}] does.. Tal and Randy have tix on this.  on first pass, var not set, on second pass, ok.  
@@ -638,10 +645,7 @@
       (debug:print-info 1 *default-log-port* "Test " hed " set to \"" (hash-table-ref test-registry (db:test-make-full-name hed item-path)) "\". Removing it from the queue")
       (if (or (not (null? tal))
 	      (not (null? reg)))
-	  (list (runs:queue-next-hed tal reg reglen regfull)
-		(runs:queue-next-tal tal reg reglen regfull)
-		(runs:queue-next-reg tal reg reglen regfull)
-		reruns)
+          (runs:loop-values tal reg reglen regfull reruns)
 	  (begin
 	    (debug:print-info 0 *default-log-port* "Nothing left in the queue!")
 	    ;; If get here twice then we know we've tried to expand all items
@@ -714,10 +718,8 @@
 	      (if (and (null? trimmed-tal)
 		       (null? trimmed-reg))
 		  #f
-		  (list (runs:queue-next-hed trimmed-tal trimmed-reg reglen regfull)
-			(runs:queue-next-tal trimmed-tal trimmed-reg reglen regfull)
-			(runs:queue-next-reg trimmed-tal trimmed-reg reglen regfull)
-			reruns)))
+                  (runs:loop-values trimmed-tal trimmed-reg reglen regfull reruns)
+                  ))
 	      (list (car newtal)(append (cdr newtal) reg) '() reruns))))
 
      ((and (null? fails)
@@ -736,10 +738,8 @@
 	    (debug:print-info 1 *default-log-port* "no fails in prerequisites for " hed " but nothing seen running in a while, dropping test " hed " from the run queue")
 	    (let ((test-id (rmt:get-test-id run-id hed "")))
 	      (if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "TIMED_OUT" "Nothing seen running in a while.")))
-	    (list (runs:queue-next-hed tal reg reglen regfull)
-		  (runs:queue-next-tal tal reg reglen regfull)
-		  (runs:queue-next-reg tal reg reglen regfull)
-		  reruns))))
+            (runs:loop-values tal reg reglen regfull reruns)
+            )))
 
      ((and 
        (or (not (null? fails))
@@ -756,10 +756,8 @@
       (if (or (not (null? reg))(not (null? tal)))
 	  (begin
 	    (hash-table-set! test-registry hed 'CANNOTRUN)
-	    (list (runs:queue-next-hed tal reg reglen regfull)
-		  (runs:queue-next-tal tal reg reglen regfull)
-		  (runs:queue-next-reg tal reg reglen regfull)
-		  (cons hed reruns)))
+            (runs:loop-values tal reg reglen regfull (cons hed reruns))
+            )
 	  #f)) ;; #f flags do not loop
 
      ((and (not (null? fails))(member 'toplevel testmode))
@@ -769,10 +767,6 @@
      ((null? runnables) #f) ;; if we get here and non-completed is null then it is all over.
      (else
       (debug:print 0 *default-log-port* "WARNING: FAILS or incomplete tests maybe preventing completion of this run. Watch for issues with test " hed ", continuing for now")
-      ;; (list (runs:queue-next-hed tal reg reglen regfull)
-      ;;   	(runs:queue-next-tal tal reg reglen regfull)
-      ;;   	(runs:queue-next-reg tal reg reglen regfull)
-      ;;   	reruns)
       (list (car newtal)(cdr newtal) reg reruns)))))
 
 (define (runs:mixed-list-testname-and-testrec->list-of-strings inlst)
