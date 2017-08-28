@@ -453,7 +453,7 @@
                                   #f
                                   (if (substring-index "/" runscript)
                                       runscript ;; use unadultered if contains slashes
-                                      (let ((fulln (conc testpath "/" runscript)))
+                                      (let ((fulln (conc work-area "/" runscript)))
 	                                  (if (and (common:file-exists? fulln)
                                                    (file-execute-access? fulln))
                                               fulln
@@ -519,13 +519,41 @@
 	;;    	  
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
-	    (if (or (common:file-exists? top-path)
+	    (if (or (common:directory-exists? work-area)
 		    (> count 10))
-		(change-directory top-path)
+		(change-directory work-area)
 		(begin
-		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " top-path " not found")
+		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " work-area " not found")
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
+
+          (if (not (string=?  (common:real-path work-area)(common:real-path (current-directory))))
+              (begin
+                (debug:print 0 *default-log-port*
+                             "INFO: we are expecting to be in directory " work-area "\n"
+                             "     but we are actually in the directory " (current-directory) "\n"
+                             "     doing another change dir.")
+                (change-directory work-area)))
+          
+	  ;; spot check that the files in testpath are available. Too often NFS delays cause problems here.
+	  (let ((files      (glob (conc testpath "/*")))
+		(bad-files '()))
+	    (for-each
+	     (lambda (fullname)
+	       (let* ((fname (pathname-strip-directory fullname))
+                      (targn (conc work-area "/" fname)))
+		 (if (not (file-exists? targn))
+		     (set! bad-files (cons fname bad-files)))))
+	     files)
+	    (if (not (null? bad-files))
+                (begin
+                  (debug:print 0 *default-log-port* "INFO: test data from " testpath " not copied properly or filesystem problems causing data to not be found. Re-running the copy command.")
+                  (debug:print 0 *default-log-port* "INFO: missing files from " work-area ": " (string-intersperse bad-files ", "))
+                  (launch:test-copy testpath work-area))))
+
+          ;; one more time, change to the work-area directory
+          (change-directory work-area)
+          
 	  (launch:setup) ;; should be properly in the top-path now
 	  (set! tconfigreg (tests:get-all))
 	  (let ((sighand (lambda (signum)
@@ -561,7 +589,8 @@
 				  (exit))))
 		 (test-pid  (db:test-get-process_id  test-info)))
 	    (cond
-	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
+             ;; -mrw- I'm removing KILLREQ from this list so that a test in KILLREQ state is treated as a "do not run" flag.
+	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
 	      (debug:print 0 *default-log-port* "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
 	      ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
 	      (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
@@ -1072,6 +1101,22 @@
 		    (debug:print-error 0 *default-log-port* "No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists and has enough space!\n    You can change minspace in the [setup] section of megatest.config. Current setting is: " minspace))
 		(exit 1))))))) ;; TODO - move the exit to the calling location and return #f
 
+(define (launch:test-copy test-src-path test-path)
+  (let* ((ovrcmd (let ((cmd (config-lookup *configdat* "setup" "testcopycmd")))
+		   (if cmd
+		       ;; substitute the TEST_SRC_PATH and TEST_TARG_PATH
+		       (string-substitute "TEST_TARG_PATH" test-path
+					  (string-substitute "TEST_SRC_PATH" test-src-path cmd #t) #t)
+		       #f)))
+	 (cmd    (if ovrcmd 
+		     ovrcmd
+		     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"
+			   " >> " test-path "/mt_launch.log 2>> " test-path "/mt_launch.log")))
+	 (status (system cmd)))
+    (if (not (eq? status 0))
+	(debug:print 2 *default-log-port* "ERROR: problem with running \"" cmd "\""))))
+
+
 ;; Desired directory structure:
 ;;
 ;;  <linkdir> - <target> - <testname> -.
@@ -1236,19 +1281,7 @@
 
     (if (and test-src-path (directory? test-path))
 	(begin
-	  (let* ((ovrcmd (let ((cmd (config-lookup *configdat* "setup" "testcopycmd")))
-			   (if cmd
-			       ;; substitute the TEST_SRC_PATH and TEST_TARG_PATH
-			       (string-substitute "TEST_TARG_PATH" test-path
-						  (string-substitute "TEST_SRC_PATH" test-src-path cmd #t) #t)
-			       #f)))
-		 (cmd    (if ovrcmd 
-			     ovrcmd
-			     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"
-				   " >> " test-path "/mt_launch.log 2>> " test-path "/mt_launch.log")))
-		 (status (system cmd)))
-	    (if (not (eq? status 0))
-		(debug:print 2 *default-log-port* "ERROR: problem with running \"" cmd "\"")))
+	  (launch:test-copy test-src-path test-path)
 	  (list lnkpathf lnkpath ))
 	(if (and test-src-path (> remtries 0))
 	    (begin

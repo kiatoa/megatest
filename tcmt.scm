@@ -97,9 +97,9 @@
 	     (testdat-start-printed-set! tdat #t)))
        (if (not endp)
 	   (begin
-	     (if (member status '(PASS WARN SKIP WAIVED))
-		 (print "##teamcity[testFinished" tcname flowid comment details duration "]")
+	     (if (not (member status '(PASS WARN SKIP WAIVED)))
 		 (print "##teamcity[testFailed  " tcname flowid comment details "]"))
+             (print "##teamcity[testFinished" tcname flowid comment details duration "]")
 	     (testdat-end-printed-set! tdat #t))))
       (else
        (if flush-mode
@@ -111,6 +111,7 @@
 	     (if (not endp)
 		 (begin
 		   (print "##teamcity[testFailed  " tcname flowid comment details "]")
+                   (print "##teamcity[testFinished" tcname flowid comment details duration "]")
 		   (testdat-end-printed-set! tdat #t)))))))
     ;; (print "ERROR: tc-type \"" (testdat-tc-type tdat) "\" not recognised for " tcname)))
     (flush-output)))

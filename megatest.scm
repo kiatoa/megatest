@@ -92,7 +92,7 @@
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
   license GPL, Copyright Matt Welland 2006-2017
-
+ 
 Usage: megatest [options]
   -h                      : this help
   -manual                 : show the Megatest user manual
@@ -116,6 +116,7 @@ Launching and managing runs
   -preclean               : remove the existing test directory before running the test
   -clean-cache            : remove the cached megatest.config and runconfigs.config files
   -no-cache               : do not use the cached config files. 
+  -one-pass               : launch as many tests as you can but do not wait for more to be ready
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
@@ -349,6 +350,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-list-servers"
 			"-kill-servers"
                         "-run-wait"      ;; wait on a run to complete (i.e. no RUNNING)
+			"-one-pass"       ;;
 			"-local"         ;; run some commands using local db access
                         "-generate-html"
 
