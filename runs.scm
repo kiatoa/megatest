@@ -268,6 +268,45 @@
                  (debug:print-info 0 *default-log-port* "pre-hook \"" run-pre-hook "\" took " (- (current-seconds) start-time) " seconds to run.")))
               (debug:print 0 *default-log-port* "Skipping pre-hook call \"" run-pre-hook "\" as there are existing tests for this run.")))))
     
+(define (runs:run-post-hook run-id)
+    (let* ((run-post-hook   (configf:lookup *configdat* "runs" "post-hook"))
+           (existing-tests (if run-post-hook
+                               (rmt:get-tests-for-run run-id "%" '() '() ;; run-id testpatt states statuses
+                                                      #f #f ;; offset limit
+                                                      #f ;; not-in
+                                                      #f ;; sort-by
+                                                      #f ;; sort-order
+                                                      #f ;; get full data (not 'shortlist)
+                                                      0 ;; (runs:gendat-inc-results-last-update *runs:general-data*) ;; last update time
+                                                      'dashboard)
+                               '()))
+           (log-dir         (conc *toppath* "/logs"))
+           (log-file        (conc "post-hook-" (string-translate (getenv "MT_TARGET") "/" "-") "-" (getenv "MT_RUNNAME") ".log"))
+           (full-log-fname  (conc log-dir "/" log-file)))
+      (if run-post-hook
+          ;; (if (null? existing-tests)
+          ;;    (debug:print 0 *default-log-port* "Skipping post-hook call \"" run-post-hook "\" as there are existing tests for this run.")))))
+	  (let* ((use-log-dir (if (not (directory-exists? log-dir))
+				  (handle-exceptions
+				      exn
+				      (begin
+					(debug:print 0 *default-log-port* "WARNING: Failed to create " log-dir)
+					#f)
+				    (create-directory log-dir #t)
+				    #t)
+				  #t))
+		 (start-time   (current-seconds))
+		 (actual-logf  (if use-log-dir full-log-fname log-file)))
+	    (handle-exceptions
+		exn
+		(begin
+		  (print-call-chain *default-log-port*)
+		  (debug:print 0 *default-log-port* "Message: " ((condition-property-accessor 'exn 'message) exn))
+		  (debug:print 0 *default-log-port* "ERROR: failed to run post-hook " run-post-hook ", check the log " log-file))
+	      (debug:print-info 0 *default-log-port* "running run-post-hook: \"" run-post-hook "\", log is " actual-logf)
+	      (system (conc run-post-hook " >> " actual-logf " 2>&1"))
+	      (debug:print-info 0 *default-log-port* "post-hook \"" run-post-hook "\" took " (- (current-seconds) start-time) " seconds to run."))))))
+
 ;;  test-names: Comma separated patterns same as test-patts but used in selection 
 ;;              of tests to run. The item portions are not respected.
 ;;              FIXME: error out if /patt specified
@@ -523,16 +562,6 @@
 						  (print " message: " ((condition-property-accessor 'exn 'message) exn)))
 					      (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests
 								    (any->number reglen) all-tests-registry)))
-					    ;; (handle-exceptions
-					    ;;  exn
-					    ;;  (begin
-					    ;;    (print-call-chain (current-error-port))
-					    ;;    (debug:print-error 0 *default-log-port* "failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
-					    ;;    (if (> run-queue-retries 0)
-					    ;; 	   (begin
-					    ;; 	     (set! run-queue-retries (- run-queue-retries 1))
-					    ;; 	     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))))
-					    ;;  (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)))
 					  "runs:run-tests-queue"))
 		 (th2        (make-thread (lambda ()				    
 					    ;; (rmt:find-and-mark-incomplete-all-runs))))) CAN'T INTERRUPT IT ...
@@ -596,12 +625,13 @@
 	  '()
 	  reg)))
 
-
+;; this is the list of parameters to the named loop "loop" near the top of runs:run-tests-queue, look around line 1216
+;;
 (define (runs:loop-values tal reg reglen regfull reruns)
-  (list (runs:queue-next-hed tal reg reglen regfull)
-        (runs:queue-next-tal tal reg reglen regfull)
-        (runs:queue-next-reg tal reg reglen regfull)
-        reruns))
+  (list (runs:queue-next-hed tal reg reglen regfull)      ;; hed
+        (runs:queue-next-tal tal reg reglen regfull)      ;; tal
+        (runs:queue-next-reg tal reg reglen regfull)      ;; reg
+        reruns))                                          ;; reruns
 
 (define runs:nothing-left-in-queue-count 0)
 
@@ -870,10 +900,7 @@
       ;; but should check if it is due to lack of resources vs. prerequisites
       (debug:print-info 1 *default-log-port* "Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " test-patts)
       (if (or (not (null? tal))(not (null? reg)))
-	  (list (runs:queue-next-hed tal reg reglen regfull)
-		(runs:queue-next-tal tal reg reglen regfull)
-		(runs:queue-next-reg tal reg reglen regfull)
-		reruns)
+	  (runs:loop-values tal reg reglen regfull reruns)
 	  #f))
      
      ;; Register tests 
@@ -898,7 +925,7 @@
       (runs:shrink-can-run-more-tests-count runsdat)   ;; DELAY TWEAKER (still needed?)
       (if (and (null? tal)(null? reg))
 	  (list hed tal (append reg (list hed)) reruns)
-	  (list (runs:queue-next-hed tal reg reglen regfull)
+	  (list (runs:queue-next-hed tal reg reglen regfull) ;; cannot replace with a call to runs:loop-values as the logic is different for reg
 		(runs:queue-next-tal tal reg reglen regfull)
 		;; NB// Here we are building reg as we register tests
 		;; if regfull we must pop the front item off reg
@@ -955,10 +982,7 @@
       (runs:shrink-can-run-more-tests-count runsdat)  ;; DELAY TWEAKER (still needed?)
       ;; (thread-sleep! *global-delta*)
       (if (or (not (null? tal))(not (null? reg)))
-	  (list (runs:queue-next-hed tal reg reglen regfull)
-		(runs:queue-next-tal tal reg reglen regfull)
-		(runs:queue-next-reg tal reg reglen regfull)
-		reruns)
+	  (runs:loop-values tal reg reglen regfull reruns)
 	  #f))
      
      ;; must be we have unmet prerequisites
@@ -994,21 +1018,14 @@
 		    ;; This next is for the items
 		    (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "BLOCKED" #f)
 		    (hash-table-set! test-registry (db:test-make-full-name test-name item-path) 'removed)
-		    (list (runs:queue-next-hed tal reg reglen regfull)
-			  (runs:queue-next-tal tal reg reglen regfull)
-			  (runs:queue-next-reg tal reg reglen regfull)
-			  reruns ;; WAS: (cons hed reruns) ;; but that makes no sense?
-			  ))
+		    (runs:loop-values tal reg reglen regfull reruns))
 		  (let ((nth-try (hash-table-ref/default test-registry hed 0)))
 		    (cond
 		     ((member "RUNNING" (map db:test-get-state prereqs-not-met))
 		      (if (runs:lownoise (conc "possible RUNNING prerequistes " hed) 60)
 			  (debug:print 0 *default-log-port* "WARNING: test " hed " has possible RUNNING prerequisites, don't give up on it yet."))
 		      (thread-sleep! 4)
-		      (list (runs:queue-next-hed newtal reg reglen regfull)
-			    (runs:queue-next-tal newtal reg reglen regfull)
-			    (runs:queue-next-reg newtal reg reglen regfull)
-			    reruns))
+		      (runs:loop-values tal reg reglen regfull reruns))
 		     ((or (not nth-try)
 			  (and (number? nth-try)
 			       (< nth-try 10)))
@@ -1019,13 +1036,7 @@
 			  (debug:print 1 *default-log-port* "WARNING: not removing test " hed " from queue although it may not be runnable due to FAILED prerequisites"))
 		      ;; may not have processed correctly. Could be a race condition in your test implementation? Dropping test " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
 		      (runs:shrink-can-run-more-tests-count runsdat) ;; DELAY TWEAKER (still needed?)
-		      ;; (list hed tal reg reruns)
-		      ;; (list (car newtal)(cdr newtal) reg reruns)
-		      ;; (hash-table-set! test-registry hed 'removed)
-		      (list (runs:queue-next-hed newtal reg reglen regfull)
-			    (runs:queue-next-tal newtal reg reglen regfull)
-			    (runs:queue-next-reg newtal reg reglen regfull)
-			    reruns))
+		      (runs:loop-values newtal reg reglen regfull reruns))
 		     ((symbol? nth-try)
 		      (if (eq? nth-try 'removed) ;; removed is removed - drop it NOW
 			  (if (null? tal)
@@ -1036,10 +1047,7 @@
 				(debug:print 0 *default-log-port* "WARNING: test " hed " has FAILED prerequisites or other issue. Internal state " nth-try " will be overridden and we'll retry."))
 			    (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "KEEP_TRYING" #f)
 			    (hash-table-set! test-registry hed 0)
-			    (list (runs:queue-next-hed newtal reg reglen regfull)
-				  (runs:queue-next-tal newtal reg reglen regfull)
-				  (runs:queue-next-reg newtal reg reglen regfull)
-				  reruns))))
+			    (runs:loop-values newtal reg reglen regfull))))
 		     (else
 		      (if (runs:lownoise (conc "FAILED prerequitests and we tried" hed) 60)
 			  (debug:print 0 *default-log-port* "WARNING: test " hed " has FAILED prerequitests and we've tried at least 10 times to run it. Giving up now."))
@@ -1053,13 +1061,10 @@
 			    reg
 			    reruns)))))
 	      ;; can't drop this - maybe running? Just keep trying
-	      (let ((runable-tests (runs:runable-tests prereqs-not-met)))
+	      (let ((runable-tests (runs:runable-tests prereqs-not-met))) ;; SUSPICIOUS: Should look at more than just prereqs-not-met?
 		(if (null? runable-tests)
 		    #f   ;; I think we are truly done here
-		    (list (runs:queue-next-hed newtal reg reglen regfull)
-			    (runs:queue-next-tal newtal reg reglen regfull)
-			    (runs:queue-next-reg newtal reg reglen regfull)
-			    reruns)))))))))
+		    (runs:loop-values newtal reg reglen regfull reruns)))))))))
 
 ;; scan a list of tests looking to see if any are potentially runnable
 ;;
@@ -1464,6 +1469,7 @@
 	    (wait-loop (rmt:get-count-tests-running-for-run-id run-id) num-running))))
     ;; LET* ((test-record
     ;; we get here on "drop through". All done!
+    (runs:run-post-hook run-id)
     (debug:print-info 1 *default-log-port* "All tests launched")))
 
 (define (runs:calc-fails prereqs-not-met)
