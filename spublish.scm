@@ -383,9 +383,9 @@ Version: " megatest-fossil-hash)) ;; "
 (define (spublish:shell-cp src-path target-path)  
   (cond
    ((not (file-exists? target-path))
-	(print "ERROR: target Directory " target-path " does not exist!!"))
+	(sauth:print-error (conc " target Directory " target-path " does not exist!!")))
    ((not (file-exists? src-path))
-    (print "Error: Source path " src-path " does not exist!!" ))
+    (sauth:print-error (conc "Source path " src-path " does not exist!!" )))
    (else
      (if (is_directory src-path) 
         (begin
@@ -414,7 +414,7 @@ Version: " megatest-fossil-hash)) ;; "
 (define (spublish:shell-mkdir targ-path)
     (if (file-exists? targ-path)
 	(begin
-	  (print "ERROR: target Directory " targ-path " already exist!!"))
+	  (print "Info: Target Directory " targ-path " already exist!!"))
         (let* ((th1         (make-thread
 			 (lambda ()
 			   (create-directory targ-path #t)
@@ -437,16 +437,18 @@ Version: " megatest-fossil-hash)) ;; "
 (define (spublish:shell-rm targ-path iport)
     (if (not (file-exists? targ-path))
 	(begin
-	  (print "ERROR: target path " targ-path " does not exist!!"))
+	  (sauth:print-error (conc "target path " targ-path " does not exist!!")))
         (begin 
            (print "Are you sure you want to delete " targ-path "?[y/n]") 
             (let* ((inl (read-line iport)))
                 (if (equal? inl "y")
 	             (let* ((th1         (make-thread
 			     (lambda ()
-                                (if (directory? targ-path)
-                                 (delete-directory targ-path #t)     
-			        (delete-file  targ-path ))
+                                (if (symbolic-link? targ-path)
+                                  (delete-file  targ-path )  
+                                  (if (directory? targ-path)
+                                    (delete-directory targ-path #t)     
+			            (delete-file  targ-path )))
 			        (print " ... path " targ-path " deleted"))
 			        "rm thread"))
 	   		    (th2         (make-thread
@@ -464,13 +466,13 @@ Version: " megatest-fossil-hash)) ;; "
 
 (define (spublish:shell-ln src-path target-path sub-path)
    (if (not (file-exists? sub-path))
-	 (print "ERROR: Path " sub-path " does not exist!! cannot proceed with link creation!!")
+	 (sauth:print-error (conc "Path " sub-path " does not exist!! cannot proceed with link creation!!"))
         (begin  
           (if (not (file-exists? src-path))
-  	    (print "ERROR: Path " src-path " does not exist!! cannot proceed with link creation!!")
+  	    (sauth:print-error (conc "Path " src-path " does not exist!! cannot proceed with link creation!!"))
             (begin
                 (if (file-exists? target-path)
-                   (print "ERROR: Path " target-path "already exist!! cannot proceed with link creation!!")
+                   (sauth:print-error (conc "Path " target-path "already exist!! cannot proceed with link creation!!"))
                    (begin 
                       (create-symbolic-link src-path target-path  )
 			   (print " ... link " target-path " created"))))))))

@@ -447,10 +447,14 @@ name))
               (begin
               (print "Missing argument to publish. \n publish <action> <area> [opts] ") 
               (exit 1)))
+            
            (let* ((action (car args))
                   (area (cadr args))
                   (cmd-args (cddr args)) 
                   (code-obj (get-obj-by-code area)))
+           ;(print "area " area)
+           ;(print "code: " code-obj)  
+           ;(print (exe-exist (cadr code-obj)  "publish")) 
            (if (or (null? code-obj)
                    (not (exe-exist (cadr code-obj)  "publish")))
               (begin
@@ -550,6 +554,28 @@ name))
                 (print "Admin only function"))
                 (sauthorize:db-do   (lambda (db)
              (sauthorize:db-qry db (conc "INSERT INTO actions (cmd,user_id,area_id,action_type ) VALUES ('area-admin " usr " ', " user-id ",0, 'area-admin ')" )))))) 
+          ((mk-admin)
+           (let* ((usr (car args))
+                  (usr-obj (get-user usr))
+                  (user-id (car (get-user username))))
+                (if (not (sauthorize:valid-unix-user usr))
+               (begin  
+                (print "User " usr " is Invalid unix user!!")
+                 (exit 1)))
+
+                (if (member  username  *super-users*)
+                (begin
+                  (if (null? usr-obj)
+                    (begin
+                        (sauthorize:db-do   (lambda (db)
+                           (sauthorize:db-qry db (conc "INSERT INTO users (username,is_admin) VALUES ( '" usr "', 'yes' )")))))
+               (begin
+                 (sauthorize:db-do   (lambda (db)
+                (sauthorize:db-qry db (conc "update users set is_admin = 'yes' where id = " (car usr-obj)))))))
+                (print "User " usr " is updated with admin access!"))
+                (print "Super-Admin only function"))
+                (sauthorize:db-do   (lambda (db)
+             (sauthorize:db-qry db (conc "INSERT INTO actions (cmd,user_id,area_id,action_type ) VALUES ('mk-admin " usr " ', " user-id ",0, 'mk-admin ')" )))))) 
 
          ((register-log)
             (if (< (length args) 4)

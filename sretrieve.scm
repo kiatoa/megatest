@@ -524,7 +524,7 @@ Version: " megatest-fossil-hash)) ;; "
 
 (define (sretrieve:get-shell-cmd target-path base-path restrictions iport)
      (if (not (file-exists? target-path))
-        (print "Target path does not exist!")
+        (sauth:print-error "Target path does not exist!")
     (begin
     (if (not (equal? target-path #f))
     (begin     
@@ -616,7 +616,7 @@ Version: " megatest-fossil-hash)) ;; "
 	     (exit 1))
   
     (if (not (file-exists? target-path))
-        (print "Error:Target path does not exist!")
+        (sauth:print-error "Error:Target path does not exist!")
     (begin
     (if (not (equal? target-path #f))
     (begin     
@@ -632,8 +632,8 @@ Version: " megatest-fossil-hash)) ;; "
                    (tmpfile (conc "/tmp/" (current-user-name) "/my-pipe-" (current-process-id))))
                     (if  (file-exists? start-dir)
                     (begin
-                         (print last-dir-name " already exist in your work dir.")
-                         (print  "Nothing has been retrieved!!  "))
+                         (sauth:print-error (conclast-dir-name " already exist in your work dir."))
+                         (sauth:print-error  "Nothing has been retrieved!!  "))
                      (begin
                    ;    (sretrieve:do-as-calling-user
                    ; (lambda ()
@@ -912,7 +912,7 @@ Version: " megatest-fossil-hash)
       ((get)
        (if (< (length args) 2)
 	   (begin 
-	     (print  "ERROR: Missing arguments; <area> <relative path>" )
+	     (sauth:print-error  "Missing arguments; <area> <relative path>" )
 	     (exit 1)))
        (let* ((remargs     (args:get-args args '("-m" ) '() args:arg-hash 0))
               (iport (make-readline-port ">"))
@@ -930,7 +930,7 @@ Version: " megatest-fossil-hash)
 
           (if (null? area-obj)
           	    (begin 
-             		(print "Area " area " does not exist")
+             		(sauth:print-error (conc "Area " area " does not exist"))
           	         (exit 1)))
               (let* ((target-path (sauth-common:get-target-path '()  (conc area "/" sub-path) top-areas base-path))
 		     (restrictions (if (equal? target-path #f)
@@ -945,7 +945,7 @@ Version: " megatest-fossil-hash)
          ((cp)
              (if (< (length args) 2)
 	   (begin 
-	     (print  "ERROR: Missing arguments; <area> <relative path>" )
+	     (sauth:print-error  "Missing arguments; <area> <relative path>" )
 	     (exit 1)))
        (let* ((remargs     (args:get-args args '("-m" ) '() args:arg-hash 0))
               (iport (make-readline-port ">"))
@@ -963,7 +963,7 @@ Version: " megatest-fossil-hash)
          ;  (print args)
           (if (null? area-obj)
           	    (begin 
-             		(print "Area " area " does not exist")
+             		(sauth:print-error (conc "Area " area " does not exist"))
           	         (exit 1)))
               (let* ((target-path (sauth-common:get-target-path '()  (conc area "/" sub-path) top-areas base-path))
 				 (restrictions (if (equal? target-path #f)
