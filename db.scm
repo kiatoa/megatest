@@ -1589,7 +1589,7 @@
   (let* ((incompleted '())
 	 (oldlaunched '())
 	 (toplevels   '())
-	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
+	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime")) ;; FIXME suspect test run time & deadtime are not well matched; resulting in COMPLETED/DEAD status of an a-ok running test
 	 (deadtime     (if (and deadtime-str
 				(string->number deadtime-str))
 			   (string->number deadtime-str)
@@ -1652,7 +1652,8 @@
                (debug:print 0 *default-log-port* "WARNING: Marking test(s); " (string-intersperse (map conc all-ids) ", ") " as INCOMPLETE")
                (for-each
                 (lambda (test-id)
-                  (db:test-set-state-status dbstruct run-id test-id "COMPLETED" "DEAD" "Test failed to complete")) ;; fix for one aspect of Randy's ticket 1405717332
+                  (db:test-set-state-status dbstruct run-id test-id "COMPLETED" "DEAD" "Test failed to complete")) ;; fix for one aspect of Randy's ticket 1405717332 ;; TODO - fix problem where test goes to COMPLETED/DEAD while in progress, only later to go to COMPLETED/PASS.  ref ticket 220546828
+
                 all-ids))))))))
 
 ;; ALL REPLACED BY THE BLOCK ABOVE
