@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
+(use srfi-1 data-structures posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
      matchable)
 (require-extension regex posix)
 
@@ -32,6 +32,23 @@
 ;;       (old-exit)
 ;;       (old-exit code)))
 
+
+;; execute thunk, return value.  If exception thrown, trap exception, return #f, and emit nonfatal condition note to *default-log-port* .
+;; arguments - thunk, message
+(define (common:fail-safe thunk warning-message-on-exception)
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print-info 0 *default-log-port* "notable but nonfatal condition - "warning-message-on-exception)
+     (debug:print-info 0 *default-log-port*
+                       (string-substitute "\n?Error:" "nonfatal condition:"
+                                          (with-output-to-string
+                                            (lambda ()
+                                              (print-error-message exn) ))))
+     (debug:print-info 0 *default-log-port* "    -- continuing after nonfatal condition...")
+     #f)
+   (thunk)))
+
 (define getenv get-environment-variable)
 (define (safe-setenv key val)
   (if (substring-index ":" key) ;; variables containing : are for internal use and cannot be environment variables.
@@ -46,6 +63,16 @@
 
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
+
+
+;; returns list of fd count, socket count
+(define (get-file-descriptor-count #!key  (pid (current-process-id )))
+  (list
+    (length (glob (conc "/proc/" pid "/fd/*")))
+    (length  (filter identity (map socket? (glob (conc "/proc/" pid "/fd/*")))))
+  )
+)
+
 
 ;; GLOBALS
 
@@ -162,7 +189,7 @@
   (last-server-check 0)  ;; last time we checked to see if the server was alive
   (conndat           #f)
   (transport         *transport-type*)
-  (server-timeout    (server:get-timeout)) ;; default from server:get-timeout
+  (server-timeout    (server:expiration-timeout))
   (force-server      #f)
   (ro-mode           #f)  
   (ro-mode-checked   #f)) ;; flag that indicates we have checked for ro-mode
@@ -1494,14 +1521,14 @@
     (cond
      ((and (> first adjload)
 	   (> count 0))
-      (debug:print-info 0 *default-log-port* "server start delayed " waitdelay " seconds due to load " first " exceeding max of " adjload " (normalized load-limit: " maxload ") " (if msg msg ""))
+      (debug:print-info 0 *default-log-port* "server start delayed " waitdelay " seconds due to load " first " exceeding max of " adjload " on server " (or remote-host (get-host-name)) " (normalized load-limit: " maxload ") " (if msg msg ""))
       (thread-sleep! waitdelay)
-      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
+      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1) msg: msg remote-host: remote-host))
      ((and (> loadjmp numcpus)
 	   (> count 0))
       (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus (if msg msg ""))
       (thread-sleep! waitdelay)
-      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
+      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1) msg: msg remote-host: remote-host)))))
 
 (define (common:wait-for-homehost-load maxload msg)
   (let* ((hh-dat (if (common:on-homehost?) ;; if we are on the homehost then pass in #f so the calls are local.
@@ -1509,7 +1536,7 @@
                      (common:get-homehost)))
          (hh     (if hh-dat (car hh-dat) #f))
          (numcpus (common:get-num-cpus hh)))
-    (common:wait-for-normalized-load maxload msg: msg remote-host: hh)))
+    (common:wait-for-normalized-load maxload msg hh)))
 
 (define (common:get-num-cpus remote-host)
   (let ((proc (lambda ()
@@ -1529,7 +1556,7 @@
 
 ;; wait for normalized cpu load to drop below maxload
 ;;
-(define (common:wait-for-normalized-load maxload #!key (msg #f)(remote-host #f))
+(define (common:wait-for-normalized-load maxload msg remote-host)
   (let ((num-cpus (common:get-num-cpus remote-host)))
     (common:wait-for-cpuload maxload num-cpus 15 msg: msg remote-host: remote-host)))
 

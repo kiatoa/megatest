@@ -481,7 +481,8 @@
 	 '("event_time"     #f)
 	 '("fail_count"     #f)
 	 '("pass_count"     #f)
-	 '("archived"       #f))
+	 '("archived"       #f)
+         '("last_update"    #f))
   (list "test_steps"
 	 '("id"             #f)
 	 '("test_id"        #f)
@@ -490,7 +491,8 @@
 	 '("status"         #f)
 	 '("event_time"     #f)
 	 '("comment"        #f)
-	 '("logfile"        #f))
+	 '("logfile"        #f)
+         '("last_update"    #f))
    (list "test_data"
 	 '("id"             #f)
 	 '("test_id"        #f)
@@ -502,7 +504,8 @@
 	 '("units"          #f)
 	 '("comment"        #f)
 	 '("status"         #f)
-	 '("type"           #f))))
+	 '("type"           #f)
+         '("last_update"    #f))))
 
 ;; needs db to get keys, this is for syncing all tables
 ;;
@@ -518,7 +521,7 @@
 		   '("id"  #f))
 	     (map (lambda (k)(list k #f))
 		  (append keys
-			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count" "contour"))))
+			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count" "contour" "last_update"))))
      (list "test_meta"
 	   '("id"             #f)
 	   '("testname"       #f)
@@ -1044,22 +1047,36 @@
 (define (db:tmp->megatest.db-sync dbstruct last-update)
   (let* ((mtdb        (dbr:dbstruct-mtdb dbstruct))
 	 (tmpdb       (db:get-db dbstruct))
-	 (refndb      (dbr:dbstruct-refndb dbstruct)))
-    (db:sync-tables (db:sync-all-tables-list dbstruct) last-update tmpdb refndb mtdb)))
+	 (refndb      (dbr:dbstruct-refndb dbstruct))
+	 (res         (db:sync-tables (db:sync-all-tables-list dbstruct) last-update tmpdb refndb mtdb)))
+    (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb)
+    res))
 
 ;;;; run-ids
 ;;    if #f use *db-local-sync* : or 'local-sync-flags
 ;;    if #t use timestamps      : or 'timestamps
+;;
+;;  NB// no-sync-db is the db handle, not a flag!
+;;
 (define (db:sync-to-megatest.db dbstruct #!key (no-sync-db #f)) 
   (let* ((start-time         (current-seconds))
-	 (last-update        (if no-sync-db
-				 (db:no-sync-get/default no-sync-db "LAST_UPDATE" 0)
-				 0)) ;; (or (db:get-var dbstruct "LAST_UPDATE") 0))
+	 (last-full-update   (if no-sync-db
+				 (db:no-sync-get/default no-sync-db "LAST_FULL_UPDATE" 0)
+				 0))
+	 (full-sync-needed   (> (- start-time last-full-update) 3600)) ;; every hour do a full sync
+	 (last-update        (if full-sync-needed
+				 0
+				 (if no-sync-db
+				     (db:no-sync-get/default no-sync-db "LAST_UPDATE" 0)
+				     0))) ;; (or (db:get-var dbstruct "LAST_UPDATE") 0))
 	 (sync-needed        (> (- start-time last-update) 6))
-	 (res                (if sync-needed ;; don't sync if a sync already occurred in the past 6 seconds
+	 (res                (if (or sync-needed ;; don't sync if a sync already occurred in the past 6 seconds
+				     full-sync-needed)
 				 (begin
 				   (if no-sync-db
-				       (db:no-sync-set no-sync-db "LAST_UPDATE" start-time))
+				       (begin
+					 (if full-sync-needed (db:no-sync-set no-sync-db "LAST_FULL_UPDATE" start-time))
+					 (db:no-sync-set no-sync-db "LAST_UPDATE" start-time)))
 				   (db:tmp->megatest.db-sync dbstruct last-update))
 				 0))
 	 (sync-time           (- (current-seconds) start-time)))
@@ -1364,6 +1381,7 @@
              WHERE b.id IN (" (string-intersperse (map conc res) ",") ") AND
          last_df > ?;")
 	 dneeded))
+    (stack-push! (dbr:dbstruct-dbstack dbstruct) dbdat)
     blocks))
     
 ;; returns id of the record, register a disk allocated to archiving and record it's last known
@@ -1420,7 +1438,9 @@
 	  (sqlite3:execute db "INSERT OR REPLACE INTO archive_blocks (archive_disk_id,disk_path,last_du)
                                                         VALUES (?,?,?);"
 			   bdisk-id archive-path (or du 0))
-	  (db:archive-register-block-name dbstruct bdisk-id archive-path du: du)))))
+	  (db:archive-register-block-name dbstruct bdisk-id archive-path du: du)))
+    (stack-push! (dbr:dbstruct-dbstack dbstruct) dbdat)
+    res))
 
 
 ;; The "archived" field in tests is overloaded; 0 = not archived, > 0 archived in block with given id
@@ -1851,10 +1871,14 @@
 (define (db:open-no-sync-db)
   (let* ((dbpath (db:dbfile-path))
 	 (dbname (conc dbpath "/no-sync.db"))
+	 (db-exists (common:file-exists? dbname))
 	 (db     (sqlite3:open-database dbname)))
     (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-    (sqlite3:execute db "PRAGMA synchronous = 0;")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS no_sync_metadat (var TEXT,val TEXT, CONSTRAINT no_sync_metadat_constraint UNIQUE (var));")
+    (if (not db-exists)
+	(begin
+	  (sqlite3:execute db "PRAGMA synchronous = 0;")
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS no_sync_metadat (var TEXT,val TEXT, CONSTRAINT no_sync_metadat_constraint UNIQUE (var));")
+	  (sqlite3:execute db "PRAGMA journal_mode=WAL;")))
     db))
 
 ;; if we are not a server create a db handle. this is not finalized
@@ -4264,6 +4288,7 @@
 	   (conc (current-directory) "/" outputfile)))
      results)
     ;; brutal clean up
+    (stack-push! (dbr:dbstruct-dbstack dbstruct) dbdat)
     (system "rm -rf tempdir")))
 
 ;; (db:extract-ods-file db "outputfile.ods" '(("sysname" "%")("fsname" "%")("datapath" "%")) "%")

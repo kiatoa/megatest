@@ -453,7 +453,7 @@
                                   #f
                                   (if (substring-index "/" runscript)
                                       runscript ;; use unadultered if contains slashes
-                                      (let ((fulln (conc testpath "/" runscript)))
+                                      (let ((fulln (conc work-area "/" runscript)))
 	                                  (if (and (common:file-exists? fulln)
                                                    (file-execute-access? fulln))
                                               fulln
@@ -469,63 +469,91 @@
 	  (set! *toppath* top-path)
 	  (setenv "MT_TEST_RUN_DIR"  work-area)
 
-	  ;; On NFS it can be slow and unreliable to get needed startup information.
-	  ;;  i. Check if we are on the homehost, if so, proceed
-	  ;; ii. Check if host and port passed in via CMDINFO are valid and if
-	  ;;     possible use them.
-	  (let ((bestadrs (server:get-best-guess-address (get-host-name)))
-		(needcare #f))
-	    (if (equal? homehost bestadrs) ;; we are likely on the homehost
-		(debug:print-info 0 *default-log-port* "test " test-name " appears to be running on the homehost " homehost)
-		(let ((host-port (if serverurl (string-split serverurl ":") #f)))
-		  (if (not *runremote*)(set! *runremote* (make-remote))) ;; init *runremote*
-		  (if (string? homehost)
-		      (if (and host-port
-			       (> (length host-port) 1))
-			  (let* ((host      (car host-port))
-                                 (port      (cadr host-port))
-                                 (start-res (http-transport:client-connect host port))
-                                 (ping-res  (rmt:login-no-auto-client-setup start-res)))
-			    (if (and start-res
-				     ping-res)
-				;; (begin ;; let ((url  (http-transport:server-dat-make-url start-res)))
-				(begin
-				  (remote-conndat-set! *runremote* start-res)
-				  ;; (remote-server-url-set! *runremote* url)
-				  ;; (if (server:ping url)
-				  (debug:print-info 0 *default-log-port* "connected to " host ":" port " using CMDINFO data."))
-				(begin
-				  (debug:print-info 0 *default-log-port* "have CMDINFO data but failed to connect to " host ":" port)
-				  (set! *runremote* #f))
-				  ;; (remote-conndat-set! *runremote* #f))
-				))
-			  (begin
-			    (set! *runremote* #f)
-			    (debug:print-info 0 *default-log-port* (if host-port
-								       (conc "received invalid host-port information " host-port)
-								       "no host-port information received"))
-			    ;; potential for bad situation if simultaneous starting of hundreds of jobs on servers, set needcare.
-			    (set! needcare #t)))
-		      (begin
-			(set! *runremote* #f)
-			(debug:print-info 0 *default-log-port* "received no homehost information. Please report this to support as it should not happen.")
-			(set! needcare #t)))))
-	    (if needcare  ;; due to very slow NFS we will do a brute force mkdir to ensure that the directory inode it truly available on this host
-		(let ((logdir (conc top-path "/logs"))) ;; we'll try to create this directory
-		  (handle-exceptions
-		      exn
-		      (debug:print 0 *default-log-port* "Failed to create directory " logdir " expect problems, message: " ((condition-property-accessor 'exn 'message) exn))
-		    (create-directory logdir #t)))))
-		  
+	;;    ;; On NFS it can be slow and unreliable to get needed startup information.
+	;;    ;;  i. Check if we are on the homehost, if so, proceed
+	;;    ;; ii. Check if host and port passed in via CMDINFO are valid and if
+	;;    ;;     possible use them.
+	;;    (let ((bestadrs (server:get-best-guess-address (get-host-name)))
+	;;    	(needcare #f))
+	;;      (if (equal? homehost bestadrs) ;; we are likely on the homehost
+	;;    	(debug:print-info 0 *default-log-port* "test " test-name " appears to be running on the homehost " homehost)
+	;;    	(let ((host-port (if serverurl (string-split serverurl ":") #f)))
+	;;    	  (if (not *runremote*)(set! *runremote* (make-remote))) ;; init *runremote*
+	;;    	  (if (string? homehost)
+	;;    	      (if (and host-port
+	;;    		       (> (length host-port) 1))
+	;;    		  (let* ((host      (car host-port))
+        ;;                           (port      (cadr host-port))
+        ;;                           (start-res (http-transport:client-connect host port))
+        ;;                           (ping-res  (rmt:login-no-auto-client-setup start-res)))
+	;;    		    (if (and start-res
+	;;    			     ping-res)
+	;;    			;; (begin ;; let ((url  (http-transport:server-dat-make-url start-res)))
+	;;    			(begin
+	;;    			  (remote-conndat-set! *runremote* start-res)
+	;;    			  ;; (remote-server-url-set! *runremote* url)
+	;;    			  ;; (if (server:ping url)
+	;;    			  (debug:print-info 0 *default-log-port* "connected to " host ":" port " using CMDINFO data."))
+	;;    			(begin
+	;;    			  (debug:print-info 0 *default-log-port* "have CMDINFO data but failed to connect to " host ":" port)
+	;;    			  (set! *runremote* #f))
+	;;    			  ;; (remote-conndat-set! *runremote* #f))
+	;;    			))
+	;;    		  (begin
+	;;    		    (set! *runremote* #f)
+	;;    		    (debug:print-info 0 *default-log-port* (if host-port
+	;;    							       (conc "received invalid host-port information " host-port)
+	;;    							       "no host-port information received"))
+	;;    		    ;; potential for bad situation if simultaneous starting of hundreds of jobs on servers, set needcare.
+	;;    		    (set! needcare #t)))
+	;;    	      (begin
+	;;    		(set! *runremote* #f)
+	;;    		(debug:print-info 0 *default-log-port* "received no homehost information. Please report this to support as it should not happen.")
+	;;    		(set! needcare #t)))))
+	;;      (if needcare  ;; due to very slow NFS we will do a brute force mkdir to ensure that the directory inode it truly available on this host
+	;;    	(let ((logdir (conc top-path "/logs"))) ;; we'll try to create this directory
+	;;    	  (handle-exceptions
+	;;    	      exn
+	;;    	      (debug:print 0 *default-log-port* "Failed to create directory " logdir " expect problems, message: " ((condition-property-accessor 'exn 'message) exn))
+	;;    	    (create-directory logdir #t)))))
+	;;    	  
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
-	    (if (or (common:file-exists? top-path)
+	    (if (or (common:directory-exists? work-area)
 		    (> count 10))
-		(change-directory top-path)
+		(change-directory work-area)
 		(begin
-		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " top-path " not found")
+		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " work-area " not found")
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
+
+          (if (not (string=?  (common:real-path work-area)(common:real-path (current-directory))))
+              (begin
+                (debug:print 0 *default-log-port*
+                             "INFO: we are expecting to be in directory " work-area "\n"
+                             "     but we are actually in the directory " (current-directory) "\n"
+                             "     doing another change dir.")
+                (change-directory work-area)))
+          
+	  ;; spot check that the files in testpath are available. Too often NFS delays cause problems here.
+	  (let ((files      (glob (conc testpath "/*")))
+		(bad-files '()))
+	    (for-each
+	     (lambda (fullname)
+	       (let* ((fname (pathname-strip-directory fullname))
+                      (targn (conc work-area "/" fname)))
+		 (if (not (file-exists? targn))
+		     (set! bad-files (cons fname bad-files)))))
+	     files)
+	    (if (not (null? bad-files))
+                (begin
+                  (debug:print 0 *default-log-port* "INFO: test data from " testpath " not copied properly or filesystem problems causing data to not be found. Re-running the copy command.")
+                  (debug:print 0 *default-log-port* "INFO: missing files from " work-area ": " (string-intersperse bad-files ", "))
+                  (launch:test-copy testpath work-area))))
+
+          ;; one more time, change to the work-area directory
+          (change-directory work-area)
+          
 	  (launch:setup) ;; should be properly in the top-path now
 	  (set! tconfigreg (tests:get-all))
 	  (let ((sighand (lambda (signum)
@@ -561,7 +589,8 @@
 				  (exit))))
 		 (test-pid  (db:test-get-process_id  test-info)))
 	    (cond
-	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
+             ;; -mrw- I'm removing KILLREQ from this list so that a test in KILLREQ state is treated as a "do not run" flag.
+	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
 	      (debug:print 0 *default-log-port* "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
 	      ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
 	      (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
@@ -950,8 +979,20 @@
                          (cachefiles   (launch:get-cache-file-paths areapath toppath target mtconfig))
                          (mtcachef     (car cachefiles))
                          (rccachef     (cdr cachefiles)))
-		    (if rccachef (configf:write-alist runconfigdat rccachef))
-		    (if mtcachef (configf:write-alist *configdat* mtcachef))
+                    ;;  trap exception due to stale NFS handle -- Error: (open-output-file) cannot open file - Stale NFS file handle: "/p/fdk/gwa/lefkowit/mtTesting/qa/primbeqa/links/p1222/11/PDK_r1.1.1/prim/clean/pcell_testgen/.runconfigs.cfg-1.6427-7d1e789cb3f62f9cde719a4865bb51b3c17ea853" - ticket 220546342
+                    ;; TODO - consider 1) using simple-lock to bracket cache write
+                    ;;                 2) cache in hash on server, since need to do rmt: anyway to lock.
+
+		    (if rccachef
+                        (common:fail-safe
+                         (lambda ()
+                           (configf:write-alist runconfigdat rccachef))
+                         (conc "Could not write cache file - "rccachef)))
+                    (if mtcachef
+                        (common:fail-safe
+                         (lambda ()
+                           (configf:write-alist *configdat* mtcachef))
+                         (conc "Could not write cache file - "mtcachef)))
 		    (set! *runconfigdat* runconfigdat)
 		    (if (and rccachef mtcachef) (set! *configstatus* 'fulldata))))
 		;; no configs found? should not happen but let's try to recover gracefully, return an empty hash-table
@@ -1020,8 +1061,22 @@
         (let* ((cachefiles   (launch:get-cache-file-paths areapath toppath target mtconfig))
                (mtcachef     (car cachefiles))
                (rccachef     (cdr cachefiles)))
-          (if (and rccachef *runconfigdat* (not (common:file-exists? rccachef))) (configf:write-alist *runconfigdat* rccachef))
-          (if (and mtcachef *configdat*    (not (common:file-exists? mtcachef))) (configf:write-alist *configdat* mtcachef))
+
+          ;; trap exception due to stale NFS handle -- Error: (open-output-file) cannot open file - Stale NFS file handle: "/p/fdk/gwa/lefkowit/mtTesting/qa/primbeqa/links/p1222/11/PDK_r1.1.1/prim/clean/pcell_testgen/.runconfigs.cfg-1.6427-7d1e789cb3f62f9cde719a4865bb51b3c17ea853" - ticket 220546342
+          ;; TODO - consider 1) using simple-lock to bracket cache write
+          ;;                 2) cache in hash on server, since need to do rmt: anyway to lock.
+          (if (and rccachef *runconfigdat* (not (common:file-exists? rccachef)))
+              (common:fail-safe
+               (lambda ()
+                 (configf:write-alist *runconfigdat* rccachef))
+               (conc "Could not write cache file - "rccachef))
+              )
+          (if (and mtcachef *configdat*    (not (common:file-exists? mtcachef)))
+              (common:fail-safe
+               (lambda ()
+                 (configf:write-alist *configdat* mtcachef))
+               (conc "Could not write cache file - "mtcachef))
+              )
           (if (and rccachef mtcachef *runconfigdat* *configdat*)
               (set! *configstatus* 'fulldata)))
 
@@ -1045,6 +1100,22 @@
 		(if (common:low-noise-print 20 "No valid disks or no disk with enough space")
 		    (debug:print-error 0 *default-log-port* "No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists and has enough space!\n    You can change minspace in the [setup] section of megatest.config. Current setting is: " minspace))
 		(exit 1))))))) ;; TODO - move the exit to the calling location and return #f
+
+(define (launch:test-copy test-src-path test-path)
+  (let* ((ovrcmd (let ((cmd (config-lookup *configdat* "setup" "testcopycmd")))
+		   (if cmd
+		       ;; substitute the TEST_SRC_PATH and TEST_TARG_PATH
+		       (string-substitute "TEST_TARG_PATH" test-path
+					  (string-substitute "TEST_SRC_PATH" test-src-path cmd #t) #t)
+		       #f)))
+	 (cmd    (if ovrcmd 
+		     ovrcmd
+		     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"
+			   " >> " test-path "/mt_launch.log 2>> " test-path "/mt_launch.log")))
+	 (status (system cmd)))
+    (if (not (eq? status 0))
+	(debug:print 2 *default-log-port* "ERROR: problem with running \"" cmd "\""))))
+
 
 ;; Desired directory structure:
 ;;
@@ -1210,19 +1281,7 @@
 
     (if (and test-src-path (directory? test-path))
 	(begin
-	  (let* ((ovrcmd (let ((cmd (config-lookup *configdat* "setup" "testcopycmd")))
-			   (if cmd
-			       ;; substitute the TEST_SRC_PATH and TEST_TARG_PATH
-			       (string-substitute "TEST_TARG_PATH" test-path
-						  (string-substitute "TEST_SRC_PATH" test-src-path cmd #t) #t)
-			       #f)))
-		 (cmd    (if ovrcmd 
-			     ovrcmd
-			     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"
-				   " >> " test-path "/mt_launch.log 2>> " test-path "/mt_launch.log")))
-		 (status (system cmd)))
-	    (if (not (eq? status 0))
-		(debug:print 2 *default-log-port* "ERROR: problem with running \"" cmd "\"")))
+	  (launch:test-copy test-src-path test-path)
 	  (list lnkpathf lnkpath ))
 	(if (and test-src-path (> remtries 0))
 	    (begin
@@ -1240,19 +1299,19 @@
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
   (mutex-lock! *launch-setup-mutex*) ;; setting variables and processing the testconfig is NOT thread-safe, reuse the launch-setup mutex
-  (let* ((lock-key        (conc "test-" test-id))
-	 (got-lock        (let loop ((lock        (rmt:no-sync-get-lock lock-key))
-				     (expire-time (+ (current-seconds) 15))) ;; give up on getting the lock and steal it after 15 seconds
-			    (if (car lock)
-				#t
-				(if (> (current-seconds) expire-time)
-				    (begin
-				      (debug:print-info 0 *default-log-port* "Timed out waiting for a lock to launch test " keyvals " " runname " " test-name " " test-path)
-				      (rmt:no-sync-del! lock-key) ;; destroy the lock
-				      (loop (rmt:no-sync-get-lock lock-key) expire-time)) ;; 
-				    (begin
-				      (thread-sleep! 1)
-				      (loop (rmt:no-sync-get-lock lock-key) expire-time))))))
+  (let* ( ;; (lock-key        (conc "test-" test-id))
+	;; (got-lock        (let loop ((lock        (rmt:no-sync-get-lock lock-key))
+	;; 			     (expire-time (+ (current-seconds) 15))) ;; give up on getting the lock and steal it after 15 seconds
+	;; 		    (if (car lock)
+	;; 			#t
+	;; 			(if (> (current-seconds) expire-time)
+	;; 			    (begin
+	;; 			      (debug:print-info 0 *default-log-port* "Timed out waiting for a lock to launch test " keyvals " " runname " " test-name " " test-path)
+	;; 			      (rmt:no-sync-del! lock-key) ;; destroy the lock
+	;; 			      (loop (rmt:no-sync-get-lock lock-key) expire-time)) ;; 
+	;; 			    (begin
+	;; 			      (thread-sleep! 1)
+	;; 			      (loop (rmt:no-sync-get-lock lock-key) expire-time))))))
 	 (item-path       (item-list->path itemdat))
 	 (contour         #f)) ;; NOT READY FOR THIS (args:get-arg "-contour")))
     (let loop ((delta        (- (current-seconds) *last-launch*))
@@ -1429,7 +1488,7 @@
 					'()
 					(cdr fullcmd)))))
         (mutex-unlock! *launch-setup-mutex*) ;; yes, really should mutex all the way to here. Need to put this entire process into a fork.
-	(rmt:no-sync-del! lock-key)         ;; release the lock for starting this test
+	;; (rmt:no-sync-del! lock-key)         ;; release the lock for starting this test
 	(if (not launchwait) ;; give the OS a little time to allow the process to start
 	    (thread-sleep! 0.01))
 	(with-output-to-file "mt_launch.log"

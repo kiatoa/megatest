@@ -55,9 +55,33 @@
 (include "run_records.scm")
 (include "megatest-fossil-hash.scm")
 
+(define *usage-log-file* #f)    ;; put path to file for logging usage in this var in the ~/.megatestrc file
+(define *usage-use-seconds* #t) ;; for Epoc seconds in usage logging change this to #t in ~/.megatestrc file
+
+;; load the ~/.megatestrc file, put (use trace)(trace-call-sites #t)(trace function-you-want-to-trace) in this file
+;;
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.megatestrc")))
   (if (common:file-exists? debugcontrolf)
       (load debugcontrolf)))
+
+;; usage logging, careful with this, it is not designed to deal with all real world challenges!
+;;
+(if (and *usage-log-file*
+         (file-write-access? *usage-log-file*))
+    (with-output-to-file
+        *usage-log-file*
+      (lambda ()
+        (print
+         (if *usage-use-seconds*
+             (current-seconds)
+             (time->string
+              (seconds->local-time (current-seconds))
+              "%Yww%V.%w %H:%M:%S"))
+         " "
+         (current-user-name) " "
+         (current-directory) " "
+         "\"" (string-intersperse (argv) " ") "\""))
+      #:append))
 
 ;; Disabled help items
 ;;  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
@@ -67,8 +91,8 @@
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
-  license GPL, Copyright Matt Welland 2006-2015
-
+  license GPL, Copyright Matt Welland 2006-2017
+ 
 Usage: megatest [options]
   -h                      : this help
   -manual                 : show the Megatest user manual
@@ -92,6 +116,7 @@ Launching and managing runs
   -preclean               : remove the existing test directory before running the test
   -clean-cache            : remove the cached megatest.config and runconfigs.config files
   -no-cache               : do not use the cached config files. 
+  -one-pass               : launch as many tests as you can but do not wait for more to be ready
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
@@ -325,6 +350,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-list-servers"
 			"-kill-servers"
                         "-run-wait"      ;; wait on a run to complete (i.e. no RUNNING)
+			"-one-pass"       ;;
 			"-local"         ;; run some commands using local db access
                         "-generate-html"
 
@@ -1559,7 +1585,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
              (let ((states   (or (configf:lookup *configdat* "validvalues" "cleanrerun-states")
                                  "KILLREQ,KILLED,UNKNOWN,INCOMPLETE,STUCK,NOT_STARTED"))
                    (statuses (or (configf:lookup *configdat* "validvalues" "cleanrerun-statuses")
-                                 "FAIL,INCOMPLETE,ABORT,CHECK")))
+                                 "FAIL,INCOMPLETE,ABORT,CHECK,DEAD")))
                (hash-table-set! args:arg-hash "-preclean" #t)
                (runs:operate-on 'set-state-status
                                 target

@@ -241,6 +241,7 @@
 						(debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
 						(debug:print 0 *default-log-port* " message: " msg)
 						(debug:print 0 *default-log-port* " cmd: " cmd " params: " params)
+                                                (debug:print 0 *default-log-port* " call-chain: " call-chain)
 						(if runremote
 						    (remote-conndat-set! runremote #f))
 						;; Killing associated server to allow clean retry.")
@@ -303,6 +304,7 @@
 	      (print-call-chain *default-log-port*)
 	      (debug:print-error 0 *default-log-port* " closing connection failed with error: " ((condition-property-accessor 'exn 'message) exn)))
 	    (close-connection! api-dat)
+            ;;(close-idle-connections!)
 	    #t))
 	#f)))
 
@@ -379,7 +381,7 @@
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)
-	 (server-timeout (server:get-timeout))
+	 (server-timeout (server:expiration-timeout))
 	 (server-going  #f)
 	 (server-log-file (args:get-arg "-log"))) ;; always set when we are a server
     (let loop ((count         0)
@@ -433,17 +435,11 @@
 	  (begin
 	    (debug:print 0 *default-log-port* "Server stats:")
 	    (db:print-current-query-stats)))
-      (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600))
-	     (adjusted-timeout (if (> hrs-since-start 1)
-				   (- server-timeout (inexact->exact (round (* hrs-since-start 60))))  ;; subtract 60 seconds per hour
-				   server-timeout)))
-	(if (common:low-noise-print 120 "server timeout")
-	    (debug:print-info 0 *default-log-port* "Adjusted server timeout: " adjusted-timeout))
+      (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600)))
 	(cond
          ((and *server-run*
 	       (> (+ last-access server-timeout)
-		  (current-seconds))
-	       (< (- (current-seconds) server-start-time) 3600)) ;; do not update log or touch log if we've been running for more than one hour.
+		  (current-seconds)))
           (if (common:low-noise-print 120 "server continuing")
               (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
 	      (let ((curr-time (current-seconds)))
@@ -494,29 +490,41 @@
 ;; start_server? 
 ;;
 (define (http-transport:launch)
-  ;; lets not even bother to start if there are already three or more server files ready to go
-  (let* ((num-alive   (server:get-num-alive (server:get-list *toppath*))))
-    (if (> num-alive 3)
-	(begin
-	  (debug:print 0 *default-log-port* "ERROR: Aborting server start because there are already " num-alive " possible servers either running or starting up")
-	  (exit))))
-  (let* ((th2 (make-thread (lambda ()
-			     (debug:print-info 0 *default-log-port* "Server run thread started")
-			     (http-transport:run 
-			      (if (args:get-arg "-server")
-				  (args:get-arg "-server")
-				  "-")
-			      )) "Server run"))
-	 (th3 (make-thread (lambda ()
-			     (debug:print-info 0 *default-log-port* "Server monitor thread started")
-			     (http-transport:keep-running)
-			   "Keep running"))))
-    (thread-start! th2)
-    (thread-sleep! 0.25) ;; give the server time to settle before starting the keep-running monitor.
-    (thread-start! th3)
-    (set! *didsomething* #t)
-    (thread-join! th2)
-    (exit)))
+	 (start-time-old      (> (- (current-seconds) start-time) 5))
+         (cleanup-proc        (lambda (msg)
+                                (let* ((serv-fname      (conc "server-" (current-process-id) "-" (get-host-name) ".log"))
+                                       (full-serv-fname (conc *toppath* "/logs/" serv-fname))
+                                       (new-serv-fname  (conc *toppath* "/logs/" "defunct-" serv-fname)))
+                                  (debug:print 0 *default-log-port* msg)
+                                  (if (common:file-exists? full-serv-fname)
+                                      (system (conc "sleep 1;mv -f " full-serv-fname " " new-serv-fname))
+                                      (debug:print 0 *default-log-port* "INFO: cannot move " full-serv-fname " to " new-serv-fname))
+                                  (exit)))))
+	  (cleanup-proc "NOT starting server, there is either a recently started server or a server in process of starting")
+	  (exit)))
+    ;; lets not even bother to start if there are already three or more server files ready to go
+    (let* ((num-alive   (server:get-num-alive (server:get-list *toppath*))))
+      (if (> num-alive 3)
+          (begin
+            (cleanup-proc (conc "ERROR: Aborting server start because there are already " num-alive " possible servers either running or starting up"))
+            (exit))))
+    (let* ((th2 (make-thread (lambda ()
+                               (debug:print-info 0 *default-log-port* "Server run thread started")
+                               (http-transport:run 
+                                (if (args:get-arg "-server")
+                                    (args:get-arg "-server")
+                                    "-")
+                                )) "Server run"))
+           (th3 (make-thread (lambda ()
+                               (debug:print-info 0 *default-log-port* "Server monitor thread started")
+                               (http-transport:keep-running)
+                               "Keep running"))))
+      (thread-start! th2)
+      (thread-sleep! 0.25) ;; give the server time to settle before starting the keep-running monitor.
+      (thread-start! th3)
+      (set! *didsomething* #t)
+      (thread-join! th2)
+      (exit))))
 
 (define (http-transport:server-signal-handler signum)
   (signal-mask! signum)
