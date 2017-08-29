@@ -642,7 +642,7 @@
 ;; 
 (define (common:get-db-tmp-area dbstruct)
   (if (and dbstruct (dbr:dbstruct-tmpdb-path dbstruct)) ;; *db-cache-path*
-      (dbr:dbstruct-tmpdb-path) ;; *db-cache-path*
+      (dbr:dbstruct-tmpdb-path dbstruct) ;; *db-cache-path*
       (let ((toppath (or (and dbstruct (dbr:dbstruct-area-path dbstruct)) *toppath*))
 	    (tsname  (or (and dbstruct (dbr:dbstruct-area-name dbstruct))(common:get-testsuite-name))))
 	(if toppath ;; common:get-create-writeable-dir
@@ -1675,7 +1675,7 @@
   (let* ((required (string->number 
 		    (or (configf:lookup *configdat* "setup" "dbdir-space-required")
 			"100000")))
-	 (dbdir    (common:get-db-tmp-area)) ;; (db:get-dbdir))
+	 (dbdir    (common:get-db-tmp-area #f)) ;; (db:get-dbdir))
 	 (tdbspace (common:check-space-in-dir dbdir required))
 	 (mdbspace (common:check-space-in-dir *toppath* required)))
     (sort (list tdbspace mdbspace) (lambda (a b)

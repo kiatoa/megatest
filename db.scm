@@ -89,7 +89,7 @@
 ;;    db:open-db              -> not properly using tmpdb path
 ;;    common:get-db-tmp-area  -> using *toppath* and common:get-testsuite-area
 ;;    
-(define (db:dashboard-open-db areas area-name area-path)
+(define (db:dashboard-open-dbstruct areas area-name area-path)
   ;; 0. check for already existing dbstruct in areas hash, return it if found
   ;; 1. do minimal read of megatest.config, store configdat, keys in dbstruct
   ;; 2. get homehost
