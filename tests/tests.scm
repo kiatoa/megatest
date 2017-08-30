@@ -20,6 +20,22 @@
 
 (define test-work-dir (current-directory))
 
+;; given list of lists
+;;  ( ( msg expected param1 param2 ...)
+;;    ( ... ) )
+;; apply test to all
+;;
+(define (test-batch proc pname inlst #!key (post-proc #f))
+  (for-each
+   (lambda (spec)
+     (let ((msg    (conc pname " " (car spec)))
+           (result (cadr spec))
+           (params (cddr spec)))
+       (if post-proc
+           (test msg result (post-proc (apply proc params)))
+           (test msg result (apply proc params)))))
+   inlst))
+
 ;; read in all the _record files
 (let ((files (glob "*_records.scm")))
   (for-each
@@ -34,9 +50,9 @@
       (load fname)
       (print "ERROR: Unit test " unit-test-name " not found in unittests directory")))
 
-
- (list "abc" "abc/%" "ab%/c%" "~abc/c%" "abc/~c%" "a,b/c,%/d" "%/,%/a" "%/,%/a" "%/,%/a" "%" "%" "%/" "%/" "%abc%")
- (list "abc" "abc"   "abcd"   "abc"     "abc"     "a"         "abc"     "def"    "ghi"   "a" "a"  "a"  "a" "abc")
- (list   ""  ""      "cde"    "cde"     "cde"     ""            ""      "a"       "b"    ""  "b"  ""   "b" "abc")
- (list   #t    #t       #t    #f           #f      #t           #t       #t       #f     #t  #t   #t    #f #t))
+;;; huh? why is this here?
+;; (list "abc" "abc/%" "ab%/c%" "~abc/c%" "abc/~c%" "a,b/c,%/d" "%/,%/a" "%/,%/a" "%/,%/a" "%" "%" "%/" "%/" "%abc%")
+;; (list "abc" "abc"   "abcd"   "abc"     "abc"     "a"         "abc"     "def"    "ghi"   "a" "a"  "a"  "a" "abc")
+;; (list   ""  ""      "cde"    "cde"     "cde"     ""            ""      "a"       "b"    ""  "b"  ""   "b" "abc")
+;; (list   #t    #t       #t    #f           #f      #t           #t       #t       #f     #t  #t   #t    #f #t)
 

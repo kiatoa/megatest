@@ -15,3 +15,5 @@ html/megatest.html : megatest.lyx
 megatest.pdf : megatest.lyx
 	lyx -e pdf2 megatest.lyx
 
+pkts.pdf : pkts.dot
+	dot -Tpdf pkts.dot -o pkts.pdf

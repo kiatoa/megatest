@@ -16,8 +16,12 @@
 (declare (uses db))
 (declare (uses rmt))
 (declare (uses common))
+(declare (uses pgdb))
+
+;; (import pgdb) ;; pgdb is a module
 
 (include "task_records.scm")
+(include "db_records.scm")
 
 ;;======================================================================
 ;; Tasks db
@@ -34,10 +38,10 @@
 	 (begin
 	   (print-call-chain (current-error-port))
 	   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	   (debug:print 0 *default-log-port* " exn=" (condition->list exn))
+	   (debug:print 5 *default-log-port* " exn=" (condition->list exn))
 	   (debug:print 0 *default-log-port* "tasks:wait-on-journal failed. Continuing on, you can ignore this call-chain")
 	   #t) ;; if stuff goes wrong just allow it to move on
-	 (let loop ((journal-exists (file-exists? fullpath))
+	 (let loop ((journal-exists (common:file-exists? fullpath))
 		    (count          n)) ;; wait ten times ...
 	   (if journal-exists
 	       (begin
@@ -47,9 +51,10 @@
 		 (if (> count 0)
 		     (begin
 		       (thread-sleep! 1)
-		       (loop (file-exists? fullpath)
+		       (loop (common:file-exists? fullpath)
 			     (- count 1)))
 		     (begin
+		       (debug:print 0 *default-log-port* "ERROR: removing the journal file " fullpath ", this is not good. Look for disk full, write access and other issues.")
 		       (if remove (system (conc "rm -rf " fullpath)))
 		       #f)))
 	       #t))))))
@@ -57,7 +62,7 @@
 (define (tasks:get-task-db-path)
   (let ((dbdir  (or (configf:lookup *configdat* "setup" "monitordir")
 		    (configf:lookup *configdat* "setup" "dbdir")
-		    (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))))
+		    (conc (common:get-linktree) "/.db"))))
     (handle-exceptions
      exn
      (begin
@@ -84,17 +89,17 @@
 	   (begin
 	     (print-call-chain (current-error-port))
 	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 *default-log-port* " exn=" (condition->list exn))
+	     (debug:print 5 *default-log-port* " exn=" (condition->list exn))
 	     (thread-sleep! 1)
 	     (tasks:open-db numretries (- numretries 1)))
 	   (begin
 	     (print-call-chain (current-error-port))
 	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 *default-log-port* " exn=" (condition->list exn))))
-       (let* ((dbpath       (tasks:get-task-db-path))
+	     (debug:print 5 *default-log-port* " exn=" (condition->list exn))))
+       (let* ((dbpath        (db:dbfile-path )) ;; (tasks:get-task-db-path))
 	      (dbfile       (conc dbpath "/monitor.db"))
 	      (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
-	      (exists       (file-exists? dbpath))
+	      (exists       (common:file-exists? dbpath))
 	      (write-access (file-write-access? dbpath))
 	      (mdb          (cond ;; what the hek is *toppath* doing here?
 			     ((and (string? *toppath*)(file-write-access? *toppath*))
@@ -180,11 +185,23 @@
 (define (tasks:kill-server hostname pid #!key (kill-switch ""))
   (debug:print-info 0 *default-log-port* "Attempting to kill server process " pid " on host " hostname)
   (setenv "TARGETHOST" hostname)
-  (setenv "TARGETHOST_LOGF" "server-kills.log")
-  (system (conc "nbfake kill "kill-switch" "pid))
+  (let* ((logdir (if (directory-exists? "logs")
+                    "logs/"
+                    ""))
+         (logfile (if logdir (conc "logs/server-"pid"-"hostname".log") #f))
+         (gzfile  (if logfile (conc logfile ".gz"))))
+    (setenv "TARGETHOST_LOGF" (conc logdir "server-kills.log"))
 
-  (unsetenv "TARGETHOST_LOGF")
-  (unsetenv "TARGETHOST"))
+    (system (conc "nbfake kill "kill-switch" "pid))
+
+    (when logfile
+      (thread-sleep! 0.5)
+      (if (common:file-exists? gzfile) (delete-file gzfile))
+      (system (conc "gzip " logfile))
+      
+      (unsetenv "TARGETHOST_LOGF")
+      (unsetenv "TARGETHOST"))))
+    
  
 ;;======================================================================
 ;; M O N I T O R S
@@ -576,4 +593,163 @@
 ;; 		     (tasks:task-get-name  task)
 ;; 		     (tasks:task-get-owner  task))
 ;;     (tasks:set-state mdb (tasks:task-get-id task) "waiting")))
+
+;;======================================================================
+;;  S Y N C   T O   P O S T G R E S Q L
+;;======================================================================
+
+;; In the spirit of "dump your junk in the tasks module" I'll put the
+;; sync to postgres here for now.
+
+;; attempt to automatically set up an area. call only if get area by path
+;; returns naught of interest
+;;
+(define (tasks:set-area dbh configdat #!key (toppath #f)) ;; could I safely put *toppath* in for the default for toppath? when would it be evaluated?
+  (let loop ((area-name (or (configf:lookup configdat "setup" "area-name")
+			    (common:get-area-name)))
+	     (modifier  'none))
+    (let ((success (handle-exceptions
+		       exn
+		       (begin
+			 (debug:print 0 *default-log-port* "ERROR: cannot create area entry, " ((condition-property-accessor 'exn 'message) exn))
+			 #f) ;; FIXME: I don't care for now but I should look at *why* there was an exception
+		     (pgdb:add-area dbh area-name (or toppath *toppath*)))))
+      (or success
+	  (case modifier
+	    ((none)(loop (conc (current-user-name) "_" area-name) 'user))
+	    ((user)(loop (conc (substring (common:get-area-path-signature) 0 4)
+			       area-name) 'areasig))
+	    (else #f)))))) ;; give up
+
+;; gets mtpg-run-id and syncs the record if different
+;;
+(define (tasks:run-id->mtpg-run-id dbh cached-info run-id)
+  (let* ((runs-ht (hash-table-ref cached-info 'runs))
+	 (runinf  (hash-table-ref/default runs-ht run-id #f)))
+    (if runinf
+	runinf ;; already cached
+	(let* ((run-dat    (rmt:get-run-info run-id))               ;; NOTE: get-run-info returns a vector < row header >
+	       (run-name   (rmt:get-run-name-from-id run-id))
+	       (row        (db:get-rows run-dat))                   ;; yes, this returns a single row
+	       (header     (db:get-header run-dat))
+	       (state      (db:get-value-by-header row header "state "))
+	       (status     (db:get-value-by-header row header "status"))
+	       (owner      (db:get-value-by-header row header "owner"))
+	       (event-time (db:get-value-by-header row header "event_time"))
+	       (comment    (db:get-value-by-header row header "comment"))
+	       (fail-count (db:get-value-by-header row header "fail_count"))
+	       (pass-count (db:get-value-by-header row header "pass_count"))
+               (db-contour (db:get-value-by-header row header "contour"))
+	       (contour    (if (args:get-arg "-prepend-contour") 
+                                 (if (> (string-length  db-contour) 0) 
+                                            db-contour
+					    (args:get-arg "-contour"))))
+	       (keytarg    (if (or (args:get-arg "-prepend-contour") (args:get-arg "-prefix-target"))
+	       			(conc "MT_CONTOUR/MT_AREA/" (string-intersperse (rmt:get-keys) "/")) (string-intersperse (rmt:get-keys) "/"))) ;; e.g. version/iteration/platform
+	       (target     (if (or (args:get-arg "-prepend-contour") (args:get-arg "-prefix-target")) 
+	       			(conc (or (args:get-arg "-prefix-target") (conc contour "/" (common:get-area-name) "/")) (rmt:get-target run-id)) (rmt:get-target run-id)))                 ;; e.g. v1.63/a3e1/ubuntu
+	       (spec-id    (pgdb:get-ttype dbh keytarg))
+	       (new-run-id (pgdb:get-run-id dbh spec-id target run-name))
+
+
+
+	       ;; (area-id    (db:get-value-by-header row header "area_id)"))
+	       )
+          (if new-run-id
+	      (begin ;; let ((run-record (pgdb:get-run-info dbh new-run-id))
+                
+		(hash-table-set! runs-ht run-id new-run-id)
+		;; ensure key fields are up to date
+		(pgdb:refresh-run-info
+		 dbh
+		 new-run-id
+		 state status owner event-time comment fail-count pass-count)
+		new-run-id)
+	      (if (handle-exceptions
+		      exn
+		      (begin (print-call-chain)
+                              (print ((condition-property-accessor 'exn 'message) exn))     
+#f)
+                     
+		    (pgdb:insert-run
+		     dbh
+		     spec-id target run-name state status owner event-time comment fail-count pass-count)) ;; area-id))
+		       (tasks:run-id->mtpg-run-id dbh cached-info run-id)
+		  #f))))))
+
+(define (tasks:sync-tests-data dbh cached-info test-ids)
+  (let ((test-ht (hash-table-ref cached-info 'tests)))
+    (for-each
+     (lambda (test-id)
+       (let* ((test-info    (rmt:get-test-info-by-id #f test-id))
+	      (run-id       (db:test-get-run_id    test-info)) ;; look these up in db_records.scm
+	      (test-id      (db:test-get-id        test-info))
+	      (test-name    (db:test-get-testname  test-info))
+	      (item-path    (db:test-get-item-path test-info))
+	      (state        (db:test-get-state     test-info))
+	      (status       (db:test-get-status    test-info))
+	      (host         (db:test-get-host      test-info))
+	      (cpuload      (db:test-get-cpuload   test-info))
+	      (diskfree     (db:test-get-diskfree  test-info))
+	      (uname        (db:test-get-uname     test-info))
+	      (run-dir      (db:test-get-rundir    test-info))
+	      (log-file     (db:test-get-final_logf test-info))
+	      (run-duration (db:test-get-run_duration test-info))
+	      (comment      (db:test-get-comment   test-info))
+	      (event-time   (db:test-get-event_time test-info))
+	      (archived     (db:test-get-archived  test-info))
+	      (pgdb-run-id  (tasks:run-id->mtpg-run-id dbh cached-info run-id))
+                
+	      (pgdb-test-id (if pgdb-run-id 
+				(begin
+                                  ;(print pgdb-run-id)    
+                                 (pgdb:get-test-id dbh pgdb-run-id test-name item-path))
+                                 #f)))
+	 ;; "id"           "run_id"        "testname"  "state"      "status"      "event_time"
+	 ;; "host"         "cpuload"       "diskfree"  "uname"      "rundir"      "item_path"
+	 ;; "run_duration" "final_logf"    "comment"   "shortdir"   "attemptnum"  "archived"
+         (if pgdb-run-id
+           (begin
+	   (if pgdb-test-id ;; have a record
+	     (begin ;; let ((key-name (conc run-id "/" test-name "/" item-path)))
+	       (hash-table-set! test-ht test-id pgdb-test-id)
+	       (print "Updating existing test with run-id: " run-id " and test-id: " test-id)
+	       (pgdb:update-test dbh pgdb-test-id pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived))
+	     (pgdb:insert-test dbh pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived)))
+              (print "WARNING: Skipping run with run-id:" run-id ". This run was created after privious sync and removed before this sync."))   
+	 ))
+     test-ids)))
+
+;; get runs changed since last sync
+;; (define (tasks:sync-test-data dbh cached-info area-info)
+;;   (let* ((
+
+(define (tasks:sync-to-postgres configdat dest)
+  (let* ((dbh         (pgdb:open configdat dbname: dest))
+	 (area-info   (pgdb:get-area-by-path dbh *toppath*))
+	 (cached-info (make-hash-table))
+	 (start       (current-seconds)))
+    (for-each (lambda (dtype)
+		(hash-table-set! cached-info dtype (make-hash-table)))
+	      '(runs targets tests))
+    (hash-table-set! cached-info 'start start) ;; when done we'll set sync times to this
+    (if area-info
+	(let* ((last-sync-time (vector-ref area-info 3))
+	       (changed        (rmt:get-changed-record-ids last-sync-time))
+	       (run-ids        (alist-ref 'runs       changed))
+	       (test-ids       (alist-ref 'tests      changed))
+	       (test-step-ids  (alist-ref 'test_steps changed))
+	       (test-data-ids  (alist-ref 'test_data  changed))
+	       (run-stat-ids   (alist-ref 'run_stats  changed)))
+	  ;(print "area-info: " area-info)
+	  (if (not (null? test-ids))
+	      (begin
+		(print "Syncing " (length test-ids) " changed tests")
+		(tasks:sync-tests-data dbh cached-info test-ids)))
+	  (pgdb:write-sync-time dbh area-info start))
+	(if (tasks:set-area dbh configdat)
+	    (tasks:sync-to-postgres configdat dest)
+	    (begin
+	      (debug:print 0 *default-log-port* "ERROR: unable to create an area record")
+	      #f)))))
 

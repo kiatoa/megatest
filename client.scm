@@ -12,14 +12,9 @@
 ;; C L I E N T S
 ;;======================================================================
 
-(require-extension (srfi 18) extras tcp s11n)
-
-(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest matchable)
-;; (use zmq)
-
-(use (prefix sqlite3 sqlite3:))
-
-(use spiffy uri-common intarweb http-client spiffy-request-vars uri-common intarweb directory-utils)
+(use srfi-18 extras tcp s11n srfi-1 posix regex srfi-69 hostinfo md5
+     message-digest matchable spiffy uri-common intarweb http-client
+     spiffy-request-vars uri-common intarweb directory-utils)
 
 (declare (unit client))
 
@@ -80,7 +75,7 @@
       ;; Alternatively here, we can get the list of candidate servers and work our way
       ;; through them searching for a good one.
       ;;
-      (let* ((server-dat (server:get-first-best areapath))
+      (let* ((server-dat (server:get-rand-best areapath)) ;; (server:get-first-best areapath))
 	     (runremote  (or area-dat *runremote*)))
 	(if (not server-dat) ;; no server found
 	    (client:setup-http areapath remaining-tries: (- remaining-tries 1))
@@ -97,12 +92,12 @@
 				      ((http)(rmt:login-no-auto-client-setup start-res)))))
 		    (if (and start-res
 			     ping-res)
-			(begin
+			(let ((runremote (or area-dat *runremote*))) ;; it might have been generated only a few statements ago
 			  (remote-conndat-set! runremote start-res) ;; (hash-table-set! runremote run-id start-res)
 			  (debug:print-info 2 *default-log-port* "connected to " (http-transport:server-dat-make-url start-res))
 			  start-res)
 			(begin    ;; login failed but have a server record, clean out the record and try again
-			  (debug:print-info 0 *default-log-port* "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
+			  (debug:print-info 0 *default-log-port* "client:setup, login failed, will attempt to start server ... start-res=" start-res ", server-dat=" server-dat) ;; had runid.  Fixes part of Randy;s ticket 1405717332
 			  (case *transport-type* 
 			    ((http)(http-transport:close-connections)))
 			  (remote-conndat-set! runremote #f)  ;; (hash-table-delete! runremote run-id)
@@ -110,9 +105,9 @@
 			  (client:setup-http areapath remaining-tries: (- remaining-tries 1))
 			  )))
 		  (begin    ;; no server registered
-		    (server:kind-run areapath)
+		    ;; (server:kind-run areapath)
+		    (server:start-and-wait areapath)
 		    (debug:print-info 0 *default-log-port* "client:setup, no server registered, remaining-tries=" remaining-tries)
 		    (thread-sleep! 1) ;; (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
-		    (server:start-and-wait areapath)
 		    (client:setup-http areapath remaining-tries: (- remaining-tries 1)))))))))
 

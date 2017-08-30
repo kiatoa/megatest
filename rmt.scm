@@ -1,5 +1,5 @@
 ;;======================================================================
-;; Copyright 2006-2013, Matthew Welland.
+;; Copyright 2006-2017, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -13,9 +13,7 @@
 
 (declare (unit rmt))
 (declare (uses api))
-(declare (uses tdb))
 (declare (uses http-transport))
-;;(declare (uses nmsg-transport))
 (include "common_records.scm")
 
 ;;
@@ -35,13 +33,14 @@
 ;;
 (define (rmt:get-connection-info areapath #!key (area-dat #f)) ;; TODO: push areapath down.
   (let* ((runremote (or area-dat *runremote*))
-	 (cinfo     (remote-conndat runremote))
-        (run-id 0))
-    (if cinfo
-	cinfo
-	(if (server:check-if-running areapath)
-	    (client:setup areapath)
-	    #f))))
+	 (cinfo     (if (remote? runremote)
+			(remote-conndat runremote)
+			#f)))
+	  (if cinfo
+	      cinfo
+	      (if (server:check-if-running areapath)
+		  (client:setup areapath)
+		  #f))))
 
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
 
@@ -49,98 +48,191 @@
 ;;
 (define (rmt:send-receive cmd rid params #!key (attemptnum 1)(area-dat #f)) ;; start attemptnum at 1 so the modulo below works as expected
 
+  ;;DOT digraph megatest_state_status {
+  ;;DOT   ranksep=0;
+  ;;DOT   // rankdir=LR;
+  ;;DOT   node [shape="box"];
+  ;;DOT "rmt:send-receive" -> MUTEXLOCK;
+  ;;DOT { edge [style=invis];"case 1" -> "case 2" -> "case 3" -> "case 4" -> "case 5" -> "case 6" -> "case 7" -> "case 8" -> "case 9" -> "case 10" -> "case 11"; }
   ;; do all the prep locked under the rmt-mutex
   (mutex-lock! *rmt-mutex*)
-
+  
   ;; 1. check if server is started IFF cmd is a write OR if we are not on the homehost, store in runremote
   ;; 2. check the age of the connections. refresh the connection if it is older than timeout-20 seconds.
   ;; 3. do the query, if on homehost use local access
   ;;
-  (let* ((start-time (current-seconds)) ;; snapshot time so all use cases get same value
-	 (runremote  (or area-dat *runremote*)))
+  (let* ((start-time    (current-seconds)) ;; snapshot time so all use cases get same value
+         (areapath      *toppath*);; TODO - resolve from dbstruct to be compatible with multiple areas
+	 (runremote     (or area-dat
+			    *runremote*))
+	 (readonly-mode (if (and runremote
+				 (remote-ro-mode-checked runremote))
+			    (remote-ro-mode runremote)
+			    (let* ((dbfile  (conc *toppath* "/megatest.db"))
+				   (ro-mode (not (file-write-access? dbfile)))) ;; TODO: use dbstruct or runremote to figure this out in future
+			      (if runremote
+				  (begin
+				    (remote-ro-mode-set! runremote ro-mode)
+				    (remote-ro-mode-checked-set! runremote #t)
+				    ro-mode)
+				  ro-mode)))))
+
+    ;; DOT INIT_RUNREMOTE; // leaving off - doesn't really add to the clarity
+    ;; DOT MUTEXLOCK -> INIT_RUNREMOTE [label="no remote?"];
+    ;; DOT INIT_RUNREMOTE -> MUTEXLOCK;
+    ;; ensure we have a record for our connection for given area
+    (if (not runremote)                   ;; can remove this one. should never get here.         
+	(begin
+	  (set! *runremote* (make-remote))
+	  (set! runremote   *runremote*))) ;; new runremote will come from this on next iteration
+    
+    ;; DOT SET_HOMEHOST; // leaving off - doesn't really add to the clarity
+    ;; DOT MUTEXLOCK -> SET_HOMEHOST [label="no homehost?"];
+    ;; DOT SET_HOMEHOST -> MUTEXLOCK;
+    ;; ensure we have a homehost record
+    (if (not (pair? (remote-hh-dat runremote)))  ;; not on homehost
+	(thread-sleep! 0.1) ;; since we shouldn't get here, delay a little
+	(remote-hh-dat-set! runremote (common:get-homehost)))
+    
+    ;;(print "BB> readonly-mode is "readonly-mode" dbfile is "dbfile)
     (cond
+     ;;DOT EXIT;
+     ;;DOT MUTEXLOCK -> EXIT [label="> 15 attempts"]; {rank=same "case 1" "EXIT" }
      ;; give up if more than 15 attempts
      ((> attemptnum 15)
       (debug:print 0 *default-log-port* "ERROR: 15 tries to start/connect to server. Giving up.")
       (exit 1))
+
+     ;;DOT CASE2 [label="local\nreadonly\nquery"];
+     ;;DOT MUTEXLOCK -> CASE2; {rank=same "case 2" CASE2}
+     ;;DOT CASE2 -> "rmt:open-qry-close-locally";
+     ;; readonly mode, read request-  handle it - case 2
+     ((and readonly-mode
+           (member cmd api:read-only-queries)) 
+      (mutex-unlock! *rmt-mutex*)
+      (debug:print-info 12 *default-log-port* "rmt:send-receive, case 2")
+      (rmt:open-qry-close-locally cmd 0 params)
+      )
+
+     ;;DOT CASE3 [label="write in\nread-only mode"];
+     ;;DOT MUTEXLOCK -> CASE3 [label="readonly\nmode?"]; {rank=same "case 3" CASE3}
+     ;;DOT CASE3 -> "#f";
+     ;; readonly mode, write request.  Do nothing, return #f
+     (readonly-mode
+      (mutex-unlock! *rmt-mutex*)
+      (debug:print-info 12 *default-log-port* "rmt:send-receive, case 3")
+      (debug:print 0 *default-log-port* "WARNING: write transaction requested on a readonly area.  cmd="cmd" params="params)
+      #f)
+
+     ;; This block was for pre-emptively resetting the connection if there had been no communication for some time.
+     ;; I don't think it adds any value. If the server is not there, just fail and start a new connection.
+     ;; also, the expire-time calculation might not be correct. We want, time-since-last-server-access > (server:get-timeout)
+     ;;
+     ;;DOT CASE4 [label="reset\nconnection"];
+     ;;DOT MUTEXLOCK -> CASE4 [label="have connection,\nlast_access > expire_time"]; {rank=same "case 4" CASE4}
+     ;;DOT CASE4 -> "rmt:send-receive";
      ;; reset the connection if it has been unused too long
      ((and runremote
            (remote-conndat runremote)
-	   (let ((expire-time (+ (- start-time (remote-server-timeout runremote))(random 30)))) ;; add 30 seconds of noise so that not all running tests expire at the same time causing a storm of server starts
-	     (< (http-transport:server-dat-get-last-access (remote-conndat runremote)) expire-time)))
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  8")
-      (remote-conndat-set! runremote #f)
+	   (> (current-seconds) ;; if it has been more than server-timeout seconds since last contact, close this connection and start a new on
+	      (+ (http-transport:server-dat-get-last-access (remote-conndat runremote))
+		 (remote-server-timeout runremote))))
+      (debug:print-info 0 *default-log-port* "Connection to " (remote-server-url runremote) " expired due to no accesses, forcing new connection.")
+      (http-transport:close-connections area-dat: runremote)
+      (remote-conndat-set! runremote #f) ;; invalidate the connection, thus forcing a new connection.
       (mutex-unlock! *rmt-mutex*)
       (rmt:send-receive cmd rid params attemptnum: attemptnum))
-     ;; ensure we have a record for our connection for given area
-     ((not runremote)                     
-      (set! *runremote* (make-remote))
-      (mutex-unlock! *rmt-mutex*)
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  1")
-      (rmt:send-receive cmd rid params attemptnum: attemptnum))
-     ;; ensure we have a homehost record
-     ((not (pair? (remote-hh-dat runremote)))  ;; not on homehost
-      (thread-sleep! 0.1) ;; since we shouldn't get here, delay a little
-      (remote-hh-dat-set! runremote (common:get-homehost))
-      (mutex-unlock! *rmt-mutex*)
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  2")
-      (rmt:send-receive cmd rid params attemptnum: attemptnum))
+     
+     ;;DOT CASE5 [label="local\nread"];
+     ;;DOT MUTEXLOCK -> CASE5 [label="server not required,\non homehost,\nread-only query"]; {rank=same "case 5" CASE5};
+     ;;DOT CASE5 -> "rmt:open-qry-close-locally";
      ;; on homehost and this is a read
-     ((and (cdr (remote-hh-dat runremote))   ;; on homehost
-           (member cmd api:read-only-queries)) ;; this is a read
+     ((and (not (remote-force-server runremote)) ;; honor forced use of server, i.e. server NOT required
+	   (cdr (remote-hh-dat runremote))       ;; on homehost
+           (member cmd api:read-only-queries))   ;; this is a read
       (mutex-unlock! *rmt-mutex*)
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  3")
+      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5")
       (rmt:open-qry-close-locally cmd 0 params))
 
+     ;;DOT CASE6 [label="init\nremote"];
+     ;;DOT MUTEXLOCK -> CASE6 [label="on homehost,\nwrite query,\nhave server,\ncan't reach it"]; {rank=same "case 6" CASE6};
+     ;;DOT CASE6 -> "rmt:send-receive";
      ;; on homehost and this is a write, we already have a server, but server has died
-     ((and (cdr (remote-hh-dat runremote))         ;; on homehost
+     ((and (cdr (remote-hh-dat runremote))           ;; on homehost
            (not (member cmd api:read-only-queries))  ;; this is a write
-           (remote-server-url runremote)           ;; have a server
-           (not (server:check-if-running *toppath*)))  ;; server has died.
+           (remote-server-url runremote)             ;; have a server
+           (not (server:ping (remote-server-url runremote))))  ;; server has died. NOTE: this is not a cheap call! Need better approach.
       (set! *runremote* (make-remote))
+      (remote-force-server-set! runremote (common:force-server?))
+      (mutex-unlock! *rmt-mutex*)
+      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  6")
+      (rmt:send-receive cmd rid params attemptnum: attemptnum))
+
+     ;;DOT CASE7 [label="homehost\nwrite"];
+     ;;DOT MUTEXLOCK -> CASE7 [label="server not required,\non homehost,\na write,\nhave a server"]; {rank=same "case 7" CASE7};
+     ;;DOT CASE7 -> "rmt:open-qry-close-locally";
+     ;; on homehost and this is a write, we already have a server
+     ((and (not (remote-force-server runremote))     ;; honor forced use of server, i.e. server NOT required
+	   (cdr (remote-hh-dat runremote))           ;; on homehost
+           (not (member cmd api:read-only-queries))  ;; this is a write
+           (remote-server-url runremote))            ;; have a server
       (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  4.1")
-      (rmt:send-receive cmd rid params attemptnum: attemptnum))
-
-     ;; on homehost and this is a write, we already have a server
-     ((and (cdr (remote-hh-dat runremote))         ;; on homehost
-           (not (member cmd api:read-only-queries))  ;; this is a write
-           (remote-server-url runremote))          ;; have a server
-      (mutex-unlock! *rmt-mutex*)
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  4")
       (rmt:open-qry-close-locally cmd 0 params))
 
+     ;;DOT CASE8 [label="force\nserver"];
+     ;;DOT MUTEXLOCK -> CASE8 [label="server not required,\nhave homehost info,\nno connection yet,\nnot a read-only query"]; {rank=same "case 8" CASE8};
+     ;;DOT CASE8 -> "rmt:open-qry-close-locally";
      ;;  on homehost, no server contact made and this is a write, passively start a server 
-     ((and (cdr (remote-hh-dat runremote)) ; new
-           (not (remote-server-url runremote))
-	   (not (member cmd api:read-only-queries)))
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5")
+     ((and (not (remote-force-server runremote))     ;; honor forced use of server, i.e. server NOT required
+	   (cdr (remote-hh-dat runremote))           ;; have homehost
+           (not (remote-server-url runremote))       ;; no connection yet
+	   (not (member cmd api:read-only-queries))) ;; not a read-only query
+      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  8")
       (let ((server-url  (server:check-if-running *toppath*))) ;; (server:read-dotserver->url *toppath*))) ;; (server:check-if-running *toppath*))) ;; Do NOT want to run server:check-if-running - very expensive to do for every write call
 	(if server-url
 	    (remote-server-url-set! runremote server-url) ;; the string can be consumed by the client setup if needed
-	    (server:kind-run *toppath*)))
+	    (if (common:force-server?)
+		(server:start-and-wait *toppath*)
+		(server:kind-run *toppath*))))
+      (remote-force-server-set! runremote (common:force-server?))
       (mutex-unlock! *rmt-mutex*)
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  5.1")
+      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  8.1")
       (rmt:open-qry-close-locally cmd 0 params))
 
-     ((and (not (cdr (remote-hh-dat runremote)))        ;; not on a homehost 
-           (not (remote-conndat runremote)))            ;; and no connection
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  6  hh-dat: " (remote-hh-dat runremote) " conndat: " (remote-conndat runremote))
+     ;;DOT CASE9 [label="force server\nnot on homehost"];
+     ;;DOT MUTEXLOCK -> CASE9 [label="no connection\nand either require server\nor not on homehost"]; {rank=same "case 9" CASE9};
+     ;;DOT CASE9 -> "start\nserver" -> "rmt:send-receive";
+     ((or (and (remote-force-server runremote)              ;; we are forcing a server and don't yet have a connection to one
+	       (not (remote-conndat runremote)))
+	  (and (not (cdr (remote-hh-dat runremote)))        ;; not on a homehost 
+	       (not (remote-conndat runremote))))           ;; and no connection
+      (debug:print-info 12 *default-log-port* "rmt:send-receive, case 9, hh-dat: " (remote-hh-dat runremote) " conndat: " (remote-conndat runremote))
       (mutex-unlock! *rmt-mutex*)
-      (server:start-and-wait *toppath*)
+      (if (not (server:check-if-running *toppath*)) ;; who knows, maybe one has started up?
+	  (server:start-and-wait *toppath*))
       (remote-conndat-set! runremote (rmt:get-connection-info *toppath*)) ;; calls client:setup which calls client:setup-http
       (rmt:send-receive cmd rid params attemptnum: attemptnum)) ;; TODO: add back-off timeout as
+
+     ;;DOT CASE10 [label="on homehost"];
+     ;;DOT MUTEXLOCK -> CASE10 [label="server not required,\non homehost"]; {rank=same "case 10" CASE10};
+     ;;DOT CASE10 -> "rmt:open-qry-close-locally";
      ;; all set up if get this far, dispatch the query
-     ((cdr (remote-hh-dat runremote)) ;; we are on homehost
+     ((and (not (remote-force-server runremote))
+	   (cdr (remote-hh-dat runremote))) ;; we are on homehost
       (mutex-unlock! *rmt-mutex*)
-      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  7")
+      (debug:print-info 12 *default-log-port* "rmt:send-receive, case 10")
       (rmt:open-qry-close-locally cmd (if rid rid 0) params))
 
+     ;;DOT CASE11 [label="send_receive"];
+     ;;DOT MUTEXLOCK -> CASE11 [label="else"]; {rank=same "case 11" CASE11};
+     ;;DOT CASE11 -> "rmt:send-receive" [label="call failed"];
+     ;;DOT CASE11 -> "RESULT" [label="call succeeded"];
      ;; not on homehost, do server query
      (else
-      (mutex-unlock! *rmt-mutex*)
+      ;; (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9")
-      (mutex-lock! *rmt-mutex*)
+      ;; (mutex-lock! *rmt-mutex*)
       (let* ((conninfo (remote-conndat runremote))
 	     (dat      (case (remote-transport runremote)
 			 ((http) (condition-case ;; handling here has caused a lot of problems. However it is needed to deal with attemtped communication to servers that have gone away
@@ -152,27 +244,45 @@
 			  (exit))))
 	     (success  (if (vector? dat) (vector-ref dat 0) #f))
 	     (res      (if (vector? dat) (vector-ref dat 1) #f)))
-	(if (vector? conninfo)(http-transport:server-dat-update-last-access conninfo)) ;; refresh access time
+	(if (and (vector? conninfo) (< 5 (vector-length conninfo)))
+            (http-transport:server-dat-update-last-access conninfo) ;; refresh access time
+	    (begin
+              (debug:print 0 *default-log-port* "INFO: Should not get here! conninfo=" conninfo)
+              (set! conninfo #f)
+              (remote-conndat-set! *runremote* #f)
+              (http-transport:close-connections  area-dat: runremote)))
 	;; (mutex-unlock! *rmt-mutex*)
-        (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat " runremote = "runremote)
-	(if success
-	    (case (remote-transport runremote)
-	      ((http)
-	       (mutex-unlock! *rmt-mutex*)
-	       res)
-	      (else
-	       (debug:print 0 *default-log-port* "ERROR: transport " (remote-transport runremote) " is unknown")
-	       (mutex-unlock! *rmt-mutex*)
-	       (exit 1)))
+        (debug:print-info 13 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat " runremote = " runremote)
+	(mutex-unlock! *rmt-mutex*)
+	(if success ;; success only tells us that the transport was successful, have to examine the data to see if there was a detected issue at the other end
+	    (if (and (vector? res)
+		     (eq? (vector-length res) 2)
+		     (eq? (vector-ref res 1) 'overloaded)) ;; since we are looking at the data to carry the error we'll use a fairly obtuse combo to minimise the chances of some sort of collision.
+                ;; this is the case where the returned data is bad or the server is overloaded and we want
+                ;; to ease off the queries
+		(let ((wait-delay (+ attemptnum (* attemptnum 10))))
+		  (debug:print 0 *default-log-port* "WARNING: server is overloaded. Delaying " wait-delay " seconds and trying call again.")
+		  (mutex-lock! *rmt-mutex*)
+		  (http-transport:close-connections area-dat: runremote)
+		  (set! *runremote* #f) ;; force starting over
+		  (mutex-unlock! *rmt-mutex*)
+		  (thread-sleep! wait-delay)
+		  (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
+		res) ;; All good, return res
 	    (begin
 	      (debug:print 0 *default-log-port* "WARNING: communication failed. Trying again, try num: " attemptnum)
-	      (remote-conndat-set!    runremote #f)
+	      (mutex-lock! *rmt-mutex*)
+              (remote-conndat-set!    runremote #f)
+	      (http-transport:close-connections area-dat: runremote)
 	      (remote-server-url-set! runremote #f)
-              (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
 	      (mutex-unlock! *rmt-mutex*)
-	      (server:start-and-wait *toppath*)
+              (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
+	      ;; (if (not (server:check-if-running *toppath*))
+	      ;; 	  (server:start-and-wait *toppath*))
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))))))))
 
+    ;;DOT }
+    
 ;; (define (rmt:update-db-stats run-id rawcmd params duration)
 ;;   (mutex-lock! *db-stats-mutex*)
 ;;   (handle-exceptions
@@ -232,11 +342,21 @@
 (define (rmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
   (let* ((qry-is-write   (not (member cmd api:read-only-queries)))
 	 (db-file-path   (db:dbfile-path)) ;;  0))
-	 (dbstruct-local (db:setup))  ;; make-dbr:dbstruct path:  dbdir local: #t)))
+	 (dbstruct-local (db:setup #t))  ;; make-dbr:dbstruct path:  dbdir local: #t)))
 	 (read-only      (not (file-write-access? db-file-path)))
 	 (start          (current-milliseconds))
 	 (resdat         (if (not (and read-only qry-is-write))
-			     (api:execute-requests dbstruct-local (vector (symbol->string cmd) params))
+			     (let ((v (api:execute-requests dbstruct-local (vector (symbol->string cmd) params))))
+			       (handle-exceptions ;; there has been a long history of receiving strange errors from values returned by the client when things go wrong..
+				exn               ;;  This is an attempt to detect that situation and recover gracefully
+				(begin
+				  (debug:print0 *default-log-port* "ERROR: bad data from server " v " message: "  ((condition-property-accessor 'exn 'message) exn))
+				  (vector #t '())) ;; should always get a vector but if something goes wrong return a dummy
+				(if (and (vector? v)
+					 (> (vector-length v) 1))
+				    (let ((newvec (vector (vector-ref v 0)(vector-ref v 1))))
+				      newvec)           ;; by copying the vector while inside the error handler we should force the detection of a corrupted record
+				    (vector #t '()))))  ;; we could also check that the returned types are valid
 			     (vector #t '())))
 	 (success        (vector-ref resdat 0))
 	 (res            (vector-ref resdat 1))
@@ -258,7 +378,7 @@
 	  (if qry-is-write
 	      (let ((start-time (current-seconds)))
 		(mutex-lock! *db-multi-sync-mutex*)
-		(set! *db-last-access* start-time)  ;; THIS IS PROBABLY USELESS? (we are on a client)
+/		(set! *db-last-access* start-time)  ;; THIS IS PROBABLY USELESS? (we are on a client)
                 (mutex-unlock! *db-multi-sync-mutex*)))))
     res))
 
@@ -337,6 +457,9 @@
 (define (rmt:runtests user run-id testpatt params)
   (rmt:send-receive 'runtests run-id testpatt))
 
+(define (rmt:get-changed-record-ids since-time)
+  (rmt:send-receive 'get-changed-record-ids #f (list since-time)) )
+
 ;;======================================================================
 ;;  T E S T   M E T A 
 ;;======================================================================
@@ -390,8 +513,10 @@
 (define (rmt:get-test-id run-id testname item-path)
   (rmt:send-receive 'get-test-id run-id (list run-id testname item-path)))
 
+;; run-id is NOT used
+;;
 (define (rmt:get-test-info-by-id run-id test-id)
-  (if (and (number? run-id)(number? test-id))
+  (if (number? test-id)
       (rmt:send-receive 'get-test-info-by-id run-id (list run-id test-id))
       (begin
 	(debug:print 0 *default-log-port* "WARNING: Bad data handed to rmt:get-test-info-by-id run-id=" run-id ", test-id=" test-id)
@@ -412,16 +537,16 @@
 (define (rmt:test-set-state-status-by-id run-id test-id newstate newstatus newcomment)
   (rmt:send-receive 'test-set-state-status-by-id run-id (list run-id test-id newstate newstatus newcomment)))
 
-(define (rmt:set-tests-state-status run-id testnames currstate currstatus newstate newstatus)
+(define (rmt:set-tests-state-status run-id                      testnames currstate currstatus newstate newstatus)
   (rmt:send-receive 'set-tests-state-status run-id (list run-id testnames currstate currstatus newstate newstatus)))
 
 (define (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)
-  (if (number? run-id)
-      (rmt:send-receive 'get-tests-for-run run-id (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode))
-      (begin
-	(debug:print-error 0 *default-log-port* "rmt:get-tests-for-run called with bad run-id=" run-id)
-	(print-call-chain (current-error-port))
-	'())))
+  ;; (if (number? run-id)
+  (rmt:send-receive 'get-tests-for-run run-id (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update mode)))
+  ;;    (begin
+  ;;	(debug:print-error 0 *default-log-port* "rmt:get-tests-for-run called with bad run-id=" run-id)
+  ;;	(print-call-chain (current-error-port))
+  ;;	'())))
 
 ;; get stuff via synchash 
 (define (rmt:synchash-get run-id proc synckey keynum params)
@@ -565,8 +690,8 @@
   (rmt:send-receive 'get-num-runs #f (list runpatt)))
 
 ;; Use the special run-id == #f scenario here since there is no run yet
-(define (rmt:register-run keyvals runname state status user)
-  (rmt:send-receive 'register-run #f (list keyvals runname state status user)))
+(define (rmt:register-run keyvals runname state status user contour)
+  (rmt:send-receive 'register-run #f (list keyvals runname state status user contour)))
     
 (define (rmt:get-run-name-from-id run-id)
   (rmt:send-receive 'get-run-name-from-id run-id (list run-id)))
@@ -614,6 +739,9 @@
 
 (define (rmt:get-var varname)
   (rmt:send-receive 'get-var #f (list varname)))
+
+(define (rmt:del-var varname)
+  (rmt:send-receive 'del-var #f (list varname)))
 
 (define (rmt:set-var varname value)
   (rmt:send-receive 'set-var #f (list varname value)))
@@ -694,10 +822,9 @@
 
 (define (rmt:read-test-data run-id test-id categorypatt #!key (work-area #f)) 
   (rmt:send-receive 'read-test-data run-id (list run-id test-id categorypatt)))
-;;   (let ((tdb  (rmt:open-test-db-by-test-id run-id test-id work-area: work-area)))
-;;     (if tdb
-;; 	(tdb:read-test-data tdb test-id categorypatt)
-;; 	'())))
+(define (rmt:read-test-data* run-id test-id categorypatt varpatt #!key (work-area #f)) 
+  (rmt:send-receive 'read-test-data* run-id (list run-id test-id categorypatt varpatt)))
+
 
 (define (rmt:testmeta-add-record testname)
   (rmt:send-receive 'testmeta-add-record #f (list testname)))
@@ -729,6 +856,22 @@
 
 (define (rmt:tasks-get-last target runname)
   (rmt:send-receive 'tasks-get-last #f (list target runname)))
+
+;;======================================================================
+;; N O   S Y N C   D B 
+;;======================================================================
+
+(define (rmt:no-sync-set var val)
+  (rmt:send-receive 'no-sync-set #f `(,var ,val)))
+
+(define (rmt:no-sync-get/default var default)
+  (rmt:send-receive 'no-sync-get/default #f `(,var ,default)))
+
+(define (rmt:no-sync-del! var)
+  (rmt:send-receive 'no-sync-del! #f `(,var)))
+
+(define (rmt:no-sync-get-lock keyname)
+  (rmt:send-receive 'no-sync-get-lock #f `(,keyname)))
 
 ;;======================================================================
 ;; A R C H I V E S

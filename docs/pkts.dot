@@ -1,0 +1,59 @@
+digraph megatest_pkts {
+  ranksep=0.05
+  // rankdir=LR
+
+node [shape=box,style=filled];
+  
+  "SENSORS" [ label = "{ Sensor Processing | { file | git | fossil | script }}"
+	      shape = "record"; ];
+  
+  "RUNS"    [ label = "{ Runs Processing | { launch | clean | re-run | archive } | { dispatcher }}";
+	      shape = "record"; ];
+
+  "WORK"    [ label = "{ Work Items | { start task | task competed }}";
+	      shape = "record"; ];
+
+  "USERREQ" [ label = "{ User Requests (Unix and Web) | { launch | clean | re-run | archive }}";
+	      shape = "record"; ];
+
+  "MTAREA1" [ label = "{ Megatest Area 1 | { parallel job\nmanagement | test\nmanagement | data\nrollup }}";
+	      shape = "record"; ];
+  
+  "MTAREA2" [ label = "{ Megatest Area 2 | { parallel job\nmanagement | test\nmanagement | data\nrollup }}";
+	      shape = "record"; ];
+  
+  "MTAREA3" [ label = "More Megatest Areas ... ";
+	      shape = "record"; ];
+
+  "PGDB"    [ label = "postgres database";
+	      shape = "cylinder"; ];
+
+  "WEBAPP"  [ label = "{ Web View | { Runs | Contours | Control | Time View }}";
+	      shape = "record"; ];
+
+  // "WEBCTRL" [ label = "{ Web View \n(control) }";
+  //	      shape = "record"; ];
+  
+  "SENSORS" -> "SPKTS";
+  "RUNS"    -> "run pkts";
+  "run pkts" -> "RUNS";
+  "WORK"    -> "work pkts";
+  "work pkts" -> "RUNS";
+  "USERREQ" -> "user request pkts";
+  "SPKTS"   -> "RUNS";
+  "user request pkts" -> "RUNS";
+  "RUNS"    -> "MTAREA1" -> "PGDB";
+  "RUNS"    -> "MTAREA2" -> "PGDB";
+  "RUNS"    -> "MTAREA3" -> "PGDB";
+  "PGDB"    -> "WEBAPP";
+  // "WEBCTRL" -> "run pkts";
+  
+  subgraph cluster_pkts {
+    label="Packets";
+    "SPKTS" [ label = "Sensor Packets" ];
+    "run pkts";
+    "work pkts";
+    "user request pkts";
+  }
+}
+

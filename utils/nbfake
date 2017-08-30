@@ -6,6 +6,8 @@
 # nbfake behavior can be changed by setting the following env vars:
 #   NBFAKE_HOST       SSH to $NBFAKE_HOST and run command
 #   NBFAKE_LOG        Logfile for nbfake output
+#   NB_WASH_GROUPS    comma-separated list of groups to wash into
+#   NB_WASH_ENABLED   must be set in order to enable wash groups
 #
 ###############################################################################
 
@@ -19,6 +21,8 @@ nbfake <command to run>
 nbfake behavior can be changed by setting the following env vars:
    NBFAKE_HOST       SSH to \$NBFAKE_HOST and run command
    NBFAKE_LOG        Logfile for nbfake output
+   NB_WASH_GROUPS    comma-separated list of groups to wash into
+   NB_WASH_ENABLED   must be set in order to enable wash groups
 
 __EOF
   exit
@@ -56,6 +60,13 @@ if [[ -z "$MY_NBFAKE_LOG" ]]; then
   MY_NBFAKE_LOG=NBFAKE-$(date +%GWW%V.%u_%T)
 fi
 
+# wash groups handling. Default is no action
+WASHCMD=""
+if [[ -n ${NB_WASH_ENABLED+1} && -n ${NB_WASH_GROUPS+1} ]]; then
+   grouplist=`echo $NB_WASH_GROUPS | tr ',' ' '`
+   WASHCMD="wash -q -n $grouplist -X"
+fi
+
 #==============================================================================
 # Run and log
 #==============================================================================
@@ -63,14 +74,14 @@ fi
 cat <<__EOF >&2
 #======================================================================
 # NBFAKE logging command to: $MY_NBFAKE_LOG
-#     $*
+#     $WASHCMD $*
 #======================================================================
 __EOF
 
 if [[ -z "$MY_NBFAKE_HOST" ]]; then
   # Run locally
-  sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* >> $MY_NBFAKE_LOG 2>&1 &"
+  sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $WASHCMD $* >> $MY_NBFAKE_LOG 2>&1 &"
 else
   # run remotely
-  ssh -X -n -f $MY_NBFAKE_HOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* >> $MY_NBFAKE_LOG 2>&1 &\""
+  ssh -X -n -f $MY_NBFAKE_HOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $WASHCMD $* >> $MY_NBFAKE_LOG 2>&1 &\""
 fi

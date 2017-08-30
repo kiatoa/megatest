@@ -33,7 +33,7 @@ node [shape=box,style=filled];
 
   "COMPLETED" [
       shape="record";
-      label = "{COMPLETED|{PASS | <here> FAIL |<here> CHECK|<here> SKIP}}";
+      label = "{COMPLETED|{PASS | SKIP | WAIVED | FAIL | CHECK| ABORT}}";
   ]
 
 

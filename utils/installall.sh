@@ -19,16 +19,18 @@ if [[ $OPTION=="" ]]; then
 fi
 
 echo You may need to do the following first:
-echo sudo apt-get install libreadline-dev
-echo sudo apt-get install libwebkitgtk-dev 
-echo sudo apt-get install libpangox-1.0-0 zlib1g-dev libfreetype6-dev cmake
-echo sudo apt-get install libssl-dev  uuid-dev
-echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
+echo sudo apt install libreadline-dev
+echo sudo apt install libwebkitgtk-dev 
+echo sudo apt install libpangox-1.0-0 zlib1g-dev libfreetype6-dev cmake
+echo sudo apt install libssl-dev  uuid-dev
+echo sudo apt install libmotif3 -OR- set KTYPE=26g4
+echo sudo apt install cmake
 echo
 echo Set OPTION to std, currently OPTION=$OPTION
 echo
 echo Additionally, if you want mysql-client, you will need to make sure
 echo mysql_config is in your path
+echo for postgres to install dbi libpq-dev
 echo
 echo You are using PREFIX=$PREFIX
 echo You are using proxy="$proxy"
@@ -37,20 +39,35 @@ echo "Set additional_libpath to help find gtk or other libraries, don't forget a
 
 SYSTEM_TYPE=$(lsb_release -irs |tr ' ' '_' |tr '\n' '-')$(uname -i)-$OPTION
 
+CHICKEN_VERSION=4.11.0
+CHICKEN_BASEVER=4.11.0
+
 # Set up variables
 #
 case $SYSTEM_TYPE in
+Ubuntu-17.04-x86_64-std)
+	KTYPE=32
+	CDVER=5.10
+	IUPVER=3.17
+	IMVER=3.11
+	CHICKEN_VERSION=4.12.0
+	CHICKEN_BASEVER=4.12.0
+	;;
 Ubuntu-16.04-x86_64-std)
 	KTYPE=32
 	CDVER=5.10
 	IUPVER=3.17
 	IMVER=3.11
+	CHICKEN_VERSION=4.12.0
+	CHICKEN_BASEVER=4.12.0
 	;;
 Ubuntu-16.04-i686-std)
 	KTYPE=32
 	CDVER=5.10
 	IUPVER=3.17
 	IMVER=3.11
+        CHICKEN_VERSION=4.12.0
+        CHICKEN_BASEVER=4.12.0
 	;;
 SUSE_LINUX_11-x86_64-std)
   KTYPE=26g4 
@@ -66,10 +83,14 @@ CentOS_5.11-x86_64-std)
   ;; 
 esac
 
+echo SYSTEM_TYPE=$SYSTEM_TYPE
 echo KTYPE=$KTYPE			  
 echo CDVER=$CDVER
 echo IUPVER=$IUPVER
 echo IMVER=$IMVER	
+echo CHICKEN_VERSION=$CHICKEN_VERSION
+echo CHICKEN_BASEVER=$CHICKEN_BASEVER
+
 # NOTES:
 #
 # Centos with security setup may need to do commands such as following as root:
@@ -98,6 +119,7 @@ if [[ $proxy == "" ]]; then
   echo PROX=""
 else
   export http_proxy=http://$proxy
+  export https_proxy=http://$proxy
   export PROX="-proxy $proxy"
 fi
 
@@ -112,8 +134,6 @@ fi
 mkdir -p tgz
 
 # http://code.call-cc.org/releases/4.8.0/chicken-4.8.0.5.tar.gz
-export CHICKEN_VERSION=4.11.0
-export CHICKEN_BASEVER=4.11.0
 chicken_targz=chicken-${CHICKEN_VERSION}.tar.gz
 if ! [[ -e tgz/$chicken_targz ]]; then 
     wget http://code.call-cc.org/releases/${CHICKEN_BASEVER}/${chicken_targz}
@@ -152,18 +172,21 @@ if ! [[ -e $PREFIX/bin/csi ]]; then
     cd $BUILDHOME
 fi
 cd $BUILDHOME
-#wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
-#mv 1.0.0 1.0.0.tar.gz
-# if ! [[ -e $PREFIX/lib64/libnanomsg.so.1.0.0 ]]; then
-#         wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
-#         mv 1.0.0 1.0.0.tar.gz
-# 	tar xf 1.0.0.tar.gz 
-# 	cd nanomsg-1.0.0
-# 	./configure --prefix=$PREFIX
-# 	make
-# 	make install
-# fi
-# cd $BUILDHOME
+#if [[ ! -e 1.0.0.tar.gz ]];then
+#  wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
+#  mv 1.0.0 1.0.0.tar.gz
+#fi
+if ! [[ -e $PREFIX/lib64/libnanomsg.so.1.0.0 ]]; then
+        wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
+        #mv 1.0.0 1.0.0.tar.gz
+	tar xf 1.0.0.tar.gz 
+	cd nanomsg-1.0.0
+	./configure --prefix=$PREFIX
+	make
+	make install
+	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL $PROX nanomsg
+fi
+cd $BUILDHOME
 
 export SQLITE3_VERSION=3090200
 if ! [[ -e $PREFIX/bin/sqlite3 ]]; then
@@ -201,7 +224,7 @@ done
 # $CHICKEN_INSTALL $PROX -keep-installed matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client spiffy-request-vars md5 message-digest http-client spiffy-directory-listing
 for egg in matchable readline apropos base64 regex-literals format "regex-case" "test" \
 	coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo \
-	tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client \
+	tcp rpc csv-xml fmt json md5 awful http-client:0.7.1 spiffy uri-common intarweb http-client \
 	spiffy-request-vars s md5 message-digest spiffy-directory-listing ssax sxml-serializer \
 	sxml-modifications logpro z3 call-with-environment-variables \
 	pathname-expand typed-records simple-exceptions numbers crypt parley srfi-42 \
@@ -355,8 +378,12 @@ CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL $PROX -D no-libra
 cd $BUILDHOME  
 
 # install ducttape
-cd ../ducttape
-$CHICKEN_INSTALL
+if [[ -e ../ducttape ]];then
+  cd ../ducttape
+  $CHICKEN_INSTALL
+else
+  echo "ducttape egg not found at ../ducttape. You will need to cd into the ducttape directory in the megatest distribution and run \"chicken-install\""
+fi
 
 cd $BUILDHOME
 echo You may need to add $LD_LIBRARY_PATH to your LD_LIBRARY_PATH variable, a setup-chicken4x.sh 

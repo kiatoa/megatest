@@ -21,9 +21,11 @@ VER = $(shell fsl info|grep checkout|awk '{print $$2}'|cut -c 1-5)
 NEWTARGET  = "$(OS)/$(FS)/$(VER)"
 TARGET     = "ubuntu/nfs/none"
 
-all : build unit test1 test2 test3 test4 test5 test6 test7 test8 test9
+all : build unit test4
+# test1 test2 test3 test4 test5 test6 test7 test8 test9
 
-unit : basicserver.log runs.log misc.log tests.log
+unit : all-rmt.log
+# basicserver.log runs.log misc.log tests.log
 
 rel : 
 	cd release;dashboard -rows 25 &
@@ -173,7 +175,7 @@ minsetup : build
 	cd mintest;$(DASHBOARD) -rows 18 &
 
 cleanprep : ../*.scm Makefile */*.config build
-	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links /tmp/$(USER)/adisk1
+	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links /tmp/$(USER)/adisk1 fullrun/logs
 	rm -f */logging.db
 	touch cleanprep
 

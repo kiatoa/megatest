@@ -19,7 +19,7 @@
 ;; have a pool of db's to pick from
 (define *dbpool* '())
 (define *pool-mutex* (make-mutex))
-1
+
 (define (get-db)
   (mutex-lock! *pool-mutex*)
   (if (null? *dbpool*)

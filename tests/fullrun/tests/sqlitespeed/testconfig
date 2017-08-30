@@ -11,3 +11,5 @@ MANYITEMS [system (env > envfile.txt;echo aa ab ac ad ae af ag ah ai)]
 
 [test_meta]
 jobgroup sqlite3
+tags quick
+

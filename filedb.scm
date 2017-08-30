@@ -18,7 +18,7 @@
 
 (define (filedb:open-db dbpath)
   (let* ((fdb      (make-filedb:fdb))
-	 (dbexists (file-exists? dbpath))
+	 (dbexists (common:file-exists? dbpath))
 	 (db (sqlite3:open-database dbpath)))
     (filedb:fdb-set-db!        fdb db)
     (filedb:fdb-set-dbpath!    fdb dbpath)
