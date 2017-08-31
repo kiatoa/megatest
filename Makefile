@@ -2,17 +2,17 @@
 # rm <files>.o ; make install CSCOPTS='-profile' ; ... ;  chicken-profile | less
 
 PREFIX=$(PWD)
-CSCOPTS= 
+CSCOPTS=
 INSTALL=install
 SRCFILES = common.scm items.scm launch.scm \
    ods.scm runconfig.scm server.scm configf.scm \
    db.scm keys.scm margs.scm megatest-version.scm \
    process.scm runs.scm tasks.scm tests.scm genexample.scm \
    http-transport.scm filedb.scm \
-   client.scm synchash.scm daemon.scm mt.scm \
+   client.scm daemon.scm mt.scm \
    ezsteps.scm lock-queue.scm sdb.scm \
    rmt.scm api.scm tdb.scm rpc-transport.scm \
-   portlogger.scm archive.scm env.scm diff-report.scm
+   portlogger.scm archive.scm env.scm diff-report.scm cgisetup/models/pgdb.scm
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
@@ -40,7 +40,8 @@ ARCHSTR=$(shell lsb_release -sr)
 
 PNGFILES = $(shell cd docs/manual;ls *png)
 
-all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard 
+#all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut ndboard
+all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut
 
 mtest: $(OFILES) readline-fix.scm megatest.o
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
@@ -51,6 +52,43 @@ dboard : $(OFILES) $(GOFILES) dashboard.scm
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
 	csc $(CSCOPTS) $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
 
+mtut: $(OFILES) mtut.scm
+	csc $(CSCOPTS) $(OFILES) mtut.scm -o mtut
+
+TCMTOBJS = \
+	api.o \
+	archive.o \
+	cgisetup/models/pgdb.o \
+	client.o \
+	common.o \
+	configf.o \
+	daemon.o \
+	db.o \
+	env.o \
+	http-transport.o \
+	items.o \
+	keys.o \
+	launch.o \
+	lock-queue.o \
+	margs.o \
+	mt.o \
+	megatest-version.o \
+	ods.o \
+	portlogger.o \
+	process.o \
+	rmt.o \
+	rpc-transport.o \
+	runconfig.o \
+	runs.o \
+	server.o \
+	tasks.o \
+	tdb.o \
+	tests.o \
+
+
+tcmt : $(TCMTOBJS) tcmt.scm
+	csc $(CSCOPTS) $(TCMTOBJS) tcmt.scm -o tcmt
+
 # install documentation to $(PREFIX)/docs
 # DOES NOT REBUILD DOCS
 #
@@ -58,6 +96,10 @@ $(PREFIX)/share/docs/megatest_manual.html : docs/manual/megatest_manual.html
 	mkdir -p $(PREFIX)/share/docs
 	$(INSTALL) docs/manual/megatest_manual.html $(PREFIX)/share/docs/megatest_manual.html
 	for png in $(PNGFILES);do $(INSTALL) docs/manual/$$png $(PREFIX)/share/docs/$$png;done
+
+$(PREFIX)/share/db/mt-pg.sql : mt-pg.sql
+	mkdir -p $(PREFIX)/share/db
+	$(INSTALL) mt-pg.sql $(PREFIX)/share/db/mt-pg.sql
 
 #multi-dboard : multi-dboard.scm $(OFILES) $(GOFILES)
 #	csc $(CSCOPTS) $(OFILES) $(GOFILES) multi-dboard.scm -o multi-dboard
@@ -103,7 +145,21 @@ $(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard utils/mk_wrapper
 	utils/mk_wrapper $(PREFIX) ndboard $(PREFIX)/bin/newdashboard
 	chmod a+x $(PREFIX)/bin/newdashboard
 
-#$(PREFIX)/bin/.$(ARCHSTR)/mdboard : multi-dboard
+$(PREFIX)/bin/.$(ARCHSTR)/mtut : mtut
+	$(INSTALL) mtut $(PREFIX)/bin/.$(ARCHSTR)/mtut
+
+$(PREFIX)/bin/mtutil : $(PREFIX)/bin/.$(ARCHSTR)/mtut utils/mk_wrapper
+	utils/mk_wrapper $(PREFIX) mtut $(PREFIX)/bin/mtutil
+	chmod a+x $(PREFIX)/bin/mtutil
+
+$(PREFIX)/bin/.$(ARCHSTR)/tcmt : tcmt
+	$(INSTALL) tcmt $(PREFIX)/bin/.$(ARCHSTR)/tcmt
+
+$(PREFIX)/bin/tcmt : $(PREFIX)/bin/.$(ARCHSTR)/tcmt utils/mk_wrapper
+	utils/mk_wrapper $(PREFIX) tcmt $(PREFIX)/bin/tcmt
+	chmod a+x $(PREFIX)/bin/tcmt
+
+# $(PREFIX)/bin/.$(ARCHSTR)/mdboard : multi-dboard
 #	$(INSTALL) multi-dboard $(PREFIX)/bin/.$(ARCHSTR)/mdboard
 
 # $(PREFIX)/bin/mdboard : $(PREFIX)/bin/.$(ARCHSTR)/mdboard  utils/mk_wrapper
@@ -180,7 +236,11 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
 	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/viewscreen $(PREFIX)/bin/mt_xterm \
-	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun
+	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun $(PREFIX)/bin/mtutil \
+	  $(PREFIX)/bin/tcmt $(PREFIX)/share/db/mt-pg.sql
+#         $(PREFIX)/bin/.$(ARCHSTR)/ndboard
+
+# $(PREFIX)/bin/newdashboard
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)
@@ -290,4 +350,8 @@ altdb.scm :
 
 portlogger-example : portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
 	csc $(CSCOPTS) portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
+
+# create a pdf dot graphviz diagram from notations in rmt.scm
+rmt.pdf : rmt.scm
+	grep ';;DOT' rmt.scm | sed -e 's/.*;;DOT //' > rmt.dot;dot -Tpdf rmt.dot -o rmt.pdf
 

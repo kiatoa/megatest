@@ -1,5 +1,5 @@
 
-;; Copyright 2006-2013, Matthew Welland.
+;; Copyright 2006-2017, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -14,7 +14,7 @@
 ;;======================================================================
 
 (use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3 call-with-environment-variables csv)
-(use typed-records pathname-expand)
+(use typed-records pathname-expand matchable)
 
 (import (prefix base64 base64:))
 (import (prefix sqlite3 sqlite3:))
@@ -63,7 +63,7 @@
 ;;
 (define (launch:load-logpro-dat run-id test-id stepname)
   (let ((cname (conc stepname ".dat")))
-    (if (file-exists? cname)
+    (if (common:file-exists? cname)
 	(let* ((dat  (read-config cname #f #f))
 	       (csvr (db:logpro-dat->csv dat stepname))
 	       (csvt (let-values (((fmt-cell fmt-record fmt-csv) (make-format ",")))
@@ -73,7 +73,7 @@
           (if csvt  ;; this if blocked stack dump caused by .dat file from logpro being 0-byte.  fixed by upgrading logpro
               (rmt:csv->test-data run-id test-id csvt)
 	      (debug:print 0 *default-log-port* "ERROR: no csvdat exists for run-id: " run-id " test-id: " test-id " stepname: " stepname ", check that logpro version is 1.15 or newer"))
-	  ;;  (BB> "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
+	  ;;  (debug:print-info 13 *default-log-port* "Error: run-id/test-id/stepname="run-id"/"test-id"/"stepname" => bad csvr="csvr)
 	  ;;  )
 	  (cond
 	   ((equal? status "PASS") "PASS") ;; skip the message part if status is pass
@@ -92,7 +92,7 @@
 	 (html-file      (conc stepname ".html"))
 	 (dat-file       (conc stepname ".dat"))
 	 (tconfig-logpro (configf:lookup testconfig "logpro" stepname))
-	 (logpro-used    (file-exists? logpro-file)))
+	 (logpro-used    (common:file-exists? logpro-file)))
 
     (if (and tconfig-logpro
 	     (not logpro-used)) ;; no logpro file found but have a defn in the testconfig
@@ -111,7 +111,7 @@
     ;; ;; first source the previous environment
     ;; (let ((prev-env (conc ".ezsteps/" prevstep (if (string-search (regexp "csh") 
     ;;      							 (get-environment-variable "SHELL")) ".csh" ".sh"))))
-    ;;   (if (and prevstep (file-exists? prev-env))
+    ;;   (if (and prevstep (common:file-exists? prev-env))
     ;;       (set! script (conc script "source " prev-env))))
     
     ;; call the command using mt_ezstep
@@ -130,7 +130,7 @@
            (lambda ()
              (print stepname ".log :")
              (print "\t" cmd)
-             (if (file-exists? (conc stepname ".logpro"))
+             (if (common:file-exists? (conc stepname ".logpro"))
                  (print "\tlogpro " stepname ".logpro " stepname ".html < " stepname ".log"))
              (print)
              (print stepname " : " stepname ".log")
@@ -174,7 +174,7 @@
       (if logpro-used
 	  (let ((datfile (conc stepname ".dat")))
 	    ;; load the .dat file into the test_data table if it exists
-	    (if (file-exists? datfile)
+	    (if (common:file-exists? datfile)
 		(set! comment (launch:load-logpro-dat run-id test-id stepname)))
 	    (rmt:test-set-log! run-id test-id (conc stepname ".html"))))
       (rmt:teststep-set-status! run-id test-id stepname "end" exinfo comment logfna))
@@ -298,7 +298,7 @@
 	    (begin
 	      (debug:print-error 0 *default-log-port* "Failed to resolve megatest.config, runconfigs.config and testconfig issues. Giving up now")
 	      (exit 1)))
-	(if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
+	(if (not (common:file-exists? ".ezsteps"))(create-directory ".ezsteps"))
 	;; if ezsteps was defined then we are sure to have at least one step but check anyway
 	(if (not (> (length ezstepslst) 0))
 	    (debug:print-error 0 *default-log-port* "ezsteps defined but ezstepslst is zero length")
@@ -310,7 +310,7 @@
 		  (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig))
 			(stepname    (car ezstep)))
 		    ;; if logpro-used read in the stepname.dat file
-		    (if (and logpro-used (file-exists? (conc stepname ".dat")))
+		    (if (and logpro-used (common:file-exists? (conc stepname ".dat")))
 			(launch:load-logpro-dat run-id test-id stepname))
 		    (if (steprun-good? logpro-used (launch:einf-exit-code exit-info))
 			(if (not (null? tal))
@@ -319,7 +319,8 @@
 		  (debug:print 4 *default-log-port* "WARNING: a prior step failed, stopping at " ezstep)))))))
 
 (define (launch:monitor-job run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m work-area runtlim misc-flags)
-  (let* ((start-seconds (current-seconds))
+  (let* ((update-period (string->number (or (configf:lookup *configdat* "setup" "test-stats-update-period") "30")))
+         (start-seconds (current-seconds))
 	 (calc-minutes  (lambda ()
 			  (inexact->exact 
 			   (round 
@@ -332,17 +333,24 @@
     (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
     (let loop ((minutes   (calc-minutes))
 	       (cpu-load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
-	       (disk-free (get-df (current-directory))))
-      (let ((new-cpu-load (let* ((load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
-				 (delta (abs (- load cpu-load))))
-			    (if (> delta 0.1) ;; don't bother updating with small changes
-				load
-				#f)))
-	    (new-disk-free (let* ((df    (get-df (current-directory)))
-				  (delta (abs (- df disk-free))))
-			     (if (> delta 200) ;; ignore changes under 200 Meg
-				 df
-				 #f))))
+	       (disk-free (get-df (current-directory)))
+               (last-sync (current-seconds)))
+      (let* ((over-time     (> (current-seconds) (+ last-sync update-period)))
+             (new-cpu-load  (let* ((load  (alist-ref 'adj-core-load (common:get-normalized-cpu-load #f)))
+                                   (delta (abs (- load cpu-load))))
+                              (if (> delta 0.1) ;; don't bother updating with small changes
+                                  load
+                                  #f)))
+             (new-disk-free (let* ((df    (if over-time ;; only get df every 30 seconds
+                                              (get-df (current-directory))
+                                              disk-free))
+                                   (delta (abs (- df disk-free))))
+                              (if (and (> df 0)
+                                       (> (/ delta df) 0.1)) ;; (> delta 200) ;; ignore changes under 200 Meg
+                                  df
+                                  #f)))
+             (do-sync       (or new-cpu-load new-disk-free over-time)))
+        (debug:print 4 *default-log-port* "cpu: " new-cpu-load " disk: " new-disk-free " last-sync: " last-sync " do-sync: " do-sync)
 	(set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
 			    (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
 						(time-exceeded (> run-seconds runtlim)))
@@ -351,7 +359,8 @@
 						 (debug:print-info 0 *default-log-port* "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
 						 #t)
 					       #f)))))
-	(tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f)
+        (if do-sync
+            (tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f))
 	(if kill-job? 
 	    (begin
 	      (mutex-lock! m)
@@ -399,13 +408,18 @@
 	    (begin
 	      (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
 	      (if (hash-table-ref/default misc-flags 'keep-going #f)  ;; keep originals for cpu-load and disk-free unless they change more than the allowed delta
-		  (loop (calc-minutes) (or new-cpu-load cpu-load) (or new-disk-free disk-free)))))))
+		  (loop (calc-minutes)
+                        (or new-cpu-load cpu-load)
+                        (or new-disk-free disk-free)
+                        (if do-sync (current-seconds) last-sync)))))))
     (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f))) ;; NOTE: Checking twice for keep-going is intentional
+
 
 (define (launch:execute encoded-cmd)
   (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
 	 (tconfigreg #f))
     (setenv "MT_CMDINFO" encoded-cmd)
+    ;;(bb-check-path msg: "launch:execute incoming")
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
 	(let* ((testpath  (assoc/default 'testpath  cmdinfo))  ;; testpath is the test spec area
@@ -415,18 +429,22 @@
 	       (runscript (assoc/default 'runscript cmdinfo))
 	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
 	       ;; (runremote (assoc/default 'runremote cmdinfo))
-	       (transport (assoc/default 'transport cmdinfo))
+	       ;; (transport (assoc/default 'transport cmdinfo))  ;; not used
 	       ;; (serverinf (assoc/default 'serverinf cmdinfo))
-	       (port      (assoc/default 'port      cmdinfo))
+	       ;; (port      (assoc/default 'port      cmdinfo))
+	       (serverurl (assoc/default 'serverurl cmdinfo))
+	       (homehost  (assoc/default 'homehost  cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (test-id   (assoc/default 'test-id   cmdinfo))
 	       (target    (assoc/default 'target    cmdinfo))
+	       (areaname  (assoc/default 'areaname  cmdinfo))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
 	       (env-ovrd  (assoc/default 'env-ovrd  cmdinfo))
 	       (set-vars  (assoc/default 'set-vars  cmdinfo)) ;; pre-overrides from -setvar
 	       (runname   (assoc/default 'runname   cmdinfo))
 	       (megatest  (assoc/default 'megatest  cmdinfo))
 	       (runtlim   (assoc/default 'runtlim   cmdinfo))
+	       (contour   (assoc/default 'contour   cmdinfo))
 	       (item-path (item-list->path itemdat))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 	       (keys      #f)
@@ -435,22 +453,107 @@
                                   #f
                                   (if (substring-index "/" runscript)
                                       runscript ;; use unadultered if contains slashes
-                                      (let ((fulln (conc testpath "/" runscript)))
-	                                  (if (and (file-exists? fulln)
+                                      (let ((fulln (conc work-area "/" runscript)))
+	                                  (if (and (common:file-exists? fulln)
                                                    (file-execute-access? fulln))
                                               fulln
                                               runscript))))) ;; assume it is on the path
 	       ) ;; (rollup-status 0)
 
+	  (if contour (setenv "MT_CONTOUR" contour))
+	  
+	  ;; immediated set some key variables from CMDINFO data, yes, these will be set again below ...
+	  ;;
+	  (setenv "MT_TESTSUITENAME" areaname)
+	  (setenv "MT_RUN_AREA_HOME" top-path)
+	  (set! *toppath* top-path)
+	  (setenv "MT_TEST_RUN_DIR"  work-area)
+
+	;;    ;; On NFS it can be slow and unreliable to get needed startup information.
+	;;    ;;  i. Check if we are on the homehost, if so, proceed
+	;;    ;; ii. Check if host and port passed in via CMDINFO are valid and if
+	;;    ;;     possible use them.
+	;;    (let ((bestadrs (server:get-best-guess-address (get-host-name)))
+	;;    	(needcare #f))
+	;;      (if (equal? homehost bestadrs) ;; we are likely on the homehost
+	;;    	(debug:print-info 0 *default-log-port* "test " test-name " appears to be running on the homehost " homehost)
+	;;    	(let ((host-port (if serverurl (string-split serverurl ":") #f)))
+	;;    	  (if (not *runremote*)(set! *runremote* (make-remote))) ;; init *runremote*
+	;;    	  (if (string? homehost)
+	;;    	      (if (and host-port
+	;;    		       (> (length host-port) 1))
+	;;    		  (let* ((host      (car host-port))
+        ;;                           (port      (cadr host-port))
+        ;;                           (start-res (http-transport:client-connect host port))
+        ;;                           (ping-res  (rmt:login-no-auto-client-setup start-res)))
+	;;    		    (if (and start-res
+	;;    			     ping-res)
+	;;    			;; (begin ;; let ((url  (http-transport:server-dat-make-url start-res)))
+	;;    			(begin
+	;;    			  (remote-conndat-set! *runremote* start-res)
+	;;    			  ;; (remote-server-url-set! *runremote* url)
+	;;    			  ;; (if (server:ping url)
+	;;    			  (debug:print-info 0 *default-log-port* "connected to " host ":" port " using CMDINFO data."))
+	;;    			(begin
+	;;    			  (debug:print-info 0 *default-log-port* "have CMDINFO data but failed to connect to " host ":" port)
+	;;    			  (set! *runremote* #f))
+	;;    			  ;; (remote-conndat-set! *runremote* #f))
+	;;    			))
+	;;    		  (begin
+	;;    		    (set! *runremote* #f)
+	;;    		    (debug:print-info 0 *default-log-port* (if host-port
+	;;    							       (conc "received invalid host-port information " host-port)
+	;;    							       "no host-port information received"))
+	;;    		    ;; potential for bad situation if simultaneous starting of hundreds of jobs on servers, set needcare.
+	;;    		    (set! needcare #t)))
+	;;    	      (begin
+	;;    		(set! *runremote* #f)
+	;;    		(debug:print-info 0 *default-log-port* "received no homehost information. Please report this to support as it should not happen.")
+	;;    		(set! needcare #t)))))
+	;;      (if needcare  ;; due to very slow NFS we will do a brute force mkdir to ensure that the directory inode it truly available on this host
+	;;    	(let ((logdir (conc top-path "/logs"))) ;; we'll try to create this directory
+	;;    	  (handle-exceptions
+	;;    	      exn
+	;;    	      (debug:print 0 *default-log-port* "Failed to create directory " logdir " expect problems, message: " ((condition-property-accessor 'exn 'message) exn))
+	;;    	    (create-directory logdir #t)))))
+	;;    	  
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
-	    (if (or (file-exists? top-path)
+	    (if (or (common:directory-exists? work-area)
 		    (> count 10))
-		(change-directory top-path)
+		(change-directory work-area)
 		(begin
-		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " top-path " not found")
+		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " work-area " not found")
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
+
+          (if (not (string=?  (common:real-path work-area)(common:real-path (current-directory))))
+              (begin
+                (debug:print 0 *default-log-port*
+                             "INFO: we are expecting to be in directory " work-area "\n"
+                             "     but we are actually in the directory " (current-directory) "\n"
+                             "     doing another change dir.")
+                (change-directory work-area)))
+          
+	  ;; spot check that the files in testpath are available. Too often NFS delays cause problems here.
+	  (let ((files      (glob (conc testpath "/*")))
+		(bad-files '()))
+	    (for-each
+	     (lambda (fullname)
+	       (let* ((fname (pathname-strip-directory fullname))
+                      (targn (conc work-area "/" fname)))
+		 (if (not (file-exists? targn))
+		     (set! bad-files (cons fname bad-files)))))
+	     files)
+	    (if (not (null? bad-files))
+                (begin
+                  (debug:print 0 *default-log-port* "INFO: test data from " testpath " not copied properly or filesystem problems causing data to not be found. Re-running the copy command.")
+                  (debug:print 0 *default-log-port* "INFO: missing files from " work-area ": " (string-intersperse bad-files ", "))
+                  (launch:test-copy testpath work-area))))
+
+          ;; one more time, change to the work-area directory
+          (change-directory work-area)
+          
 	  (launch:setup) ;; should be properly in the top-path now
 	  (set! tconfigreg (tests:get-all))
 	  (let ((sighand (lambda (signum)
@@ -479,10 +582,15 @@
 	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
 	  ;;
 	  (let* ((test-info (rmt:get-test-info-by-id run-id test-id))
-		 (test-host (db:test-get-host        test-info))
+		 (test-host (if test-info
+				(db:test-get-host        test-info)
+				(begin
+				  (debug:print 0 *default-log-port* "ERROR: failed to find a record for test-id " test-id ", exiting.")
+				  (exit))))
 		 (test-pid  (db:test-get-process_id  test-info)))
 	    (cond
-	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
+             ;; -mrw- I'm removing KILLREQ from this list so that a test in KILLREQ state is treated as a "do not run" flag.
+	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
 	      (debug:print 0 *default-log-port* "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
 	      ;; (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
 	      (rmt:test-set-state-status run-id test-id "REMOTEHOSTSTART" "n/a" #f)
@@ -505,7 +613,7 @@
 	  (set! keys       (rmt:get-keys))
 	  ;; (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals) ;; these may be needed by the launching process
 	  ;; one of these is defunct/redundant ...
-	  (if (not (launch:setup force: #t))
+	  (if (not (launch:setup force-reread: #t))
 	      (begin
 		(debug:print 0 *default-log-port* "Failed to setup, exiting") 
 		;; (sqlite3:finalize! db)
@@ -517,7 +625,8 @@
 	  ;;       seems non-ideal but could well break stuff
 	  ;;    BUG? BUG? BUG?
 	  
-	  (let ((rconfig (full-runconfigs-read))) ;; (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target))))
+	  (let ((rconfig (full-runconfigs-read)) ;; (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target))))
+		(wconfig (read-config "waivers.config" #f #t sections: `( "default" ,target )))) ;; read the waivers config if it exists
 	    ;; (setup-env-defaults (conc *toppath* "/runconfigs.config") run-id (make-hash-table) keyvals target)
 	    ;; (set-run-config-vars run-id keyvals target) ;; (db:get-target db run-id))
 	    ;; Now have runconfigs data loaded, set environment vars
@@ -531,17 +640,18 @@
 					  (debug:print-error 0 *default-log-port* "bad variable spec, " var "=" val))))
 				  (configf:get-section rconfig section)))
 		      (list "default" target)))
+          ;;(bb-check-path msg: "launch:execute post block 1")
 
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
-	    (if (or (file-exists? work-area)
+	    (if (or (common:file-exists? work-area)
 		    (> count 10))
 		(change-directory work-area)
 		(begin
 		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " work-area " not found")
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
-
+          ;;(bb-check-path msg: "launch:execute post block 1.5")
 	  ;; (change-directory work-area) 
 	  (set! keyvals    (keys:target->keyval keys target))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
@@ -557,6 +667,7 @@
 			       (debug:print 1 *default-log-port* "Adding pre-var/val " var " = " val " to the environment")
 			       (setenv var val)))))
 		     varpairs)))
+          ;;(bb-check-path msg: "launch:execute post block 2")
 	  (for-each
 	   (lambda (varval)
 	     (let ((var (car varval))
@@ -574,10 +685,12 @@
 	      (list  "MT_RUNNAME"   runname)
 	      (list  "MT_MEGATEST"  megatest)
 	      (list  "MT_TARGET"    target)
-	      (list  "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))
-	      (list  "MT_TESTSUITE_NAME" (common:get-testsuite-name))))
+	      (list  "MT_LINKTREE"  (common:get-linktree)) ;; (configf:lookup *configdat* "setup" "linktree"))
+	      (list  "MT_TESTSUITENAME" (common:get-testsuite-name))))
+          ;;(bb-check-path msg: "launch:execute post block 3")
 
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
+          ;;(bb-check-path msg: "launch:execute post block 4")
 	  ;; (change-directory top-path)
 	  ;; Can setup as client for server mode now
 	  ;; (client:setup)
@@ -585,9 +698,16 @@
 	  
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
+          ;;(bb-check-path msg: "launch:execute post block 41")
 	  (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals)
+          ;;(bb-check-path msg: "launch:execute post block 42")
 	  (set-item-env-vars itemdat)
-	  (save-environment-as-files "megatest")
+          ;;(bb-check-path msg: "launch:execute post block 43")
+          (let ((blacklist (configf:lookup *configdat* "setup" "blacklistvars")))
+            (if blacklist
+                (save-environment-as-files "megatest" ignorevars: (string-split blacklist))
+                (save-environment-as-files "megatest")))
+          ;;(bb-check-path msg: "launch:execute post block 44")
 	  ;; open-run-close not needed for test-set-meta-info
 	  ;; (tests:set-full-meta-info #f test-id run-id 0 work-area)
 	  ;; (tests:set-full-meta-info test-id run-id 0 work-area)
@@ -598,7 +718,7 @@
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
 	      (if (and fullrunscript 
-		       (file-exists? fullrunscript)
+		       (common:file-exists? fullrunscript)
 		       (not (file-execute-access? fullrunscript)))
 		  (system (conc "chmod ug+x " fullrunscript))))
 
@@ -671,8 +791,11 @@
 	    (debug:print 2 *default-log-port* "Output from running " fullrunscript ", pid " (launch:einf-pid exit-info) " in work area " 
 			 work-area ":\n====\n exit code " (launch:einf-exit-code exit-info) "\n" "====\n")
 	    (if (not (launch:einf-exit-status exit-info))
-		(exit 4)))))))
+		(exit 4))))
+        )))
 
+;; DO NOT USE - caching of configs is handled in launch:setup now.
+;;
 (define (launch:cache-config)
   ;; if we have a linktree and -runtests and -target and the directory exists dump the config
   ;; to megatest-(current-seconds).cfg and symlink it to megatest.cfg
@@ -680,29 +803,30 @@
 	   (or (args:get-arg "-run")
 	       (args:get-arg "-runtests")
 	       (args:get-arg "-execute")))
-      (let* ((linktree (get-environment-variable "MT_LINKTREE"))
-	     (target   (common:args-get-target))
+      (let* ((linktree (common:get-linktree)) ;; (get-environment-variable "MT_LINKTREE"))
+	     (target   (common:args-get-target exit-if-bad: #t))
 	     (runname  (or (args:get-arg "-runname")
 			   (args:get-arg ":runname")
 			   (getenv "MT_RUNNAME")))
 	     (fulldir  (conc linktree "/"
 			     target "/"
 			     runname)))
-	(if (and linktree (file-exists? linktree)) ;; can't proceed without linktree
+	(if (and linktree (common:file-exists? linktree)) ;; can't proceed without linktree
 	    (begin
 	      (debug:print-info 0 *default-log-port* "Have -run with target=" target ", runname=" runname ", fulldir=" fulldir ", testpatt=" (or (args:get-arg "-testpatt") "%"))
-	      (if (not (file-exists? fulldir))
+	      (if (not (common:file-exists? fulldir))
 		  (create-directory fulldir #t)) ;; need to protect with exception handler 
 	      (if (and target
 		       runname
-		       (file-exists? fulldir))
+		       (common:file-exists? fulldir))
 		  (let ((tmpfile  (conc fulldir "/.megatest.cfg." (current-seconds)))
 			(targfile (conc fulldir "/.megatest.cfg-"  megatest-version "-" megatest-fossil-hash))
 			(rconfig  (conc fulldir "/.runconfig." megatest-version "-" megatest-fossil-hash)))
-		    (if (file-exists? rconfig) ;; only cache megatest.config AFTER runconfigs has been cached
+		    (if (common:file-exists? rconfig) ;; only cache megatest.config AFTER runconfigs has been cached
 			(begin
 			  (debug:print-info 0 *default-log-port* "Caching megatest.config in " tmpfile)
-			  (configf:write-alist *configdat* tmpfile)
+                          (if (not (common:in-running-test?))
+                              (configf:write-alist *configdat* tmpfile))
 			  (system (conc "ln -sf " tmpfile " " targfile))))
 		    )))
 	    (debug:print-info 1 *default-log-port* "No linktree yet, no caching configs.")))))
@@ -723,155 +847,245 @@
 ;;           *runconfigdat* (runconfigs.config info)
 ;;           *configstatus* (status of the read data)
 ;;
-(define (launch:setup #!key (force #f))
+(define (launch:setup #!key (force-reread #f) (areapath #f))
   (mutex-lock! *launch-setup-mutex*)
   (if (and *toppath*
-	   (eq? *configstatus* 'fulldata)) ;; got it all
+	   (eq? *configstatus* 'fulldata) (not force-reread)) ;; got it all
       (begin
-	(debug:print 0 *default-log-port* "NOTE: skipping launch:setup-body call since we have fulldata")
+	(debug:print 2 *default-log-port* "NOTE: skipping launch:setup-body call since we have fulldata")
 	(mutex-unlock! *launch-setup-mutex*)
 	*toppath*)
-      (let ((res (launch:setup-body force: force)))
+      (let ((res (launch:setup-body force-reread: force-reread areapath: areapath)))
 	(mutex-unlock! *launch-setup-mutex*)
 	res)))
 
-(define (launch:setup-body #!key (force #f))
-  (let* ((toppath  (or *toppath* (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
-	 (runname  (common:args-get-runname))
-	 (target   (common:args-get-target))
-	 (linktree (common:get-linktree))
-	 (sections (if target (list "default" target) #f)) ;; for runconfigs
-	 (mtconfig (or (args:get-arg "-config") "megatest.config")) ;; allow overriding megatest.config 
-	 (rundir   (if (and runname target linktree)(conc linktree "/" target "/" runname) #f))
-	 (mtcachef (and rundir (conc rundir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
-	 (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
-	 (cancreate (and rundir (file-exists? rundir)(file-write-access? rundir)))
-         (cxt       (hash-table-ref/default *contexts* toppath #f)))
+;; return paths depending on what info is available.
+;;
+(define (launch:get-cache-file-paths areapath toppath target mtconfig)
+  (let* ((use-cache (common:use-cache?))
+         (runname  (common:args-get-runname))
+         (linktree (common:get-linktree))
+         (testname (common:get-full-test-name))
+         (rundir   (if (and runname target linktree)
+                       (common:directory-writable? (conc linktree "/" target "/" runname))
+                       #f))
+         (testdir  (if (and rundir testname)
+                       (common:directory-writable? (conc rundir "/" testname))
+                       #f))
+         (cachedir (or testdir rundir))
+         (mtcachef (and cachedir (conc cachedir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
+         (rccachef (and cachedir (conc cachedir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash))))
+    (debug:print-info 6 *default-log-port* 
+                      "runname=" runname 
+                      "\n  linktree=" linktree
+                      "\n  testname=" testname
+                      "\n  rundir=" rundir 
+                      "\n  testdir=" testdir 
+                      "\n  cachedir=" cachedir
+                      "\n  mtcachef=" mtcachef
+                      "\n  rccachef=" rccachef)
+    (cons mtcachef rccachef)))
 
-    ;; create our cxt for this area if it doesn't already exist
-    (if (not cxt)(hash-table-set! *contexts* toppath (make-cxt)))
-
-    ;; (print "runname: " runname " target: " target " mtcachef: " mtcachef " rccachef: " rccachef)
-    (set! *toppath* toppath) ;; This is needed when we are running as a test using CMDINFO as a datasource
-    (cond
-     ;; data was read and cached and available in *configstatus*, toppath has already been set
-     ((eq? *configstatus* 'fulldata)
-      *toppath*)
-     ;; if mtcachef exists just read it, however we need to assume toppath is available in $MT_RUN_AREA_HOME
-     ((and mtcachef (file-exists? mtcachef) (get-environment-variable "MT_RUN_AREA_HOME"))
-      (set! *configdat*    (configf:read-alist mtcachef))
-      (set! *runconfigdat* (configf:read-alist rccachef))
-      (set! *configinfo*   (list *configdat*  (get-environment-variable "MT_RUN_AREA_HOME")))
-      (set! *configstatus* 'fulldata)
-      (set! *toppath*      (get-environment-variable "MT_RUN_AREA_HOME"))
-      *toppath*)
-     ;; we have all the info needed to fully process runconfigs and megatest.config
-     (mtcachef              
-      (let* ((first-pass    (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect
-			             mtconfig
-				     environ-patt: "env-override"
-				     given-toppath: toppath
-				     pathenvvar: "MT_RUN_AREA_HOME"))
-	     (first-rundat  (let ((toppath (if toppath 
-					       toppath
-					       (car first-pass))))
-			      (read-config ;; (conc toppath "/runconfigs.config")
-			       (conc (if (string? toppath)
-					 toppath
-					 (get-environment-variable "MT_RUN_AREA_HOME"))
-				     "/runconfigs.config")
-			       *runconfigdat* #t 
-			       sections: sections))))
-	(set! *runconfigdat* first-rundat)
-	(if first-pass  ;; 
-	    (begin
-	      (set! *configdat*  (car first-pass))
-	      (set! *configinfo* first-pass)
-	      (set! *toppath*    (or toppath (cadr first-pass))) ;; use the gathered data unless already have it
-	      (set! toppath      *toppath*)
-	      (if (not *toppath*)
-		  (begin
-		    (debug:print-error 0 *default-log-port* "you are not in a megatest area!")
-		    (exit 1)))
-	      (setenv "MT_RUN_AREA_HOME" *toppath*)
-	      ;; the seed read is done, now read runconfigs, cache it then read megatest.config one more time and cache it
-	      (let* ((keys         (rmt:get-keys))
-		     (key-vals     (keys:target->keyval keys target))
-		     (linktree     (or (getenv "MT_LINKTREE")
-				       (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f)))
-		     (second-pass  (find-and-read-config
-				    mtconfig
-				    environ-patt: "env-override"
-				    given-toppath: toppath
-				    pathenvvar: "MT_RUN_AREA_HOME"))
-		     (runconfigdat (begin     ;; this read of the runconfigs will see any adjustments made by re-reading megatest.config
-				     (for-each (lambda (kt)
-						 (setenv (car kt) (cadr kt)))
-					       key-vals)
-				     (read-config (conc toppath "/runconfigs.config") *runconfigdat* #t 
-						  sections: sections))))
-		(if cancreate (configf:write-alist runconfigdat rccachef))
-		(set! *runconfigdat* runconfigdat)
-		(if cancreate (configf:write-alist *configdat* mtcachef))
-		(if cancreate (set! *configstatus* 'fulldata))))
-	    ;; no configs found? should not happen but let's try to recover gracefully, return an empty hash-table
-	    (set! *configdat* (make-hash-table))
-	    )))
-     ;; else read what you can and set the flag accordingly
-     (else
-      (let* ((cfgdat   (find-and-read-config 
-			(or (args:get-arg "-config") "megatest.config")
-			environ-patt: "env-override"
-			given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
-			pathenvvar: "MT_RUN_AREA_HOME")))
-	(if cfgdat
-	    (let* ((toppath  (or (get-environment-variable "MT_RUN_AREA_HOME")(cadr cfgdat)))
-		   (rdat     (read-config (conc toppath
-						"/runconfigs.config") *runconfigdat* #t sections: sections)))
-	      (set! *configinfo*   cfgdat)
-	      (set! *configdat*    (car cfgdat))
-	      (set! *runconfigdat* rdat)
-	      (set! *toppath*      toppath)
-	      (set! *configstatus* 'partial))
-	    (begin
-	      (debug:print-error 0 *default-log-port* "No " mtconfig " file found. Giving up.")
-	      (exit 2))))))
-    ;; additional house keeping
-    (let* ((linktree (or (getenv "MT_LINKTREE")
-			 (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f))))
-      (if linktree
-	  (begin
-	    (if (not (file-exists? linktree))
+(define (launch:setup-body #!key (force-reread #f) (areapath #f))
+  (if (and (eq? *configstatus* 'fulldata)
+	   *toppath*
+	   (not force-reread)) ;; no need to reprocess
+      *toppath*   ;; return toppath
+      (let* ((use-cache (common:use-cache?)) ;; BB- use-cache checks *configdat* for use-cache setting.  We do not have *configdat*.  Bootstrapping problem here.
+	     (toppath  (or *toppath* areapath (getenv "MT_RUN_AREA_HOME"))) ;; preserve toppath
+	     (target   (common:args-get-target))
+	     (sections (if target (list "default" target) #f)) ;; for runconfigs
+	     (mtconfig (or (args:get-arg "-config") "megatest.config")) ;; allow overriding megatest.config 
+             (cachefiles (launch:get-cache-file-paths areapath toppath target mtconfig))
+	     ;; checking for null cachefiles should not be necessary, I was seeing error car of '(), might be a chicken bug or a red herring ...
+	     (mtcachef   (if (null? cachefiles)
+			     #f
+			     (car cachefiles))) ;; (and cachedir (conc cachedir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
+	     (rccachef   (if (null? cachefiles)
+			     #f
+			     (cdr cachefiles)))) ;; (and cachedir (conc cachedir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash)))
+	      ;; (cancreate (and cachedir (common:file-exists? cachedir)(file-write-access? cachedir) (not (common:in-running-test?)))))
+	(set! *toppath* toppath) ;; This is needed when we are running as a test using CMDINFO as a datasource
+        ;;(BB> "launch:setup-body -- cachefiles="cachefiles)
+	(cond
+	 ;; if mtcachef exists just read it, however we need to assume toppath is available in $MT_RUN_AREA_HOME
+	 ((and (not force-reread)
+	       mtcachef  rccachef
+	       use-cache
+	       (get-environment-variable "MT_RUN_AREA_HOME")
+	       (common:file-exists? mtcachef)
+	       (common:file-exists? rccachef))
+          ;;(BB> "launch:setup-body -- cond branch 1 - use-cache")
+          (set! *configdat*    (configf:read-alist mtcachef))
+          ;;(BB> "launch:setup-body -- 1 set! *configdat*="*configdat*)
+	  (set! *runconfigdat* (configf:read-alist rccachef))
+	  (set! *configinfo*   (list *configdat*  (get-environment-variable "MT_RUN_AREA_HOME")))
+	  (set! *configstatus* 'fulldata)
+	  (set! *toppath*      (get-environment-variable "MT_RUN_AREA_HOME"))
+	  *toppath*)
+	 ;; there are no existing cached configs, do full reads of the configs and cache them
+	 ;; we have all the info needed to fully process runconfigs and megatest.config
+	 ((and ;; (not force-reread) ;; force-reread is irrelevant in the AND, could however OR it?
+	       mtcachef
+	       rccachef) ;; BB- why are we doing this without asking if caching is desired?
+          ;;(BB> "launch:setup-body -- cond branch 2")
+	  (let* ((first-pass    (find-and-read-config        ;; NB// sets MT_RUN_AREA_HOME as side effect
+				 mtconfig
+				 environ-patt: "env-override"
+				 given-toppath: toppath
+				 pathenvvar: "MT_RUN_AREA_HOME"))
+		 (first-rundat  (let ((toppath (if toppath 
+						   toppath
+						   (car first-pass))))
+				  (read-config ;; (conc toppath "/runconfigs.config") ;; this should be converted to runconfig:read but it is non-trivial, leaving it for now.
+				   (conc (if (string? toppath)
+					     toppath
+					     (get-environment-variable "MT_RUN_AREA_HOME"))
+					 "/runconfigs.config")
+				   *runconfigdat* #t 
+				   sections: sections))))
+	    (set! *runconfigdat* first-rundat)
+	    (if first-pass  ;; 
 		(begin
-		  (handle-exceptions
-		   exn
-		   (begin
-		     (debug:print-error 0 *default-log-port* "Something went wrong when trying to create linktree dir at " linktree)
-		     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-		     (exit 1))
-		   (create-directory linktree #t))))
-	    (handle-exceptions
-	     exn
-	     (begin
-	       (debug:print-error 0 *default-log-port* "Something went wrong when trying to create link to linktree at " *toppath*)
-	       (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn)))
-	     (let ((tlink (conc *toppath* "/lt")))
-	       (if (not (file-exists? tlink))
-		   (create-symbolic-link linktree tlink)))))
-	  (begin
-	    (debug:print-error 0 *default-log-port* "linktree not defined in [setup] section of megatest.config")
-	    )))
-    (if (and *toppath*
-	     (directory-exists? *toppath*))
-	(begin
-	  (setenv "MT_RUN_AREA_HOME" *toppath*)
-	  (setenv "MT_TESTSUITE_NAME" (common:get-testsuite-name)))
-	(begin
-	  (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")
-          ;;(exit 1)
-          #f
-          ))
-    *toppath*))
+                  ;;(BB> "launch:setup-body -- \"first-pass\"=first-pass")
+		  (set! *configdat*  (car first-pass))
+                  ;;(BB> "launch:setup-body -- 2 set! *configdat*="*configdat*)
+		  (set! *configinfo* first-pass)
+		  (set! *toppath*    (or toppath (cadr first-pass))) ;; use the gathered data unless already have it
+		  (set! toppath      *toppath*)
+		  (if (not *toppath*)
+		      (begin
+			(debug:print-error 0 *default-log-port* "you are not in a megatest area!")
+			(exit 1)))
+		  (setenv "MT_RUN_AREA_HOME" *toppath*)
+		  ;; the seed read is done, now read runconfigs, cache it then read megatest.config one more time and cache it
+		  (let* ((keys         (rmt:get-keys))
+			 (key-vals     (keys:target->keyval keys target))
+			 (linktree     (common:get-linktree)) ;; (or (getenv "MT_LINKTREE")(if *configdat* (configf:lookup *configdat* "setup" "linktree") #f)))
+					;     (if *configdat*
+					; 	   (configf:lookup *configdat* "setup" "linktree")
+					; 	   (conc *toppath* "/lt"))))
+			 (second-pass  (find-and-read-config
+					mtconfig
+					environ-patt: "env-override"
+					given-toppath: toppath
+					pathenvvar: "MT_RUN_AREA_HOME"))
+			 (runconfigdat (begin     ;; this read of the runconfigs will see any adjustments made by re-reading megatest.config
+					 (for-each (lambda (kt)
+						     (setenv (car kt) (cadr kt)))
+						   key-vals)
+					 (read-config (conc toppath "/runconfigs.config") *runconfigdat* #t ;; consider using runconfig:read some day ...
+						      sections: sections)))
+                         (cachefiles   (launch:get-cache-file-paths areapath toppath target mtconfig))
+                         (mtcachef     (car cachefiles))
+                         (rccachef     (cdr cachefiles)))
+                    ;;  trap exception due to stale NFS handle -- Error: (open-output-file) cannot open file - Stale NFS file handle: "/p/fdk/gwa/lefkowit/mtTesting/qa/primbeqa/links/p1222/11/PDK_r1.1.1/prim/clean/pcell_testgen/.runconfigs.cfg-1.6427-7d1e789cb3f62f9cde719a4865bb51b3c17ea853" - ticket 220546342
+                    ;; TODO - consider 1) using simple-lock to bracket cache write
+                    ;;                 2) cache in hash on server, since need to do rmt: anyway to lock.
+
+		    (if rccachef
+                        (common:fail-safe
+                         (lambda ()
+                           (configf:write-alist runconfigdat rccachef))
+                         (conc "Could not write cache file - "rccachef)))
+                    (if mtcachef
+                        (common:fail-safe
+                         (lambda ()
+                           (configf:write-alist *configdat* mtcachef))
+                         (conc "Could not write cache file - "mtcachef)))
+		    (set! *runconfigdat* runconfigdat)
+		    (if (and rccachef mtcachef) (set! *configstatus* 'fulldata))))
+		;; no configs found? should not happen but let's try to recover gracefully, return an empty hash-table
+		(set! *configdat* (make-hash-table))
+		)))
+
+	 ;; else read what you can and set the flag accordingly
+	 ;; here we don't have either mtconfig or rccachef
+	 (else
+          ;;(BB> "launch:setup-body -- cond branch 3 - else")
+	  (let* ((cfgdat   (find-and-read-config 
+			    (or (args:get-arg "-config") "megatest.config")
+			    environ-patt: "env-override"
+			    given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
+			    pathenvvar: "MT_RUN_AREA_HOME")))
+
+            (if (and cfgdat (list? cfgdat) (> (length cfgdat) 0) (hash-table? (car cfgdat)))
+		(let* ((toppath  (or (get-environment-variable "MT_RUN_AREA_HOME")(cadr cfgdat)))
+		       (rdat     (read-config (conc toppath  ;; convert this to use runconfig:read!
+						    "/runconfigs.config") *runconfigdat* #t sections: sections)))
+		  (set! *configinfo*   cfgdat)
+		  (set! *configdat*    (car cfgdat))
+		  (set! *runconfigdat* rdat)
+		  (set! *toppath*      toppath)
+		  (set! *configstatus* 'partial))
+		(begin
+		  (debug:print-error 0 *default-log-port* "No " mtconfig " file found. Giving up.")
+		  (exit 2))))))
+	;; COND ends here.
+	
+	;; additional house keeping
+	(let* ((linktree (common:get-linktree)))
+	  (if linktree
+	      (begin
+		(if (not (common:file-exists? linktree))
+		    (begin
+		      (handle-exceptions
+			  exn
+			  (begin
+			    (debug:print-error 0 *default-log-port* "Something went wrong when trying to create linktree dir at " linktree)
+			    (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+			    (exit 1))
+			(create-directory linktree #t))))
+		(handle-exceptions
+		    exn
+		    (begin
+		      (debug:print-error 0 *default-log-port* "Something went wrong when trying to create link to linktree at " *toppath*)
+		      (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn)))
+		  (let ((tlink (conc *toppath* "/lt")))
+		    (if (not (common:file-exists? tlink))
+			(create-symbolic-link linktree tlink)))))
+	      (begin
+		(debug:print-error 0 *default-log-port* "linktree not defined in [setup] section of megatest.config")
+		)))
+	(if (and *toppath*
+		 (directory-exists? *toppath*))
+	    (begin
+	      (setenv "MT_RUN_AREA_HOME" *toppath*)
+	      (setenv "MT_TESTSUITENAME" (common:get-testsuite-name)))
+	    (begin
+	      (debug:print-error 0 *default-log-port* "failed to find the top path to your Megatest area.")
+	      (set! *toppath* #f) ;; force it to be false so we return #f
+	      #f))
+	
+        ;; one more attempt to cache the configs for future reading
+        (let* ((cachefiles   (launch:get-cache-file-paths areapath toppath target mtconfig))
+               (mtcachef     (car cachefiles))
+               (rccachef     (cdr cachefiles)))
+
+          ;; trap exception due to stale NFS handle -- Error: (open-output-file) cannot open file - Stale NFS file handle: "/p/fdk/gwa/lefkowit/mtTesting/qa/primbeqa/links/p1222/11/PDK_r1.1.1/prim/clean/pcell_testgen/.runconfigs.cfg-1.6427-7d1e789cb3f62f9cde719a4865bb51b3c17ea853" - ticket 220546342
+          ;; TODO - consider 1) using simple-lock to bracket cache write
+          ;;                 2) cache in hash on server, since need to do rmt: anyway to lock.
+          (if (and rccachef *runconfigdat* (not (common:file-exists? rccachef)))
+              (common:fail-safe
+               (lambda ()
+                 (configf:write-alist *runconfigdat* rccachef))
+               (conc "Could not write cache file - "rccachef))
+              )
+          (if (and mtcachef *configdat*    (not (common:file-exists? mtcachef)))
+              (common:fail-safe
+               (lambda ()
+                 (configf:write-alist *configdat* mtcachef))
+               (conc "Could not write cache file - "mtcachef))
+              )
+          (if (and rccachef mtcachef *runconfigdat* *configdat*)
+              (set! *configstatus* 'fulldata)))
+
+	;; if have -append-config then read and append here
+	(let ((cfname (args:get-arg "-append-config")))
+	  (if (and cfname
+		   (file-read-access? cfname))
+	      (read-config cfname *configdat* #t))) ;; values are added to the hash, no need to do anything special.
+	*toppath*)))
 
 (define (get-best-disk confdat testconfig)
   (let* ((disks   (or (and testconfig (hash-table-ref/default testconfig "disks" #f))
@@ -886,6 +1100,22 @@
 		(if (common:low-noise-print 20 "No valid disks or no disk with enough space")
 		    (debug:print-error 0 *default-log-port* "No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists and has enough space!\n    You can change minspace in the [setup] section of megatest.config. Current setting is: " minspace))
 		(exit 1))))))) ;; TODO - move the exit to the calling location and return #f
+
+(define (launch:test-copy test-src-path test-path)
+  (let* ((ovrcmd (let ((cmd (config-lookup *configdat* "setup" "testcopycmd")))
+		   (if cmd
+		       ;; substitute the TEST_SRC_PATH and TEST_TARG_PATH
+		       (string-substitute "TEST_TARG_PATH" test-path
+					  (string-substitute "TEST_SRC_PATH" test-src-path cmd #t) #t)
+		       #f)))
+	 (cmd    (if ovrcmd 
+		     ovrcmd
+		     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"
+			   " >> " test-path "/mt_launch.log 2>> " test-path "/mt_launch.log")))
+	 (status (system cmd)))
+    (if (not (eq? status 0))
+	(debug:print 2 *default-log-port* "ERROR: problem with running \"" cmd "\""))))
+
 
 ;; Desired directory structure:
 ;;
@@ -909,6 +1139,7 @@
 			(db:get-value-by-header (db:get-rows run-info)
 						(db:get-header run-info)
 						"runname")))
+	 (contour   #f) ;; NOT READY FOR THIS (args:get-arg "-contour"))
 	 ;; convert back to db: from rdb: - this is always run at server end
 	 (target   (string-intersperse (map cadr keyvals) "/"))
 
@@ -919,14 +1150,16 @@
 	 (test-base    (conc testtop-base (if not-iterated "" "/") item-path))
 
 	 ;; nb// if itempath is not "" then it is prefixed with "/"
-	 (toptest-path (conc disk-path "/" testtop-base))
-	 (test-path    (conc disk-path "/" test-base))
+	 (toptest-path (conc disk-path (if contour (conc "/" contour) "") "/" testtop-base))
+	 (test-path    (conc disk-path (if contour (conc "/" contour) "") "/" test-base))
 
 	 ;; ensure this exists first as links to subtests must be created there
-	 (linktree  (let ((rd (config-lookup *configdat* "setup" "linktree")))
-		      (if rd rd (conc *toppath* "/runs"))))
+	 (linktree  (common:get-linktree))
+	 ;; WAS: (let ((rd (config-lookup *configdat* "setup" "linktree")))
+	 ;;         (if rd rd (conc *toppath* "/runs"))))
+	 ;; which seems wrong ...
 
-	 (lnkbase   (conc linktree "/" target "/" runname))
+	 (lnkbase   (conc linktree (if contour (conc "/" contour) "") "/" target "/" runname))
 	 (lnkpath   (conc lnkbase "/" testname))
 	 (lnkpathf  (conc lnkpath (if not-iterated "" "/") item-path))
 	 (lnktarget (conc lnkpath "/" item-path)))
@@ -936,13 +1169,13 @@
     (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path run-id)
 
     (debug:print 2 *default-log-port* "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
-    (if (not (file-exists? linktree))
+    (if (not (common:file-exists? linktree))
 	(begin
 	  (debug:print 0 *default-log-port* "WARNING: linktree did not exist! Creating it now at " linktree)
 	  (create-directory linktree #t))) ;; (system (conc "mkdir -p " linktree))))
     ;; create the directory for the tests dir links, this is needed no matter what...
-    (if (and (not (directory-exists? lnkbase))
-	     (not (file-exists? lnkbase)))
+    (if (and (not (common:directory-exists? lnkbase))
+	     (not (common:file-exists? lnkbase)))
 	(handle-exceptions
 	 exn
 	 (begin
@@ -977,7 +1210,7 @@
 	   (exit 1))
 	 (delete-file lnkpath)))
 
-    (if (not (or (file-exists? lnkpath)
+    (if (not (or (common:file-exists? lnkpath)
 		 (symbolic-link? lnkpath)))
 	(handle-exceptions
 	 exn
@@ -1002,7 +1235,7 @@
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?
 	  (rmt:general-call 'test-set-rundir-shortdir run-id lnkpath 
-			    (if (file-exists? lnkpath)
+			    (if (common:file-exists? lnkpath)
 				;; (resolve-pathname lnkpath)
 				(common:nice-path lnkpath)
 				lnkpath)
@@ -1041,26 +1274,14 @@
 	     (debug:print-error 0 *default-log-port* " Failed to re-create link " lnktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	     (exit))
 	   (if (symbolic-link? lnktarget)     (delete-file lnktarget))
-	   (if (not (file-exists? lnktarget)) (create-symbolic-link test-path lnktarget)))))
+	   (if (not (common:file-exists? lnktarget)) (create-symbolic-link test-path lnktarget)))))
 
     (if (not (directory? test-path))
 	(create-directory test-path #t)) ;; this is a hack, I don't know why out of the blue this path does not exist sometimes
 
     (if (and test-src-path (directory? test-path))
 	(begin
-	  (let* ((ovrcmd (let ((cmd (config-lookup *configdat* "setup" "testcopycmd")))
-			   (if cmd
-			       ;; substitute the TEST_SRC_PATH and TEST_TARG_PATH
-			       (string-substitute "TEST_TARG_PATH" test-path
-						  (string-substitute "TEST_SRC_PATH" test-src-path cmd #t) #t)
-			       #f)))
-		 (cmd    (if ovrcmd 
-			     ovrcmd
-			     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"
-				   " >> " test-path "/mt_launch.log 2>> " test-path "/mt_launch.log")))
-		 (status (system cmd)))
-	    (if (not (eq? status 0))
-		(debug:print 2 *default-log-port* "ERROR: problem with running \"" cmd "\"")))
+	  (launch:test-copy test-src-path test-path)
 	  (list lnkpathf lnkpath ))
 	(if (and test-src-path (> remtries 0))
 	    (begin
@@ -1078,12 +1299,27 @@
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
   (mutex-lock! *launch-setup-mutex*) ;; setting variables and processing the testconfig is NOT thread-safe, reuse the launch-setup mutex
-  (let* ((item-path       (item-list->path itemdat)))
+  (let* ( ;; (lock-key        (conc "test-" test-id))
+	;; (got-lock        (let loop ((lock        (rmt:no-sync-get-lock lock-key))
+	;; 			     (expire-time (+ (current-seconds) 15))) ;; give up on getting the lock and steal it after 15 seconds
+	;; 		    (if (car lock)
+	;; 			#t
+	;; 			(if (> (current-seconds) expire-time)
+	;; 			    (begin
+	;; 			      (debug:print-info 0 *default-log-port* "Timed out waiting for a lock to launch test " keyvals " " runname " " test-name " " test-path)
+	;; 			      (rmt:no-sync-del! lock-key) ;; destroy the lock
+	;; 			      (loop (rmt:no-sync-get-lock lock-key) expire-time)) ;; 
+	;; 			    (begin
+	;; 			      (thread-sleep! 1)
+	;; 			      (loop (rmt:no-sync-get-lock lock-key) expire-time))))))
+	 (item-path       (item-list->path itemdat))
+	 (contour         #f)) ;; NOT READY FOR THIS (args:get-arg "-contour")))
     (let loop ((delta        (- (current-seconds) *last-launch*))
-	       (launch-delay (string->number (or (configf:lookup *configdat* "setup" "launch-delay") "5"))))
+	       (launch-delay (configf:lookup-number *configdat* "setup" "launch-delay" default: 1)))
       (if (> launch-delay delta)
 	  (begin
-	    (debug:print-info 0 *default-log-port* "Delaying launch of " test-name " for " (- launch-delay delta) " seconds")
+	    (if (common:low-noise-print 1200 "test launch delay") ;; every two hours or so remind the user about launch delay.
+		(debug:print-info 0 *default-log-port* "NOTE: test launches are delayed by " launch-delay " seconds. See megatest.config launch-delay setting to adjust.")) ;; launch of " test-name " for " (- launch-delay delta) " seconds"))
 	    (thread-sleep! (- launch-delay delta))
 	    (loop (- (current-seconds) *last-launch*) launch-delay))))
     (change-directory *toppath*)
@@ -1094,6 +1330,7 @@
        (list "MT_TEST_NAME" test-name)
        (list "MT_RUNNAME"   runname)
        (list "MT_ITEMPATH"  item-path)
+       (list "MT_CONTOUR"   contour)
        )
       itemdat))
     (let* ((tregistry       (tests:get-all)) ;; third param (below) is system-allowed
@@ -1174,8 +1411,16 @@
 		       (with-output-to-string
 			 (lambda () ;; (list 'hosts     hosts)
 			   (write (list (list 'testpath  test-path)
-					(list 'transport (conc *transport-type*))
+					;; (list 'transport (conc *transport-type*))
 					;; (list 'serverinf *server-info*)
+					(list 'homehost  (let* ((hhdat (common:get-homehost)))
+							   (if hhdat
+							       (car hhdat)
+							       #f)))
+					(list 'serverurl (if *runremote*
+							     (remote-server-url *runremote*)
+							     #f)) ;;
+					(list 'areaname  (common:get-testsuite-name))
 					(list 'toppath   *toppath*)
 					(list 'work-area work-area)
 					(list 'test-name test-name) 
@@ -1187,6 +1432,7 @@
 					(list 'megatest  remote-megatest)
 					(list 'ezsteps   ezsteps) 
 					(list 'target    mt_target)
+					(list 'contour   contour)
 					(list 'runtlim   (if run-time-limit (common:hms-string->seconds run-time-limit) #f))
 					(list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
 					(list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
@@ -1196,7 +1442,7 @@
       ;; clean out step records from previous run if they exist
       ;; (rmt:delete-test-step-records run-id test-id)
       ;; if the dir does not exist we may have a itempath where individual variables are a path, launch anyway
-      (if (file-exists? work-area)
+      (if (common:file-exists? work-area)
 	  (change-directory work-area)) ;; so that log files from the launch process don't clutter the test dir
       (cond
        ;; ((and launcher hosts) ;; must be using ssh hostname
@@ -1242,6 +1488,7 @@
 					'()
 					(cdr fullcmd)))))
         (mutex-unlock! *launch-setup-mutex*) ;; yes, really should mutex all the way to here. Need to put this entire process into a fork.
+	;; (rmt:no-sync-del! lock-key)         ;; release the lock for starting this test
 	(if (not launchwait) ;; give the OS a little time to allow the process to start
 	    (thread-sleep! 0.01))
 	(with-output-to-file "mt_launch.log"

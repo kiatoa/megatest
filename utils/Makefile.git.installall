@@ -49,7 +49,7 @@ PROXY=
 # http://code.call-cc.org/dev-snapshots/2015/06/07/chicken-4.10.0rc1.tar.gz
 # http://code.call-cc.org/releases/4.10.0/chicken-4.10.0.tar.gz
 # Select version of chicken, sqlite3 etc
-CHICKEN_VERSION=4.10.1
+CHICKEN_VERSION=4.12.0rc2
 SQLITE3_VERSION=3090200
 # http://www.sqlite.org/2014/sqlite-autoconf-3080500.tar.gz
 # http://www.sqlite.org/2015/sqlite-autoconf-3081101.tar.gz
@@ -175,6 +175,9 @@ chicken-4.10.1.tar.gz :
 	cd chicken-core; fossil open ../chicken-scheme.fossil
 	cd chicken-core; fossil up 337f5be
 #	wget http://code.call-cc.org/dev-snapshots/2015/08/29/chicken-4.10.1.tar.gz
+
+chicken-4.12.0rc2.tar.gz :
+	wget https://code.call-cc.org/dev-snapshots/2017/02/06/chicken-4.12.0rc2.tar.gz	
 
 # git clone git://code.call-cc.org/chicken-core
 # git clone http://code.call-cc.org/git/chicken-core.git

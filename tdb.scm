@@ -52,7 +52,7 @@
 	   (directory? work-area)
 	   (file-read-access? work-area))
       (let* ((dbpath              (conc work-area "/testdat.db"))
-	     (dbexists            (file-exists? dbpath))
+	     (dbexists            (common:file-exists? dbpath))
 	     (work-area-writeable (file-write-access? work-area))
 	     (db                  (handle-exceptions  ;; open the db if area writeable or db pre-existing. open in-mem otherwise. if exception, open in-mem
 				   exn

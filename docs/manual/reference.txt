@@ -44,11 +44,34 @@ B d e f
 -------------------------
 
 Then the config file would effectively appear to contain an items section
-exactly like the output from the script. This is extremely useful when
-dynamically creating items, itemstables and other config structures. You can
-see the expansion of the call by looking in the cached files (look in your
-linktree for megatest.config and runconfigs.config cache files and in your
-test run areas for the expanded and cached testconfig).
+exactly like the output from the script. This is useful when dynamically
+creating items, itemstables and other config structures. You can see the
+expansion of the call by looking in the cached files (look in your linktree
+for megatest.config and runconfigs.config cache files and in your test run
+areas for the expanded and cached testconfig).
+
+Wildcards and regexes in Targets
+
+-------------------------
+[a/2/b]
+VAR1 VAL1
+
+[a/%/b]
+VAR1 VAL2
+-------------------------
+
+Will result in:
+
+-------------------------
+[a/2/b]
+VAR1 VAL2
+-------------------------
+
+Can use either wildcard of "%" or a regular expression:
+
+-------------------------
+[/abc.*def/]
+-------------------------
 
 Disk Space Checks
 ^^^^^^^^^^^^^^^^^
@@ -124,6 +147,18 @@ Attempt to rerun tests in "STUCK/DEAD", "n/a", "ZERO_ITEMS" states.
 [setup]
 reruns 5
 ------------------
+
+Replace the default blacklisted environment variables with user supplied
+list.
+
+Default list: USER HOME DISPLAY LS_COLORS XKEYSYMDB EDITOR MAKEFLAGS MAKEF MAKEOVERRIDES
+
+.Add a "bad" variable "PROMPT" to the variables that will be commented out
+in the megatest.sh and megatest.csh files:
+-----------------
+[setup]
+blacklistvars USER HOME DISPLAY LS_COLORS XKEYSYMDB EDITOR MAKEFLAGS PROMPT
+-----------------
 
 Run time limit
 ++++++++++++++
@@ -449,7 +484,7 @@ $MT_MEGATEST -env2file .ezsteps/${stepname}
 Triggers
 ~~~~~~~~
 
-In your testconfig triggers can be specified 
+In your testconfig or megatest.config triggers can be specified 
 
 -----------------
 [triggers]
@@ -464,7 +499,7 @@ RUNNING/ running.sh
 PASS/ onpass.sh
 -----------------
 
-Scripts called will have; test-id test-rundir trigger, added to the commandline.
+Scripts called will have; test-id test-rundir trigger test-name item-path state status event-time, added to the commandline.
 
 HINT
 
@@ -476,6 +511,29 @@ COMPLETED/ xterm -e bash -s --
 -----------------
 
 NOTE: There is a trailing space after the --
+
+There are a number of environment variables available to the trigger script
+but since triggers can be called in various contexts not all variables are
+available at all times. The trigger script should check for the variable and
+fail gracefully if it doesn't exist.
+
+.Environment variables visible to the trigger script
+[width="90%",cols="^,2m",frame="topbot",options="header"]
+|======================
+|Variable             | Purpose            
+| MT_TEST_RUN_DIR     | The directory where Megatest ran this test                   
+| MT_CMDINFO          | Encoded command data for the test                   
+| MT_DEBUG_MODE       | Used to pass the debug mode to nested calls to Megatest                   
+| MT_RUN_AREA_HOME    | Megatest home area 
+| MT_TESTSUITENAME    | The name of this testsuite or area                   
+| MT_TEST_NAME        | The name of this test
+| MT_ITEM_INFO        | The variable and values for the test item
+| MT_MEGATEST         | Which Megatest binary is being used by this area
+| MT_TARGET           | The target variable values, separated by '/'
+| MT_LINKTREE         | The base of the link tree where all run tests can be found
+| MT_ITEMPATH         | The values of the item path variables, separated by '/'
+| MT_RUNNAME          | The name of the run
+|======================
 
 
 Override the Toplevel HTML File

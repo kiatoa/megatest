@@ -134,8 +134,8 @@
 				(list (car item)((cadr item)))  ;; evaluate the proc
 				item))
 			  itemstable))
-    (if (and have-items  (null? items))     (debug:print-error 0 *default-log-port* "[items] section in testconfig but no entries defined"))
-    (if (and have-itable (null? itemstable))(debug:print-error 0 *default-log-port* "[itemstable] section in testconfig but no entries defined"))
+    (if (and have-items  (null? items))     (debug:print 0 *default-log-port* "WARNING:[items] section in testconfig but no entries defined"))
+    (if (and have-itable (null? itemstable))(debug:print 0 *default-log-port* "WARNNG:[itemstable] section in testconfig but no entries defined"))
     (if (or (not (null? items))(not (null? itemstable)))
 	(append (item-assoc->item-list items)
 		(item-table->item-list itemstable))

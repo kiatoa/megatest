@@ -1,0 +1,30 @@
+#!/bin/bash
+SYSTEM_TYPE=$(lsb_release -irs |tr ' ' '_' |tr '\n' '-')$(uname -i)
+file=`/bin/mktemp`
+case $SYSTEM_TYPE in
+Ubuntu-17.04-x86_64-std)
+	apt list --installed | cut -d/ -f 1 > $file
+        ;;
+Ubuntu-16.04-x86_64)
+	apt list --installed | cut -d/ -f 1 > $file
+        ;;
+Ubuntu-16.04-i686)
+	apt list --installed | cut -d/ -f 1 > $file
+        ;;
+SUSE_LINUX_11-x86_64)
+	rpm -qa > $file 
+  ;;
+CentOS_5.11-x86_64-std)
+	rpm -qa > $file 
+  ;;
+esac
+
+
+
+for package in libmysqlclient-dev libsqlite3-dev sqlite3 postgresql libreadline-dev libwebkitgtk-dev libpangox-1.0-0 zlib1g-dev libfreetype6 cmake libssl-dev uuid-dev libmotif3 mysql-client; do
+  grep --silent $package $file
+  if [ "$?" != "0" ]; then
+    echo "sudo apt install $package"
+  fi 
+done
+rm $file

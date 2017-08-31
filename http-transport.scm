@@ -59,8 +59,11 @@
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname))) 
 	 (start-port      (portlogger:open-run-close portlogger:find-port))
-	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree")))
+	 (link-tree-path  (common:get-linktree))
+	 (tmp-area        (common:get-db-tmp-area))
+	 (start-file      (conc tmp-area "/.server-start")))
     (debug:print-info 0 *default-log-port* "portlogger recommended port: " start-port)
+    ;; set some parameters for the server
     (root-path     (if link-tree-path 
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
@@ -106,44 +109,48 @@
 				   (send-response body: "hey there!\n"
 						  headers: '((content-type text/plain))))
 				  (else (continue))))))))
+    (with-output-to-file start-file (lambda ()(print (current-process-id))))
     (http-transport:try-start-server ipaddrstr start-port)))
 
 ;; This is recursively run by http-transport:run until sucessful
 ;;
 (define (http-transport:try-start-server ipaddrstr portnum)
-  (let ((config-hostname (configf:lookup *configdat* "server" "hostname")))
+  (let ((config-hostname (configf:lookup *configdat* "server" "hostname"))
+	(config-use-proxy (equal? (configf:lookup *configdat* "client" "use-http_proxy") "yes")))
+    (if (not config-use-proxy)
+	(determine-proxy (constantly #f)))
     (debug:print-info 0 *default-log-port* "http-transport:try-start-server time=" (seconds->time-string (current-seconds)) " ipaddrsstr=" ipaddrstr " portnum=" portnum " config-hostname=" config-hostname)
     (handle-exceptions
-     exn
-     (begin
-       (print-error-message exn)
-       (if (< portnum 64000)
-	   (begin 
-	     (debug:print 0 *default-log-port* "WARNING: attempt to start server failed. Trying again ...")
-	     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 *default-log-port* "exn=" (condition->list exn))
-	     (portlogger:open-run-close portlogger:set-failed portnum)
-	     (debug:print 0 *default-log-port* "WARNING: failed to start on portnum: " portnum ", trying next port")
-	     (thread-sleep! 0.1)
-
-	     ;; get_next_port goes here
-	     (http-transport:try-start-server ipaddrstr
-					      (portlogger:open-run-close portlogger:find-port)))
-	   (begin
-	     (print "ERROR: Tried and tried but could not start the server"))))
-     ;; any error in following steps will result in a retry
-     (set! *server-info* (list ipaddrstr portnum))
-     (debug:print 0 *default-log-port* "INFO: Trying to start server on " ipaddrstr ":" portnum)
-     ;; This starts the spiffy server
-     ;; NEED WAY TO SET IP TO #f TO BIND ALL
-     ;; (start-server bind-address: ipaddrstr port: portnum)
-     (if config-hostname ;; this is a hint to bind directly
-	 (start-server port: portnum bind-address: (if (equal? config-hostname "-")
-						       ipaddrstr
-						       config-hostname))
-	 (start-server port: portnum))
-     (portlogger:open-run-close portlogger:set-port portnum "released")
-     (debug:print 1 *default-log-port* "INFO: server has been stopped"))))
+	exn
+	(begin
+	  (print-error-message exn)
+	  (if (< portnum 64000)
+	      (begin 
+		(debug:print 0 *default-log-port* "WARNING: attempt to start server failed. Trying again ...")
+		(debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
+		(debug:print 5 *default-log-port* "exn=" (condition->list exn))
+		(portlogger:open-run-close portlogger:set-failed portnum)
+		(debug:print 0 *default-log-port* "WARNING: failed to start on portnum: " portnum ", trying next port")
+		(thread-sleep! 0.1)
+		
+		;; get_next_port goes here
+		(http-transport:try-start-server ipaddrstr
+						 (portlogger:open-run-close portlogger:find-port)))
+	      (begin
+		(print "ERROR: Tried and tried but could not start the server"))))
+      ;; any error in following steps will result in a retry
+      (set! *server-info* (list ipaddrstr portnum))
+      (debug:print 0 *default-log-port* "INFO: Trying to start server on " ipaddrstr ":" portnum)
+      ;; This starts the spiffy server
+      ;; NEED WAY TO SET IP TO #f TO BIND ALL
+      ;; (start-server bind-address: ipaddrstr port: portnum)
+      (if config-hostname ;; this is a hint to bind directly
+	  (start-server port: portnum bind-address: (if (equal? config-hostname "-")
+							ipaddrstr
+							config-hostname))
+	  (start-server port: portnum))
+      (portlogger:open-run-close portlogger:set-port portnum "released")
+      (debug:print 1 *default-log-port* "INFO: server has been stopped"))))
 
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
@@ -204,7 +211,7 @@
 
 ;; Send "cmd" with json payload "params" to serverdat and receive result
 ;;
-(define (http-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 3))
+(define (http-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 3)(area-dat #f))
   (let* ((fullurl    (if (vector? serverdat)
 			 (http-transport:server-dat-get-api-req serverdat)
 			 (begin
@@ -212,7 +219,8 @@
 			   (exit 1))))
 	 (res        (vector #f "uninitialized"))
 	 (success    #t)
-	 (sparams    (db:obj->string params transport: 'http)))
+	 (sparams    (db:obj->string params transport: 'http))
+	 (runremote  (or area-dat *runremote*)))
        (debug:print-info 11 *default-log-port* "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
        ;; set up the http-client here
        (max-retry-attempts 1)
@@ -226,30 +234,33 @@
 			      (mutex-lock! *http-mutex*)
 			      ;; (condition-case (with-input-from-request "http://localhost"; #f read-lines)
 			      ;;					       ((exn http client-error) e (print e)))
-			      (set! res (vector
+			      (set! res (vector                ;;; DON'T FORGET - THIS IS THE CLIENT SIDE! NOTE: consider moving this to client.scm since we are only supporting http transport at this time.
 					 success
 					 (db:string->obj 
 					  (handle-exceptions
-					   exn
-					   (begin
-					     (set! success #f)
-					     (debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
-					     (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-					     (if *runremote*
-                                                 (remote-conndat-set! *runremote* #f))
-					     ;; Killing associated server to allow clean retry.")
-					     ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
-					     (mutex-unlock! *http-mutex*)
+					      exn
+					      (let ((call-chain (get-call-chain))
+						    (msg        ((condition-property-accessor 'exn 'message) exn)))
+						(set! success #f)
+						(debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
+						(debug:print 0 *default-log-port* " message: " msg)
+						(debug:print 0 *default-log-port* " cmd: " cmd " params: " params)
+                                                (debug:print 0 *default-log-port* " call-chain: " call-chain)
+						(if runremote
+						    (remote-conndat-set! runremote #f))
+						;; Killing associated server to allow clean retry.")
+						;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
+						(mutex-unlock! *http-mutex*)
 					     ;;; (signal (make-composite-condition
 					     ;;;          (make-property-condition 'commfail 'message "failed to connect to server")))
 					     ;;; "communications failed"
-					     (db:obj->string #f))
-					   (with-input-from-request ;; was dat
-					    fullurl 
-					    (list (cons 'key "thekey")
-						  (cons 'cmd cmd)
-						  (cons 'params sparams))
-					    read-string))
+						(db:obj->string #f))
+					    (with-input-from-request ;; was dat
+					     fullurl 
+					     (list (cons 'key (or *server-id* "thekey"))
+						   (cons 'cmd cmd)
+						   (cons 'params sparams))
+					     read-string))
 					  transport: 'http)
                                          0)) ;; added this speculatively
 			      ;; Shouldn't this be a call to the managed call-all-connections stuff above?
@@ -267,13 +278,12 @@
 	 (thread-terminate! th2)
 	 (debug:print-info 11 *default-log-port* "got res=" res)
 	 (if (vector? res)
-	     (if (vector-ref res 0)
-		 res
+	     (if (vector-ref res 0) ;; this is the first flag or the second flag?
+		 res ;; this is the *inner* vector? seriously? why?
                  (if (debug:debug-mode 11)
-                     (begin ;; note: this code also called in nmsg-transport - consider consolidating it
-                       (debug:print-error 11 *default-log-port* "error occured at server, info=" (vector-ref res 2))
-                       (debug:print 11 *default-log-port* " client call chain:")
+                     (let ((call-chain (get-call-chain))) ;; note: this code also called in nmsg-transport - consider consolidating it
                        (print-call-chain (current-error-port))
+                       (debug:print-error 11 *default-log-port* "error above occured at server, res=" res " message: " ((condition-property-accessor 'exn 'message) exn))
                        (debug:print 11 *default-log-port* " server call chain:")
                        (pp (vector-ref res 1) (current-error-port))
                        (signal (vector-ref res 0)))
@@ -285,14 +295,21 @@
 
 ;; careful closing of connections stored in *runremote*
 ;;
-(define (http-transport:close-connections)
-  (let* ((server-dat (if *runremote*
-                         (remote-conndat *runremote*)
+(define (http-transport:close-connections #!key (area-dat #f))
+  (let* ((runremote  (or area-dat *runremote*))
+	 (server-dat (if runremote
+                         (remote-conndat runremote)
                          #f))) ;; (hash-table-ref/default *runremote* run-id #f)))
     (if (vector? server-dat)
 	(let ((api-dat (http-transport:server-dat-get-api-uri server-dat)))
-	  (close-connection! api-dat)
-	  #t)
+	  (handle-exceptions
+	    exn
+	    (begin
+	      (print-call-chain *default-log-port*)
+	      (debug:print-error 0 *default-log-port* " closing connection failed with error: " ((condition-property-accessor 'exn 'message) exn)))
+	    (close-connection! api-dat)
+            ;;(close-idle-connections!)
+	    #t))
 	#f)))
 
 
@@ -339,7 +356,9 @@
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
   (debug:print-info 0 *default-log-port* "Starting the sync-back, keep alive thread in server")
-  (let* ((server-start-time (current-seconds))
+  (let* ((tmp-area          (common:get-db-tmp-area))
+	 (started-file      (conc tmp-area "/.server-started"))
+	 (server-start-time (current-seconds))
 	 (server-info (let loop ((start-time (current-seconds))
 				 (changed    #t)
 				 (last-sdat  "not this"))
@@ -368,9 +387,12 @@
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)
-	 (server-timeout (server:get-timeout))
+	 (server-timeout (server:expiration-timeout))
 	 (server-going  #f)
 	 (server-log-file (args:get-arg "-log"))) ;; always set when we are a server
+
+    (with-output-to-file started-file (lambda ()(print (current-process-id))))
+
     (let loop ((count         0)
 	       (server-state 'available)
 	       (bad-sync-count 0)
@@ -379,7 +401,7 @@
       (if (not server-going) ;; *dbstruct-db* 
 	  (begin
 	    (debug:print 0 *default-log-port* "SERVER: dbprep")
-	    (set! *dbstruct-db*  (db:setup)) ;;  run-id))
+	    (set! *dbstruct-db*  (db:setup #t)) ;;  run-id))
 	    (set! server-going #t)
 	    (debug:print 0 *default-log-port* "SERVER: running, megatest version: " (common:get-full-version)) ;; NOTE: the server is NOT yet marked as running in the log. We do that in the keep-running routine.
 	    (thread-start! *watchdog*)))
@@ -418,35 +440,35 @@
 	  (begin
 	    (debug:print 0 *default-log-port* "SERVER STARTED: " iface ":" port " AT " (current-seconds))
 	    (flush-output *default-log-port*)))
-
-      (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600))
-	     (adjusted-timeout (if (> hrs-since-start 1)
-				   (- server-timeout (inexact->exact (round (* hrs-since-start 60))))  ;; subtract 60 seconds per hour
-				   server-timeout)))
-	(if (common:low-noise-print 120 "server timeout")
-	    (debug:print-info 0 *default-log-port* "Adjusted server timeout: " adjusted-timeout))
+      (if (common:low-noise-print 60 "dbstats")
+	  (begin
+	    (debug:print 0 *default-log-port* "Server stats:")
+	    (db:print-current-query-stats)))
+      (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600)))
 	(cond
          ((and *server-run*
 	       (> (+ last-access server-timeout)
-		  (current-seconds))
-	       (< (- (current-seconds) server-start-time) 3600)) ;; do not update log or touch log if we've been running for more than one hour.
+		  (current-seconds)))
           (if (common:low-noise-print 120 "server continuing")
               (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
 	      (let ((curr-time (current-seconds)))
-		(change-file-times server-log-file curr-time curr-time)))
+		(handle-exceptions
+		    exn
+		    (debug:print 0 *default-log-port* "ERROR: Failed to change timestamp on log file " server-log-file ". Are you out of space on that disk?")
+		  (if (not *server-overloaded*)
+		      (change-file-times server-log-file curr-time curr-time)))))
           (loop 0 server-state bad-sync-count (current-milliseconds)))
          (else
           (debug:print-info 0 *default-log-port* "Server timed out. seconds since last db access: " (- (current-seconds) last-access))
           (http-transport:server-shutdown port)))))))
 
 (define (http-transport:server-shutdown port)
-  (let ((tdbdat (tasks:open-db)))
+  (begin
     ;;(BB> "http-transport:server-shutdown called")
     (debug:print-info 0 *default-log-port* "Starting to shutdown the server. pid="(current-process-id))
     ;;
     ;; start_shutdown
     ;;
-    ;; (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "shutting-down")
     (set! *time-to-exit* #t) ;; tell on-exit to be fast as we've already cleaned up
     (portlogger:open-run-close portlogger:set-port port "released")
     (thread-sleep! 1)
@@ -477,48 +499,69 @@
 ;; start_server? 
 ;;
 (define (http-transport:launch)
-  (if (args:get-arg "-daemonize")
-      (begin
-	(daemon:ize)
-	(if *alt-log-file* ;; we should re-connect to this port, I think daemon:ize disrupts it
-	    (begin
-	      (current-error-port *alt-log-file*)
-	      (current-output-port *alt-log-file*)))))
-  (let* ((th2 (make-thread (lambda ()
-			     (debug:print-info 0 *default-log-port* "Server run thread started")
-			     (http-transport:run 
-			      (if (args:get-arg "-server")
-				  (args:get-arg "-server")
-				  "-")
-			      )) "Server run"))
-	 (th3 (make-thread (lambda ()
-			     (debug:print-info 0 *default-log-port* "Server monitor thread started")
-			     (http-transport:keep-running)
-			   "Keep running"))))
-    (thread-start! th2)
-    (thread-sleep! 0.25) ;; give the server time to settle before starting the keep-running monitor.
-    (thread-start! th3)
-    (set! *didsomething* #t)
-    (thread-join! th2)
-    (exit)))
+  ;; check that a server start is in progress, pause or exit if so
+  (let* ((tmp-area            (common:get-db-tmp-area))
+	 (server-start        (conc tmp-area "/.server-start"))
+	 (server-started      (conc tmp-area "/.server-started"))
+	 (start-time          (common:lazy-modification-time server-start))
+	 (started-time        (common:lazy-modification-time server-started))
+	 (server-starting     (< start-time started-time)) ;; if start-time is less than started-time then a server is still starting
+	 (start-time-old      (> (- (current-seconds) start-time) 5))
+         (cleanup-proc        (lambda (msg)
+                                (let* ((serv-fname      (conc "server-" (current-process-id) "-" (get-host-name) ".log"))
+                                       (full-serv-fname (conc *toppath* "/logs/" serv-fname))
+                                       (new-serv-fname  (conc *toppath* "/logs/" "defunct-" serv-fname)))
+                                  (debug:print 0 *default-log-port* msg)
+                                  (if (common:file-exists? full-serv-fname)
+                                      (system (conc "sleep 1;mv -f " full-serv-fname " " new-serv-fname))
+                                      (debug:print 0 *default-log-port* "INFO: cannot move " full-serv-fname " to " new-serv-fname))
+                                  (exit)))))
+    (if (and (not start-time-old) ;; last server start try was less than five seconds ago
+	     (not server-starting))
+	(begin
+	  (cleanup-proc "NOT starting server, there is either a recently started server or a server in process of starting")
+	  (exit)))
+    ;; lets not even bother to start if there are already three or more server files ready to go
+    (let* ((num-alive   (server:get-num-alive (server:get-list *toppath*))))
+      (if (> num-alive 3)
+          (begin
+            (cleanup-proc (conc "ERROR: Aborting server start because there are already " num-alive " possible servers either running or starting up"))
+            (exit))))
+    (let* ((th2 (make-thread (lambda ()
+                               (debug:print-info 0 *default-log-port* "Server run thread started")
+                               (http-transport:run 
+                                (if (args:get-arg "-server")
+                                    (args:get-arg "-server")
+                                    "-")
+                                )) "Server run"))
+           (th3 (make-thread (lambda ()
+                               (debug:print-info 0 *default-log-port* "Server monitor thread started")
+                               (http-transport:keep-running)
+                               "Keep running"))))
+      (thread-start! th2)
+      (thread-sleep! 0.25) ;; give the server time to settle before starting the keep-running monitor.
+      (thread-start! th3)
+      (set! *didsomething* #t)
+      (thread-join! th2)
+      (exit))))
 
-(define (http-transport:server-signal-handler signum)
-  (signal-mask! signum)
-  (handle-exceptions
-   exn
-   (debug:print 0 *default-log-port* " ... exiting ...")
-   (let ((th1 (make-thread (lambda ()
-			     (thread-sleep! 1))
-			   "eat response"))
-	 (th2 (make-thread (lambda ()
-			     (debug:print-error 0 *default-log-port* "Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
-			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
-			     (debug:print 0 *default-log-port* "       Done.")
-			     (exit 4))
-			   "exit on ^C timer")))
-     (thread-start! th2)
-     (thread-start! th1)
-     (thread-join! th2))))
+;; (define (http-transport:server-signal-handler signum)
+;;   (signal-mask! signum)
+;;   (handle-exceptions
+;;    exn
+;;    (debug:print 0 *default-log-port* " ... exiting ...")
+;;    (let ((th1 (make-thread (lambda ()
+;; 			     (thread-sleep! 1))
+;; 			   "eat response"))
+;; 	 (th2 (make-thread (lambda ()
+;; 			     (debug:print-error 0 *default-log-port* "Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
+;; 			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
+;; 			     (debug:print 0 *default-log-port* "       Done.")
+;; 			     (exit 4))
+;; 			   "exit on ^C timer")))
+;;      (thread-start! th2)
+;;      (thread-start! th1)
+;;      (thread-join! th2))))
 
 ;;======================================================================
 ;; web pages
@@ -542,7 +585,7 @@
   (mutex-lock! *heartbeat-mutex*)
   (let ((res 
 	 (conc "<table>"
-	       "<tr><td>Max cached queries</td>        <td>" *max-cache-size* "</td></tr>"
+	       ;; "<tr><td>Max cached queries</td>        <td>" *max-cache-size* "</td></tr>"
 	       "<tr><td>Number of cached writes</td>   <td>" *number-of-writes* "</td></tr>"
 	       "<tr><td>Average cached write time</td> <td>" (if (eq? *number-of-writes* 0)
 								 "n/a (no writes)"
@@ -550,10 +593,10 @@
 								    *number-of-writes*))
 	       " ms</td></tr>"
 	       "<tr><td>Number non-cached queries</td> <td>"  *number-non-write-queries* "</td></tr>"
-	       "<tr><td>Average non-cached time</td>   <td>" (if (eq? *number-non-write-queries* 0)
-								 "n/a (no queries)"
-								 (/ *total-non-write-delay* 
-								    *number-non-write-queries*))
+	       ;; "<tr><td>Average non-cached time</td>   <td>" (if (eq? *number-non-write-queries* 0)
+	       ;; 							 "n/a (no queries)"
+	       ;; 							 (/ *total-non-write-delay* 
+	       ;; 							    *number-non-write-queries*))
 	       " ms</td></tr>"
 	       "<tr><td>Last access</td><td>"              (seconds->time-string *db-last-access*) "</td></tr>"
 	       "</table>")))

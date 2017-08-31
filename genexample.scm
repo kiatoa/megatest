@@ -58,7 +58,7 @@ the generated files before starting your first runs")
 	  (create-directory path #t)))
 
     ;; First check that the directory is empty!
-    (if (and (file-exists? path)
+    (if (and (common:file-exists? path)
 	     (not (null? (glob (conc path "/*")))))
 	(begin
 	  (print "WARNING: directory " path " is not empty, are you sure you want to continue?")
@@ -212,10 +212,10 @@ You can edit your config files and create tests in the " path " directory
 	(rel-path #f))
 
     (cond
-     ((file-exists? "megatest.config")         (set! rel-path "./"))
-     ((file-exists? "../megatest.config")      (set! rel-path "../"))
-     ((file-exists? "../../megatest.config")   (set! rel-path "../../"))
-     ((file-exists? "../../../megatest.config")(set! rel-path "../../../"))) ;; good enough dang it.
+     ((common:file-exists? "megatest.config")         (set! rel-path "./"))
+     ((common:file-exists? "../megatest.config")      (set! rel-path "../"))
+     ((common:file-exists? "../../megatest.config")   (set! rel-path "../../"))
+     ((common:file-exists? "../../../megatest.config")(set! rel-path "../../../"))) ;; good enough dang it.
 
     ;; Don't gather data or continue if a) megatest.config can't be found or b) testconfig already exists
     (if (not rel-path)
@@ -223,7 +223,7 @@ You can edit your config files and create tests in the " path " directory
 	  (print "ERROR: I could not find megatest.config, please run -create-test in the top dir of your megatest area")
 	  (exit 1)))
 
-    (if (file-exists? (conc rel-path "tests/" testname "/testconfig"))
+    (if (common:file-exists? (conc rel-path "tests/" testname "/testconfig"))
 	(begin
 	  (print "WARNING: You already have a testconfig in " rel-path "tests/" testname ", do you want to clobber your files?")
 	  (display "Enter y/n: ")

@@ -55,7 +55,7 @@
    (begin
      (print "ERROR:  Failed to run command: " cmd " " (string-intersperse params " "))
      (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-     (print "exn=" (condition->list exn))
+     (debug:print 5 *default-log-port* "exn=" (condition->list exn))
      #f)
    (let-values (((fh fho pid) (if (null? params)
 				  (process cmd)
@@ -145,7 +145,7 @@
   (handle-exceptions
    exn
    ;; possibly pid is a process not a child, look in /proc to see if it is running still
-   (file-exists? (conc "/proc/" pid))
+   (common:file-exists? (conc "/proc/" pid))
    (let-values (((rpid exit-type exit-signal)(process-wait pid #t)))
        (and (number? rpid)
 	    (equal? rpid pid)))))

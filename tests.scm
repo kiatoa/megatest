@@ -43,7 +43,12 @@
     (tests:get-valid-tests (make-hash-table) test-search-path)))
 
 (define (tests:get-tests-search-path cfgdat)
-  (let ((paths (map cadr (configf:get-section cfgdat "tests-paths"))))
+  (let ((paths (let ((section (if cfgdat
+				  (configf:get-section cfgdat "tests-paths")
+				  #f)))
+		 (if section
+		     (map cadr section)
+		     '()))))
     (filter (lambda (d)
 	      (if (directory-exists? d)
 		  d
@@ -58,12 +63,12 @@
       test-registry
       (let loop ((hed (car tests-paths))
 		 (tal (cdr tests-paths)))
-	(if (file-exists? hed)
+	(if (common:file-exists? hed)
 	    (for-each (lambda (test-path)
 			(let* ((tname   (last (string-split test-path "/")))
 			       (tconfig (conc test-path "/testconfig")))
 			  (if (and (not (hash-table-ref/default test-registry tname #f))
-				   (file-exists? tconfig))
+				   (common:file-exists? tconfig))
 			      (hash-table-set! test-registry tname test-path))))
 		      (glob (conc hed "/*"))))
 	(if (null? tal)
@@ -302,7 +307,7 @@
 	 (waiver-rx   (regexp "^(\\S+)\\s+(.*)$"))
 	 (diff-rule   "diff %file1% %file2%")
 	 (logpro-rule "diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html"))
-    (if (not (file-exists? test-rundir))
+    (if (not (common:file-exists? test-rundir))
 	(begin
 	  (debug:print-error 0 *default-log-port* "test run directory is gone, cannot propagate waiver")
 	  #f)
@@ -319,7 +324,7 @@
 				     (waiver-glob (if wparts (caddr wparts) #f))
 				     (logpro-file (if waiver
 						      (let ((fname (conc hed ".logpro")))
-							(if (file-exists? fname)
+							(if (common:file-exists? fname)
 							    fname 
 							    (begin
 							      (debug:print 0 *default-log-port* "INFO: No logpro file " fname " falling back to diff")
@@ -417,15 +422,15 @@
     (let ((category (hash-table-ref/default otherdat ":category" ""))
 	  (variable (hash-table-ref/default otherdat ":variable" ""))
 	  (value    (hash-table-ref/default otherdat ":value"    #f))
-	  (expected (hash-table-ref/default otherdat ":expected" #f))
-	  (tol      (hash-table-ref/default otherdat ":tol"      #f))
+	  (expected (hash-table-ref/default otherdat ":expected" "n/a"))
+	  (tol      (hash-table-ref/default otherdat ":tol"      "n/a"))
 	  (units    (hash-table-ref/default otherdat ":units"    ""))
 	  (type     (hash-table-ref/default otherdat ":type"     ""))
 	  (dcomment (hash-table-ref/default otherdat ":comment"  "")))
       (debug:print 4 *default-log-port* 
 		   "category: " category ", variable: " variable ", value: " value
 		   ", expected: " expected ", tol: " tol ", units: " units)
-      (if (and value expected tol) ;; all three required
+      (if (and value) ;; require only value; BB was- all three required
 	  (let ((dat (conc category ","
 			   variable ","
 			   value    ","
@@ -436,7 +441,9 @@
 			   type     )))
 	    ;; This was run remote, don't think that makes sense. Perhaps not, but that is the easiest path for the moment.
 	    (rmt:csv->test-data run-id test-id
-				dat))))
+				dat)
+            (thread-sleep! 10) ;; add 10 second delay before quit incase rmt needs time to start a server.
+            )))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     ;;;;;; (if (not (equal? item-path ""))
@@ -488,7 +495,10 @@
 		  (tests:test-set-toplog! run-id test-name outputfilename))
 		;; didn't get the lock, check to see if current update started later than this 
 		;; update, if so we can exit without doing any work
-		(if (> my-start-time (file-modification-time lockf))
+		(if (> my-start-time (handle-exceptions
+					 exn
+					 0
+				       (file-modification-time lockf)))
 		    ;; we started since current re-gen in flight, delay a little and try again
 		    (begin
 		      (debug:print-info 1 *default-log-port* "Waiting to update " outputfilename ", another test currently updating it")
@@ -833,7 +843,7 @@ EOF
 							(let* ((targ-path (string-intersperse p "/"))
                                                                (full-path (conc linktree "/" targ-path))
                                                                (run-name  (car (reverse p))))
-                                                          (if (and (file-exists? full-path)
+                                                          (if (and (common:file-exists? full-path)
                                                                    (directory?   full-path)
                                                                    (file-write-access? full-path))
                                                               (s:a run-name 'href (conc targ-path "/run-summary.html"))
@@ -872,7 +882,7 @@ EOF
                     (tests-htree (common:list->htree tests-tree-dat))
                     (html-dir    (conc linktree "/" (string-intersperse run-dir "/")))
                     (html-path   (conc html-dir "/run-summary.html"))
-                    (oup         (if (and (file-exists? html-dir)
+                    (oup         (if (and (common:file-exists? html-dir)
                                           (directory?   html-dir)
                                           (file-write-access? html-dir))
                                      (open-output-file  html-path)
@@ -900,17 +910,17 @@ EOF
                                                                           (full-targ (conc html-dir "/" targ-path))
                                                                           (std-file  (conc full-targ "/test-summary.html"))
                                                                           (alt-file  (conc full-targ "/megatest-rollup-" test-name ".html"))
-                                                                          (html-file (if (file-exists? alt-file)
+                                                                          (html-file (if (common:file-exists? alt-file)
                                                                                          alt-file
                                                                                          std-file))
                                                                           (run-name  (car (reverse p))))
-                                                                     (if (and (not (file-exists? full-targ))
+                                                                     (if (and (not (common:file-exists? full-targ))
                                                                               (directory? full-targ)
                                                                               (file-write-access? full-targ))
                                                                          (tests:summarize-test 
                                                                           run-id 
                                                                           (rmt:get-test-id run-id test-name item-path)))
-                                                                     (if (file-exists? full-targ)
+                                                                     (if (common:file-exists? full-targ)
                                                                          (s:a run-name 'href html-file)
                                                                          (begin
                                                                            (debug:print 0 *default-log-port* "ERROR: can't access " full-targ)
@@ -941,15 +951,17 @@ EOF
 	 (debug:print 6 *default-log-port* "step=" step)
 	 (let ((record (hash-table-ref/default 
 			res 
-			(tdb:step-get-stepname step) 
-			;;        stepname                start end status Duration  Logfile Comment
-			(vector (tdb:step-get-stepname step) ""   "" ""     ""        ""     ""))))
+			(tdb:step-get-stepname step)
+			;;           0                      1    2    3       4         5       6       7
+			;;        stepname                start end status Duration  Logfile Comment  first-id
+			(vector (tdb:step-get-stepname step) ""   "" ""     ""        ""     ""       #f))))
 	   (debug:print 6 *default-log-port* "record(before) = " record 
 			"\nid:       " (tdb:step-get-id step)
 			"\nstepname: " (tdb:step-get-stepname step)
 			"\nstate:    " (tdb:step-get-state step)
 			"\nstatus:   " (tdb:step-get-status step)
 			"\ntime:     " (tdb:step-get-event_time step))
+	   (if (not (vector-ref record 7))(vector-set! record 7 (tdb:step-get-id step))) ;; do not clobber the id if previously set
 	   (case (string->symbol (tdb:step-get-state step))
 	     ((start)(vector-set! record 1 (tdb:step-get-event_time step))
 	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
@@ -997,30 +1009,34 @@ EOF
 ;; 
 ;;
 (define (tests:get-compressed-steps run-id test-id)
-  (let* ((steps-data  (rmt:get-steps-for-test run-id test-id))
-	 (comprsteps  (tests:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
+  (let* ((steps-data  (rmt:get-steps-for-test run-id test-id)) ;;      0       1    2    3       4       5       6      7       
+	 (comprsteps  (tests:process-steps-table steps-data))) ;; #<stepname start end status Duration Logfile Comment id>
     (map (lambda (x)
 	   ;; take advantage of the \n on time->string
-	   (vector
-	    (vector-ref x 0)
+	   (vector    ;; we are constructing basically the original vector but collapsing start end records
+	    (vector-ref x 0)                              ;; id        0
 	    (let ((s (vector-ref x 1)))
-	      (if (number? s)(seconds->time-string s) s))
+	      (if (number? s)(seconds->time-string s) s)) ;; starttime 1
 	    (let ((s (vector-ref x 2)))
-	      (if (number? s)(seconds->time-string s) s))
-	    (vector-ref x 3)    ;; status
-	    (vector-ref x 4)
-	    (vector-ref x 5)  ;; time delta
-	    (vector-ref x 6)))
+	      (if (number? s)(seconds->time-string s) s)) ;; endtime   2
+	    (vector-ref x 3)                              ;; status    3    
+	    (vector-ref x 4)                              ;; duration  4
+	    (vector-ref x 5)                              ;; logfile   5
+	    (vector-ref x 6)                              ;; comment   6
+	    (vector-ref x 7)))                            ;; id        7
 	 (sort (hash-table-values comprsteps)
 	       (lambda (a b)
 		 (let ((time-a (vector-ref a 1))
-		       (time-b (vector-ref b 1)))
+		       (time-b (vector-ref b 1))
+		       (id-a   (vector-ref a 7))
+		       (id-b   (vector-ref b 7)))
 		   (if (and (number? time-a)(number? time-b))
 		       (if (< time-a time-b)
 			   #t
 			   (if (eq? time-a time-b)
-			       (string<? (conc (vector-ref a 2))
-					 (conc (vector-ref b 2)))
+			       (< id-a id-b)
+			       ;; (string<? (conc (vector-ref a 2))
+			       ;;	    (conc (vector-ref b 2)))
 			       #f))
 		       (string<? (conc time-a)(conc time-b)))))))))
 
@@ -1029,52 +1045,57 @@ EOF
 ;;
 (define (tests:summarize-test run-id test-id)
   (let* ((test-dat  (rmt:get-test-info-by-id run-id test-id))
-	 (steps-dat (rmt:get-steps-for-test run-id test-id))
-	 (test-name (db:test-get-testname test-dat))
-	 (item-path (db:test-get-item-path test-dat))
-	 (full-name (db:test-make-full-name test-name item-path))
-	 (oup       (open-output-file (conc (db:test-get-rundir test-dat) "/test-summary.html")))
-	 (status    (db:test-get-status   test-dat))
-	 (color     (common:get-color-from-status status))
-	 (logf      (db:test-get-final_logf test-dat))
-	 (steps-dat (tests:get-compressed-steps run-id test-id)))
-    ;; (dcommon:get-compressed-steps #f 1 30045)
-    ;; (#("wasting_time" "23:36:13" "23:36:21" "0" "8.0s" "wasting_time.log"))
-
-    (s:output-new
-     oup
-     (s:html
-      (s:title "Summary for " full-name)
-      (s:body 
-       (s:h2 "Summary for " full-name)
-       (s:table 'cellspacing "0" 'border "1"
-	(s:tr (s:td "run id")   (s:td (db:test-get-run_id   test-dat))
-	      (s:td "test id")  (s:td (db:test-get-id       test-dat)))
-	(s:tr (s:td "testname") (s:td test-name)
-	      (s:td "itempath") (s:td item-path))
-	(s:tr (s:td "state")    (s:td (db:test-get-state    test-dat))
-	      (s:td "status")   (s:td (s:a 'href logf (s:font 'color color status))))
-	(s:tr (s:td "TestDate") (s:td (seconds->work-week/day-time 
-				       (db:test-get-event_time test-dat)))
-	      (s:td "Duration") (s:td (seconds->hr-min-sec (db:test-get-run_duration test-dat)))))
-       (s:h3 "Log files")
-       (s:table
-	'cellspacing "0" 'border "1"
-	(s:tr (s:td "Final log")(s:td (s:a 'href logf logf))))
-       (s:table
-	'cellspacing "0" 'border "1"
-	(s:tr (s:td "Step Name")(s:td "Start")(s:td "End")(s:td "Status")(s:td "Duration")(s:td "Log File"))
-	(map (lambda (step-dat)
-	       (s:tr (s:td (tdb:steps-table-get-stepname step-dat))
-		     (s:td (tdb:steps-table-get-start    step-dat))
-		     (s:td (tdb:steps-table-get-end      step-dat))
-		     (s:td (tdb:steps-table-get-status   step-dat))
-		     (s:td (tdb:steps-table-get-runtime  step-dat))
-		     (s:td (let ((step-log (tdb:steps-table-get-log-file step-dat)))
-			     (s:a 'href step-log step-log)))))
-	     steps-dat))
-	)))
-    (close-output-port oup)))
+	 (out-dir   (db:test-get-rundir test-dat))
+	 (out-file  (conc out-dir "/test-summary.html")))
+    ;; first verify we are able to write the output file
+    (if (not (file-write-access? out-dir))
+	(debug:print 0 *default-log-port* "ERROR: cannot write test-summary.html to " out-dir)
+	(let* (;; (steps-dat (rmt:get-steps-for-test run-id test-id))
+	       (test-name (db:test-get-testname test-dat))
+	       (item-path (db:test-get-item-path test-dat))
+	       (full-name (db:test-make-full-name test-name item-path))
+	       (oup       (open-output-file out-file))
+	       (status    (db:test-get-status   test-dat))
+	       (color     (common:get-color-from-status status))
+	       (logf      (db:test-get-final_logf test-dat))
+	       (steps-dat (tests:get-compressed-steps run-id test-id)))
+	  ;; (dcommon:get-compressed-steps #f 1 30045)
+	  ;; (#("wasting_time" "23:36:13" "23:36:21" "0" "8.0s" "wasting_time.log"))
+	  
+	  (s:output-new
+	   oup
+	   (s:html
+	    (s:title "Summary for " full-name)
+	    (s:body 
+	     (s:h2 "Summary for " full-name)
+	     (s:table 'cellspacing "0" 'border "1"
+		      (s:tr (s:td "run id")   (s:td (db:test-get-run_id   test-dat))
+			    (s:td "test id")  (s:td (db:test-get-id       test-dat)))
+		      (s:tr (s:td "testname") (s:td test-name)
+			    (s:td "itempath") (s:td item-path))
+		      (s:tr (s:td "state")    (s:td (db:test-get-state    test-dat))
+			    (s:td "status")   (s:td (s:a 'href logf (s:font 'color color status))))
+		      (s:tr (s:td "TestDate") (s:td (seconds->work-week/day-time 
+						     (db:test-get-event_time test-dat)))
+			    (s:td "Duration") (s:td (seconds->hr-min-sec (db:test-get-run_duration test-dat)))))
+	     (s:h3 "Log files")
+	     (s:table
+	      'cellspacing "0" 'border "1"
+	      (s:tr (s:td "Final log")(s:td (s:a 'href logf logf))))
+	     (s:table
+	      'cellspacing "0" 'border "1"
+	      (s:tr (s:td "Step Name")(s:td "Start")(s:td "End")(s:td "Status")(s:td "Duration")(s:td "Log File"))
+	      (map (lambda (step-dat)
+		     (s:tr (s:td (tdb:steps-table-get-stepname step-dat))
+			   (s:td (tdb:steps-table-get-start    step-dat))
+			   (s:td (tdb:steps-table-get-end      step-dat))
+			   (s:td (tdb:steps-table-get-status   step-dat))
+			   (s:td (tdb:steps-table-get-runtime  step-dat))
+			   (s:td (let ((step-log (tdb:steps-table-get-log-file step-dat)))
+				   (s:a 'href step-log step-log)))))
+		   steps-dat))
+	     )))
+	  (close-output-port oup)))))
 	  
 	  
 ;; MUST BE CALLED local!
@@ -1112,7 +1133,7 @@ EOF
 
 ;; (define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
 ;;   (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
-;;     (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
+;;     (set! tests (filter (lambda (test)(common:file-exists? (conc test "/testconfig"))) tests))
 ;;     (delete-duplicates
 ;;      (filter (lambda (testname)
 ;; 	       (tests:match test-patts testname #f))
@@ -1129,10 +1150,11 @@ EOF
       (conc (getenv "MT_LINKTREE")  "/"
 	    (getenv "MT_TARGET")    "/"
 	    (getenv "MT_RUNNAME")   "/"
-	    (getenv "MT_TEST_NAME") "/"
-	    (if (or (getenv "MT_ITEMPATH")
-		    (not (string=? "" (getenv "MT_ITEMPATH"))))
-		(conc "/" (getenv "MT_ITEMPATH"))))
+	    (getenv "MT_TEST_NAME")
+	    (if (and (getenv "MT_ITEMPATH")
+                     (not (string=? "" (getenv "MT_ITEMPATH"))))
+		(conc "/" (getenv "MT_ITEMPATH"))
+                ""))
       #f))
 
 ;; if .testconfig exists in test directory read and return it
@@ -1140,14 +1162,16 @@ EOF
 ;; else read the testconfig file
 ;;   if have path to test directory save the config as .testconfig and return it
 ;;
-(define (tests:get-testconfig test-name item-path test-registry system-allowed #!key (force-create #f))
-  (let* ((cache-path   (tests:get-test-path-from-environment))
+(define (tests:get-testconfig test-name item-path test-registry system-allowed #!key (force-create #f)(allow-write-cache #t))
+  (let* ((use-cache    (common:use-cache?))
+	 (cache-path   (tests:get-test-path-from-environment))
 	 (cache-file   (and cache-path (conc cache-path "/.testconfig")))
 	 (cache-exists (and cache-file
 			    (not force-create)  ;; if force-create then pretend there is no cache to read
-			    (file-exists? cache-file)))
+			    (common:file-exists? cache-file)))
 	 (cached-dat   (if (and (not force-create)
-				cache-exists)
+				cache-exists
+				use-cache)
 			   (handle-exceptions
 			    exn
 			    #f ;; any issues, just give up with the cached version and re-read
@@ -1168,7 +1192,7 @@ EOF
 		     (test-path    (or (hash-table-ref/default treg test-name #f)
 				       (conc *toppath* "/tests/" test-name)))
 		     (test-configf (conc test-path "/testconfig"))
-		     (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
+		     (testexists   (and (common:file-exists? test-configf)(file-read-access? test-configf)))
 		     (tcfg         (if testexists
 				       (read-config test-configf #f system-allowed
 						    environ-patt: (if system-allowed
@@ -1179,10 +1203,12 @@ EOF
 		(if tcfg (hash-table-set! *testconfigs* test-full-name tcfg))
 		(if (and testexists
 			 cache-file
-			 (file-write-access? cache-path))
+			 (file-write-access? cache-path)
+			 allow-write-cache)
 		    (let ((tpath (conc cache-path "/.testconfig")))
 		      (debug:print-info 1 *default-log-port* "Caching testconfig for " test-name " in " tpath)
-		      (configf:write-alist tcfg tpath)))
+                      (if (not (common:in-running-test?))
+                          (configf:write-alist tcfg tpath))))
 		tcfg))))))
   
 ;; sort tests by priority and waiton
@@ -1336,7 +1362,7 @@ EOF
   (let ((dfile (conc "/tmp/." (current-user-name) "-" (server:mk-signature) ".dot"))
 	(fname (conc "/tmp/." (current-user-name) "-" (server:mk-signature) ".dotdat")))
     (tests:write-dot-file testrecords dfile sizex sizey)
-    (if (file-exists? fname)
+    (if (common:file-exists? fname)
 	(let ((res (with-input-from-file fname
 		     (lambda ()
 		       (read-lines)))))
@@ -1539,7 +1565,7 @@ EOF
 	   (debug:print-error 0 *default-log-port* "tried for over a minute to update meta info and failed. Giving up")
 	   (debug:print 0 *default-log-port* "EXCEPTION: database probably overloaded or unreadable.")
 	   (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
-	   (print "exn=" (condition->list exn))
+	   (debug:print 5 *default-log-port* "exn=" (condition->list exn))
 	   (debug:print 0 *default-log-port* " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
 	   (print-call-chain (current-error-port))))
      (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
