@@ -132,6 +132,32 @@
     ttype-id target run-name state status owner event-time comment fail-count pass-count))
 
 ;;======================================================================
+;;  T E S T - S T E P S
+;;======================================================================
+
+(define (pgdb:get-test-step-id dbh test-id stepname)
+  (dbi:get-one
+    dbh
+    "SELECT id FROM test_steps WHERE test_id=? AND stepname=? ;"
+    test-id stepname))
+
+(define (pgdb:insert-test-step dbh test-id stepname state status event_time comment logfile)
+  (dbi:exec
+   dbh
+   "INSERT INTO test_steps (test_id,stepname,state,status,event_time,logfile,comment)
+       VALUES (?,?,?,?,?,?,?);"
+   test-id stepname  state   status  event_time   logfile   comment))
+
+(define (pgdb:update-test-step dbh step-id test-id stepname state status event_time comment logfile)
+  (dbi:exec
+    dbh
+    "UPDATE test_steps SET
+         test_id=?,stepname=?,state=?,status=?,event_time=?,logfile=?,comment=?
+          WHERE id=?;"
+    test-id stepname  state   status  event_time   logfile   comment step-id))
+
+
+;;======================================================================
 ;;  T E S T S
 ;;======================================================================
 

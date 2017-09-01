@@ -3108,6 +3108,21 @@
 	test-id)
        (reverse res)))))
 
+ (define (db:get-steps-info-by-id dbstruct  test-step-id)
+   (db:with-db
+    dbstruct
+    #f 
+    #f
+    (lambda (db)
+      (let* ((res (vector #f #f #f #f #f #f #f #f)))
+        (sqlite3:for-each-row 
+       (lambda (id test-id stepname state status event-time logfile comment)
+         (set! res (vector id test-id stepname state status event-time (if (string? logfile) logfile "") comment)))
+       db
+       "SELECT id,test_id,stepname,state,status,event_time,logfile,comment FROM test_steps WHERE status != 'DELETED' AND id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+       test-step-id)
+        res))))
+
 (define (db:get-steps-data dbstruct run-id test-id)
   (db:with-db
    dbstruct

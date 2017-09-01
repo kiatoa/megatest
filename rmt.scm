@@ -816,6 +816,9 @@
 (define (rmt:get-steps-for-test run-id test-id)
   (rmt:send-receive 'get-steps-for-test run-id (list run-id test-id)))
 
+(define (rmt:get-steps-info-by-id test-step-id)
+  (rmt:send-receive 'get-steps-info-by-id #f (list test-step-id)))
+
 ;;======================================================================
 ;;  T E S T   D A T A 
 ;;======================================================================

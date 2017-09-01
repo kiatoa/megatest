@@ -650,14 +650,10 @@
 	       			(conc (or (args:get-arg "-prefix-target") (conc contour "/" (common:get-area-name) "/")) (rmt:get-target run-id)) (rmt:get-target run-id)))                 ;; e.g. v1.63/a3e1/ubuntu
 	       (spec-id    (pgdb:get-ttype dbh keytarg))
 	       (new-run-id (pgdb:get-run-id dbh spec-id target run-name))
-
-
-
 	       ;; (area-id    (db:get-value-by-header row header "area_id)"))
 	       )
           (if new-run-id
 	      (begin ;; let ((run-record (pgdb:get-run-info dbh new-run-id))
-                
 		(hash-table-set! runs-ht run-id new-run-id)
 		;; ensure key fields are up to date
 		(pgdb:refresh-run-info
@@ -669,13 +665,50 @@
 		      exn
 		      (begin (print-call-chain)
                               (print ((condition-property-accessor 'exn 'message) exn))     
-#f)
-                     
+			#f)
 		    (pgdb:insert-run
 		     dbh
 		     spec-id target run-name state status owner event-time comment fail-count pass-count)) ;; area-id))
 		       (tasks:run-id->mtpg-run-id dbh cached-info run-id)
 		  #f))))))
+
+
+(define (tasks:sync-test-steps dbh cached-info test-step-ids)
+  (let ((test-ht (hash-table-ref cached-info 'tests))
+        (step-ht (hash-table-ref cached-info 'steps)))
+    (for-each
+     (lambda (test-step-id)
+        (let* ((test-step-info  (rmt:get-steps-info-by-id test-step-id))
+               (step-id (tdb:step-get-id test-step-info))
+               (test-id  (tdb:step-get-test_id    test-step-info))   
+	       (stepname (tdb:step-get-stepname  test-step-info))
+	       (state (tdb:step-get-state test-step-info))	
+	       (status (tdb:step-get-status test-step-info))	
+	       (event_time (tdb:step-get-event_time  test-step-info))	
+	       (comment  (tdb:step-get-comment test-step-info))	
+	       (logfile (tdb:step-get-logfile test-step-info))	
+	       (pgdb-test-id  (hash-table-ref/default test-ht test-id #f))
+               (pgdb-step-id (if pgdb-test-id 
+                                 (pgdb:get-test-step-id dbh pgdb-test-id stepname)
+                                  #f)))
+    (if step-id
+      (begin  
+        (if pgdb-test-id
+           (begin 
+                (if  pgdb-step-id
+                   (begin
+                    (print "Updating existing test-step with test-id: " test-id " and step-id " step-id)
+                    (pgdb:update-test-step dbh pgdb-step-id pgdb-test-id stepname state status event_time comment logfile))
+                    (begin
+ 		      (print "Updating existing test-step with test-id: " test-id " and step-id " step-id)
+                      (pgdb:insert-test-step dbh pgdb-test-id stepname state status event_time comment logfile )
+                      (set! pgdb-step-id  (pgdb:get-test-step-id dbh pgdb-test-id stepname))))
+                (hash-table-set! step-ht step-id pgdb-step-id )
+		(print test-step-info " test-step-id: " test-step-id " pgdb-test-id: " pgdb-test-id))
+           (print "Error: Test not cashed")))
+      (print "Error: Could not get test step info for step id " test-step-id ))))	;; this is a wierd senario need to debug      	
+   test-step-ids)))
+
 
 (define (tasks:sync-tests-data dbh cached-info test-ids)
   (let ((test-ht (hash-table-ref cached-info 'tests)))
@@ -712,12 +745,15 @@
            (begin
 	   (if pgdb-test-id ;; have a record
 	     (begin ;; let ((key-name (conc run-id "/" test-name "/" item-path)))
-	       (hash-table-set! test-ht test-id pgdb-test-id)
 	       (print "Updating existing test with run-id: " run-id " and test-id: " test-id)
 	       (pgdb:update-test dbh pgdb-test-id pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived))
-	     (pgdb:insert-test dbh pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived)))
-              (print "WARNING: Skipping run with run-id:" run-id ". This run was created after privious sync and removed before this sync."))   
-	 ))
+	     (begin 
+                 (print "Inserting test with run-id: " run-id " and test-id: " test-id)
+
+                (pgdb:insert-test dbh pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived)
+                (set! pgdb-test-id (pgdb:get-test-id dbh pgdb-run-id test-name item-path))))
+               (hash-table-set! test-ht test-id pgdb-test-id))
+              (print "WARNING: Skipping run with run-id:" run-id ". This run was created after privious sync and removed before this sync."))))
      test-ids)))
 
 ;; get runs changed since last sync
@@ -731,7 +767,7 @@
 	 (start       (current-seconds)))
     (for-each (lambda (dtype)
 		(hash-table-set! cached-info dtype (make-hash-table)))
-	      '(runs targets tests))
+	      '(runs targets tests steps))
     (hash-table-set! cached-info 'start start) ;; when done we'll set sync times to this
     (if area-info
 	(let* ((last-sync-time (vector-ref area-info 3))
@@ -744,9 +780,11 @@
 	  ;(print "area-info: " area-info)
 	  (if (not (null? test-ids))
 	      (begin
-		(print "Syncing " (length test-ids) " changed tests")
-		(tasks:sync-tests-data dbh cached-info test-ids)))
-	  (pgdb:write-sync-time dbh area-info start))
+		(print "Syncing " (length test-step-ids) " changed tests")
+		(tasks:sync-tests-data dbh cached-info test-ids)
+                (tasks:sync-test-steps dbh cached-info test-step-ids)))
+	  ;(pgdb:write-sync-time dbh area-info start)
+)
 	(if (tasks:set-area dbh configdat)
 	    (tasks:sync-to-postgres configdat dest)
 	    (begin
