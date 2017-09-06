@@ -14,7 +14,7 @@
 (define (toplevel-command . a) #f)
 
 (use srfi-1 posix srfi-69 readline ;;  regex regex-case srfi-69 apropos json http-client directory-utils rpc typed-records;; (srfi 18) extras)
-     srfi-18 extras format pkts regex regex-case 
+     srfi-18 extras format pkts regex regex-case
      (prefix dbi dbi:)
      nanomsg)
 
@@ -120,7 +120,7 @@ Actions:
 
 Contour actions:
    process                   : runs import, rungen and dispatch 
-
+			     
 Trigger propagation actions:
    tsend a=b,c=d...          : send trigger info to all recpients in the [listeners] section
    tlisten -port N           : listen for trigger info on port N
@@ -458,8 +458,6 @@ ret))
        res))))
 
 ;;======================================================================
-
-
 ;; Runs
 ;;======================================================================
 
@@ -528,7 +526,6 @@ ret))
     ;; we set some dynamic data in a section called "scratchdata"
     (if mtconf
 	(begin
-           
 	  (configf:section-var-set! mtconf "scratchdat" "toppath" start-dir)))
     ;; (print "TOPPATH: " (configf:lookup mtconf "scratchdat" "toppath"))
     mtconfdat))
