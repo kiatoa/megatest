@@ -689,7 +689,7 @@
 	       (logfile (tdb:step-get-logfile test-step-info))	
 	       (pgdb-test-id  (hash-table-ref/default test-ht test-id #f))
                (pgdb-step-id (if pgdb-test-id 
-                                 (pgdb:get-test-step-id dbh pgdb-test-id stepname)
+                                 (pgdb:get-test-step-id dbh pgdb-test-id stepname state)
                                   #f)))
     (if step-id
       (begin  
@@ -700,14 +700,55 @@
                     (print "Updating existing test-step with test-id: " test-id " and step-id " step-id)
                     (pgdb:update-test-step dbh pgdb-step-id pgdb-test-id stepname state status event_time comment logfile))
                     (begin
- 		      (print "Updating existing test-step with test-id: " test-id " and step-id " step-id)
+ 		      (print "Inserting test-step with test-id: " test-id " and step-id " step-id)
                       (pgdb:insert-test-step dbh pgdb-test-id stepname state status event_time comment logfile )
-                      (set! pgdb-step-id  (pgdb:get-test-step-id dbh pgdb-test-id stepname))))
-                (hash-table-set! step-ht step-id pgdb-step-id )
-		(print test-step-info " test-step-id: " test-step-id " pgdb-test-id: " pgdb-test-id))
+                      (set! pgdb-step-id  (pgdb:get-test-step-id dbh pgdb-test-id stepname state))))
+                (hash-table-set! step-ht step-id pgdb-step-id ))
            (print "Error: Test not cashed")))
       (print "Error: Could not get test step info for step id " test-step-id ))))	;; this is a wierd senario need to debug      	
    test-step-ids)))
+
+(define (tasks:sync-test-gen-data dbh cached-info test-data-ids)
+  (let ((test-ht (hash-table-ref cached-info 'tests))
+        (data-ht (hash-table-ref cached-info 'data)))
+    (print test-data-ids)
+    (for-each
+     (lambda (test-data-id)
+        (let* ((test-data-info  (rmt:get-data-info-by-id test-data-id))
+               (data-id (db:test-data-get-id  test-data-info))
+               (test-id  (db:test-data-get-test_id   test-data-info))   
+	       (category  (db:test-data-get-category  test-data-info))
+	       (variable  (db:test-data-get-variable test-data-info))	
+	       (value (db:test-data-get-value  test-data-info))	
+               (expected (db:test-data-get-expected  test-data-info))
+               (tol (db:test-data-get-tol  test-data-info))
+               (units (db:test-data-get-units  test-data-info))     
+	       (comment  (db:test-data-get-comment test-data-info))	
+               (status (db:test-data-get-status test-data-info))	
+	       (type (db:test-data-get-type test-data-info))	
+	       (pgdb-test-id  (hash-table-ref/default test-ht test-id #f))
+               (pgdb-data-id (if pgdb-test-id 
+                                 (pgdb:get-test-data-id dbh pgdb-test-id category variable)
+                                  #f)))
+    (if data-id
+      (begin
+        (if pgdb-test-id
+           (begin 
+                (if  pgdb-data-id
+                   (begin
+                    (print "Updating existing test-data with test-id: " test-id " and data-id " data-id)
+                    (pgdb:update-test-data dbh pgdb-data-id pgdb-test-id  category variable value expected tol units comment status type))
+                    (begin
+ 		      (print "Inserting test-data with test-id: " test-id " and data-id " data-id)
+                      (pgdb:insert-test-data dbh pgdb-test-id category variable value expected tol units comment status type )
+                      (set! pgdb-data-id  (pgdb:get-test-data-id dbh pgdb-test-id  category variable))))
+                (hash-table-set! data-ht data-id pgdb-data-id ))
+             (begin
+                 (print "Error: Test not in pgdb"))))
+
+      (print "Error: Could not get test data info for data id " test-data-id ))))	;; this is a wierd senario need to debug      	
+   test-data-ids)))
+
 
 
 (define (tasks:sync-tests-data dbh cached-info test-ids)
@@ -749,7 +790,6 @@
 	       (pgdb:update-test dbh pgdb-test-id pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived))
 	     (begin 
                  (print "Inserting test with run-id: " run-id " and test-id: " test-id)
-
                 (pgdb:insert-test dbh pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived)
                 (set! pgdb-test-id (pgdb:get-test-id dbh pgdb-run-id test-name item-path))))
                (hash-table-set! test-ht test-id pgdb-test-id))
@@ -767,7 +807,7 @@
 	 (start       (current-seconds)))
     (for-each (lambda (dtype)
 		(hash-table-set! cached-info dtype (make-hash-table)))
-	      '(runs targets tests steps))
+	      '(runs targets tests steps data))
     (hash-table-set! cached-info 'start start) ;; when done we'll set sync times to this
     (if area-info
 	(let* ((last-sync-time (vector-ref area-info 3))
@@ -777,12 +817,16 @@
 	       (test-step-ids  (alist-ref 'test_steps changed))
 	       (test-data-ids  (alist-ref 'test_data  changed))
 	       (run-stat-ids   (alist-ref 'run_stats  changed)))
-	  ;(print "area-info: " area-info)
+	  (print "area-info: " area-info)
 	  (if (not (null? test-ids))
 	      (begin
 		(print "Syncing " (length test-step-ids) " changed tests")
+                
+                ;;Assumption here is that if test-step or test data is changed then the test last update time is changed 
 		(tasks:sync-tests-data dbh cached-info test-ids)
-                (tasks:sync-test-steps dbh cached-info test-step-ids)))
+                (tasks:sync-test-steps dbh cached-info test-step-ids)
+                (tasks:sync-test-gen-data dbh cached-info test-data-ids)
+))
 	  ;(pgdb:write-sync-time dbh area-info start)
 )
 	(if (tasks:set-area dbh configdat)

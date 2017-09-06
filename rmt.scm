@@ -828,6 +828,8 @@
 (define (rmt:read-test-data* run-id test-id categorypatt varpatt #!key (work-area #f)) 
   (rmt:send-receive 'read-test-data* run-id (list run-id test-id categorypatt varpatt)))
 
+(define (rmt:get-data-info-by-id test-data-id)
+   (rmt:send-receive 'get-data-info-by-id #f (list test-data-id)))
 
 (define (rmt:testmeta-add-record testname)
   (rmt:send-receive 'testmeta-add-record #f (list testname)))

@@ -135,11 +135,11 @@
 ;;  T E S T - S T E P S
 ;;======================================================================
 
-(define (pgdb:get-test-step-id dbh test-id stepname)
+(define (pgdb:get-test-step-id dbh test-id stepname state)
   (dbi:get-one
     dbh
-    "SELECT id FROM test_steps WHERE test_id=? AND stepname=? ;"
-    test-id stepname))
+    "SELECT id FROM test_steps WHERE test_id=? AND stepname=? and state = ? ;"
+    test-id stepname state))
 
 (define (pgdb:insert-test-step dbh test-id stepname state status event_time comment logfile)
   (dbi:exec
@@ -155,6 +155,33 @@
          test_id=?,stepname=?,state=?,status=?,event_time=?,logfile=?,comment=?
           WHERE id=?;"
     test-id stepname  state   status  event_time   logfile   comment step-id))
+
+
+;;======================================================================
+;;  T E S T - D A T A
+;;======================================================================
+
+(define (pgdb:get-test-data-id dbh test-id category variable)
+  (dbi:get-one
+    dbh
+    "SELECT id FROM test_data WHERE test_id=? AND category=? and variable = ? ;"
+    test-id category variable))
+
+(define (pgdb:insert-test-data dbh test-id category variable value expected tol units comment status type)
+  (dbi:exec
+   dbh
+   "INSERT INTO test_data (test_id, category, variable, value, expected, tol, units, comment, status, type)
+       VALUES (?,?,?,?,?,?,?,?,?,?);"
+   test-id category variable value expected tol units comment status type))
+
+(define (pgdb:update-test-data dbh data-id test-id  category variable value expected tol units comment status type)
+  (dbi:exec
+    dbh
+    "UPDATE test_data SET
+         test_id=?, category=?, variable=?, value=?, expected=?, tol=?, units=?, comment=?, status=?, type=?
+          WHERE id=?;"
+    test-id category variable value expected tol units comment status type data-id ))
+
 
 
 ;;======================================================================

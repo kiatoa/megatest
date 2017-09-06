@@ -284,6 +284,7 @@
                    ;; TEST DATA
                    ((read-test-data)               (apply db:read-test-data dbstruct params))
                    ((read-test-data*)              (apply db:read-test-data* dbstruct params))
+                   ((get-data-info-by-id)          (apply db:get-data-info-by-id dbstruct params)) 
 
                    ;; MISC
                    ((get-latest-host-load)         (apply db:get-latest-host-load dbstruct params))

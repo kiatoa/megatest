@@ -3119,7 +3119,7 @@
        (lambda (id test-id stepname state status event-time logfile comment)
          (set! res (vector id test-id stepname state status event-time (if (string? logfile) logfile "") comment)))
        db
-       "SELECT id,test_id,stepname,state,status,event_time,logfile,comment FROM test_steps WHERE status != 'DELETED' AND id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+       "SELECT id,test_id,stepname,state,status,event_time,logfile,comment FROM test_steps WHERE id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
        test-step-id)
         res))))
 
@@ -3141,6 +3141,22 @@
 ;;======================================================================
 ;; T E S T  D A T A 
 ;;======================================================================
+
+ (define (db:get-data-info-by-id dbstruct  test-data-id)
+   (db:with-db
+    dbstruct
+    #f 
+    #f
+    (lambda (db)
+      (let* ((res (vector #f #f #f #f #f #f #f #f #f #f #f)))
+        (sqlite3:for-each-row 
+       (lambda (id test-id  category variable value expected tol units comment status type )
+         (set! res (vector id test-id  category variable value expected tol units comment status type)))
+       db
+       "SELECT id,test_id, category, variable, value, expected, tol, units, comment, status, type FROM test_data WHERE id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+       test-data-id)
+        res))))
+
 
 ;; WARNING: Do NOT call this for the parent test on an iterated test
 ;; Roll up test_data pass/fail results
