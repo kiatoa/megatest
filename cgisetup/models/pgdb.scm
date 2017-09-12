@@ -100,36 +100,36 @@
 ;; given a target spec id, target and run-name return the run-id
 ;; if no run found return #f
 ;;
-(define (pgdb:get-run-id dbh spec-id target run-name)
-  (dbi:get-one dbh "SELECT id FROM runs WHERE ttype_id=? AND target=? AND run_name=?;"
-	       spec-id target run-name))
+(define (pgdb:get-run-id dbh spec-id target run-name area-id)
+  (dbi:get-one dbh "SELECT id FROM runs WHERE ttype_id=? AND target=? AND run_name=? and area_id=?;"
+	       spec-id target run-name area-id))
 
 ;; given a run-id return all the run info
 ;;
-(define (pgdb:get-run-info dbh run-id) ;; to join ttype or not?
+(define (pgdb:get-run-info dbh run-id ) ;; to join ttype or not?
   (dbi:get-one-row
    dbh   ;; 0    1       2       3      4     5      6       7        8         9         10          11         12
    "SELECT id,target,ttype_id,run_name,state,status,owner,event_time,comment,fail_count,pass_count,last_update,area_id
-       FROM runs WHERE id=?;" run-id))
+       FROM runs WHERE id=? ;" run-id ))
 
 ;; refresh the data in a run record
 ;;
-(define (pgdb:refresh-run-info dbh run-id state status owner event-time comment fail-count pass-count) ;; area-id)
+(define (pgdb:refresh-run-info dbh run-id state status owner event-time comment fail-count pass-count area-id) ;; area-id)
   (dbi:exec
    dbh
    "UPDATE runs SET
-      state=?,status=?,owner=?,event_time=?,comment=?,fail_count=?,pass_count=?
-     WHERE id=?;"
-   state status owner event-time comment fail-count pass-count run-id))
+      state=?,status=?,owner=?,event_time=?,comment=?,fail_count=?,pass_count=? 
+     WHERE id=? and area_id=?;"
+   state status owner event-time comment fail-count pass-count run-id area-id))
 
 ;; given all needed info create run record
 ;;
-(define (pgdb:insert-run dbh ttype-id target run-name state status owner event-time comment fail-count pass-count)
+(define (pgdb:insert-run dbh ttype-id target run-name state status owner event-time comment fail-count pass-count area-id)
     (dbi:exec
    dbh
-   "INSERT INTO runs (ttype_id,target,run_name,state,status,owner,event_time,comment,fail_count,pass_count)
-      VALUES (?,?,?,?,?,?,?,?,?,?);"
-    ttype-id target run-name state status owner event-time comment fail-count pass-count))
+   "INSERT INTO runs (ttype_id,target,run_name,state,status,owner,event_time,comment,fail_count,pass_count,area_id )
+      VALUES (?,?,?,?,?,?,?,?,?,?,?);"
+    ttype-id target run-name state status owner event-time comment fail-count pass-count area-id))
 
 ;;======================================================================
 ;;  T E S T - S T E P S

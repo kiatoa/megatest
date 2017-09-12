@@ -623,9 +623,10 @@
 
 ;; gets mtpg-run-id and syncs the record if different
 ;;
-(define (tasks:run-id->mtpg-run-id dbh cached-info run-id)
+(define (tasks:run-id->mtpg-run-id dbh cached-info run-id area-info)
   (let* ((runs-ht (hash-table-ref cached-info 'runs))
-	 (runinf  (hash-table-ref/default runs-ht run-id #f)))
+	 (runinf  (hash-table-ref/default runs-ht run-id #f))
+         (area-id (vector-ref area-info 0)))
     (if runinf
 	runinf ;; already cached
 	(let* ((run-dat    (rmt:get-run-info run-id))               ;; NOTE: get-run-info returns a vector < row header >
@@ -649,7 +650,7 @@
 	       (target     (if (or (args:get-arg "-prepend-contour") (args:get-arg "-prefix-target")) 
 	       			(conc (or (args:get-arg "-prefix-target") (conc contour "/" (common:get-area-name) "/")) (rmt:get-target run-id)) (rmt:get-target run-id)))                 ;; e.g. v1.63/a3e1/ubuntu
 	       (spec-id    (pgdb:get-ttype dbh keytarg))
-	       (new-run-id (pgdb:get-run-id dbh spec-id target run-name))
+	       (new-run-id (pgdb:get-run-id dbh spec-id target run-name area-id))
 	       ;; (area-id    (db:get-value-by-header row header "area_id)"))
 	       )
           (if new-run-id
@@ -659,7 +660,7 @@
 		(pgdb:refresh-run-info
 		 dbh
 		 new-run-id
-		 state status owner event-time comment fail-count pass-count)
+		 state status owner event-time comment fail-count pass-count area-id)
 		new-run-id)
 	      (if (handle-exceptions
 		      exn
@@ -668,8 +669,8 @@
 			#f)
 		    (pgdb:insert-run
 		     dbh
-		     spec-id target run-name state status owner event-time comment fail-count pass-count)) ;; area-id))
-		       (tasks:run-id->mtpg-run-id dbh cached-info run-id)
+		     spec-id target run-name state status owner event-time comment fail-count pass-count  area-id))
+		       (tasks:run-id->mtpg-run-id dbh cached-info run-id area-info)
 		  #f))))))
 
 
@@ -711,7 +712,6 @@
 (define (tasks:sync-test-gen-data dbh cached-info test-data-ids)
   (let ((test-ht (hash-table-ref cached-info 'tests))
         (data-ht (hash-table-ref cached-info 'data)))
-    (print test-data-ids)
     (for-each
      (lambda (test-data-id)
         (let* ((test-data-info  (rmt:get-data-info-by-id test-data-id))
@@ -751,7 +751,7 @@
 
 
 
-(define (tasks:sync-tests-data dbh cached-info test-ids)
+(define (tasks:sync-tests-data dbh cached-info test-ids area-info)
   (let ((test-ht (hash-table-ref cached-info 'tests)))
     (for-each
      (lambda (test-id)
@@ -772,7 +772,7 @@
 	      (comment      (db:test-get-comment   test-info))
 	      (event-time   (db:test-get-event_time test-info))
 	      (archived     (db:test-get-archived  test-info))
-	      (pgdb-run-id  (tasks:run-id->mtpg-run-id dbh cached-info run-id))
+	      (pgdb-run-id  (tasks:run-id->mtpg-run-id dbh cached-info run-id area-info))
                 
 	      (pgdb-test-id (if pgdb-run-id 
 				(begin
@@ -818,17 +818,17 @@
 	       (test-data-ids  (alist-ref 'test_data  changed))
 	       (run-stat-ids   (alist-ref 'run_stats  changed)))
 	  (print "area-info: " area-info)
+            
 	  (if (not (null? test-ids))
 	      (begin
 		(print "Syncing " (length test-step-ids) " changed tests")
-                
                 ;;Assumption here is that if test-step or test data is changed then the test last update time is changed 
-		(tasks:sync-tests-data dbh cached-info test-ids)
+                ;; not syncing run stats at this time as they can be derived from tests table.
+		(tasks:sync-tests-data dbh cached-info test-ids area-info)
+                ;(exit)   
                 (tasks:sync-test-steps dbh cached-info test-step-ids)
-                (tasks:sync-test-gen-data dbh cached-info test-data-ids)
-))
-	  ;(pgdb:write-sync-time dbh area-info start)
-)
+                (tasks:sync-test-gen-data dbh cached-info test-data-ids)))
+	  (pgdb:write-sync-time dbh area-info start))
 	(if (tasks:set-area dbh configdat)
 	    (tasks:sync-to-postgres configdat dest)
 	    (begin

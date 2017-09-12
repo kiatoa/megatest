@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS runs (
        pass_count INTEGER DEFAULT 0,
        last_update INTEGER DEFAULT extract(epoch from now()),
        area_id     INTEGER DEFAULT 0,
-       CONSTRAINT runsconstraint UNIQUE (target,ttype_id,run_name));
+       CONSTRAINT runsconstraint UNIQUE (target,ttype_id,run_name, area_id));
 
 CREATE TABLE IF NOT EXISTS run_stats (
        id     SERIAL PRIMARY KEY,
