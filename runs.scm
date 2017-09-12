@@ -542,7 +542,7 @@
 							      (handle-exceptions
 							       exn
 							       (debug:print 0 *default-log-port* "error in calling find-and-mark-incomplete for run-id " run-id)
-							       (rmt:find-and-mark-incomplete run-id #f)))) ;; ovr-deadtime)))
+							       (rmt:find-and-mark-incomplete run-id #f)))) ;; ovr-deadtime))) ;; could be root of https://hsdes.intel.com/appstore/article/#/220546828/main -- Title: Megatest jobs show DEAD even though they are still running (1.64/27)
 							run-ids)))
 					  "runs: mark-incompletes")))
 	    (thread-start! th1)
@@ -720,15 +720,15 @@
 			reruns)))
 	      (list (car newtal)(append (cdr newtal) reg) '() reruns))))
 
-     ((and (null? fails)
+     ((and (null? fails) ;; have not-started tests, but unable to run them.  everything looks completed with no prospect of unsticking something that is stuck.  we should mark hed as moribund and exit or continue if there are more tests to consider
 	   (null? prereq-fails)
 	   (null? non-completed))
       (if  (runs:can-keep-running? hed 20)
 	  (begin
 	    (runs:inc-cant-run-tests hed)
-	    (debug:print-info 1 *default-log-port* "no fails in prerequisites for " hed " but also none running, keeping " hed " for now. Try count: " (hash-table-ref/default *seen-cant-run-tests* hed 0))
+	    (debug:print-info 0 *default-log-port* "no fails in prerequisites for " hed " but also none running, keeping " hed " for now. Try count: " (hash-table-ref/default *seen-cant-run-tests* hed 0)) ;; 
 	    ;; getting here likely means the system is way overloaded, kill a full minute before continuing
-	    (thread-sleep! 60)
+	    (thread-sleep! 60) ;; TODO: gate by normalized server load > 1.0 (maxload config thing)
 	    ;; num-retries code was here
 	    ;; we use this opportunity to move contents of reg to tal
 	    (list (car newtal)(append (cdr newtal) reg) '() reruns)) ;; an issue with prereqs not yet met?
@@ -1169,46 +1169,46 @@
   ;; (rmt:find-and-mark-incomplete)
 
   (let* ((run-info             (rmt:get-run-info run-id))
-	(tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
-	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
-	(test-registry         (make-hash-table))
-	(registry-mutex        (make-mutex))
-	(num-retries           0)
-	(max-retries           (config-lookup *configdat* "setup" "maxretries"))
-	(max-concurrent-jobs   (configf:lookup-number *configdat* "setup" "max_concurrent_jobs" default: 50))
-        (reglen                (if (number? reglen-in) reglen-in 1))
-	(last-time-incomplete  (- (current-seconds) 900)) ;; force at least one clean up cycle
-	(last-time-some-running (current-seconds))
-	;; (tdbdat                (tasks:open-db))
-	(runsdat (make-runs:dat
-		  ;; hed: hed
-		  ;; tal: tal
-		  ;; reg: reg
-		  ;; reruns: reruns
-		  reglen: reglen
-		  regfull: #f ;; regfull
-		  ;; test-record: test-record
-		  runname: runname
-		  ;; test-name: test-name
-		  ;; item-path: item-path
-		  ;; jobgroup: jobgroup
-		  max-concurrent-jobs: max-concurrent-jobs
-		  run-id: run-id
-		  ;; waitons: waitons
-		  ;; testmode: testmode
-		  test-patts: test-patts
-		  required-tests: required-tests
-		  test-registry: test-registry
-		  registry-mutex: registry-mutex
-		  flags: flags
-		  keyvals: keyvals
-		  run-info: run-info
-		  ;; newtal: newtal
-		  all-tests-registry: all-tests-registry
-		  ;; itemmaps: itemmaps
-		  ;; prereqs-not-met: (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps)
-		  ;; can-run-more-tests: (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs) ;; look at the test jobgroup and tot jobs running
-		  )))
+         (tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
+         (sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
+         (test-registry         (make-hash-table))
+         (registry-mutex        (make-mutex))
+         (num-retries           0)
+         (max-retries           (config-lookup *configdat* "setup" "maxretries"))
+         (max-concurrent-jobs   (configf:lookup-number *configdat* "setup" "max_concurrent_jobs" default: 50))
+         (reglen                (if (number? reglen-in) reglen-in 1))
+         (last-time-incomplete  (- (current-seconds) 900)) ;; force at least one clean up cycle
+         (last-time-some-running (current-seconds))
+         ;; (tdbdat                (tasks:open-db))
+         (runsdat (make-runs:dat
+                   ;; hed: hed
+                   ;; tal: tal
+                   ;; reg: reg
+                   ;; reruns: reruns
+                   reglen: reglen
+                   regfull: #f ;; regfull
+                   ;; test-record: test-record
+                   runname: runname
+                   ;; test-name: test-name
+                   ;; item-path: item-path
+                   ;; jobgroup: jobgroup
+                   max-concurrent-jobs: max-concurrent-jobs
+                   run-id: run-id
+                   ;; waitons: waitons
+                   ;; testmode: testmode
+                   test-patts: test-patts
+                   required-tests: required-tests
+                   test-registry: test-registry
+                   registry-mutex: registry-mutex
+                   flags: flags
+                   keyvals: keyvals
+                   run-info: run-info
+                   ;; newtal: newtal
+                   all-tests-registry: all-tests-registry
+                   ;; itemmaps: itemmaps
+                   ;; prereqs-not-met: (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps)
+                   ;; can-run-more-tests: (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs) ;; look at the test jobgroup and tot jobs running
+                   )))
 
     ;; Initialize the test-registery hash with tests that already have a record
     ;; convert state to symbol and use that as the hash value
@@ -1286,8 +1286,8 @@
 	(if (> num-running 0)
 	  (set! last-time-some-running (current-seconds)))
 
-      (if (> (current-seconds)(+ last-time-some-running (or (configf:lookup *configdat* "setup" "give-up-waiting") 36000)))
-	  (hash-table-set! *max-tries-hash* tfullname (+ (hash-table-ref/default *max-tries-hash* tfullname 0) 1)))
+        (if (> (current-seconds)(+ last-time-some-running (or (configf:lookup *configdat* "setup" "give-up-waiting") 36000)))
+            (hash-table-set! *max-tries-hash* tfullname (+ (hash-table-ref/default *max-tries-hash* tfullname 0) 1)))
 	;; (debug:print 0 *default-log-port* "max-tries-hash: " (hash-table->alist *max-tries-hash*))
 
 	;; Ensure all top level tests get registered. This way they show up as "NOT_STARTED" on the dashboard
