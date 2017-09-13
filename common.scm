@@ -533,7 +533,8 @@
     (7 "STUCK/DEAD")
     (8 "DEAD")
     (9 "FAIL")
-    (10 "ABORT")))
+    (10 "PREQ_FAIL")
+    (11 "ABORT")))
 
 (define *common:ended-states*       ;; states which indicate the test is stopped and will not proceed
   '("COMPLETED" "ARCHIVED" "KILLED" "KILLREQ" "STUCK" "INCOMPLETE"))

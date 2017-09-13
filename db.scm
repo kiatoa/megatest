@@ -1,4 +1,4 @@
-;;======================================================================
+;======================================================================
 ;; Copyright 2006-2016, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
@@ -200,7 +200,7 @@
 ;; returns: db existed-prior-to-opening
 ;; RA => Returns a db handler; sets the lock if opened in writable mode
 ;;
-;;(define *db-open-mutex* (make-mutex))
+(define *db-open-mutex* (make-mutex))
 
 (define (db:lock-create-open fname initproc)
   (let* ((parent-dir   (or (pathname-directory fname)(current-directory))) ;; no parent? go local
@@ -210,7 +210,7 @@
 	 (file-write   (if file-exists
 			   (file-write-access? fname)
 			   dir-writable )))
-    ;;(mutex-lock! *db-open-mutex*) ;; tried this mutex, not clear it helped.
+    (mutex-lock! *db-open-mutex*) ;; tried this mutex, not clear it helped.
     (if file-write ;; dir-writable
 	(condition-case
          (let* ((lockfname   (conc fname ".lock"))
@@ -248,7 +248,7 @@
          (begin
            (debug:print 2 *default-log-port* "WARNING: opening db in non-writable dir " fname)
            (let ((db (sqlite3:open-database fname)))
-             ;;(mutex-unlock! *db-open-mutex*)
+             (mutex-unlock! *db-open-mutex*)
              db))
          (exn (io-error)  (debug:print 0 *default-log-port* "ERROR: i/o error with " fname ". Check permissions, disk space etc. and try again."))
          (exn (corrupt)   (debug:print 0 *default-log-port* "ERROR: database " fname " is corrupt. Repair it to proceed."))
@@ -3495,11 +3495,15 @@
 			    (non-completes     (filter (lambda (x)
 							 (not (equal? x "COMPLETED")))
 						       all-curr-states))
-			    (num-non-completes (length non-completes))
-                            
+                            (preq-fails        (filter (lambda (x)
+							 (equal? x "PREQ_FAIL"))
+						       all-curr-statuses))
+                            (num-non-completes (length non-completes))
                             (newstate          (cond
 						((> running 0)
 						 "RUNNING") ;; anything running, call the situation running
+                                                ;;((> (length preq-fails) 0)
+                                                ;; "NOT_STARTED")
 						((> bad-not-started 0)  ;; we have an ugly situation, it is completed in the sense we cannot do more.
 						 "COMPLETED") 
 						((> num-non-completes 0) ;;
@@ -3512,16 +3516,34 @@
                                                ;;     (if (> bad-not-started 0)
                                                ;;         "COMPLETED"
                                                ;;         (car all-curr-states))))
-                            (newstatus            (if (or (> bad-not-started 0)
-							  (and (equal? newstate "NOT_STARTED")
-							       (> num-non-completes 0)))
-						      "STARTED"
-                                                      (car all-curr-statuses))))
+                            ;; (newstatus         (cond
+                            ;;                     ;;((> (length preq-fails) 0)
+                            ;;                     ;; "PREQ_FAIL")
+                            ;;                     ((or (> bad-not-started 0)
+                            ;;                          (and (equal? newstate "NOT_STARTED")
+                            ;;                               (> num-non-completes 0)))
+                            ;;                      "STARTED")
+                            ;;                     (else
+                            ;;                      (car all-curr-statuses)))))
+                            (newstatus         (if (or (> bad-not-started 0)
+                                                       (and (equal? newstate "NOT_STARTED")
+                                                            (> num-non-completes 0)))
+                                                   "STARTED"
+                                                   (car all-curr-statuses))))
+
                        ;; (print "bad-not-supported: " bad-not-support " all-curr-states: " all-curr-states " all-curr-statuses: " all-curr-states)
                        ;;      " newstate: " newstate " newstatus: " newstatus)
                        ;; NB// Pass the db so it is part of the transaction
+                       (debug:print 4 *default-log-port* "BB> tl-test-id="tl-test-id" ; "test-name":"item-path"> bad-not-started="bad-not-started" newstate="newstate" newstatus="newstatus" num-non-completes="num-non-completes" non-completes="non-completes "len(sscs)="(length state-status-counts)  " state-status-counts: "
+                                    (apply conc
+                                           (map (lambda (x)
+                                                  (conc
+                                                   (with-output-to-string (lambda () (pp (dbr:counts->alist x)))) " | "))
+                                                state-status-counts))
+                                    
+                                    ); end debug:print
                        (if tl-test-id
-			   (db:test-set-state-status db run-id tl-test-id newstate newstatus #f))))))))
+			   (db:test-set-state-status dbstruct run-id tl-test-id newstate newstatus #f))))))))
          (mutex-unlock! *db-transaction-mutex*)
          (if (and test-id state status (equal? status "AUTO")) 
              (db:test-data-rollup dbstruct run-id test-id status))
