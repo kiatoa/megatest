@@ -11,7 +11,7 @@
 
 (use srfi-1 data-structures posix regex-case (prefix base64 base64:)
      matchable regex posix srfi-18 extras pkts (prefix dbi dbi:)
-     (prefix sqlite3 sqlite3:)
+     (prefix sqlite3 sqlite3:) typed-records
      )
 
 (declare (unit common))
