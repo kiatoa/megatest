@@ -10,9 +10,8 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking (srfi 18) 
+(use (prefix sqlite3 sqlite3:) srfi-1 posix regex regex-case srfi-69 (srfi 18) 
      posix-extras directory-utils pathname-expand typed-records format)
-(import (prefix sqlite3 sqlite3:))
 
 (declare (unit runs))
 (declare (uses db))

@@ -24,6 +24,13 @@
 	  (s:body
 	   (s:div 'class "grid flex" 'id "top_of_page"
 		  ;; add visible to columns to help visualize them e.g. "col_12 visible"
+                  (s:ul 'class "menu"
+(s:li (s:a 'href ""  (s:i 'class "fa fa-inbox") "QA Summary")
+      (s:ul
+	(s:li (s:a 'href "/cgi-bin/megatest.sh/home"  "Component Snapshot"))
+        (s:li (s:a 'href "/cgi-bin/megatest.sh/kitprogress"  "Kit/Contour progress"))
+ )))
+;(s:li (s:a 'href (s:link-to "run" ) "Runs"))) 
 		  (case (string->symbol page-name)
 		    ((index)  (s:call "home"))
 		    (else     (s:call page-name))))

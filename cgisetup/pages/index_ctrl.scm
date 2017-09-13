@@ -64,7 +64,7 @@ EOF
 
 (define index:javascript
 #<<EOF
-<script type="text/javascript" src="/js/prettify.js"></script>                                   <!-- PRETTIFY -->
+<!-- <script type="text/javascript" src="/js/prettify.js"></script>                                  PRETTIFY -->
 <script type="text/javascript" src="/js/kickstart.js"></script>                                  <!-- KICKSTART -->
 <script type="text/javascript" src="/js/pjhatwal-modal.js "></script>                          <!-- Modal -->
 EOF

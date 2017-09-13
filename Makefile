@@ -52,7 +52,7 @@ dboard : $(OFILES) $(GOFILES) dashboard.scm dashboard-areas.scm
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
 	csc $(CSCOPTS) $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
 
-mtut: $(OFILES) mtut.scm
+mtut: $(OFILES) megatest-fossil-hash.scm mtut.scm
 	csc $(CSCOPTS) $(OFILES) mtut.scm -o mtut
 
 TCMTOBJS = \
@@ -147,6 +147,9 @@ $(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard utils/mk_wrapper
 
 $(PREFIX)/bin/.$(ARCHSTR)/mtut : mtut
 	$(INSTALL) mtut $(PREFIX)/bin/.$(ARCHSTR)/mtut
+
+install-mtut : mtut
+	$(INSTALL) mtut $(PREFIX)/bin/mtut
 
 $(PREFIX)/bin/mtutil : $(PREFIX)/bin/.$(ARCHSTR)/mtut utils/mk_wrapper
 	utils/mk_wrapper $(PREFIX) mtut $(PREFIX)/bin/mtutil

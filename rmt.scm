@@ -13,9 +13,7 @@
 
 (declare (unit rmt))
 (declare (uses api))
-;; (declare (uses tdb))
 (declare (uses http-transport))
-;;(declare (uses nmsg-transport))
 (include "common_records.scm")
 
 ;;
@@ -818,6 +816,9 @@
 (define (rmt:get-steps-for-test run-id test-id)
   (rmt:send-receive 'get-steps-for-test run-id (list run-id test-id)))
 
+(define (rmt:get-steps-info-by-id test-step-id)
+  (rmt:send-receive 'get-steps-info-by-id #f (list test-step-id)))
+
 ;;======================================================================
 ;;  T E S T   D A T A 
 ;;======================================================================
@@ -827,10 +828,8 @@
 (define (rmt:read-test-data* run-id test-id categorypatt varpatt #!key (work-area #f)) 
   (rmt:send-receive 'read-test-data* run-id (list run-id test-id categorypatt varpatt)))
 
-;;   (let ((tdb  (rmt:open-test-db-by-test-id run-id test-id work-area: work-area)))
-;;     (if tdb
-;; 	(tdb:read-test-data tdb test-id categorypatt)
-;; 	'())))
+(define (rmt:get-data-info-by-id test-data-id)
+   (rmt:send-receive 'get-data-info-by-id #f (list test-data-id)))
 
 (define (rmt:testmeta-add-record testname)
   (rmt:send-receive 'testmeta-add-record #f (list testname)))

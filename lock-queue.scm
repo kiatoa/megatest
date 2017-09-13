@@ -7,8 +7,7 @@
 ;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 ;;  PURPOSE.
 
-(use sqlite3 srfi-18)
-(import (prefix sqlite3 sqlite3:))
+(use (prefix sqlite3 sqlite3:) srfi-18)
 
 (declare (unit lock-queue))
 (declare (uses common))

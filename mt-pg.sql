@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS runs (
        pass_count INTEGER DEFAULT 0,
        last_update INTEGER DEFAULT extract(epoch from now()),
        area_id     INTEGER DEFAULT 0,
-       CONSTRAINT runsconstraint UNIQUE (target,ttype_id,run_name));
+       CONSTRAINT runsconstraint UNIQUE (target,ttype_id,run_name, area_id));
 
 CREATE TABLE IF NOT EXISTS run_stats (
        id     SERIAL PRIMARY KEY,
@@ -210,6 +210,24 @@ CREATE TABLE IF NOT EXISTS archives (
        du           INTEGER,
        archive_path TEXT);
  
+CREATE TABLE IF NOT EXISTS users(
+   id SERIAL  PRIMARY KEY   ,
+   usename           TEXT    NOT NULL,
+   fullname          TEXT    NOT NULL, 
+   email             TEXT    NOT NULL, 
+   deleted           INTEGER     default 0
+);
+ 
+CREATE TABLE IF NOT EXISTS webviews(
+   id SERIAL  PRIMARY KEY   ,
+   owner_id          INTEGER NOT NULL,
+   name              TEXT    NOT NULL, 
+   ttype_id          INTEGER DEFAULT 0,
+   view_specifics    TEXT   ,
+   col               TEXT    NOT NULL,
+   row               TEXT    NOT NULL,
+   deleted           INTEGER     default 0
+);
 
 -- TRUNCATE archive_blocks, archive_allocations, extradat, metadat,
 -- access_log, tests, test_steps, test_data, test_rundat, archives, runs,

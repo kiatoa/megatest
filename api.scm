@@ -279,10 +279,12 @@
                    ;; STEPS
                    ((get-steps-data)               (apply db:get-steps-data dbstruct params))
                    ((get-steps-for-test)           (apply db:get-steps-for-test dbstruct params))
+		   ((get-steps-info-by-id)         (apply db:get-steps-info-by-id dbstruct params))
 
                    ;; TEST DATA
                    ((read-test-data)               (apply db:read-test-data dbstruct params))
                    ((read-test-data*)              (apply db:read-test-data* dbstruct params))
+                   ((get-data-info-by-id)          (apply db:get-data-info-by-id dbstruct params)) 
 
                    ;; MISC
                    ((get-latest-host-load)         (apply db:get-latest-host-load dbstruct params))

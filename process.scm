@@ -15,7 +15,6 @@
 
 (use regex)
 (declare (unit process))
-;;(declare (uses common))
 
 (define (process:conservative-read port)
   (let loop ((res ""))

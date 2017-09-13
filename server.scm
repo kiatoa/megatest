@@ -1,5 +1,5 @@
 
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2017, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -10,8 +10,8 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest directory-utils posix-extras matchable)
-;; (use zmq)
+(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest directory-utils posix-extras matchable
+     )
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
 
@@ -22,8 +22,6 @@
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 ;; (declare (uses synchash))
 (declare (uses http-transport))
-(declare (uses rpc-transport))
-;;(declare (uses nmsg-transport))
 (declare (uses launch))
 (declare (uses daemon))
 
@@ -36,6 +34,12 @@
       (conc "http://" (car hostport) ":" (cadr hostport))))
 
 (define  *server-loop-heart-beat* (current-seconds))
+
+;;======================================================================
+;; P K T S   S T U F F 
+;;======================================================================
+
+;; ???
 
 ;;======================================================================
 ;; S E R V E R
@@ -449,6 +453,19 @@
 	     (common:hms-string->seconds tmo)) ;; BUG: hms-string->seconds is broken, if given "10" returns 0. Also, it doesn't belong in this logic unless the string->number is changed below
         (* 3600 (string->number tmo))
 	60)))
+
+(define (server:get-best-guess-address hostname)
+  (let ((res #f))
+    (for-each 
+     (lambda (adr)
+       (if (not (eq? (u8vector-ref adr 0) 127))
+	   (set! res adr)))
+     ;; NOTE: This can fail when there is no mention of the host in /etc/hosts. FIXME
+     (vector->list (hostinfo-addresses (hostname->hostinfo hostname))))
+    (string-intersperse 
+     (map number->string
+	  (u8vector->list
+	   (if res res (hostname->ip hostname)))) ".")))
 
 ;; moving this here as it needs access to db and cannot be in common.
 ;;

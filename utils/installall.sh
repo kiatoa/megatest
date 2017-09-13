@@ -39,41 +39,41 @@ echo "Set additional_libpath to help find gtk or other libraries, don't forget a
 
 SYSTEM_TYPE=$(lsb_release -irs |tr ' ' '_' |tr '\n' '-')$(uname -i)-$OPTION
 
-CHICKEN_VERSION=4.11.0
-CHICKEN_BASEVER=4.11.0
+CHICKEN_VERSION=4.12.0
+CHICKEN_BASEVER=4.12.0
 
 # Set up variables
 #
 case $SYSTEM_TYPE in
 Ubuntu-17.04-x86_64-std)
 	KTYPE=32
-	CDVER=5.10
-	IUPVER=3.17
-	IMVER=3.11
+	CDVER=5.11.1
+	IUPVER=3.22
+	IMVER=3.12
 	CHICKEN_VERSION=4.12.0
 	CHICKEN_BASEVER=4.12.0
 	;;
 Ubuntu-16.04-x86_64-std)
 	KTYPE=32
-	CDVER=5.10
-	IUPVER=3.17
-	IMVER=3.11
+	CDVER=5.11.1
+	IUPVER=3.22
+	IMVER=3.12
 	CHICKEN_VERSION=4.12.0
 	CHICKEN_BASEVER=4.12.0
 	;;
 Ubuntu-16.04-i686-std)
 	KTYPE=32
-	CDVER=5.10
-	IUPVER=3.17
-	IMVER=3.11
+	CDVER=5.11.1
+	IUPVER=3.22
+	IMVER=3.12
         CHICKEN_VERSION=4.12.0
         CHICKEN_BASEVER=4.12.0
 	;;
 SUSE_LINUX_11-x86_64-std)
   KTYPE=26g4 
-	CDVER=5.10
-	IUPVER=3.17
-	IMVER=3.11
+	CDVER=5.11.1
+	IUPVER=3.22
+	IMVER=3.12
   ;;
 CentOS_5.11-x86_64-std)
   KTYPE=24g3 
@@ -178,7 +178,7 @@ cd $BUILDHOME
 #fi
 if ! [[ -e $PREFIX/lib64/libnanomsg.so.1.0.0 ]]; then
         wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
-        #mv 1.0.0 1.0.0.tar.gz
+        mv 1.0.0 1.0.0.tar.gz
 	tar xf 1.0.0.tar.gz 
 	cd nanomsg-1.0.0
 	./configure --prefix=$PREFIX
@@ -204,11 +204,24 @@ if ! [[ -e $PREFIX/bin/sqlite3 ]]; then
 	    fi
 	fi
 fi
-
+if ! [[ -e $PREFIX/bin/pg_config ]]; then
+	echo Install Postgresql
+	pgsql_tgz=postgresql-9.6.4.tar.gz
+	if ! [[ -e tgz/$pgsql_tgz ]]; then
+	  wget -c https://ftp.postgresql.org/pub/source/v9.6.4/$pgsql_tgz
+	  mv $pgsql_tgz tgz
+	fi
+	if ! [[ -e $PREFIX/bin/pg_config ]]; then
+	  if [[ -e tgz/$pgsql_tgz ]]; then
+	    tar xfz tgz/$pgsql_tgz
+	    (cd postgresql-9.6.4; ./configure --prefix=$PREFIX --with-openssl; make; make install)
+	  fi
+	fi
+fi
 
 
 cd $BUILDHOME
-for egg in "sqlite3" sql-de-lite # nanomsg
+for egg in "sqlite3" sql-de-lite nanomsg
 do
 	echo "Installing $egg"
 	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib -L$PREFIX/lib64"  $CHICKEN_INSTALL $PROX -keep-installed $egg
@@ -235,7 +248,7 @@ for egg in matchable readline apropos base64 regex-literals format "regex-case" 
 	locale-timezone loops low-level-macros procedural-macros refdb rfc3339 scsh-process \
 	sexp-diff sha1 shell slice srfi-101 srfi-19 srfi-19-core srfi-19-date srfi-19-io \
 	srfi-19-period srfi-19-support srfi-19-time srfi-19-timezone srfi-29 srfi-37 srfi-78 syslog \
-	udp uuid uuid-lib zlib
+	udp uuid uuid-lib zlib postgresql
 
 do
 	echo "Installing $egg"
@@ -246,9 +259,8 @@ do
 		exit 1
 	fi
 done
-
 if [[ -e `which mysql_config` ]]; then
-  $CHICKEN_INSTALL $PROX -keep-installed mysql-client
+  $CHICKEN_INSTALL $PROX mysql-client
 fi
 
 cd $BUILDHOME
@@ -256,25 +268,8 @@ cd `$PREFIX/bin/csi -p '(chicken-home)'`
 curl http://3e8.org/pub/chicken-doc/chicken-doc-repo.tgz | tar zx
 cd $BUILDHOME
 
-
-
 # $CHICKEN_INSTALL $PROX sqlite3
 cd $BUILDHOME
-# # IUP versions
-# if [[ x$USEOLDIUP == "x" ]];then
-#   CDVER=5.10
-#   IUPVER=3.17
-#   IMVER=3.11
-# else
-#   CDVER=5.10
-#   IUPVER=3.17
-#   IMVER=3.11
-# fi
-# if [[ x$KTYPE == "x24g3" ]];then
-#   CDVER=5.4.1
-#   IUPVER=3.5
-#   IMVER=3.6.3
-# fi
 
 if [[ `uname -a | grep x86_64` == "" ]]; then 
     export ARCHSIZE=''
@@ -341,6 +336,8 @@ if ! [[ -e $PREFIX/bin/hs ]] ; then
 	$PREFIX/bin/chicken-install
 	cd ../margs
 	$PREFIX/bin/chicken-install
+	cd ../pkts
+	$PREFIX/bin/chicken-install
 fi
 cd $BUILDHOME
 
@@ -368,7 +365,7 @@ if [[ $IUPVER == "3.5" ]]; then
 fi
 
 #CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks -feature disable-iup-web iup
-CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL $PROX -D no-library-checks -feature disable-iup-web $IUPEGGVER
+CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL $PROX -D no-library-checks -feature disable-iup-web -feature disable-iup-pplot $IUPEGGVER
 
 # CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks -feature disable-iup-web -deploy -prefix $DEPLOYTARG iup
 # iup:1.0.2 

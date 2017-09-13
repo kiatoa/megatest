@@ -100,36 +100,89 @@
 ;; given a target spec id, target and run-name return the run-id
 ;; if no run found return #f
 ;;
-(define (pgdb:get-run-id dbh spec-id target run-name)
-  (dbi:get-one dbh "SELECT id FROM runs WHERE ttype_id=? AND target=? AND run_name=?;"
-	       spec-id target run-name))
+(define (pgdb:get-run-id dbh spec-id target run-name area-id)
+  (dbi:get-one dbh "SELECT id FROM runs WHERE ttype_id=? AND target=? AND run_name=? and area_id=?;"
+	       spec-id target run-name area-id))
 
 ;; given a run-id return all the run info
 ;;
-(define (pgdb:get-run-info dbh run-id) ;; to join ttype or not?
+(define (pgdb:get-run-info dbh run-id ) ;; to join ttype or not?
   (dbi:get-one-row
    dbh   ;; 0    1       2       3      4     5      6       7        8         9         10          11         12
    "SELECT id,target,ttype_id,run_name,state,status,owner,event_time,comment,fail_count,pass_count,last_update,area_id
-       FROM runs WHERE id=?;" run-id))
+       FROM runs WHERE id=? ;" run-id ))
 
 ;; refresh the data in a run record
 ;;
-(define (pgdb:refresh-run-info dbh run-id state status owner event-time comment fail-count pass-count) ;; area-id)
+(define (pgdb:refresh-run-info dbh run-id state status owner event-time comment fail-count pass-count area-id) ;; area-id)
   (dbi:exec
    dbh
    "UPDATE runs SET
-      state=?,status=?,owner=?,event_time=?,comment=?,fail_count=?,pass_count=?
-     WHERE id=?;"
-   state status owner event-time comment fail-count pass-count run-id))
+      state=?,status=?,owner=?,event_time=?,comment=?,fail_count=?,pass_count=? 
+     WHERE id=? and area_id=?;"
+   state status owner event-time comment fail-count pass-count run-id area-id))
 
 ;; given all needed info create run record
 ;;
-(define (pgdb:insert-run dbh ttype-id target run-name state status owner event-time comment fail-count pass-count)
+(define (pgdb:insert-run dbh ttype-id target run-name state status owner event-time comment fail-count pass-count area-id)
+    (dbi:exec
+   dbh
+   "INSERT INTO runs (ttype_id,target,run_name,state,status,owner,event_time,comment,fail_count,pass_count,area_id )
+      VALUES (?,?,?,?,?,?,?,?,?,?,?);"
+    ttype-id target run-name state status owner event-time comment fail-count pass-count area-id))
+
+;;======================================================================
+;;  T E S T - S T E P S
+;;======================================================================
+
+(define (pgdb:get-test-step-id dbh test-id stepname state)
+  (dbi:get-one
+    dbh
+    "SELECT id FROM test_steps WHERE test_id=? AND stepname=? and state = ? ;"
+    test-id stepname state))
+
+(define (pgdb:insert-test-step dbh test-id stepname state status event_time comment logfile)
   (dbi:exec
    dbh
-   "INSERT INTO runs (ttype_id,target,run_name,state,status,owner,event_time,comment,fail_count,pass_count)
-      VALUES (?,?,?,?,?,?,?,?,?,?);"
-    ttype-id target run-name state status owner event-time comment fail-count pass-count))
+   "INSERT INTO test_steps (test_id,stepname,state,status,event_time,logfile,comment)
+       VALUES (?,?,?,?,?,?,?);"
+   test-id stepname  state   status  event_time   logfile   comment))
+
+(define (pgdb:update-test-step dbh step-id test-id stepname state status event_time comment logfile)
+  (dbi:exec
+    dbh
+    "UPDATE test_steps SET
+         test_id=?,stepname=?,state=?,status=?,event_time=?,logfile=?,comment=?
+          WHERE id=?;"
+    test-id stepname  state   status  event_time   logfile   comment step-id))
+
+
+;;======================================================================
+;;  T E S T - D A T A
+;;======================================================================
+
+(define (pgdb:get-test-data-id dbh test-id category variable)
+  (dbi:get-one
+    dbh
+    "SELECT id FROM test_data WHERE test_id=? AND category=? and variable = ? ;"
+    test-id category variable))
+
+(define (pgdb:insert-test-data dbh test-id category variable value expected tol units comment status type)
+  (dbi:exec
+   dbh
+   "INSERT INTO test_data (test_id, category, variable, value, expected, tol, units, comment, status, type)
+       VALUES (?,?,?,?,?,?,?,?,?,?);"
+   test-id category variable value expected tol units comment status type))
+
+(define (pgdb:update-test-data dbh data-id test-id  category variable value expected tol units comment status type)
+  (dbi:exec
+    dbh
+    "UPDATE test_data SET
+         test_id=?, category=?, variable=?, value=?, expected=?, tol=?, units=?, comment=?, status=?, type=?
+          WHERE id=?;"
+    test-id category variable value expected tol units comment status type data-id ))
+
+
 
 ;;======================================================================
 ;;  T E S T S
@@ -200,20 +253,89 @@
             WHERE t.state='COMPLETED' AND r.target LIKE ? GROUP BY r.target;"
    target-patt))
 
-(define (pgdb:get-latest-run-stats-given-target dbh ttype-id target-patt)
+
+(define (pgdb:get-latest-run-stats-given-target dbh ttype-id target-patt limit offset)
   (dbi:get-rows
    dbh
    ;;    "SELECT COUNT(t.id),t.status,r.target FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
    ;;         WHERE t.state='COMPLETED' AND ttype_id=? AND r.target LIKE ? GROUP BY r.target,t.status;"
-   "SELECT r.target,COUNT(*) AS total,
+   "SELECT r.target, r.event_time, COUNT(*) AS total,
                     SUM(CASE WHEN t.status='PASS' THEN 1 ELSE 0 END) AS pass,
                     SUM(CASE WHEN t.status='FAIL' THEN 1 ELSE 0 END) AS fail,
                     SUM(CASE WHEN t.status IN ('PASS','FAIL') THEN 0 ELSE 1 END) AS other, r.id
             FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
             WHERE t.state like '%'  AND ttype_id=? AND r.target LIKE ? 
                  and r.id in 
-(SELECT DISTINCT on (target) id from runs where target like ? AND ttype_id=? order by target,event_time desc) GROUP BY r.target,r.id;"
-   ttype-id target-patt target-patt ttype-id))
+           (SELECT DISTINCT on (target) id from runs where target like ? AND ttype_id=? order by target,event_time desc) 
+          GROUP BY r.target,r.id 
+          order by r.event_time desc limit ? offset ? ;"
+   ttype-id target-patt target-patt ttype-id limit offset))
+
+(define (pgdb:get-latest-run-stats-given-pattern dbh patt limit offset)
+  (dbi:get-rows
+   dbh
+   ;;    "SELECT COUNT(t.id),t.status,r.target FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+   ;;         WHERE t.state='COMPLETED' AND ttype_id=? AND r.target ILIKE ? GROUP BY r.target,t.status;"
+   "SELECT r.target, r.event_time, COUNT(*) AS total,
+                    SUM(CASE WHEN t.status='PASS' THEN 1 ELSE 0 END) AS pass,
+                    SUM(CASE WHEN t.status='FAIL' THEN 1 ELSE 0 END) AS fail,
+                    SUM(CASE WHEN t.status IN ('PASS','FAIL') THEN 0 ELSE 1 END) AS other, r.id
+            FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+            WHERE t.state like '%'  AND r.target ILIKE ? 
+                 and r.id in 
+           (SELECT DISTINCT on (target) id from runs where target ilike ?  order by target,event_time desc) 
+          GROUP BY r.target,r.id 
+          order by r.event_time desc limit ? offset ? ;"
+   patt patt  limit offset))
+
+
+(define (pgdb:get-count-data-stats-target-latest dbh ttype-id target-patt)
+  (dbi:get-rows
+   dbh
+    "SELECT count(*)  from 
+          (SELECT DISTINCT on (target) id 
+		from runs where target like ? AND ttype_id = ? 
+		order by target, event_time desc
+          ) as x;" 
+    target-patt ttype-id))
+
+(define  (pgdb:get-latest-run-cnt dbh ttype-id target-patt)
+  (let* ((cnt-result (pgdb:get-count-data-stats-target-latest dbh ttype-id target-patt))
+         ;(cnt-row (car (cnt-result)))
+         (cnt 0) 
+       )
+    (for-each
+     (lambda (row)
+      (set! cnt  (vector-ref row 0 ))) 
+     cnt-result)
+
+cnt))
+
+(define (pgdb:get-count-data-stats-latest-pattern dbh patt)
+  (dbi:get-rows
+   dbh
+    "SELECT count(*)  from 
+          (SELECT DISTINCT on (target) id 
+		from runs where target ilike ?  
+		order by target, event_time desc
+          ) as x;" 
+    patt))
+
+(define  (pgdb:get-latest-run-cnt-by-pattern dbh target-patt)
+  (let* ((cnt-result (pgdb:get-count-data-stats-latest-pattern dbh target-patt))
+         ;(cnt-row (car (cnt-result)))
+         (cnt 0) 
+       )
+    (for-each
+     (lambda (row)
+      (set! cnt  (vector-ref row 0 ))) 
+     cnt-result)
+
+cnt))
+
+
+
+
 
 (define (pgdb:get-run-stats-history-given-target dbh ttype-id target-patt)
   (dbi:get-rows
@@ -229,19 +351,42 @@
                  GROUP BY r.run_name;"
    ttype-id target-patt ))
 
-(define (pgdb:get-all-run-stats-target-slice dbh target-patt)
-(dbi:get-rows
-   dbh
-   "SELECT  r.target, r.run_name,r.event_time, COUNT(*) AS total,
+(define (pgdb:get-all-run-stats-target-slice dbh target-patt limit offset)
+    (dbi:get-rows
+    dbh
+    "SELECT  r.target, r.run_name,r.event_time, COUNT(*) AS total,
                     SUM(CASE WHEN t.status='PASS' THEN 1 ELSE 0 END) AS pass,
                     SUM(CASE WHEN t.status='FAIL' THEN 1 ELSE 0 END) AS fail,
                     SUM(CASE WHEN t.status IN ('PASS','FAIL') THEN 0 ELSE 1 END) AS other
             FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
             WHERE r.target LIKE ? 
-             
-            GROUP BY r.target,r.run_name, r.event_time;"
+            GROUP BY r.target,r.run_name, r.event_time
+             order by r.target,r.event_time desc limit  ? offset ?   ;"
+    target-patt limit offset))
+     
+
+(define (pgdb:get-count-data-stats-target-slice dbh target-patt)
+  (dbi:get-rows
+   dbh
+    "SELECT count(*)  from (SELECT  r.target, r.run_name,r.event_time, COUNT(*) AS total
+            FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id
+            WHERE r.target LIKE ?
+            GROUP BY r.target,r.run_name, r.event_time 
+          ) as x;" 
     target-patt))
 
+(define  (pgdb:get-slice-cnt dbh target-patt)
+  (let* ((cnt-result (pgdb:get-count-data-stats-target-slice dbh target-patt))
+         ;(cnt-row (car (cnt-result)))
+         (cnt 0) 
+       )
+    (for-each
+     (lambda (row)
+      (set! cnt  (vector-ref row 0 ))) 
+     cnt-result)
+
+cnt))
+   
 
 (define (pgdb:get-target-types dbh)
   (dbi:get-rows dbh "SELECT id,target_spec FROM ttype;"))
@@ -249,7 +394,8 @@
  (define (pgdb:get-distict-target-slice dbh)
   (dbi:get-rows dbh " select distinct on (split_part (target, '/', 1)) (split_part (target, '/', 1)) from runs;"))
 
-
+  (define (pgdb:get-distict-target-slice3 dbh)
+  (dbi:get-rows dbh " select distinct on (split_part (target, '/', 3)) (split_part (target, '/', 3)) from runs;"))
 ;; 
 (define (pgdb:get-targets dbh target-patt)
   (let ((ttypes (pgdb:get-target-types dbh)))
@@ -289,13 +435,44 @@
 ;;
 ;; fnum is the field number in the tuples to be split
 ;;
+
+(define (pgdb:mk-pattern  dot type bp rel)
+  (let* ((typ (if (equal? type "all")
+               "%"
+                type))
+        (dotprocess (if (equal? dot "all")
+                      "%"
+                     dot))
+        (rel-num (if (equal? rel "")
+                      "%"
+                     rel))
+        (pattern  (conc "%/" bp "/" dotprocess "/" typ "_" rel-num)))
+pattern))
+
 (define (pgdb:coalesce-runs dbh runs all-parts row-or-col fnum)
   (let* ((data  (make-hash-table)))
-    ;;	 (rnums (
-    ;; for now just do first => remainder
+    
     (for-each
      (lambda (run)
        (let* ((target (vector-ref run fnum))
+	      (parts  (string-split target "/"))
+	      (first  (car parts))
+	      (rest   (string-intersperse (cdr parts) "/"))
+	      (coldat (hash-table-ref/default data first #f)))
+	 (if (not coldat)(let ((newht (make-hash-table)))
+			   (hash-table-set! data first newht)
+			   (set! coldat newht)))
+	 (hash-table-set! coldat rest run)))
+     runs)
+    data))
+
+
+(define (pgdb:coalesce-runs1 runs  )
+  (let* ((data  (make-hash-table)))
+    
+    (for-each
+     (lambda (run)
+       (let* ((target (vector-ref run 0))
 	      (parts  (string-split target "/"))
 	      (first  (car parts))
 	      (rest   (string-intersperse (cdr parts) "/"))
@@ -381,3 +558,13 @@
 	 (hash-table-set! data run-name run)))
      runs)
     data))
+
+(define (pgdb:get-pg-lst tab2-pages)
+    (let loop ((i 1)
+             (lst `()))
+                       (cond
+                        ((> i tab2-pages )
+                        lst) 
+                      (else 
+		  	(loop (+ i 1) (append   lst (list i)))))))
+
