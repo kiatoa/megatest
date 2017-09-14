@@ -48,7 +48,7 @@
     procs))
 
 
-;; given a sexp, return a flat lost of atoms in that sexp
+;; given a sexp, return a flat list of atoms in that sexp
 (define (get-atoms-in-body body)
   (cond
    ((null? body) '())
