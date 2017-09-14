@@ -200,7 +200,7 @@
 ;; returns: db existed-prior-to-opening
 ;; RA => Returns a db handler; sets the lock if opened in writable mode
 ;;
-(define *db-open-mutex* (make-mutex))
+;; (define *db-open-mutex* (make-mutex))
 
 (define (db:lock-create-open fname initproc)
   (let* ((parent-dir   (or (pathname-directory fname)(current-directory))) ;; no parent? go local
@@ -210,7 +210,7 @@
 	 (file-write   (if file-exists
 			   (file-write-access? fname)
 			   dir-writable )))
-    (mutex-lock! *db-open-mutex*) ;; tried this mutex, not clear it helped.
+    ;; (mutex-lock! *db-open-mutex*) ;; tried this mutex, not clear it helped.
     (if file-write ;; dir-writable
 	(condition-case
          (let* ((lockfname   (conc fname ".lock"))
@@ -248,7 +248,7 @@
          (begin
            (debug:print 2 *default-log-port* "WARNING: opening db in non-writable dir " fname)
            (let ((db (sqlite3:open-database fname)))
-             (mutex-unlock! *db-open-mutex*)
+             ;; (mutex-unlock! *db-open-mutex*)
              db))
          (exn (io-error)  (debug:print 0 *default-log-port* "ERROR: i/o error with " fname ". Check permissions, disk space etc. and try again."))
          (exn (corrupt)   (debug:print 0 *default-log-port* "ERROR: database " fname " is corrupt. Repair it to proceed."))
