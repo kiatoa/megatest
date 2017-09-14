@@ -3501,7 +3501,8 @@
                             (num-non-completes (length non-completes))
                             (newstate          (cond
 						((> running 0)           "RUNNING")            ;; anything running, call the situation running
-                                                ;;((> (length preq-fails) 0)                                                ;; "NOT_STARTED")
+                                                ((> (length preq-fails) 0)
+                                                 "NOT_STARTED")
 						((> bad-not-started 0)   "COMPLETED")          ;; we have an ugly situation, it is completed in the sense we cannot do more.
 						((> num-non-completes 0) (car non-completes))  ;;  (remove (lambda (x)(equal? "COMPLETED" x)) all-curr-states))) ;; only rollup DELETED if all DELETED
 						(else                    (car all-curr-states))))
@@ -3510,20 +3511,15 @@
                                                ;;     (if (> bad-not-started 0)
                                                ;;         "COMPLETED"
                                                ;;         (car all-curr-states))))
-                            ;; (newstatus         (cond
-                            ;;                     ;;((> (length preq-fails) 0)
-                            ;;                     ;; "PREQ_FAIL")
-                            ;;                     ((or (> bad-not-started 0)
-                            ;;                          (and (equal? newstate "NOT_STARTED")
-                            ;;                               (> num-non-completes 0)))
-                            ;;                      "STARTED")
-                            ;;                     (else
-                            ;;                      (car all-curr-statuses)))))
-                            (newstatus         (if (or (> bad-not-started 0)
-                                                       (and (equal? newstate "NOT_STARTED")
-                                                            (> num-non-completes 0)))
-                                                   "STARTED"
-                                                   (car all-curr-statuses))))
+                            (newstatus         (cond
+                                                ((> (length preq-fails) 0)
+                                                 "PREQ_FAIL")
+                                                ((or (> bad-not-started 0)
+                                                     (and (equal? newstate "NOT_STARTED")
+                                                          (> num-non-completes 0)))
+                                                 "STARTED")
+                                                (else
+                                                 (car all-curr-statuses)))))
 
                        ;; (print "bad-not-supported: " bad-not-support " all-curr-states: " all-curr-states " all-curr-statuses: " all-curr-states)
                        ;;      " newstate: " newstate " newstatus: " newstatus)
