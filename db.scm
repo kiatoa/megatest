@@ -3495,22 +3495,16 @@
 			    (non-completes     (filter (lambda (x)
 							 (not (equal? x "COMPLETED")))
 						       all-curr-states))
-                            (preq-fails        (filter (lambda (x)
+			    (preq-fails        (filter (lambda (x)
 							 (equal? x "PREQ_FAIL"))
 						       all-curr-statuses))
                             (num-non-completes (length non-completes))
                             (newstate          (cond
-						((> running 0)
-						 "RUNNING") ;; anything running, call the situation running
-                                                ;;((> (length preq-fails) 0)
-                                                ;; "NOT_STARTED")
-						((> bad-not-started 0)  ;; we have an ugly situation, it is completed in the sense we cannot do more.
-						 "COMPLETED") 
-						((> num-non-completes 0) ;;
-						 (car non-completes))  ;;  (remove (lambda (x)(equal? "COMPLETED" x)) all-curr-states)))
-                                                ;; only rollup DELETED if all DELETED
-						(else
-						 (car all-curr-states))))
+						((> running 0)           "RUNNING")            ;; anything running, call the situation running
+                                                ;;((> (length preq-fails) 0)                                                ;; "NOT_STARTED")
+						((> bad-not-started 0)   "COMPLETED")          ;; we have an ugly situation, it is completed in the sense we cannot do more.
+						((> num-non-completes 0) (car non-completes))  ;;  (remove (lambda (x)(equal? "COMPLETED" x)) all-curr-states))) ;; only rollup DELETED if all DELETED
+						(else                    (car all-curr-states))))
 			                       ;; (if (> running 0)
                                                ;;     "RUNNING"
                                                ;;     (if (> bad-not-started 0)
@@ -3543,7 +3537,8 @@
                                     
                                     ); end debug:print
                        (if tl-test-id
-			   (db:test-set-state-status dbstruct run-id tl-test-id newstate newstatus #f))))))))
+			   (db:test-set-state-status db run-id tl-test-id newstate newstatus #f)) ;; we are still in the transaction - must access the db and not the dbstruct
+		       ))))))
          (mutex-unlock! *db-transaction-mutex*)
          (if (and test-id state status (equal? status "AUTO")) 
              (db:test-data-rollup dbstruct run-id test-id status))
