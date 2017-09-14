@@ -94,6 +94,33 @@
 	    (pgdb:get-ttype dbh target-spec)))))
 
 ;;======================================================================
+;;  T A G S
+;;======================================================================
+
+
+(define (pgdb:get-tag-info-by-name dbh tag)
+  (dbi:get-one-row dbh "SELECT id,tag_name FROM tags where tag_name=?;" tag))
+
+(define (pgdb:insert-tag dbh name )
+  (dbi:exec dbh "INSERT INTO tags (tag_name) VALUES (?)" name ))
+
+(define (pgdb:insert-area-tag dbh tag-id area-id )
+  (dbi:exec dbh "INSERT INTO area_tags (tag_id, area_id) VALUES (?,?)" tag-id area-id ))
+
+(define (pgdb:is-area-taged dbh area-id)
+   (let ((area-tag-id (dbi:get-one dbh "SELECT id FROM area_tags WHERE area_id=?;" area-id)))
+   (if area-tag-id 
+           #t
+            #f)))
+
+(define (pgdb:is-area-taged-with-a-tag dbh   tag-id area-id)
+   (let ((area-tag-id (dbi:get-one dbh "SELECT id FROM area_tags WHERE area_id=? and tag_id=?;" area-id tag-id)))
+   (if area-tag-id 
+           #t
+            #f)))
+
+
+;;======================================================================
 ;;  R U N S
 ;;======================================================================
 

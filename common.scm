@@ -116,6 +116,7 @@
 (define *common:denoise*    (make-hash-table)) ;; for low noise printing
 (define *default-log-port*  (current-error-port))
 (define *time-zero* (current-seconds)) ;; for the watchdog
+(define *default-area-tag* "local")
 
 ;; DATABASE
 (define *dbstruct-db*         #f) ;; used to cache the dbstruct in db:setup. Goal is to remove this.

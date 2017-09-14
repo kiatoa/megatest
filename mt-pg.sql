@@ -43,6 +43,17 @@ CREATE TABLE IF NOT EXISTS areas (
        last_sync INTEGER DEFAULT 0,
        CONSTRAINT areaconstraint UNIQUE (area_name));
 
+CREATE TABLE IF NOT EXISTS tags (
+       id SERIAL PRIMARY KEY,
+       tag_name TEXT NOT NULL,
+       CONSTRAINT tagconstraint UNIQUE (tag_name));
+
+CREATE TABLE IF NOT EXISTS area_tags (
+       id SERIAL PRIMARY KEY,
+       tag_id   INTEGER DEFAULT 0,
+       area_id  INTEGER DEFAULT 0,
+       CONSTRAINT areatagconstraint UNIQUE (tag_id, area_id));
+
 INSERT INTO areas (id,area_name,area_path) VALUES (0,'local','.');
 
 CREATE TABLE IF NOT EXISTS ttype (

@@ -796,6 +796,27 @@
               (print "WARNING: Skipping run with run-id:" run-id ". This run was created after privious sync and removed before this sync."))))
      test-ids)))
 
+(define (task:add-area-tag dbh area-info tag) 
+  (let* ((tag-info (pgdb:get-tag-info-by-name dbh tag)))
+   (if (not tag-info)
+     (begin   
+     (if (handle-exceptions
+	   exn
+	   (begin 
+               (print ((condition-property-accessor 'exn 'message) exn))     
+	   #f)
+	   (pgdb:insert-tag  dbh   tag))
+                       (set! tag-info (pgdb:get-tag-info-by-name dbh tag))
+		  #f)))
+     ;;add to area_tags
+     (handle-exceptions
+	   exn
+	   (begin 
+               (print ((condition-property-accessor 'exn 'message) exn))     
+	   #f)
+           (if (not (pgdb:is-area-taged-with-a-tag dbh (vector-ref tag-info 0)  (vector-ref area-info 0)))  
+	   (pgdb:insert-area-tag  dbh   (vector-ref tag-info 0)  (vector-ref area-info 0))))))
+
 ;; get runs changed since last sync
 ;; (define (tasks:sync-test-data dbh cached-info area-info)
 ;;   (let* ((
@@ -816,9 +837,15 @@
 	       (test-ids       (alist-ref 'tests      changed))
 	       (test-step-ids  (alist-ref 'test_steps changed))
 	       (test-data-ids  (alist-ref 'test_data  changed))
-	       (run-stat-ids   (alist-ref 'run_stats  changed)))
-	  (print "area-info: " area-info)
-            
+	       (run-stat-ids   (alist-ref 'run_stats  changed))
+               (area-tag    (if (args:get-arg "-area-tag") 
+                                 (args:get-arg "-area-tag")
+                                  "")))
+	 ; (print "area-info: " area-info)
+           (if (and (equal? area-tag "") (not (pgdb:is-area-taged dbh (vector-ref area-info 0))))
+            (set! area-tag *default-area-tag*)) 
+           (if (not (equal? area-tag "")) 
+             (task:add-area-tag dbh area-info area-tag)) 
 	  (if (not (null? test-ids))
 	      (begin
 		(print "Syncing " (length test-step-ids) " changed tests")

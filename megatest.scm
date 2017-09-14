@@ -172,6 +172,7 @@ Queries
 Misc 
   -start-dir path         : switch to this directory before running megatest
   -contour cname          : add a level of hierarcy to the linktree and run paths
+  -area-tag tagname       : add a tag to an area while syncking to pgdb
   -rebuild-db             : bring the database schema up to date
   -cleanup-db             : remove any orphan records, vacuum the db
   -import-megatest.db     : push data from megatest.db to cache db files in /tmp/$USER
@@ -280,6 +281,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			;; misc
 			"-start-dir"
 			"-contour"
+                        "-area-tag"  
 			"-server"
 			"-transport"
 			"-port"
