@@ -97,6 +97,10 @@ $(PREFIX)/share/docs/megatest_manual.html : docs/manual/megatest_manual.html
 	$(INSTALL) docs/manual/megatest_manual.html $(PREFIX)/share/docs/megatest_manual.html
 	for png in $(PNGFILES);do $(INSTALL) docs/manual/$$png $(PREFIX)/share/docs/$$png;done
 
+js : java-script-lib/jquery-3.1.0.slim.min.js
+	mkdir -p $(PREFIX)/share/js
+	cp java-script-lib/jquery-3.1.0.slim.min.js $(PREFIX)/share/js/jquery-3.1.0.slim.min.js
+
 $(PREFIX)/share/db/mt-pg.sql : mt-pg.sql
 	mkdir -p $(PREFIX)/share/db
 	$(INSTALL) mt-pg.sql $(PREFIX)/share/db/mt-pg.sql
@@ -239,8 +243,10 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
 	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/viewscreen $(PREFIX)/bin/mt_xterm \
+	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun \
 	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun $(PREFIX)/bin/mtutil \
-	  $(PREFIX)/bin/tcmt $(PREFIX)/share/db/mt-pg.sql
+	  $(PREFIX)/bin/tcmt $(PREFIX)/share/db/mt-pg.sql \
+          js 
 #         $(PREFIX)/bin/.$(ARCHSTR)/ndboard
 
 # $(PREFIX)/bin/newdashboard
@@ -323,10 +329,18 @@ datashare-testing/spublish : spublish.scm $(OFILES)
 datashare-testing/sretrieve : sretrieve.scm megatest-version.o margs.o configf.o process.o 
 	csc $(CSCOPTS) sretrieve.scm megatest-version.o margs.o configf.o process.o -o datashare-testing/sretrieve
 
+datashare-testing/sauthorize : sretrieve.scm megatest-version.o margs.o configf.o process.o common.o
+	 csc sauthorize.scm megatest-version.o margs.o configf.o process.o common.o -o datashare-testing/sauthorize
+
+
+datashare-testing/sauthorize : sretrieve.scm megatest-version.o margs.o configf.o process.o common.o
+	 csc sauthorize.scm megatest-version.o margs.o configf.o process.o common.o -o datashare-testing/sauthorize
+
+
 sretrieve/sretrieve : datashare-testing/sretrieve
 	csc $(CSCOPTS) -deploy -deployed sretrieve.scm megatest-version.o margs.o configf.o process.o
 	chicken-install -keep-installed $(PROXY) -deploy -prefix sretrieve defstruct srfi-18 format sql-de-lite \
-             srfi-1 posix regex regex-case srfi-69
+             srfi-1 posix regex regex-case srfi-69 
 
 # base64 dot-locking \
 #             csv-xml z3

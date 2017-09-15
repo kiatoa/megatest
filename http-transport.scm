@@ -10,6 +10,7 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
+
 (use  srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest posix-extras)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars intarweb spiffy-directory-listing)
@@ -31,7 +32,9 @@
 
 (include "common_records.scm")
 (include "db_records.scm")
+(include "js-path.scm")
 
+(require-library stml)
 (define (http-transport:make-server-url hostport)
   (if (not hostport)
       #f
@@ -105,8 +108,20 @@
 						  headers: '((content-type text/plain))))
 				  ((equal? (uri-path (request-uri (current-request))) 
 					   '(/ "hey"))
-				   (send-response body: "hey there!\n"
+				   (send-response body: "hey there!\n" 
 						  headers: '((content-type text/plain))))
+                                  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ "jquery3.1.0.js"))
+				   (send-response body: (http-transport:show-jquery) 
+						  headers: '((content-type application/javascript))))
+                                  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ "test_log"))
+				   (send-response body: (http-transport:html-test-log $) 
+						  headers: '((content-type text/HTML))))    
+                                  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ "dashboard"))
+				   (send-response body: (http-transport:html-dboard $) 
+						  headers: '((content-type text/HTML)))) 
 				  (else (continue))))))))
     (with-output-to-file start-file (lambda ()(print (current-process-id))))
     (http-transport:try-start-server ipaddrstr start-port)))
@@ -562,9 +577,43 @@
 ;;      (thread-start! th1)
 ;;      (thread-join! th2))))
 
+;;===============================================
+;; Java script
+;;===============================================
+(define (http-transport:show-jquery)
+  (let* ((data  (tests:readlines *java-script-lib*)))
+(string-join data "\n")))
+
+
+
 ;;======================================================================
 ;; web pages
 ;;======================================================================
+
+(define (http-transport:html-test-log $)
+   (let* ((run-id ($ 'runid))
+         (test-item ($ 'testname))
+         (parts (string-split test-item ":"))
+         (test-name (car parts))
+             
+         (item-name (if (equal? (length parts) 1)
+             ""
+             (cadr parts))))
+  ;(print $) 
+(tests:get-test-log run-id test-name item-name)))
+
+
+(define (http-transport:html-dboard $)
+  (let* ((page ($ 'page))
+         (oup       (open-output-string)) 
+         (bdy "--------------------------")
+
+         (ret  (tests:dynamic-dboard page)))
+    (s:output-new  oup  ret)
+   (close-output-port oup)
+
+  (set! bdy   (get-output-string oup))
+     (conc "<h1>Dashboard</h1>" bdy "<br/> <br/> "  )))
 
 (define (http-transport:main-page)
   (let ((linkpath (root-path)))
