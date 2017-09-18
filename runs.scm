@@ -466,7 +466,7 @@
     ;;
     ;;======================================================================
     
-    (if (not (null? test-names))
+    (if (not (null? test-names)) ;; BEGIN test-names loop
 	(let loop ((hed (car test-names))   ;; NOTE: This is the main loop that iterates over the test-names
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	  (change-directory *toppath*) ;; PLEASE OPTIMIZE ME!!! I think this should be a no-op but there are several places where change-directories could be happening.
@@ -484,12 +484,12 @@
 	    
 	    ;; (items   (items:get-items-from-config config)))
 	    (if (not (hash-table-ref/default test-records hed #f))
-		(hash-table-set! test-records
-				 hed (vector hed     ;; 0
-					     config  ;; 1
-					     waitons ;; 2
+		(hash-table-set! test-records ;; BB: we are doing a manual make-tests:testqueue
+				 hed (vector hed     ;; 0 ;; testname
+					     config  ;; 1 
+					     waitons ;; 2 
 					     (config-lookup config "requirements" "priority")     ;; priority 3
-					     (tests:get-items config) ;; expand the [items] and or [itemstable] into explict items
+					     (tests:get-items config) ;; 4 ;; expand the [items] and or [itemstable] into explict items
 					     #f      ;; itemsdat 5
 					     #f      ;; spare - used for item-path
 					     waitors ;; 
@@ -503,7 +503,7 @@
 						(or (hash-table-ref/default waiton-tconfig "items" #f)
 						    (hash-table-ref/default waiton-tconfig "itemstable" #f))))
 			  (itemmaps        (tests:get-itemmaps config))  ;; (configf:lookup config "requirements" "itemmap"))
-			  (new-test-patts  (tests:extend-test-patts test-patts hed waiton itemmaps)))
+			  (new-test-patts  (tests:extend-test-patts test-patts hed waiton itemmaps)))   ;; BB:  items expanded here.
 		     (debug:print-info 0 *default-log-port* "Test " waiton " has " (if waiton-record "a" "no") " waiton-record and" (if waiton-itemized " " " no ") "items")
 		     ;; need to account for test-patt here, if I am test "a", selected with a test-patt of "hed/b%"
 		     ;; and we are waiting on "waiton" we need to add "waiton/,waiton/b%" to test-patt
@@ -543,7 +543,7 @@
 	      (if (not (null? remtests))
 		  (begin
 		    ;; (debug:print-info 0 *default-log-port* "Preprocessing continues for " (string-intersperse remtests ", "))
-		    (loop (car remtests)(cdr remtests))))))))
+		    (loop (car remtests)(cdr remtests)))))))) ;; END test-names loop
 
     (if (not (null? required-tests))
 	(debug:print-info 1 *default-log-port* "Adding \"" (string-intersperse required-tests " ") "\" to the run queue"))
@@ -562,7 +562,7 @@
 					      (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests
 								    (any->number reglen) all-tests-registry)))
 					  "runs:run-tests-queue"))
-		 (th2        (make-thread (lambda ()				    
+		 (th2        (make-thread (lambda ()			 ;; BBQ: why are we visiting ALL runs here?	    
 					    ;; (rmt:find-and-mark-incomplete-all-runs))))) CAN'T INTERRUPT IT ...
 					    (let ((run-ids (rmt:get-all-run-ids)))
 					      (for-each (lambda (run-id)
@@ -570,7 +570,7 @@
 							      (handle-exceptions
 							       exn
 							       (debug:print 0 *default-log-port* "error in calling find-and-mark-incomplete for run-id " run-id)
-							       (rmt:find-and-mark-incomplete run-id #f)))) ;; ovr-deadtime)))
+							       (rmt:find-and-mark-incomplete run-id #f)))) ;; ovr-deadtime))) ;; could be root of https://hsdes.intel.com/appstore/article/#/220546828/main -- Title: Megatest jobs show DEAD even though they are still running (1.64/27)
 							run-ids)))
 					  "runs: mark-incompletes")))
 	    (thread-start! th1)
@@ -751,15 +751,15 @@
                   ))
 	      (list (car newtal)(append (cdr newtal) reg) '() reruns))))
 
-     ((and (null? fails)
+     ((and (null? fails) ;; have not-started tests, but unable to run them.  everything looks completed with no prospect of unsticking something that is stuck.  we should mark hed as moribund and exit or continue if there are more tests to consider
 	   (null? prereq-fails)
 	   (null? non-completed))
       (if  (runs:can-keep-running? hed 20)
 	  (begin
 	    (runs:inc-cant-run-tests hed)
-	    (debug:print-info 1 *default-log-port* "no fails in prerequisites for " hed " but also none running, keeping " hed " for now. Try count: " (hash-table-ref/default *seen-cant-run-tests* hed 0))
+	    (debug:print-info 0 *default-log-port* "no fails in prerequisites for " hed " but also none running, keeping " hed " for now. Try count: " (hash-table-ref/default *seen-cant-run-tests* hed 0)) ;; 
 	    ;; getting here likely means the system is way overloaded, kill a full minute before continuing
-	    (thread-sleep! 60)
+	    (thread-sleep! 60) ;; TODO: gate by normalized server load > 1.0 (maxload config thing)
 	    ;; num-retries code was here
 	    ;; we use this opportunity to move contents of reg to tal
 	    (list (car newtal)(append (cdr newtal) reg) '() reruns)) ;; an issue with prereqs not yet met?
@@ -781,7 +781,9 @@
 	(if test-id
 	    (if (not (null? prereq-fails))
 		(mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to prior failed prerequisites")
-		(mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL"      "Failed to run due to failed prerequisites"))))
+                (begin
+                  (debug:print 4 *default-log-port*"BB> set PREQ_FAIL on "hed)
+                  (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL"      "Failed to run due to failed prerequisites"))))) ;; BB: this works, btu equivalent for itemwait mode does not work.
       (if (or (not (null? reg))(not (null? tal)))
 	  (begin
 	    (hash-table-set! test-registry hed 'CANNOTRUN)
@@ -819,6 +821,9 @@
 ;;  hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmaps)
 (define (runs:process-expanded-tests runsdat testdat)
   ;; unroll the contents of runsdat and testdat (due to ongoing refactoring).
+  (debug:print 2 *default-log-port* "runs:process-expanded-tests; testdat:" )
+  (debug:print 2 *default-log-port* (with-output-to-string
+                                            (lambda () (pp (runs:testdat->alist testdat) ))))
   (let* ((hed                    (runs:testdat-hed testdat))
 	 (tal                    (runs:testdat-tal testdat))
 	 (reg                    (runs:testdat-reg testdat))
@@ -890,7 +895,7 @@
     ;; i.e. is this a re-launch?
     (debug:print-info 4 *default-log-port* "run-limits-info = " run-limits-info)
     
-    (cond
+    (cond ; cond 894- 1067
      
      ;; Check item path against item-patts, 
      ;;
@@ -1006,7 +1011,7 @@
 	    (list (car newtal)(cdr newtal) reg reruns))
 	  ;; the waiton is FAIL so no point in trying to run hed ever again
 	  (if (or (not (null? reg))(not (null? tal)))
-	      (if (vector? hed)
+	      (if (or (vector? hed)  (not (null? fails))) ;; BB: why do we need a vector?  in my case, fails is populated (prereq failed), reg is not nul, and we really want to drop this one
 		  (begin
 		    (debug:print 1 *default-log-port* "WARNING: Dropping test " test-name "/" item-path
 				 " from the launch list as it has prerequistes that are FAIL")
@@ -1015,17 +1020,23 @@
 		    (runs:shrink-can-run-more-tests-count runsdat) ;; DELAY TWEAKER (still needed?)
 		    ;; (thread-sleep! *global-delta*)
 		    ;; This next is for the items
-		    (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "BLOCKED" #f)
+
+                    (if (not (null? fails))
+                        ;;(mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "PREQ_FAIL" #f)
+                        (rmt:set-state-status-and-roll-up-items run-id test-name item-path "NOT_STARTED" "PREQ_FAIL" #f) 
+                        ;;(mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "BLOCKED" #f)
+                        (rmt:set-state-status-and-roll-up-items run-id test-name item-path "NOT_STARTED" "BLOCKED" #f) )
 		    (hash-table-set! test-registry (db:test-make-full-name test-name item-path) 'removed)
 		    (runs:loop-values tal reg reglen regfull reruns))
-		  (let ((nth-try (hash-table-ref/default test-registry hed 0)))
+		  (let ((nth-try (hash-table-ref/default test-registry hed 0))) ;; hed not a vector...
+                    (debug:print 2 *default-log-port* "nth-try("hed")="nth-try)
 		    (cond
 		     ((member "RUNNING" (map db:test-get-state prereqs-not-met))
 		      (if (runs:lownoise (conc "possible RUNNING prerequistes " hed) 60)
 			  (debug:print 0 *default-log-port* "WARNING: test " hed " has possible RUNNING prerequisites, don't give up on it yet."))
 		      (thread-sleep! 4)
 		      (runs:loop-values tal reg reglen regfull reruns))
-		     ((or (not nth-try)
+		     ((or (not nth-try) ;; BB: condition on subsequent tries, condition below fires on first try 
 			  (and (number? nth-try)
 			       (< nth-try 10)))
 		      (hash-table-set! test-registry hed (if (number? nth-try)
@@ -1036,14 +1047,14 @@
 		      ;; may not have processed correctly. Could be a race condition in your test implementation? Dropping test " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
 		      (runs:shrink-can-run-more-tests-count runsdat) ;; DELAY TWEAKER (still needed?)
 		      (runs:loop-values newtal reg reglen regfull reruns))
-		     ((symbol? nth-try)
+		     ((symbol? nth-try) ;; BB: 'done matches here in one case where prereq itemwait failed.  This is first "try"
 		      (if (eq? nth-try 'removed) ;; removed is removed - drop it NOW
 			  (if (null? tal)
 			      #f ;; yes, really
 			      (list (car tal)(cdr tal) reg reruns))
 			  (begin
 			    (if (runs:lownoise (conc "FAILED prerequisites or other issue" hed) 60)
-				(debug:print 0 *default-log-port* "WARNING: test " hed " has FAILED prerequisites or other issue. Internal state " nth-try " will be overridden and we'll retry."))
+				(debug:print 0 *default-log-port* "WARNING: test " hed " has FAILED prerequisites or other issue. Internal state >" nth-try "< will be overridden and we'll retry."))
 			    (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "KEEP_TRYING" #f)
 			    (hash-table-set! test-registry hed 0)
 			    (runs:loop-values newtal reg reglen regfull))))
@@ -1167,46 +1178,46 @@
   ;; (rmt:find-and-mark-incomplete)
 
   (let* ((run-info             (rmt:get-run-info run-id))
-	(tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
-	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
-	(test-registry         (make-hash-table))
-	(registry-mutex        (make-mutex))
-	(num-retries           0)
-	(max-retries           (config-lookup *configdat* "setup" "maxretries"))
-	(max-concurrent-jobs   (configf:lookup-number *configdat* "setup" "max_concurrent_jobs" default: 50))
-        (reglen                (if (number? reglen-in) reglen-in 1))
-	(last-time-incomplete  (- (current-seconds) 900)) ;; force at least one clean up cycle
-	(last-time-some-running (current-seconds))
-	;; (tdbdat                (tasks:open-db))
-	(runsdat (make-runs:dat
-		  ;; hed: hed
-		  ;; tal: tal
-		  ;; reg: reg
-		  ;; reruns: reruns
-		  reglen: reglen
-		  regfull: #f ;; regfull
-		  ;; test-record: test-record
-		  runname: runname
-		  ;; test-name: test-name
-		  ;; item-path: item-path
-		  ;; jobgroup: jobgroup
-		  max-concurrent-jobs: max-concurrent-jobs
-		  run-id: run-id
-		  ;; waitons: waitons
-		  ;; testmode: testmode
-		  test-patts: test-patts
-		  required-tests: required-tests
-		  test-registry: test-registry
-		  registry-mutex: registry-mutex
-		  flags: flags
-		  keyvals: keyvals
-		  run-info: run-info
-		  ;; newtal: newtal
-		  all-tests-registry: all-tests-registry
-		  ;; itemmaps: itemmaps
-		  ;; prereqs-not-met: (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps)
-		  ;; can-run-more-tests: (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs) ;; look at the test jobgroup and tot jobs running
-		  )))
+         (tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
+         (sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
+         (test-registry         (make-hash-table))
+         (registry-mutex        (make-mutex))
+         (num-retries           0)
+         (max-retries           (config-lookup *configdat* "setup" "maxretries"))
+         (max-concurrent-jobs   (configf:lookup-number *configdat* "setup" "max_concurrent_jobs" default: 50))
+         (reglen                (if (number? reglen-in) reglen-in 1))
+         (last-time-incomplete  (- (current-seconds) 900)) ;; force at least one clean up cycle
+         (last-time-some-running (current-seconds))
+         ;; (tdbdat                (tasks:open-db))
+         (runsdat (make-runs:dat
+                   ;; hed: hed
+                   ;; tal: tal
+                   ;; reg: reg
+                   ;; reruns: reruns
+                   reglen: reglen
+                   regfull: #f ;; regfull
+                   ;; test-record: test-record
+                   runname: runname
+                   ;; test-name: test-name
+                   ;; item-path: item-path
+                   ;; jobgroup: jobgroup
+                   max-concurrent-jobs: max-concurrent-jobs
+                   run-id: run-id
+                   ;; waitons: waitons
+                   ;; testmode: testmode
+                   test-patts: test-patts
+                   required-tests: required-tests
+                   test-registry: test-registry
+                   registry-mutex: registry-mutex
+                   flags: flags
+                   keyvals: keyvals
+                   run-info: run-info
+                   ;; newtal: newtal
+                   all-tests-registry: all-tests-registry
+                   ;; itemmaps: itemmaps
+                   ;; prereqs-not-met: (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps)
+                   ;; can-run-more-tests: (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs) ;; look at the test jobgroup and tot jobs running
+                   )))
 
     ;; Initialize the test-registery hash with tests that already have a record
     ;; convert state to symbol and use that as the hash value
@@ -1284,8 +1295,8 @@
 	(if (> num-running 0)
 	  (set! last-time-some-running (current-seconds)))
 
-      (if (> (current-seconds)(+ last-time-some-running (or (configf:lookup *configdat* "setup" "give-up-waiting") 36000)))
-	  (hash-table-set! *max-tries-hash* tfullname (+ (hash-table-ref/default *max-tries-hash* tfullname 0) 1)))
+        (if (> (current-seconds)(+ last-time-some-running (or (configf:lookup *configdat* "setup" "give-up-waiting") 36000)))
+            (hash-table-set! *max-tries-hash* tfullname (+ (hash-table-ref/default *max-tries-hash* tfullname 0) 1)))
 	;; (debug:print 0 *default-log-port* "max-tries-hash: " (hash-table->alist *max-tries-hash*))
 
 	;; Ensure all top level tests get registered. This way they show up as "NOT_STARTED" on the dashboard
@@ -1443,7 +1454,8 @@
 	  (loop (car reg)(cdr reg) '() reruns))
 	 (else
 	  (debug:print-info 4 *default-log-port* "Exiting loop with...\n  hed=" hed "\n  tal=" tal "\n  reruns=" reruns))
-	 )))
+	 ))) ;; end loop on sorted test names
+    
     ;; now *if* -run-wait we wait for all tests to be done
     ;; Now wait for any RUNNING tests to complete (if in run-wait mode)
     (thread-sleep! 5) ;; I think there is a race condition here. Let states/statuses settle
