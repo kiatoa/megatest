@@ -710,6 +710,9 @@
 (define (rmt:get-runs runpatt count offset keypatts)
   (rmt:send-receive 'get-runs #f (list runpatt count offset keypatts)))
 
+(define (rmt:simple-get-runs runpatt count offset target)
+  (rmt:send-receive 'simple-get-runs #f (list runpatt count offset target)))
+
 (define (rmt:get-all-run-ids)
   (rmt:send-receive 'get-all-run-ids #f '()))
 

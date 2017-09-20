@@ -1757,6 +1757,42 @@
   ;; then the entire directory
   (runs:recursive-delete-with-error-msg real-dir))
 
+;; cleanup often needs to remove all but the last N runs per target
+;;
+;; target-patts a1/b1/c1,a2/b2/c2 ...
+;;
+;; This will fail if called with empty target or a bad target (i.e. missing or extra fields)
+;;
+(define (runs:get-hash-by-target target-patts runpatt)
+  (let* ((targets (string-split target-patts ","))
+	 (keys    (rmt:get-keys))
+	 (res-ht  (make-hash-table))) ;; target -> ( runrecord1 runrecord2 ... )
+    (for-each
+     (lambda (target-patt)
+       (let ((runs     (rmt:simple-get-runs runpatt #f #f target-patt)))
+	 (for-each
+	  (lambda (run)
+	    (let ((target (simple-run-target run)))
+	      (hash-table-set! res-ht target (cons run (hash-table-ref/default res-ht target '())))))
+	  runs)))
+     targets)
+    res-ht))
+
+(define (runs:get-all-but-most-recent-n-per-target target-patts runpatt num-to-keep)
+  (let ((runs-ht (runs:get-hash-by-target target-patts runpatt)))
+    (for-each
+     (lambda (target)
+       (let* ((runs      (hash-table-ref runs-ht target))
+	      (sorted    (sort runs (lambda (a b)(> (simple-run-event_time a)(simple-run-event_time b)))))
+	      (to-remove (if (> (length sorted) num-to-keep)
+			     (take sorted (- (length sorted) num-to-keep))
+			     '())))
+	 (hash-table-set! runs-ht target to-remove)
+	 (print "Sorted: " (map simple-run-event_time sorted))
+	 (print "Remove: " (map simple-run-event_time to-remove))))
+     (hash-table-keys runs-ht))
+    runs-ht))
+
 ;; Remove runs
 ;; fields are passing in through 
 ;; action:
