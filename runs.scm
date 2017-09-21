@@ -1783,7 +1783,11 @@
 ;; delete redundant runs within a target IFF older than given date/time AND keep at least N
 ;; 
 (define (runs:remove-all-but-last-n-runs-per-target target-patts runpatt num-to-keep #!key (actions '(print)))
-  (let ((runs-ht (runs:get-hash-by-target target-patts runpatt)))
+  (let* ((runs-ht  (runs:get-hash-by-target target-patts runpatt))
+	 (age      (if (args:get-arg "-age")(common:hms-string->seconds (args:get-arg "-age")) #f))
+	 (age-mark (if age (- (current-seconds) age) (+ (current-seconds) 86400)))
+	 (precmd   (or (args:get-arg "-precmd") "")))
+    (print "Actions: " actions)
     (for-each
      (lambda (target)
        (let* ((runs      (hash-table-ref runs-ht target))
@@ -1800,19 +1804,23 @@
             (let ((remove (member run to-remove (lambda (a b)
                                                   (eq? (simple-run-id a)
                                                        (simple-run-id b))))))
-              (for-each
-               (lambda (action)
-                 (case action
-                   ((print)
-                    (print " " (simple-run-runname run)
-                           " " (time->string (seconds->local-time (simple-run-event_time run)) "WW%V.%u %H:%M:%S")
-                           " " (if remove "REMOVE" "")))
-                   ((remove)
-                    (print "megatest -remove-runs -target " target " -runname " (simple-run-runname run) " -testpatt %"))))
-               actions)))
-          sorted)))
-	 ;; (print "Sorted: " (map simple-run-event_time sorted))
-	 ;; (print "Remove: " (map simple-run-event_time to-remove))))
+	      (if (and age (> (simple-run-event_time run) age-mark))
+		  (print "Skipping handling of " target "/" (simple-run-runname run) " as it is younger than " (args:get-arg "-age"))
+		  (for-each
+		   (lambda (action)
+		     (case action
+		       ((print)
+			(print " " (simple-run-runname run)
+			       " " (time->string (seconds->local-time (simple-run-event_time run)) "WW%V.%u %H:%M:%S")
+			       " " (if remove "REMOVE" "")))
+		       ((remove-runs)
+			(if remove (system (conc precmd " megatest -remove-runs -target " target " -runname " (simple-run-runname run) " -testpatt %"))))
+		       ((archive)
+			(if remove (system (conc precmd " megatest -archive save-remove -target " target " -runname " (simple-run-runname run) " -testpatt %"))))))
+		   actions))))
+	    sorted)))
+     ;; (print "Sorted: " (map simple-run-event_time sorted))
+     ;; (print "Remove: " (map simple-run-event_time to-remove))))
      (hash-table-keys runs-ht))
     runs-ht))
 

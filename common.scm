@@ -1799,10 +1799,10 @@
 
 ;; Convert strings like "5s 2h 3m" => 60x60x2 + 3x60 + 5
 (define (common:hms-string->seconds tstr)
-  (let ((parts     (string-split tstr))
+  (let ((parts     (string-split-fields "\\w+" tstr))
 	(time-secs 0)
-	;; s=seconds, m=minutes, h=hours, d=days
-	(trx       (regexp "(\\d+)([smhd])")))
+	;; s=seconds, m=minutes, h=hours, d=days, M=months, y=years, w=weeks
+	(trx       (regexp "(\\d+)([smhdMyw])")))
     (for-each (lambda (part)
 		(let ((match  (string-match trx part)))
 		  (if match
@@ -1813,8 +1813,11 @@
 							    (case (string->symbol unt)
 							      ((s) 1)
 							      ((m) 60)
-							      ((h) (* 60 60))
-							      ((d) (* 24 60 60))
+							      ((h) 3600)
+							      ((d) 86400)
+							      ((2) 604800)
+							      ((M) 2628000) ;; aproximately one month
+							      ((y) 31536000)
 							      (else 0))))))))))
 	      parts)
     time-secs))

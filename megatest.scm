@@ -117,7 +117,11 @@ Launching and managing runs
   -clean-cache            : remove the cached megatest.config and runconfigs.config files
   -no-cache               : do not use the cached config files. 
   -one-pass               : launch as many tests as you can but do not wait for more to be ready
-  -remove-keep N action   : remove all but N most recent runs per target, action is; print,remove
+  -remove-keep N action   : remove all but N most recent runs per target
+                            * Use -actions print,remove-runs,archive to specify action to take
+                            * Add param -age 120d,3h,20m to apply only to runs older than the 
+                                 specified age
+                            * Add -precmd to insert a wrapper command in front of the commands run
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
@@ -297,6 +301,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
                         ;; move runs stuff here
                         "-remove-keep"           
 			"-set-run-status"
+			"-age"
+			"-archive"
+			"-actions"
+			"-precmd"
+			
 			"-debug" ;; for *verbosity* > 2
 			"-create-test"
 			"-override-timeout"
@@ -310,7 +319,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-refdb2dat"
 			"-o"
 			"-log"
-			"-archive"
 			"-since"
 			"-fields"
 			"-recover-test" ;; run-id,test-id - used internally to recover a test stuck in RUNNING state
@@ -1045,11 +1053,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      "remove keep"
      (lambda (target runname keys keyvals)
        (let ((actions (map string->symbol
-                           (if (null? remargs)
-                               '("print") ;; default to printing the output
-                               (string-split (car remargs) ",")))))
-         (runs:remove-all-but-last-n-runs-per-target target runname (string->number (args:get-arg "-remove-keep" actions: actions)))))))
-    
+                           (string-split
+			    (or (args:get-arg "-actions")
+				"print")
+			    ",")))) ;; default to printing the output
+         (runs:remove-all-but-last-n-runs-per-target target runname
+						     (string->number (args:get-arg "-remove-keep"))
+						     actions: actions)))))
+
 (if (args:get-arg "-set-state-status")
     (general-run-call 
      "-set-state-status"
