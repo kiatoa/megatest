@@ -117,6 +117,7 @@ Launching and managing runs
   -clean-cache            : remove the cached megatest.config and runconfigs.config files
   -no-cache               : do not use the cached config files. 
   -one-pass               : launch as many tests as you can but do not wait for more to be ready
+  -remove-keep N action   : remove all but N most recent runs per target, action is; print,remove
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
@@ -292,6 +293,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-envdelta"
 			"-setvars"
 			"-set-state-status"
+
+                        ;; move runs stuff here
+                        "-remove-keep"           
 			"-set-run-status"
 			"-debug" ;; for *verbosity* > 2
 			"-create-test"
@@ -1035,6 +1039,17 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
                                           'remove-data-only
                                           'remove-all)))))
 
+(if (args:get-arg "-remove-keep")
+    (general-run-call 
+     "-remove-keep"
+     "remove keep"
+     (lambda (target runname keys keyvals)
+       (let ((actions (map string->symbol
+                           (if (null? remargs)
+                               '("print") ;; default to printing the output
+                               (string-split (car remargs) ",")))))
+         (runs:remove-all-but-last-n-runs-per-target target runname (string->number (args:get-arg "-remove-keep" actions: actions)))))))
+    
 (if (args:get-arg "-set-state-status")
     (general-run-call 
      "-set-state-status"

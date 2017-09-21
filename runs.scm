@@ -1778,20 +1778,54 @@
      targets)
     res-ht))
 
-(define (runs:get-all-but-most-recent-n-per-target target-patts runpatt num-to-keep)
+;; delete runs older than X (weeks, days, months years etc.)
+;; delete redundant runs within a target - N is the input
+;; delete redundant runs within a target IFF older than given date/time AND keep at least N
+;; 
+(define (runs:remove-all-but-last-n-runs-per-target target-patts runpatt num-to-keep #!key (actions '(print)))
   (let ((runs-ht (runs:get-hash-by-target target-patts runpatt)))
     (for-each
      (lambda (target)
        (let* ((runs      (hash-table-ref runs-ht target))
 	      (sorted    (sort runs (lambda (a b)(> (simple-run-event_time a)(simple-run-event_time b)))))
-	      (to-remove (if (> (length sorted) num-to-keep)
-			     (take sorted (- (length sorted) num-to-keep))
-			     '())))
+	      (to-remove (let* ((len      (length sorted))
+                                (trim-amt (- len num-to-keep)))
+                           (if (> trim-amt 0)
+                               (take sorted trim-amt)
+                               '()))))
 	 (hash-table-set! runs-ht target to-remove)
-	 (print "Sorted: " (map simple-run-event_time sorted))
-	 (print "Remove: " (map simple-run-event_time to-remove))))
+         (print target ":")
+         (for-each
+          (lambda (run)
+            (let ((remove (member run to-remove (lambda (a b)
+                                                  (eq? (simple-run-id a)
+                                                       (simple-run-id b))))))
+              (for-each
+               (lambda (action)
+                 (case action
+                   ((print)
+                    (print " " (simple-run-runname run)
+                           " " (time->string (seconds->local-time (simple-run-event_time run)) "WW%V.%u %H:%M:%S")
+                           " " (if remove "REMOVE" "")))
+                   ((remove)
+                    (print "megatest -remove-runs -target " target " -runname " (simple-run-runname run) " -testpatt %"))))
+               actions)))
+          sorted)))
+	 ;; (print "Sorted: " (map simple-run-event_time sorted))
+	 ;; (print "Remove: " (map simple-run-event_time to-remove))))
      (hash-table-keys runs-ht))
     runs-ht))
+
+;; (define (runs:remove-all-but-last-n-runs-per-target target-patts runpatt num-to-keep)
+;;   (let ((data (runs:get-all-but-most-recent-n-per-target target-patts runpatt num-to-keep)))
+;;     (for-each
+;;      (lambda (target)
+;;        (let ((runs-to-remove (hash-table-ref data target )))
+;;          (for-each
+;;           (lambda (run)
+;;             (print "megatest -remove-runs -target " target " -runname " (simple-run-runname run) " -testpatt %"))
+;;           runs-to-remove)))
+;;      (hash-table-keys data))))
 
 ;; Remove runs
 ;; fields are passing in through 
