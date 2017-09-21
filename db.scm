@@ -2116,6 +2116,44 @@
     (debug:print-info 11 *default-log-port* "db:get-runs END qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
     (vector header res)))
 
+
+(define-record simple-run target id runname state status owner event_time)
+(define-record-printer (simple-run x out)
+  (fprintf out "#,(simple-run ~S ~S ~S ~S)"
+	   (simple-run-target x) (simple-run-id x) (simple-run-runname x) (time->string (seconds->local-time (simple-run-event_time x) ))))
+
+;; simple get-runs
+;;
+(define (db:simple-get-runs dbstruct runpatt count offset target)
+    (let* ((res       '())
+	   (keys       (db:get-keys dbstruct))
+	   (runpattstr (db:patt->like "runname" runpatt))
+	   (remfields  (list "id" "runname" "state" "status" "owner" "event_time"))
+	   (targstr    (string-intersperse keys "||'/'||"))
+	   (keystr     (conc targstr " AS target,"
+			     (string-intersperse remfields ",")))
+	   (qrystr     (conc "SELECT " keystr " FROM runs WHERE (" runpattstr ") " ;; runname LIKE ? "
+			     ;; Generate: " AND x LIKE 'keypatt' ..."
+			     " AND target LIKE '" target "'"
+			     " AND state != 'deleted' ORDER BY event_time DESC "
+			     (if (number? count)
+				 (conc " LIMIT " count)
+				 "")
+			     (if (number? offset)
+				 (conc " OFFSET " offset)
+				 ""))))
+    (debug:print-info 11 *default-log-port* "db:get-runs START qrystr: " qrystr " target: " target " offset: " offset " limit: " count)
+    (db:with-db dbstruct #f #f
+		(lambda (db)		
+		  (sqlite3:for-each-row
+		   (lambda (target id runname state status owner event_time)
+		     (set! res (cons (make-simple-run target id runname state status owner event_time) res)))
+		   db
+		   qrystr
+		   )))
+    (debug:print-info 11 *default-log-port* "db:get-runs END qrystr: " qrystr " target: " target " offset: " offset " limit: " count)
+    res))
+
 ;; TODO: Switch this to use max(update_time) from each run db? Then if using a server there is no disk traffic (using inmem db)
 ;;
 (define (db:get-changed-run-ids since-time)

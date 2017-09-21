@@ -615,6 +615,20 @@ cat testconfig
 [include modified.config]
 ------------------------------
 
+Managing Old Runs
+-----------------
+
+It is often desired to keep some older runs around but this must be balanced with the costs of disk space.
+
+. Use -remove-keep
+. Use -archive (can also be done from the -remove-keep interface)
+. use -remove-runs with -keep-records
+
+.For each target, remove all runs but the most recent 3 if they are over 1 week old
+---------------------
+# use -precmd 'sleep 5;nbfake' to limit overloading the host computer but to allow the removes to run in parallel.
+megatest -actions print,remove-runs -remove-keep 3 -target %/%/%/% -runname % -age 1w -precmd 'sleep 5;nbfake'"
+---------------------
 
 Programming API
 ---------------
