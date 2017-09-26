@@ -25,6 +25,7 @@
 (define gutils:colors
   '((PASS . "70 249 73")
     (FAIL . "253 33 49")
+    (PREQ_FAIL . "255 127 127")
     (SKIP . "230 230 0")))
 
 (define (gutils:get-color-spec effective-state)
@@ -61,6 +62,7 @@
     ((KILLREQ)          (list "39 82 206"    state))
     ((KILLED)           (list "234 101 17"   state))
     ((NOT_STARTED)      (case (string->symbol status)
+                          ((PREQ_FAIL)(list (gutils:get-color-spec 'PREQ_FAIL) status))
 			  ((CHECK STARTED)(list (gutils:get-color-spec 'SKIP) state))
 			  (else   (list "240 240 240"                 state))))
     ;; for xor mode below
