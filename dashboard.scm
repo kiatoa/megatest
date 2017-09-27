@@ -1713,12 +1713,16 @@ Misc
       (let ((a-test-name  (db:test-get-testname a))
             (a-item-path  (db:test-get-item-path a))
             (b-test-name  (db:test-get-testname b))
-            (b-item-path  (db:test-get-item-path b)))
-        (cond
-         ((< 0 (string-compare3 a-test-name b-test-name)) #t)
-         ((> 0 (string-compare3 a-test-name b-test-name)) #f)
-         ((< 0 (string-compare3 a-item-path b-item-path)) #t)
-         (else #f)))))))
+            (b-item-path  (db:test-get-item-path b))
+            (a-event-time (db:test-get-event_time a))
+            (b-event-time (db:test-get-event_time b)))
+        (if (not (equal? a-test-name b-test-name))
+            (> a-event-time b-event-time)
+            (cond
+             ((< 0 (string-compare3 a-test-name b-test-name)) #t)
+             ((> 0 (string-compare3 a-test-name b-test-name)) #f)
+             ((< 0 (string-compare3 a-item-path b-item-path)) #t)
+             (else #f))))))))
 
 
 (define (dashboard:run-id->tests-mindat run-id tabdat runs-hash)

@@ -552,6 +552,9 @@
 (define (rmt:synchash-get run-id proc synckey keynum params)
   (rmt:send-receive 'synchash-get run-id (list run-id proc synckey keynum params)))
 
+(define (rmt:get-tests-for-run-mindata run-id testpatt states status not-in)
+  (rmt:send-receive 'get-tests-for-run-mindata run-id (list run-id testpatt states status not-in)))
+  
 ;; IDEA: Threadify these - they spend a lot of time waiting ...
 ;;
 (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)

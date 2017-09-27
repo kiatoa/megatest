@@ -48,6 +48,7 @@
     get-tests-for-run
     get-test-id
     get-tests-for-runs-mindata
+    get-tests-for-run-mindata
     get-run-name-from-id
     get-runs
     simple-get-runs
@@ -266,6 +267,7 @@
                    ((get-tests-for-run)            (apply db:get-tests-for-run dbstruct params))
                    ((get-test-id)                  (apply db:get-test-id dbstruct params))
                    ((get-tests-for-run-mindata)    (apply db:get-tests-for-run-mindata dbstruct params))
+                   ((get-tests-for-runs-mindata)   (apply db:get-tests-for-runs-mindata dbstruct params))
                    ((get-runs)                     (apply db:get-runs dbstruct params))
                    ((simple-get-runs)              (apply db:simple-get-runs dbstruct params))
                    ((get-num-runs)                 (apply db:get-num-runs dbstruct params))
