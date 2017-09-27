@@ -1986,6 +1986,30 @@
 ;;  R U N S
 ;;======================================================================
 
+
+
+
+
+(define (db:get-run-times dbstruct run-patt target-patt)
+(let ((res `())
+           (qry 	(conc "select runname, (max(end_time)-min(event_time))/60 as runtime, target from (select runname, run_id,tests.event_time,tests.event_time+run_duration AS end_time, " (string-join (db:get-keys dbstruct) " || '/' || ") " as target from tests inner join runs on tests.run_id = runs.id where runs.runname like ? and target like ?) group by run_id ;")))
+;(print qry)
+(db:with-db 
+   dbstruct
+   #f ;; this is for the main runs db
+   #f ;; does not modify db
+   (lambda (db)
+            (sqlite3:for-each-row
+	(lambda (runname runtime target )
+	  (set! res (cons (vector runname runtime target) res)))
+	db
+        qry 
+	run-patt target-patt)
+       
+       res))))
+
+
+
 (define (db:get-run-name-from-id dbstruct run-id)
   (db:with-db 
    dbstruct
@@ -3074,6 +3098,23 @@
       "SELECT rundir FROM tests WHERE id=?;"
       #f ;; default result
       test-id))))
+
+(define (db:get-test-times dbstruct run-name target)
+  (let ((res `())
+        (qry 	(conc "select testname, item_path, run_duration, " (string-join (db:get-keys dbstruct) " || '/' || ") " as target from tests inner join runs on tests.run_id = runs.id where runs.runname = ? and target = ?  ;")))
+   
+  (db:with-db 
+    dbstruct
+    #f ;; this is for the main runs db
+    #f ;; does not modify db
+    (lambda (db)
+            (sqlite3:for-each-row
+	(lambda (test-name item-path test-time target )
+	  (set! res (cons (vector test-name item-path test-time) res)))
+	db
+        qry 
+	run-name target)
+       res))))
 
 ;;======================================================================
 ;; S T E P S
