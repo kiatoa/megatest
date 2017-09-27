@@ -41,10 +41,12 @@
     get-run-info
     get-run-status
     get-run-stats
+    get-run-times
     get-targets
     get-target
     ;; register-run
     get-tests-tags
+    get-test-times
     get-tests-for-run
     get-test-id
     get-tests-for-runs-mindata
@@ -259,6 +261,7 @@
                    ((get-count-tests-running-for-run-id) (apply db:get-count-tests-running-for-run-id dbstruct params))
                    ((synchash-get)                    (apply synchash:server-get dbstruct params))
                    ((get-raw-run-stats)               (apply db:get-raw-run-stats dbstruct params))
+		   ((get-test-times)                  (apply db:get-test-times dbstruct params))
 
                    ;; RUNS
                    ((get-run-info)                 (apply db:get-run-info dbstruct params))
@@ -279,6 +282,7 @@
                    ((get-main-run-stats)           (apply db:get-main-run-stats dbstruct params))
                    ((get-var)                      (apply db:get-var dbstruct params))
                    ((get-run-stats)                (apply db:get-run-stats dbstruct params))
+                   ((get-run-times)                (apply db:get-run-times dbstruct params)) 
 
                    ;; STEPS
                    ((get-steps-data)               (apply db:get-steps-data dbstruct params))

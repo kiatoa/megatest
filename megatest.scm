@@ -215,6 +215,13 @@ Utilities
                             in the [archive-disks] section.
                             cmd: keep-html, restore, save, save-remove
   -generate-html          : create a simple html tree for browsing your runs
+  -list-run-time          : list time requered to complete runs. It supports following switches
+                            -run-patt <patt> -target-patt <patt> -dumpmode <csv,json,plain-text>
+  -list-test-time	   : list time requered to complete each test in a run. It following following arguments
+                            -runname <patt> -target <patt> -dumpmode <csv,json,plain-text>
+
+  		
+
 
 Diff report
   -diff-rep               : generate diff report (must include -src-target, -src-runname, -target, -runname
@@ -285,6 +292,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			":units"
 			;; misc
 			"-start-dir"
+                        "-run-patt"
+                        "-target-patt"   
 			"-contour"
                         "-area-tag"  
 			"-server"
@@ -365,7 +374,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-one-pass"       ;;
 			"-local"         ;; run some commands using local db access
                         "-generate-html"
-
+			"-list-run-time"
+                        "-list-test-time"
 			;; misc queries
 			"-list-disks"
 			"-list-targets"
@@ -393,7 +403,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-convert-to-old"
 			"-import-megatest.db"
 			"-sync-to-megatest.db"
-			
 			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
@@ -2229,6 +2238,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (tasks:sync-to-postgres *configdat* (args:get-arg "-sync-to"))
       (set! *didsomething* #t)))
 
+(if (args:get-arg "-list-test-time")
+     (begin 
+     (task:get-test-times)  
+     (set! *didsomething* #t)))
+
+(if (args:get-arg "-list-run-time")
+     (begin 
+     (task:get-run-times)  
+     (set! *didsomething* #t)))
+     
 (if (args:get-arg "-generate-html")
     (let* ((toppath (launch:setup)))
       (if (tests:create-html-tree #f)

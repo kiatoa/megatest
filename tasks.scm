@@ -621,6 +621,114 @@
 			       area-name) 'areasig))
 	    (else #f)))))) ;; give up
 
+(define (task:print-runtime run-times saperator)
+(for-each
+    (lambda (run-time-info)
+     (let* ((run-name  (vector-ref run-time-info 0))
+            (run-time  (vector-ref run-time-info 1))
+            (target  (vector-ref run-time-info 2)))
+        (print target saperator run-name saperator run-time )))
+   run-times))
+
+(define (task:print-runtime-as-json run-times)
+ (let loop ((run-time-info (car run-times))
+            (rema (cdr run-times)) 
+            (str ""))
+     (let* ((run-name  (vector-ref run-time-info 0))
+            (run-time  (vector-ref run-time-info 1))
+            (target  (vector-ref run-time-info 2)))
+        ;(print (not (equal? str "")))
+        (if (not (equal? str "")) 
+            (set! str (conc str ",")))
+        (if (null? rema)
+		(print "[" str "{target:" target ",run-name:" run-name ", run-time:" run-time "}]")
+            (loop (car rema) (cdr rema) (conc str "{target:" target ", run-name:" run-name ", run-time:" run-time "}"))))))
+
+(define (task:get-run-times)
+   (let* ( 
+           (run-patt (if (args:get-arg "-run-patt")
+                        (args:get-arg "-run-patt")
+                        "%"))
+           (target-patt (if (args:get-arg "-target-patt")
+                        (args:get-arg "-target-patt")
+                        "%"))
+ 
+           (run-times  (rmt:get-run-times  run-patt target-patt )))
+   (if (eq? (length run-times) 0)
+     (begin
+       (print "Data not found!!")
+       (exit)))
+   (if (equal? (args:get-arg "-dumpmode") "json")
+       (task:print-runtime-as-json run-times)
+         (if (equal? (args:get-arg "-dumpmode") "csv")
+	     (task:print-runtime run-times ",")
+	     (task:print-runtime run-times "  ")))))
+
+
+(define (task:print-testtime test-times saperator)
+(for-each
+    (lambda (test-time-info)
+     (let* ((test-name  (vector-ref test-time-info 0))
+            (test-time  (vector-ref test-time-info 2))
+            (test-item  (if (eq? (string-length (vector-ref test-time-info 1)) 0)
+                               "N/A"
+				(vector-ref test-time-info 1))))
+        (print  test-name saperator test-item saperator test-time )))
+   test-times))
+
+(define (task:print-testtime-as-json test-times)
+ (let loop ((test-time-info (car test-times))
+            (rema (cdr test-times)) 
+            (str ""))
+     (let* ((test-name  (vector-ref test-time-info 0))
+            (test-time  (vector-ref test-time-info 2))
+            (item  (vector-ref test-time-info 1)))
+        ;(print (not (equal? str "")))
+        (if (not (equal? str "")) 
+            (set! str (conc str ",")))
+        (if (null? rema)
+		(print "[" str "{test-name:" test-name ", item-path:" item ", test-time:" test-time "}]")
+            (loop (car rema) (cdr rema) (conc str "{test-name:" test-name ", item-path:" item ", test-time:" test-time "}"))))))
+
+
+ (define (task:get-test-times)
+   (let* ((runname (if (args:get-arg "-runname")
+                        (args:get-arg "-runname")
+                        #f))
+           (target (if (args:get-arg "-target")
+                        (args:get-arg "-target")
+                        #f))
+ 
+           (test-times  (rmt:get-test-times  runname target )))
+   (if (not runname)
+      (begin
+      (print "Error: Missing argument -runname")
+      (exit))) 
+    (if (string-contains runname "%")
+      (begin
+      (print "Error: Invalid runname, '%' not allowed  (" runname ") ")
+      (exit)))
+    (if (not target)
+      (begin
+      (print "Error: Missing argument -target")
+      (exit)))
+     (if  (string-contains target "%")
+      (begin
+      (print "Error: Invalid target, '%' not allowed  (" target ") ")
+      (exit)))
+ 
+   (if (eq? (length test-times) 0)
+     (begin
+       (print "Data not found!!")
+       (exit)))
+   (if (equal? (args:get-arg "-dumpmode") "json")
+       (task:print-testtime-as-json test-times)
+         (if (equal? (args:get-arg "-dumpmode") "csv")
+	     (task:print-testtime test-times ",")
+	     (task:print-testtime test-times "  ")))))
+
+
+
 ;; gets mtpg-run-id and syncs the record if different
 ;;
 (define (tasks:run-id->mtpg-run-id dbh cached-info run-id area-info)

@@ -502,6 +502,10 @@
 (define (rmt:get-target run-id)
   (rmt:send-receive 'get-target run-id (list run-id)))
 
+(define (rmt:get-run-times runpatt targetpatt)
+  (rmt:send-receive 'get-run-times #f (list runpatt targetpatt ))) 
+
+
 ;;======================================================================
 ;;  T E S T S
 ;;======================================================================
@@ -681,6 +685,9 @@
 
 (define (rmt:get-raw-run-stats run-id)
   (rmt:send-receive 'get-raw-run-stats run-id (list run-id)))
+
+(define (rmt:get-test-times runname target)
+  (rmt:send-receive 'get-test-times #f (list runname target ))) 
 
 ;;======================================================================
 ;;  R U N S
