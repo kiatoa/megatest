@@ -1299,6 +1299,7 @@
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
   (mutex-lock! *launch-setup-mutex*) ;; setting variables and processing the testconfig is NOT thread-safe, reuse the launch-setup mutex
+  (BB> "entered launch-test")
   (let* ( ;; (lock-key        (conc "test-" test-id))
 	;; (got-lock        (let loop ((lock        (rmt:no-sync-get-lock lock-key))
 	;; 			     (expire-time (+ (current-seconds) 15))) ;; give up on getting the lock and steal it after 15 seconds
@@ -1333,6 +1334,7 @@
        (list "MT_CONTOUR"   contour)
        )
       itemdat))
+    (BB> "set env vars")
     (let* ((tregistry       (tests:get-all)) ;; third param (below) is system-allowed
            ;; for tconfig, why do we allow fallback to test-conf?
 	   (tconfig         (or (tests:get-testconfig test-name item-path tregistry #t force-create: #t)
@@ -1378,6 +1380,7 @@
 	   (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	   (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 				(if (args:get-arg "-logging")(list "-logging") '()))))
+      (BB> "entered let 1")
       ;; (if hosts (set! hosts (string-split hosts)))
       ;; set the megatest to be called on the remote host
       (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))
@@ -1389,7 +1392,8 @@
 	  (begin
 	    (debug:print-info 0 *default-log-port* "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
 	    (runs:remove-test-directory testinfo 'remove-data-only))) ;; remove data only, do not perturb the record
-      
+
+      (BB> "after launcher set")
       ;; prevent overlapping actions - set to LAUNCHED as early as possible
       ;;
       ;; the following call handles waiver propogation. cannot yet condense into roll-up-pass-fail
@@ -1397,6 +1401,7 @@
       (rmt:set-state-status-and-roll-up-items run-id test-name item-path #f "LAUNCHED" #f)
       ;; (pp (hash-table->alist tconfig))
       (set! diskpath (get-best-disk *configdat* tconfig))
+      (BB> "after launch state set")
       (if diskpath
 	  (let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
 	    (set! work-area (car dat))
@@ -1406,6 +1411,7 @@
 	    (set! work-area (conc test-path "/tmp_run"))
 	    (create-directory work-area #t)
 	    (debug:print 0 *default-log-port* "WARNING: No disk work area specified - running in the test directory under tmp_run")))
+      (BB> "after disk path set")
       (set! cmdparms (base64:base64-encode 
 		      (z3:encode-buffer 
 		       (with-output-to-string
@@ -1438,7 +1444,7 @@
 					(list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
 					(list 'runname   runname)
 					(list 'mt-bindir-path mt-bindir-path))))))))
-      
+      (BB> "after cmdparams set")
       ;; clean out step records from previous run if they exist
       ;; (rmt:delete-test-step-records run-id test-id)
       ;; if the dir does not exist we may have a itempath where individual variables are a path, launch anyway
@@ -1460,7 +1466,8 @@
       ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
       (debug:print 4 *default-log-port* "fullcmd: " fullcmd)
       (set! *last-launch* (current-seconds)) ;; all that junk above takes time, set this as late as possible.
-      (let* ((commonprevvals (alist->env-vars
+      (BB> "after set *last-launch*")
+      (let* ((commonprevvals (alist->env-vars ;; observed this let can be very slow. (>5 sec)
 			      (hash-table-ref/default *configdat* "env-override" '())))
 	     (miscprevvals   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
 			      (append (list (list "MT_TEST_RUN_DIR" work-area)
@@ -1487,6 +1494,7 @@
 				    (if useshell
 					'()
 					(cdr fullcmd)))))
+        (BB> "let depth 2 entered")
         (mutex-unlock! *launch-setup-mutex*) ;; yes, really should mutex all the way to here. Need to put this entire process into a fork.
 	;; (rmt:no-sync-del! lock-key)         ;; release the lock for starting this test
 	(if (not launchwait) ;; give the OS a little time to allow the process to start

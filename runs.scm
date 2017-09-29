@@ -206,7 +206,7 @@
 	(runs:inc-can-run-more-tests-count runsdat)) ;; (set! *runs:can-run-more-tests-count* (+ *runs:can-run-more-tests-count* 1)))
     (if (not (eq? *last-num-running-tests* num-running))
 	(begin
-	  (debug:print 2 *default-log-port* "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
+	  (debug:print 1 *default-log-port* "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
 	  (set! *last-num-running-tests* num-running)))
     (if (not (eq? 0 *globalexitstatus*))
 	(list #f num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)
@@ -716,6 +716,7 @@
                                (BB> "foo - "test)
                                (and (vector? test)
                                     (equal? "COMPLETED" (db:test-get-state test))
+                                    (equal? "COMPLETED" (db:test-get-state test))
                                     (not (equal? "" (db:test-get-item-path test)))))
                              prereqs)))
             res)) 
@@ -769,14 +770,15 @@
 
             ;;; desired result of below cond branch:
             ;;   we want to expand items in our test of interest (hed) in the following cases:
-            ;;    case 1 - mode is itemmatch or itemwait: (TODO)
+            ;;    case 1 - mode is itemmatch or itemwait: (DONE)
             ;;       - all prereq tests have been expanded
             ;;       - at least one prereq's items have completed
-            ;;    case 2 - mode is toplevel   (DONE)
+            ;;    case 2 - mode is toplevel   (PARTIAL)
             ;;       - prereqs are completed.
+            ;;       - or no prereqs can complete (TODO)
             ;;    case 3 - mode not specified (DONE)
-            ;;       - prereqs are completed and passed (we could consider removing "and passed" -- it would change behavior from current)
-            
+            ;;       - prereqs are completed and passed (we could consider removing "and passed" -- it would change behavior from current)          
+                   
             ;; runs:expand-items case: toplevel or else no dangling prerequeistes -- expand items now.
             ((or
               (and have-itemized (null? unexpanded-prereqs) (not (null? completed-prereq-items)))
@@ -1427,7 +1429,7 @@
 		  ;; (loop (car tal)(cdr tal) reg reruns))))
 
 	(runs:incremental-print-results run-id)
-	(debug:print 4 *default-log-port* "TOP OF LOOP => "
+	(debug:print 1 *default-log-port* "TOP OF LOOP => "
 		     "test-name: " test-name
 		     "\n  test-record  " test-record
 		     "\n  hed:         " hed
@@ -1467,6 +1469,13 @@
 				 waitons))))) ;; could do this more elegantly with a marker....
 	  (debug:print 0 *default-log-port* "WARNING: Marking test " tfullname " as not runnable. It is waiting on tests that cannot be run. Giving up now.")
 	  (hash-table-set! test-registry tfullname 'removed))
+
+
+         ; BB - a possibility for preqfail propagation
+         ;; ((and (not items) (string? item-path) (not (equal? item-path ""))
+         ;;       (lset-intersection testmode '(itemmatch itemwait)))
+
+         ;;  )
 
 	 ;; items is #f then the test is ok to be handed off to launch (but not before)
 	 ;; 
@@ -1591,19 +1600,22 @@
     (runs:run-post-hook run-id)
     (debug:print-info 1 *default-log-port* "All tests launched")))
 
-(define (runs:calc-fails prereqs-not-met)
+(define (runs:calc-fails prereqs-not-met) ;; BB is this redundant with runs:runable-tests ?
   (filter (lambda (test)
-	    (and (vector? test) ;; not (string? test))
-		 (member (db:test-get-state test) '("INCOMPLETE" "COMPLETED"))
-		 (not (member (db:test-get-status test)
-			      '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))))
+            (or
+             (and (vector? test) ;; not (string? test))
+                  (member (db:test-get-status test) '("TEN_STRIKES" "BLOCKED" "PREQ_FAIL" "ZERO_ITEMS" "PREQ_DISCARDED" "TIMED_OUT" "KILLED")))
+             (and (vector? test) ;; not (string? test))
+                  (member (db:test-get-state test) '("INCOMPLETE" "COMPLETED"))
+                  (not (member (db:test-get-status test)
+                               '("PASS" "WARN" "CHECK" "WAIVED" "SKIP"))))))
 	  prereqs-not-met))
 
 (define (runs:calc-prereq-fail prereqs-not-met)
   (filter (lambda (test)
 	    (and (vector? test) ;; not (string? test))
 		 (equal? (db:test-get-state test) "NOT_STARTED")
-		 (not (member (db:test-get-status test)
+                 (not (member (db:test-get-status test)
 			      '("n/a" "KEEP_TRYING")))))
 	  prereqs-not-met))
 
@@ -1611,7 +1623,7 @@
   (filter 
    (lambda (t)
      (or (not (vector? t))
-         (not (and (equal? (db:test-get-state t) "NOT_STARTED") (equal? (db:test-get-status t) "PREQ_FAIL")))
+         (not (member (db:test-get-status t) '("TEN_STRIKES" "BLOCKED" "PREQ_FAIL" "ZERO_ITEMS" "PREQ_DISCARDED" "TIMED_OUT" "KILLED")))
 	 (not (member (db:test-get-state t) '("INCOMPLETE" "COMPLETED")))))
    prereqs-not-met))
 
@@ -1629,7 +1641,7 @@
 	 (and (equal? "NOT_STARTED" (db:test-get-state t))
 	      (member (db:test-get-status t)
 		      '("n/a" "KEEP_TRYING")))
-	 (and (equal? "RUNNING" (db:test-get-state t))))) ;; account for a test that is running
+	 (and (member (db:test-get-state t) '("RUNNING" "LAUNCHED" "REMOTEHOSTSTART" ))))) ;; account for a test that is running
    prereqs-not-met))
 
 (define (runs:pretty-string lst)

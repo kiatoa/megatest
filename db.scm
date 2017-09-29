@@ -1583,7 +1583,7 @@
 ;;  select end_time-now from
 ;;      (select testname,item_path,event_time+run_duration as
 ;;                          end_time,strftime('%s','now') as now from tests where state in
-;;      ('RUNNING','REMOTEHOSTSTART','LAUNCED'));
+;;      ('RUNNING','REMOTEHOSTSTART','LAUNCHED'));
 
 (define (db:find-and-mark-incomplete dbstruct run-id ovr-deadtime)
   (let* ((incompleted '())
