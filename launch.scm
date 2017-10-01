@@ -242,7 +242,7 @@
 	 )))
     logpro-used))
 
-(define (launch:manage-steps run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m)
+(define (launch:manage-steps run-id test-id item-path fullrunscript ezsteps subrun test-name tconfigreg exit-info m)
   ;; (let-values
   ;;  (((pid exit-status exit-code)
   ;;    (run-n-wait fullrunscript)))
@@ -276,7 +276,7 @@
 	       )))))
   ;; then, if runscript ran ok (or did not get called)
   ;; do all the ezsteps (if any)
-  (if ezsteps
+  (if (or ezsteps subrun)
       (let* ((testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
 	      ;; NOTE: it is tempting to turn off force-create of testconfig but dynamic
 	      ;;       ezstep names need a full re-eval here.
@@ -295,25 +295,64 @@
 	    (begin
 	      (debug:print-error 0 *default-log-port* "Failed to resolve megatest.config, runconfigs.config and testconfig issues. Giving up now")
 	      (exit 1)))
-	(if (not (common:file-exists? ".ezsteps"))(create-directory ".ezsteps"))
-	;; if ezsteps was defined then we are sure to have at least one step but check anyway
-	(if (not (> (length ezstepslst) 0))
-	    (debug:print-error 0 *default-log-port* "ezsteps defined but ezstepslst is zero length")
-	    (let loop ((ezstep (car ezstepslst))
-		       (tal    (cdr ezstepslst))
-		       (prevstep #f))
-	      ;; check exit-info (vector-ref exit-info 1)
-	      (if (launch:einf-exit-status exit-info) ;; (vector-ref exit-info 1)
-		  (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig))
-			(stepname    (car ezstep)))
-		    ;; if logpro-used read in the stepname.dat file
-		    (if (and logpro-used (common:file-exists? (conc stepname ".dat")))
-			(launch:load-logpro-dat run-id test-id stepname))
-		    (if (steprun-good? logpro-used (launch:einf-exit-code exit-info))
-			(if (not (null? tal))
-			    (loop (car tal) (cdr tal) stepname))
-			(debug:print 4 *default-log-port* "WARNING: step " (car ezstep) " failed. Stopping")))
-		  (debug:print 4 *default-log-port* "WARNING: a prior step failed, stopping at " ezstep)))))))
+	;; process the ezsteps
+	(if ezsteps
+	    (begin
+	      (if (not (common:file-exists? ".ezsteps"))(create-directory ".ezsteps"))
+	      ;; if ezsteps was defined then we are sure to have at least one step but check anyway
+	      (if (not (> (length ezstepslst) 0))
+		  (debug:print-error 0 *default-log-port* "ezsteps defined but ezstepslst is zero length")
+		  (let loop ((ezstep (car ezstepslst))
+			     (tal    (cdr ezstepslst))
+			     (prevstep #f))
+		    ;; check exit-info (vector-ref exit-info 1)
+		    (if (launch:einf-exit-status exit-info) ;; (vector-ref exit-info 1)
+			(let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig))
+			      (stepname    (car ezstep)))
+			  ;; if logpro-used read in the stepname.dat file
+			  (if (and logpro-used (common:file-exists? (conc stepname ".dat")))
+			      (launch:load-logpro-dat run-id test-id stepname))
+			  (if (steprun-good? logpro-used (launch:einf-exit-code exit-info))
+			      (if (not (null? tal))
+				  (loop (car tal) (cdr tal) stepname))
+			      (debug:print 4 *default-log-port* "WARNING: step " (car ezstep) " failed. Stopping")))
+			(debug:print 4 *default-log-port* "WARNING: a prior step failed, stopping at " ezstep))))))
+	;; by this point we are done with runtest and ezsteps. we can now check if there is
+	;; a request for a sub-megatest run and execute it
+	
+	;; 1. get section [runarun]
+	;; 2. unset MT_* vars
+	;; 3. fix target
+	;; 4. fix runname
+	;; 5. fix testpatt or calculate it from contour
+	;; 6. launch the run
+	;; 7. roll up the run result and or roll up the logpro processed result
+	(let* ((runarea   (configf:lookup testconfig "subrun" "runarea"))
+	       (passfail  (configf:lookup testconfig "subrun" "passfail"))
+	       (target    (configf:lookup testconfig "subrun" "target"))
+	       (runname   (configf:lookup testconfig "subrun" "runname"))
+	       (contour   (configf:lookup testconfig "subrun" "contour"))
+	       (testpatt  (configf:lookup testconfig "subrun" "testpatt"))
+	       (mode-patt (configf:lookup testconfig "subrun" "mode-patt"))
+	       (tag-expr  (configf:lookup testconfig "subrun" "tag-expr"))
+	       (mt-cmd    (conc "megatest -run -target " target
+				" -runname " runname
+				(if testpatt  (conc " -testpatt " testpatt)  "")
+				(if mode-patt (conc " -modepatt " mode-patt) "")
+				(if tag-expr  (conc " -tag-expr"  tag-expr)  ""))))
+	  ;; change directory to runarea, create it if needed, we do NOT create the directory 
+	  (if runarea
+	      (if (directory-exists? runarea)
+		  (change-directory runarea)
+		  (begin
+		    (debug:print 0 *default-log-port* "ERROR: for sub-megatest run the runarea \"" runarea "\" does not exist! EXITING.")
+		    (exit 1)))
+	      (let ((subrun (conc *toppath* "/subrun") #t))
+		(create-directory subrun)
+		(change-directory subrun)))
+	  ;; by this point we are in the right place to run the subrun
+	  
+	)))
 
 (define (launch:monitor-job run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m work-area runtlim misc-flags)
   (let* ((update-period (string->number (or (configf:lookup *configdat* "setup" "test-stats-update-period") "30")))
@@ -425,6 +464,7 @@
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
 	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
+	       (subrun    (assoc/default 'subrun    cmdinfo))
 	       ;; (runremote (assoc/default 'runremote cmdinfo))
 	       ;; (transport (assoc/default 'transport cmdinfo))  ;; not used
 	       ;; (serverinf (assoc/default 'serverinf cmdinfo))
@@ -505,7 +545,7 @@
 
 	  (launch:setup) ;; should be properly in the run area home now
           
-	  (set! tconfigreg (tests:get-all))
+	  (set! tconfigreg (tests:get-all)) ;; mapping of testname => test source path
 	  (let ((sighand (lambda (signum)
 			   ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
 			   (if (eq? signum signal/stop)
@@ -584,16 +624,18 @@
 	    ;; (setup-env-defaults (conc *toppath* "/runconfigs.config") run-id (make-hash-table) keyvals target)
 	    ;; (set-run-config-vars run-id keyvals target) ;; (db:get-target db run-id))
 	    ;; Now have runconfigs data loaded, set environment vars
-	    (for-each (lambda (section)
-			(for-each (lambda (varval)
-				    (let ((var (car varval))
-					  (val (cadr varval)))
-				      (if (and (string? var)(string? val))
-					  (begin
-					    (setenv var (config:eval-string-in-environment val))) ;; val)
-					  (debug:print-error 0 *default-log-port* "bad variable spec, " var "=" val))))
-				  (configf:get-section rconfig section)))
-		      (list "default" target)))
+	    (for-each
+	     (lambda (section)
+	       (for-each
+		(lambda (varval)
+		  (let ((var (car varval))
+			(val (cadr varval)))
+		    (if (and (string? var)(string? val))
+			(begin
+			  (setenv var (config:eval-string-in-environment val))) ;; val)
+			(debug:print-error 0 *default-log-port* "bad variable spec, " var "=" val))))
+		(configf:get-section rconfig section)))
+	     (list "default" target)))
           ;;(bb-check-path msg: "launch:execute post block 1")
 
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
@@ -693,7 +735,7 @@
 				 (hash-table-set! ht 'keep-going #t)
 				 ht))
 		 (runit        (lambda ()
-				 (launch:manage-steps run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m)))
+				 (launch:manage-steps run-id test-id item-path fullrunscript ezsteps subrun test-name tconfigreg exit-info m)))
 		 (monitorjob   (lambda ()
 				 (launch:monitor-job  run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m work-area runtlim misc-flags)))
 		 (th1          (make-thread monitorjob "monitor job"))
@@ -1303,7 +1345,8 @@
 				      ush)
 				  #t)))     ;; default is yes
 	   (runscript       (config-lookup tconfig   "setup"        "runscript"))
-	   (ezsteps         (> (length (hash-table-ref/default tconfig "ezsteps" '())) 0)) ;; don't send all the steps, could be big
+	   (ezsteps         (> (length (hash-table-ref/default tconfig "ezsteps" '())) 0)) ;; don't send all the steps, could be big, just send a flag
+	   (subrun          (> (length (hash-table-ref/default tconfig "subrun"  '())) 0)) ;; send a flag to process a subrun
 	   ;; (diskspace       (config-lookup tconfig   "requirements" "diskspace"))
 	   ;; (memory          (config-lookup tconfig   "requirements" "memory"))
 	   ;; (hosts           (config-lookup *configdat* "jobtools"     "workhosts")) ;; I'm pretty sure this was never completed
@@ -1387,7 +1430,8 @@
 					;; (list 'item-path item-path )
 					(list 'itemdat   itemdat  )
 					(list 'megatest  remote-megatest)
-					(list 'ezsteps   ezsteps) 
+					(list 'ezsteps   ezsteps)
+					(list 'subrun    subrun)
 					(list 'target    mt_target)
 					(list 'contour   contour)
 					(list 'runtlim   (if run-time-limit (common:hms-string->seconds run-time-limit) #f))

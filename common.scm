@@ -1750,6 +1750,8 @@
 
 ;; set some env vars from an alist, return an alist with original values
 ;; (("VAR" "value") ...)
+;; a value of #f means "unset this var"
+;;
 (define (alist->env-vars lst)
   (if (list? lst)
       (let ((res '()))
