@@ -82,7 +82,8 @@
   (let* ((stepname       (car ezstep))  ;; do stuff to run the step
 	 (stepinfo       (cadr ezstep))
 	 (stepparts      (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
-	 (stepparms      (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each 
+	 (stepparms      (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each
+	 (paramparts     (string-split 
 	 (stepcmd        (list-ref stepparts 3))
 	 (script         "") ; "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!\
 	 (logpro-file    (conc stepname ".logpro"))
@@ -335,11 +336,14 @@
 	       (testpatt  (configf:lookup testconfig "subrun" "testpatt"))
 	       (mode-patt (configf:lookup testconfig "subrun" "mode-patt"))
 	       (tag-expr  (configf:lookup testconfig "subrun" "tag-expr"))
+	       (compact-stem (string-substitute "[/*]" "_" (conc target "-" runname "-" (or testpatt mode-patt tag-expr))))
+	       (log-file (conc compact-stem ".log"))
 	       (mt-cmd    (conc "megatest -run -target " target
 				" -runname " runname
 				(if testpatt  (conc " -testpatt " testpatt)  "")
 				(if mode-patt (conc " -modepatt " mode-patt) "")
-				(if tag-expr  (conc " -tag-expr"  tag-expr)  ""))))
+				(if tag-expr  (conc " -tag-expr"  tag-expr)  "")
+				" -log " log-file)))
 	  ;; change directory to runarea, create it if needed, we do NOT create the directory 
 	  (if runarea
 	      (if (directory-exists? runarea)
@@ -350,8 +354,10 @@
 	      (let ((subrun (conc *toppath* "/subrun") #t))
 		(create-directory subrun)
 		(change-directory subrun)))
-	  ;; by this point we are in the right place to run the subrun
-	  
+	  ;; by this point we are in the right place to run the subrun and we have a Megatest command to run
+	  ;; (filter (lambda (x)(string-match "MT_.*" (car x))) (get-environment-variables))
+	  (common:without-vars mt-cmd "^MT_.*")
+
 	)))
 
 (define (launch:monitor-job run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m work-area runtlim misc-flags)
