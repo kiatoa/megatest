@@ -707,13 +707,14 @@
           (filter (lambda (testname)
                     (let* ((test-rec (hash-table-ref test-records testname))
                            (items       (tests:testqueue-get-items  test-rec)))
-                      (BB> "HEY " testname "=>"items)
+                      ;;(BB> "HEY " testname "=>"items)
                       (or (procedure? items)(eq? items 'have-procedure))))
                   waitons))
          (completed-prereq-items 
-          (let ((foo (begin (BB> "hello prereqs: "prereqs) #t))
+          (let ((foo (begin ;;(BB> "hello prereqs: "prereqs)
+                            #t))
                 (res (filter (lambda (test)
-                               (BB> "foo - "test)
+                               ;;(BB> "foo - "test)
                                (and (vector? test)
                                     (equal? "COMPLETED" (db:test-get-state test))
                                     (equal? "COMPLETED" (db:test-get-state test))
@@ -722,7 +723,7 @@
             res)) 
 
          )
-    (debug:print-info 4 *default-log-port* "START OF INNER COND #2 "
+    (debug:print-info 1 *default-log-port* "START OF INNER COND #2 "
 		      "\n can-run-more:            " can-run-more
 		      "\n testname:                " hed
 		      "\n prereqs:                 " (runs:pretty-string prereqs)
@@ -741,7 +742,7 @@
                       "\n have-itemized:           " have-itemized
 		      "\n can-run-more:            " can-run-more)
     
-    (BB> "before runs:expand-items cond")
+    ;;(BB> "before runs:expand-items cond")
     (let ((res
            (cond
             ;; all prereqs met, fire off the test
@@ -750,7 +751,7 @@
             ((and (not (member 'toplevel testmode)) ;; test has been blackballed elsewhere
                   (member (hash-table-ref/default test-registry (db:test-make-full-name hed item-path) 'n/a)
                           '(DONOTRUN removed CANNOTRUN))) ;; *common:cant-run-states-sym*) ;; '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE)) ;; try to catch repeat processing of COMPLETED tests here
-             (BB> "cb1")
+             ;;(BB> "cb1")
              
              (debug:print-info 1 *default-log-port* "Test " hed " set to \"" (hash-table-ref test-registry (db:test-make-full-name hed item-path)) "\". Removing it from the queue")
              (if (or (not (null? tal))
@@ -785,7 +786,7 @@
               (null? prereqs)            ;; nothing is in our way to proceed (need to expand this to an item level check.)
               (and (member 'toplevel testmode)   ;; for toplevel test - proceed (nothing in our way)
                    (null? non-completed)))
-             (BB> "cb2")
+             ;;(BB> "cb2")
 
              (debug:print-info 4 *default-log-port* "runs:expand-items: (or (null? prereqs) (and (member 'toplevel testmode)(null? non-completed)))")
              (let ((test-name (tests:testqueue-get-testname test-record)))
@@ -811,7 +812,7 @@
             ((and (null? fails)
                   (null? prereq-fails)
                   (not (null? non-completed)))
-             (BB> "cb3")
+             ;;(BB> "cb3")
              (let* ((allinqueue (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
                                      (append newtal reruns)))
                     ;; prereqstrs is a list of test names as strings that are prereqs for hed
@@ -852,7 +853,7 @@
             ((and (null? fails) ;; have not-started tests, but unable to run them.  everything looks completed with no prospect of unsticking something that is stuck.  we should mark hed as moribund and exit or continue if there are more tests to consider
                   (null? prereq-fails)
                   (null? non-completed))
-             (BB> "cb4")
+             ;;(BB> "cb4")
              (if  (runs:can-keep-running? hed 20)
                   (begin
                     (runs:inc-cant-run-tests hed)
@@ -873,17 +874,22 @@
               (or (not (null? fails))
                   (not (null? prereq-fails)))
               (member 'normal testmode))
-             (BB> "cb5")
+             ;;(BB> "cb5")
              (debug:print-info 1 *default-log-port* "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
                                (string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
                                ", removing it from to-do list")
              (let ((test-id (rmt:get-test-id run-id hed "")))
                (if test-id
                    (if (not (null? prereq-fails))
-                       (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to prior failed prerequisites")
+                       ;;was: (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to prior failed prerequisites")
+                       (rmt:set-state-status-and-roll-up-items run-id test-id #f "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to prior failed prerequisites")
                        (begin
-                         (debug:print 4 *default-log-port*"BB> set PREQ_FAIL on "hed)
-                         (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL"      "Failed to run due to failed prerequisites"))))) ;; BB: this works, btu equivalent for itemwait mode does not work.
+                         ;;(debug:print 4 *default-log-port*"BB> set PREQ_FAIL on "hed)
+
+                         
+                         ;;was: (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites")
+                         (rmt:set-state-status-and-roll-up-items run-id test-id #f "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites")
+                         )))) 
              (if (or (not (null? reg))(not (null? tal)))
                  (begin
                    (hash-table-set! test-registry hed 'CANNOTRUN)
@@ -892,20 +898,20 @@
                  #f)) ;; #f flags do not loop
 
             ((and (not (null? fails))(member 'toplevel testmode))
-             (BB> "cb6")
+             ;;(BB> "cb6")
              (if (or (not (null? reg))(not (null? tal)))
                  (list (car newtal)(append (cdr newtal) reg) '() reruns)
                  #f))
             
             ((null? runnable-prereqs)
-             (BB> "cb7")
+             ;;(BB> "cb7")
              #f) ;; if we get here and non-completed is null then it is all over.
             
             (else
-             (BB> "cb8")
+             ;;(BB> "cb8")
              (debug:print 0 *default-log-port* "WARNING: FAILS or incomplete tests maybe preventing completion of this run. Watch for issues with test " hed ", continuing for now")
              (list (car newtal)(cdr newtal) reg reruns)))))
-      (BB> "after runs:expand-items big cond")
+      ;;(BB> "after runs:expand-items big cond")
       res)))
 
 (define (runs:mixed-list-testname-and-testrec->list-of-strings inlst)
@@ -1124,8 +1130,11 @@
 		    (debug:print 1 *default-log-port* "WARNING: Dropping test " test-name "/" item-path
 				 " from the launch list as it has prerequistes that are FAIL")
 		    (let ((test-id (rmt:get-test-id run-id hed "")))
-		      (if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites")))
-		    (runs:shrink-can-run-more-tests-count runsdat) ;; DELAY TWEAKER (still needed?)
+		      (if test-id
+                          ;; was: ;(mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites")))
+                          (rmt:set-state-status-and-roll-up-items run-id test-id #f "NOT_STARTED"  "PREQ_FAIL" "Failed to run due to failed prerequisites")))
+                                        
+                    (runs:shrink-can-run-more-tests-count runsdat) ;; DELAY TWEAKER (still needed?)
 		    ;; (thread-sleep! *global-delta*)
 		    ;; This next is for the items
 

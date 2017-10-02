@@ -3524,14 +3524,15 @@
                        ;; (print "bad-not-supported: " bad-not-support " all-curr-states: " all-curr-states " all-curr-statuses: " all-curr-states)
                        ;;      " newstate: " newstate " newstatus: " newstatus)
                        ;; NB// Pass the db so it is part of the transaction
-                       (debug:print 4 *default-log-port* "BB> tl-test-id="tl-test-id" ; "test-name":"item-path"> bad-not-started="bad-not-started" newstate="newstate" newstatus="newstatus" num-non-completes="num-non-completes" non-completes="non-completes "len(sscs)="(length state-status-counts)  " state-status-counts: "
-                                    (apply conc
-                                           (map (lambda (x)
-                                                  (conc
-                                                   (with-output-to-string (lambda () (pp (dbr:counts->alist x)))) " | "))
-                                                state-status-counts))
+
+                       ;; (debug:print 4 *default-log-port* "BB> tl-test-id="tl-test-id" ; "test-name":"item-path"> bad-not-started="bad-not-started" newstate="newstate" newstatus="newstatus" num-non-completes="num-non-completes" non-completes="non-completes "len(sscs)="(length state-status-counts)  " state-status-counts: "
+                       ;;              (apply conc
+                       ;;                     (map (lambda (x)
+                       ;;                            (conc
+                       ;;                             (with-output-to-string (lambda () (pp (dbr:counts->alist x)))) " | "))
+                       ;;                          state-status-counts))
                                     
-                                    ); end debug:print
+                       ;;              ); end debug:print
                        (if tl-test-id
 			   (db:test-set-state-status db run-id tl-test-id newstate newstatus #f)) ;; we are still in the transaction - must access the db and not the dbstruct
 		       ))))))
@@ -4100,7 +4101,7 @@
          '()
          (let* ((unmet-pre-reqs '())
                 (result         '()))
-           (for-each 
+           (for-each ;; waitons
             (lambda (waitontest-name)
               ;; by getting the tests with matching name we are looking only at the matching test 
               ;; and related sub items
@@ -4109,15 +4110,15 @@
                     (ever-seen         #f)
                     (parent-waiton-met #f)
                     (item-waiton-met   #f))
-                (for-each 
+                (for-each ;; item (test record) in waiton
                  (lambda (test) ;; BB- this is the upstream test
                    ;; (if (equal? waitontest-name (db:test-get-testname test)) ;; by defintion this had better be true ...
                    (let* ((state             (db:test-get-state test))
                           (status            (db:test-get-status test))
                           (item-path         (db:test-get-item-path test)) ;; BB- this is the upstream itempath
                           (is-completed      (equal? state "COMPLETED"))
-                          (is-running        (equal? state "RUNNING"))
-                          (is-killed         (equal? state "KILLED"))
+                          (is-running        (member state '("LAUNCHED" "REMOTEHOSTSTART" "RUNNING")))
+                          (is-killed         (member state '("KILLREQ" "KILLING" "KILLED")))
                           (is-ok             (member status ok-statuses))
                           ;;                                       testname-b    path-a    path-b
                           (same-itempath     (db:compare-itempaths ref-test-name item-path ref-item-path itemmaps))) ;; (equal? ref-item-path item-path)))
@@ -4148,11 +4149,26 @@
                                 (member 'toplevel mode))              ;; toplevel does not block on FAIL
                             (and is-ok (member 'itemmatch mode))) ;; itemmatch blocks on not ok
                        (set! item-waiton-met #t)))))
-                 tests)
+                 tests) ;; end of item for-each
+
+
                 ;; both requirements, parent and item-waiton must be met to NOT add item to
                 ;; prereq's not met list
-                (if (not (or parent-waiton-met item-waiton-met))
+
+                ;; is:
+                (if (not (or
+                          (and (equal? ref-item-path "") parent-waiton-met)
+                          item-waiton-met))
                     (set! result (append (if (null? tests) (list waitontest-name) tests) result))) ;; appends the string if the full record is not available
+                ;; was briefly:
+                ;; (if (not
+                ;;      (and
+                ;;       item-waiton-met
+                ;;       (or parent-waiton-met (not (equal? ref-item-path "")))))
+                ;;     ;;add to list
+                ;;     (set! result (append (if (null? tests) (list waitontest-name) tests) result))) ;; appends the string if the full record is not available
+
+
                 ;; if the test is not found then clearly the waiton is not met...
                 ;; (if (not ever-seen)(set! result (cons waitontest-name result)))))
                 (if (not ever-seen)
