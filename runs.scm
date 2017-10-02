@@ -1057,7 +1057,7 @@
 				(debug:print 0 *default-log-port* "WARNING: test " hed " has FAILED prerequisites or other issue. Internal state >" nth-try "< will be overridden and we'll retry."))
 			    (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "KEEP_TRYING" #f)
 			    (hash-table-set! test-registry hed 0)
-			    (runs:loop-values newtal reg reglen regfull))))
+			    (runs:loop-values newtal reg reglen regfull reruns))))
 		     (else
 		      (if (runs:lownoise (conc "FAILED prerequitests and we tried" hed) 60)
 			  (debug:print 0 *default-log-port* "WARNING: test " hed " has FAILED prerequitests and we've tried at least 10 times to run it. Giving up now."))
