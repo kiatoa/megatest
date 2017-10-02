@@ -460,6 +460,11 @@
 (define (configf:get-section cfgdat section)
   (hash-table-ref/default cfgdat section '()))
 
+(define (configf:set-section-var cfgdat section var val)
+  (let ((sectdat (configf:get-section cfgdat section)))
+    (append (filter (lambda (x)(not (assoc var sectdat))) sectdat)
+	    (list var val))))
+
 (define (setup)
   (let* ((configf (find-config "megatest.config"))
 	 (config  (if configf (read-config configf #f #t) #f)))

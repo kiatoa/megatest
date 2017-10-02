@@ -81,9 +81,16 @@
 (define (launch:runstep ezstep run-id test-id exit-info m tal testconfig)
   (let* ((stepname       (car ezstep))  ;; do stuff to run the step
 	 (stepinfo       (cadr ezstep))
+	;; (let ((info (cadr ezstep)))
+	;; 		   (if (proc? info) "" info)))
+	;; (stepproc       (let ((info (cadr ezstep)))
+	;; 		   (if (proc? info) info #f)))
 	 (stepparts      (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
-	 (stepparms      (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each
-	 (paramparts     (string-split 
+	 (stepparams     (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each
+	 (paramparts     (if (list? stepparams)
+			     (map (lambda (x)(string-split x "=")) (string-split-fields "[^;]*=[^;]*" stepparams))
+			     '()))
+	 (subrun         (alist-ref "subrun" paramparts equal?))
 	 (stepcmd        (list-ref stepparts 3))
 	 (script         "") ; "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!\
 	 (logpro-file    (conc stepname ".logpro"))
@@ -104,7 +111,7 @@
     
     ;; NB// can safely assume we are in test-area directory
     (debug:print 4 *default-log-port* "ezsteps:\n stepname: " stepname " stepinfo: " stepinfo " stepparts: " stepparts
-		 " stepparms: " stepparms " stepcmd: " stepcmd)
+		 " stepparams: " stepparams " stepcmd: " stepcmd)
     
     ;; ;; first source the previous environment
     ;; (let ((prev-env (conc ".ezsteps/" prevstep (if (string-search (regexp "csh") 
@@ -122,8 +129,13 @@
      (list (cons "PATH" (conc (get-environment-variable "PATH") ":.")))
      (lambda () ;; (process-run "/bin/bash" "-c" "exec ls -l /tmp/foobar > /tmp/delme-more.log 2>&1")
        (let* ((cmd (conc stepcmd " > " stepname ".log 2>&1")) ;; >outfile 2>&1 
-	      (pid (process-run "/bin/bash" (list "-c" cmd))))
-
+	      (pid #f))
+	 (let ((proc (lambda ()
+		       (set! pid (process-run "/bin/bash" (list "-c" cmd))))))
+	   (if subrun
+	       (common:without-vars proc "^MT_.*")
+	       (proc)))
+	 
          (with-output-to-file "Makefile.ezsteps"
            (lambda ()
              (print stepname ".log :")
@@ -296,6 +308,54 @@
 	    (begin
 	      (debug:print-error 0 *default-log-port* "Failed to resolve megatest.config, runconfigs.config and testconfig issues. Giving up now")
 	      (exit 1)))
+
+	;; create a proc for the subrun if requested, save that proc in the ezsteps table as the last entry
+	;; 1. get section [runarun]
+	;; 2. unset MT_* vars
+	;; 3. fix target
+	;; 4. fix runname
+	;; 5. fix testpatt or calculate it from contour
+	;; 6. launch the run
+	;; 7. roll up the run result and or roll up the logpro processed result
+	(if (configf:lookup testconfig "subrun" "runwait") ;; we use runwait as the flag that a subrun is requested
+	    (let* ((runarea   (configf:lookup testconfig "subrun" "runarea"))
+		   (passfail  (configf:lookup testconfig "subrun" "passfail"))
+		   (target    (configf:lookup testconfig "subrun" "target"))
+		   (runname   (configf:lookup testconfig "subrun" "runname"))
+		   (contour   (configf:lookup testconfig "subrun" "contour"))
+		   (testpatt  (configf:lookup testconfig "subrun" "testpatt"))
+		   (mode-patt (configf:lookup testconfig "subrun" "mode-patt"))
+		   (tag-expr  (configf:lookup testconfig "subrun" "tag-expr"))
+		   (run-wait  (configf:lookup testconfig "subrun" "runwait"))
+		   (logpro    (configf:lookup testconfig "subrun" "logpro"))
+		   (compact-stem (string-substitute "[/*]" "_" (conc target "-" runname "-" (or testpatt mode-patt tag-expr))))
+		   (log-file (conc compact-stem ".log"))
+		   (mt-cmd    (conc "megatest -run -target " target
+				    " -runname " runname
+				    (if runarea   (conc " -start-dir " runarea)  *toppath*)
+				    (if testpatt  (conc " -testpatt " testpatt)  "")
+				    (if mode-patt (conc " -modepatt " mode-patt) "")
+				    (if tag-expr  (conc " -tag-expr"  tag-expr)  "")
+				    (if (equal? runwait "yes") " -runwait " "")
+				    " -log " log-file)))
+	      ;; change directory to runarea, create it if needed, we do NOT create the directory 
+	      (if runarea
+		  (if (directory-exists? runarea)
+		      (change-directory runarea)
+		      (begin
+			(debug:print 0 *default-log-port* "ERROR: for sub-megatest run the runarea \"" runarea "\" does not exist! EXITING.")
+			(exit 1))))
+	      ;; (let ((subrun (conc *toppath* "/subrun") #t))
+	      ;; 	 (create-directory subrun)
+	      ;; 	 (change-directory subrun)))
+	      
+	      ;; by this point we are in the right place to run the subrun and we have a Megatest command to run
+	      ;; (filter (lambda (x)(string-match "MT_.*" (car x))) (get-environment-variables))
+	      (common:without-vars mt-cmd "^MT_.*")
+	      (set! ezsteps (append ezsteps (list "subrun" (conc "{subrun=true} " mt-cmd))))
+	      (configf:set-section-var testconfig "logpro" "subrun" logpro) ;; append the logpro rules to the logpro section as stepname subrun
+	      ))
+
 	;; process the ezsteps
 	(if ezsteps
 	    (begin
@@ -321,42 +381,6 @@
 	;; by this point we are done with runtest and ezsteps. we can now check if there is
 	;; a request for a sub-megatest run and execute it
 	
-	;; 1. get section [runarun]
-	;; 2. unset MT_* vars
-	;; 3. fix target
-	;; 4. fix runname
-	;; 5. fix testpatt or calculate it from contour
-	;; 6. launch the run
-	;; 7. roll up the run result and or roll up the logpro processed result
-	(let* ((runarea   (configf:lookup testconfig "subrun" "runarea"))
-	       (passfail  (configf:lookup testconfig "subrun" "passfail"))
-	       (target    (configf:lookup testconfig "subrun" "target"))
-	       (runname   (configf:lookup testconfig "subrun" "runname"))
-	       (contour   (configf:lookup testconfig "subrun" "contour"))
-	       (testpatt  (configf:lookup testconfig "subrun" "testpatt"))
-	       (mode-patt (configf:lookup testconfig "subrun" "mode-patt"))
-	       (tag-expr  (configf:lookup testconfig "subrun" "tag-expr"))
-	       (compact-stem (string-substitute "[/*]" "_" (conc target "-" runname "-" (or testpatt mode-patt tag-expr))))
-	       (log-file (conc compact-stem ".log"))
-	       (mt-cmd    (conc "megatest -run -target " target
-				" -runname " runname
-				(if testpatt  (conc " -testpatt " testpatt)  "")
-				(if mode-patt (conc " -modepatt " mode-patt) "")
-				(if tag-expr  (conc " -tag-expr"  tag-expr)  "")
-				" -log " log-file)))
-	  ;; change directory to runarea, create it if needed, we do NOT create the directory 
-	  (if runarea
-	      (if (directory-exists? runarea)
-		  (change-directory runarea)
-		  (begin
-		    (debug:print 0 *default-log-port* "ERROR: for sub-megatest run the runarea \"" runarea "\" does not exist! EXITING.")
-		    (exit 1)))
-	      (let ((subrun (conc *toppath* "/subrun") #t))
-		(create-directory subrun)
-		(change-directory subrun)))
-	  ;; by this point we are in the right place to run the subrun and we have a Megatest command to run
-	  ;; (filter (lambda (x)(string-match "MT_.*" (car x))) (get-environment-variables))
-	  (common:without-vars mt-cmd "^MT_.*")
 
 	)))
 
@@ -1067,7 +1091,7 @@
                (mtcachef     (car cachefiles))
                (rccachef     (cdr cachefiles)))
 
-          ;; trap exception due to stale NFS handle -- Error: (open-output-file) cannot open file - Stale NFS file handle: "/p/fdk/gwa/lefkowit/mtTesting/qa/primbeqa/links/p1222/11/PDK_r1.1.1/prim/clean/pcell_testgen/.runconfigs.cfg-1.6427-7d1e789cb3f62f9cde719a4865bb51b3c17ea853" - ticket 220546342
+          ;; trap exception due to stale NFS handle -- Error: (open-output-file) cannot open file - Stale NFS file handle: "...somepath.../.runconfigs.cfg-1.6427-7d1e789cb3f62f9cde719a4865bb51b3c17ea853" - ticket 220546342
           ;; TODO - consider 1) using simple-lock to bracket cache write
           ;;                 2) cache in hash on server, since need to do rmt: anyway to lock.
           (if (and rccachef *runconfigdat* (not (common:file-exists? rccachef)))
