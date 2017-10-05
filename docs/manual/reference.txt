@@ -660,6 +660,7 @@ passfail logpro
 # Optional: 
 logpro ;; if this section exists then logpro is used to determine pass/fail
   (expect:required in "LogFileBody" >= 1 "At least one pass" #/PASS/)
+  (expect:fail     in "LogFileBody"  = 0 "No FAILs allowed"  #/FAIL/)
 
 # Optional: target translator, default is to use the parent target
 target #{shell somescript.sh}
