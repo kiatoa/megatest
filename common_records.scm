@@ -149,10 +149,12 @@
          (if (equal? this-func "BB>")
              (set! location this-loc))))
      stack)
-    (let ((dp-args
+    (let ((color-on "\x1b[1m")
+          (color-off "\x1b[0m")
+          (dp-args
            (append
             (list 0 *default-log-port*
-                  (conc location "@"(/ (- (current-milliseconds) *BB-process-starttime*) 1000)"   ")  )
+                  (conc color-on location "@"(/ (- (current-milliseconds) *BB-process-starttime*) 1000) color-off "   ")  )
             in-args)))
       (apply debug:print dp-args))))
 

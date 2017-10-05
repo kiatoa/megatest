@@ -781,8 +781,8 @@
       (let ((test-id (rmt:get-test-id run-id hed "")))
 	(if test-id
 	    (if (not (null? prereq-fails))
-		(mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to prior failed prerequisites")
-		(mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL"      "Failed to run due to failed prerequisites"))))
+		(mt:test-set-state-status-by-id run-id test-id "COMPLETED" "PREQ_DISCARDED" "Failed to run due to prior failed prerequisites")
+		(mt:test-set-state-status-by-id run-id test-id "COMPLETED" "PREQ_FAIL"      "Failed to run due to failed prerequisites"))))
       (if (or (not (null? reg))(not (null? tal)))
 	  (begin
 	    (hash-table-set! test-registry hed 'CANNOTRUN)
@@ -1012,7 +1012,7 @@
 		    (debug:print 1 *default-log-port* "WARNING: Dropping test " test-name "/" item-path
 				 " from the launch list as it has prerequistes that are FAIL")
 		    (let ((test-id (rmt:get-test-id run-id hed "")))
-		      (if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites")))
+		      (if test-id (mt:test-set-state-status-by-id run-id test-id "COMPLETED" "PREQ_FAIL" "Failed to run due to failed prerequisites")))
 		    (runs:shrink-can-run-more-tests-count runsdat) ;; DELAY TWEAKER (still needed?)
 		    ;; (thread-sleep! *global-delta*)
 		    ;; This next is for the items
