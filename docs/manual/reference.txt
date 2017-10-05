@@ -662,10 +662,10 @@ logpro ;; if this section exists then logpro is used to determine pass/fail
   (expect:required in "LogFileBody" >= 1 "At least one pass" #/PASS/)
 
 # Optional: target translator, default is to use the parent target
-target somescript.sh
+target #{shell somescript.sh}
 
 # Optional: runname translator/generator, default is to use the parent runname
-runname somescript.sh
+runname #{somescript.sh}
 
 # Optional: testpatt spec, default is to first look for TESTPATT spec from runconfigs unless there is a contour spec
 testpatt %/item1,test2
@@ -678,6 +678,11 @@ mode-patt TESTPATT
 
 # Optional: tag-expr, use this tag-expr to select tests
 tag-expr quick
+
+# Optional: (not yet implemented), propagate these actions from the parent
+#           test
+#   Note// default is % for all
+propagate remove-runs archive ...
 
 ---------------
 

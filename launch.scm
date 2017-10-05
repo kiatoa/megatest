@@ -85,9 +85,9 @@
 	;; 		   (if (proc? info) "" info)))
 	;; (stepproc       (let ((info (cadr ezstep)))
 	;; 		   (if (proc? info) info #f)))
-	 (stepparts      (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
+	 (stepparts      (string-match (regexp "^(\\{([^\\}\\{]*)\\}\\s*|)(.*)$") stepinfo))
 	 (stepparams     (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each
-	 (paramparts     (if (list? stepparams)
+	 (paramparts     (if (string? stepparams)
 			     (map (lambda (x)(string-split x "=")) (string-split-fields "[^;]*=[^;]*" stepparams))
 			     '()))
 	 (subrun         (alist-ref "subrun" paramparts equal?))
@@ -99,6 +99,9 @@
 	 (tconfig-logpro (configf:lookup testconfig "logpro" stepname))
 	 (logpro-used    (common:file-exists? logpro-file)))
 
+    (debug:print 0 *default-log-port* "stepparts: " stepparts ", stepparams: " stepparams
+                 ", paramparts: " paramparts ", subrun: " subrun ", stepcmd: " stepcmd)
+    
     (if (and tconfig-logpro
 	     (not logpro-used)) ;; no logpro file found but have a defn in the testconfig
 	(begin
@@ -133,7 +136,9 @@
 	 (let ((proc (lambda ()
 		       (set! pid (process-run "/bin/bash" (list "-c" cmd))))))
 	   (if subrun
-	       (common:without-vars proc "^MT_.*")
+               (begin
+                 (debug:print-info 0 *default-log-port* "Running without MT_.* environment variables.")
+                 (common:without-vars proc "^MT_.*"))
 	       (proc)))
 	 
          (with-output-to-file "Makefile.ezsteps"
@@ -331,28 +336,31 @@
 		   (compact-stem (string-substitute "[/*]" "_" (conc target "-" runname "-" (or testpatt mode-patt tag-expr))))
 		   (log-file (conc compact-stem ".log"))
 		   (mt-cmd    (conc "megatest -run -target " target
-				    " -runname " runname
-				    (if runarea   (conc " -start-dir " runarea)  *toppath*)
+				    " -runname " (or runname (get-environment-variable "MT_RUNNAME"))
+				    (conc " -start-dir " (if runarea runarea *toppath*))
 				    (if testpatt  (conc " -testpatt " testpatt)  "")
 				    (if mode-patt (conc " -modepatt " mode-patt) "")
 				    (if tag-expr  (conc " -tag-expr"  tag-expr)  "")
-				    (if (equal? runwait "yes") " -runwait " "")
+				    (if (equal? run-wait "yes") " -run-wait " "")
 				    " -log " log-file)))
 	      ;; change directory to runarea, create it if needed, we do NOT create the directory 
-	      (if runarea
-		  (if (directory-exists? runarea)
-		      (change-directory runarea)
-		      (begin
-			(debug:print 0 *default-log-port* "ERROR: for sub-megatest run the runarea \"" runarea "\" does not exist! EXITING.")
-			(exit 1))))
+	;; (if runarea
+	;;     (if (directory-exists? runarea)
+	;;         (change-directory runarea)
+	;;         (begin
+	;;   	(debug:print 0 *default-log-port* "ERROR: for sub-megatest run the runarea \"" runarea "\" does not exist! EXITING.")
+	;;   	(exit 1))))
 	      ;; (let ((subrun (conc *toppath* "/subrun") #t))
 	      ;; 	 (create-directory subrun)
 	      ;; 	 (change-directory subrun)))
 	      
 	      ;; by this point we are in the right place to run the subrun and we have a Megatest command to run
 	      ;; (filter (lambda (x)(string-match "MT_.*" (car x))) (get-environment-variables))
-	      (common:without-vars mt-cmd "^MT_.*")
-	      (set! ezsteps (append ezsteps (list "subrun" (conc "{subrun=true} " mt-cmd))))
+	      ;; (common:without-vars mt-cmd "^MT_.*")
+              (debug:print-info 0 *default-log-port* "Subrun command is \"" mt-cmd "\"")
+              (set! ezsteps #t) ;; set the needed flag
+	      (set! ezstepslst (append (or ezstepslst '())
+                                       (list (list "subrun" (conc "{subrun=true} " mt-cmd)))))
 	      (configf:set-section-var testconfig "logpro" "subrun" logpro) ;; append the logpro rules to the logpro section as stepname subrun
 	      ))
 
@@ -366,6 +374,7 @@
 		  (let loop ((ezstep (car ezstepslst))
 			     (tal    (cdr ezstepslst))
 			     (prevstep #f))
+                    (debug:print-info 0 *default-log-port* "Processing ezstep \"" (string-intersperse ezstep " ") "\"")
 		    ;; check exit-info (vector-ref exit-info 1)
 		    (if (launch:einf-exit-status exit-info) ;; (vector-ref exit-info 1)
 			(let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig))
@@ -376,13 +385,8 @@
 			  (if (steprun-good? logpro-used (launch:einf-exit-code exit-info))
 			      (if (not (null? tal))
 				  (loop (car tal) (cdr tal) stepname))
-			      (debug:print 4 *default-log-port* "WARNING: step " (car ezstep) " failed. Stopping")))
-			(debug:print 4 *default-log-port* "WARNING: a prior step failed, stopping at " ezstep))))))
-	;; by this point we are done with runtest and ezsteps. we can now check if there is
-	;; a request for a sub-megatest run and execute it
-	
-
-	)))
+			      (debug:print 0 *default-log-port* "WARNING: step " (car ezstep) " failed. Stopping")))
+			(debug:print 0 *default-log-port* "WARNING: a prior step failed, stopping at " ezstep)))))))))
 
 (define (launch:monitor-job run-id test-id item-path fullrunscript ezsteps test-name tconfigreg exit-info m work-area runtlim misc-flags)
   (let* ((update-period (string->number (or (configf:lookup *configdat* "setup" "test-stats-update-period") "30")))
