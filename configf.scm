@@ -462,8 +462,11 @@
 
 (define (configf:set-section-var cfgdat section var val)
   (let ((sectdat (configf:get-section cfgdat section)))
-    (append (filter (lambda (x)(not (assoc var sectdat))) sectdat)
-	    (list var val))))
+    (hash-table-set! cfgdat section
+                     (config:assoc-safe-add sectdat var val))))
+
+    ;;(append (filter (lambda (x)(not (assoc var sectdat))) sectdat)
+    ;;	    (list var val))))
 
 (define (setup)
   (let* ((configf (find-config "megatest.config"))

@@ -362,6 +362,8 @@
 	      (set! ezstepslst (append (or ezstepslst '())
                                        (list (list "subrun" (conc "{subrun=true} " mt-cmd)))))
 	      (configf:set-section-var testconfig "logpro" "subrun" logpro) ;; append the logpro rules to the logpro section as stepname subrun
+              (if runarea (configf:set-section-var testconfig "setup" "submegatest" runarea))
+              (configf:write-alist testconfig "testconfig.subrun")
 	      ))
 
 	;; process the ezsteps
