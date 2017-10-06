@@ -2239,12 +2239,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-list-test-time")
-     (begin 
+     (let* ((toppath (launch:setup))) 
      (task:get-test-times)  
      (set! *didsomething* #t)))
 
 (if (args:get-arg "-list-run-time")
-     (begin 
+     (let* ((toppath (launch:setup))) 
      (task:get-run-times)  
      (set! *didsomething* #t)))
      

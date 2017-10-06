@@ -503,7 +503,7 @@
 						(or (hash-table-ref/default waiton-tconfig "items" #f)
 						    (hash-table-ref/default waiton-tconfig "itemstable" #f))))
 			  (itemmaps        (tests:get-itemmaps config))  ;; (configf:lookup config "requirements" "itemmap"))
-			  (new-test-patts  (tests:extend-test-patts test-patts hed waiton itemmaps)))   ;; BB:  items expanded here.
+			  (new-test-patts  (tests:extend-test-patts test-patts hed waiton itemmaps))) ;; BB: items expanded here
 		     (debug:print-info 0 *default-log-port* "Test " waiton " has " (if waiton-record "a" "no") " waiton-record and" (if waiton-itemized " " " no ") "items")
 		     ;; need to account for test-patt here, if I am test "a", selected with a test-patt of "hed/b%"
 		     ;; and we are waiting on "waiton" we need to add "waiton/,waiton/b%" to test-patt
@@ -605,21 +605,21 @@
 
 (define (runs:queue-next-hed tal reg n regfull)
   (if regfull
-      (car reg)
+      (if (null? reg) #f (car reg))
       (if (null? tal) ;; tal is used up, pop from reg
-	  (car reg)
+	  (if (null? reg) #f (car reg))
 	  (car tal))))
 
 (define (runs:queue-next-tal tal reg n regfull)
   (if regfull
       tal
       (if (null? tal) ;; must transfer from reg
-	  (cdr reg)
+	  (if (null? reg) '() (cdr reg))
 	  (cdr tal))))
 
 (define (runs:queue-next-reg tal reg n regfull)
   (if regfull
-      (cdr reg)
+      (if (null? reg) '() (cdr reg))
       (if (null? tal) ;; if tal is null and reg not full then '() as reg contents moved to tal
 	  '()
 	  reg)))
@@ -632,8 +632,21 @@
         (runs:queue-next-reg tal reg reglen regfull)      ;; reg
         reruns))                                          ;; reruns
 
+;; objective - iterate thru tests
+;;    => want to prioritize tests we haven't seen before
+;;    => sometimes need to squeeze things in (added to reg)
+;;    => review of a previously seen test is higher priority of never visited test
+;; reg - list of previously visited tests
+;; tal - list of never visited tests
+;;   prefer next hed to be from reg than tal.
+
 (define runs:nothing-left-in-queue-count 0)
 
+;; return value of runs:expand-items is passed back to runs-tests-queue and is fed to named loop with this signature:
+;;    (let loop ((hed         (car sorted-test-names))
+;;	         (tal         (cdr sorted-test-names))
+;;	         (reg         '()) ;; registered, put these at the head of tal 
+;;	         (reruns      '()))
 ;; BB: for future reference - suspect target vars are not expanded to env vars at this point (item expansion using [items]\nwhatever [system echo $TARGETVAR] doesnt work right whereas [system echo #{targetvar}] does.. Tal and Randy have tix on this.  on first pass, var not set, on second pass, ok.  
 (define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmaps)
   (let* ((loop-list       (list hed tal reg reruns))
@@ -645,12 +658,23 @@
 					       "ERROR: rmt:get-prereqs-not-met returned non-list!\n"
 					       "  res=" res " run-id=" run-id " waitons=" waitons " hed=" hed " item-path=" item-path " testmode=" testmode " itemmaps=" itemmaps)
 				  '()))))
+         (have-itemized (not (null? (lset-intersection eq? testmode '(itemmatch itemwait)))))
 	 ;; (prereqs-not-met (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails           (runs:calc-fails prereqs-not-met))
 	 (prereq-fails    (runs:calc-prereq-fail prereqs-not-met))
 	 (non-completed   (runs:calc-not-completed prereqs-not-met))
-	 (runnables       (runs:calc-runnable prereqs-not-met)))
-    (debug:print-info 4 *default-log-port* "START OF INNER COND #2 "
+	 (runnables       (runs:calc-runnable prereqs-not-met))
+         (unexpanded-prereqs
+          (filter (lambda (testname)
+                    (let* ((test-rec (hash-table-ref test-records testname))
+                           (items       (tests:testqueue-get-items  test-rec)))
+                      ;;(BB> "HEY " testname "=>"items)
+                      (or (procedure? items)(eq? items 'have-procedure))))
+                  waitons))
+
+
+         )
+    (debug:print-info 1 *default-log-port* "START OF INNER COND #2 "
 		      "\n can-run-more:    " can-run-more
 		      "\n testname:        " hed
 		      "\n prereqs-not-met: " (runs:pretty-string prereqs-not-met)
@@ -687,7 +711,16 @@
 		(set! runs:nothing-left-in-queue-count (+ runs:nothing-left-in-queue-count 1)))
 	    #f)))
 
-     ;; 
+     ;; desired result of below cond branch:
+     ;;   we want to expand items in our test of interest (hed) in the following cases:
+     ;;    case 1 - mode is itemmatch or itemwait: 
+     ;;       - all prereq tests have been expanded
+     ;;       - at least one prereq's items have completed
+     ;;    case 2 - mode is toplevel   
+     ;;       - prereqs are completed.
+     ;;       - or no prereqs can complete 
+     ;;    case 3 - mode not specified 
+     ;;       - prereqs are completed and passed (we could consider removing "and passed" -- it would change behavior from current)          
      ((or (null? prereqs-not-met)
 	  (and (member 'toplevel testmode)
 	       (null? non-completed)))
@@ -742,7 +775,7 @@
 	      (debug:print 1 *default-log-port* "WARNING: test " hed " has discarded prerequisites, removing it from the queue")
 
 	      (let ((test-id (rmt:get-test-id run-id hed "")))
-		(if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to discarded prerequisites")))
+		(if test-id (mt:test-set-state-status-by-id run-id test-id "COMPLETED" "PREQ_DISCARDED" "Failed to run due to discarded prerequisites")))
 	      
 	      (if (and (null? trimmed-tal)
 		       (null? trimmed-reg))
@@ -780,17 +813,17 @@
       (let ((test-id (rmt:get-test-id run-id hed "")))
 	(if test-id
 	    (if (not (null? prereq-fails))
-		(mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to prior failed prerequisites")
-                (begin
-                  (debug:print 4 *default-log-port*"BB> set PREQ_FAIL on "hed)
-                  (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL"      "Failed to run due to failed prerequisites"))))) ;; BB: this works, btu equivalent for itemwait mode does not work.
+		(mt:test-set-state-status-by-id run-id test-id "COMPLETED" "PREQ_DISCARDED" "Failed to run due to prior failed prerequisites")
+		(mt:test-set-state-status-by-id run-id test-id "COMPLETED" "PREQ_FAIL"      "Failed to run due to failed prerequisites"))))
+      ;; (debug:print 4 *default-log-port*"BB> set PREQ_FAIL on "hed)
+      ;; (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL"      "Failed to run due to failed prerequisites")))) ;; BB: this works, btu equivalent for itemwait mode does not work.
       (if (or (not (null? reg))(not (null? tal)))
 	  (begin
 	    (hash-table-set! test-registry hed 'CANNOTRUN)
             (runs:loop-values tal reg reglen regfull (cons hed reruns))
             )
 	  #f)) ;; #f flags do not loop
-
+      
      ((and (not (null? fails))(member 'toplevel testmode))
       (if (or (not (null? reg))(not (null? tal)))
 	   (list (car newtal)(append (cdr newtal) reg) '() reruns)
@@ -861,7 +894,7 @@
 	 (job-group-limit        (list-ref run-limits-info 4))
 	 ;; (prereqs-not-met        (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps))
 	 ;; (prereqs-not-met         (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
-	 (fails                  (if (list? prereqs-not-met)
+	 (fails                  (if (list? prereqs-not-met) ;; TODO: rename fails to failed-prereqs
 				      (runs:calc-fails prereqs-not-met)
 				      (begin
 					(debug:print-error 0 *default-log-port* "prereqs-not-met is not a list! " prereqs-not-met)
@@ -1010,13 +1043,19 @@
 	    (thread-sleep! 1)
 	    (list (car newtal)(cdr newtal) reg reruns))
 	  ;; the waiton is FAIL so no point in trying to run hed ever again
-	  (if (or (not (null? reg))(not (null? tal)))
-	      (if (or (vector? hed)  (not (null? fails))) ;; BB: why do we need a vector?  in my case, fails is populated (prereq failed), reg is not nul, and we really want to drop this one
+	  (begin
+            (let ((my-test-id (rmt:get-test-id run-id test-name item-path)))
+              (mt:test-set-state-status-by-id run-id my-test-id "COMPLETED" "PREQ_FAIL" "Failed to run due to failed prerequisites2"))
+
+
+            
+            (if (or (not (null? reg))(not (null? tal)))
+                (if (vector? hed)
 		  (begin
 		    (debug:print 1 *default-log-port* "WARNING: Dropping test " test-name "/" item-path
 				 " from the launch list as it has prerequistes that are FAIL")
 		    (let ((test-id (rmt:get-test-id run-id hed "")))
-		      (if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites")))
+		      (if test-id (mt:test-set-state-status-by-id run-id test-id "COMPLETED" "PREQ_FAIL" "Failed to run due to failed prerequisites")))
 		    (runs:shrink-can-run-more-tests-count runsdat) ;; DELAY TWEAKER (still needed?)
 		    ;; (thread-sleep! *global-delta*)
 		    ;; This next is for the items
@@ -1034,11 +1073,11 @@
 		     ((member "RUNNING" (map db:test-get-state prereqs-not-met))
 		      (if (runs:lownoise (conc "possible RUNNING prerequistes " hed) 60)
 			  (debug:print 0 *default-log-port* "WARNING: test " hed " has possible RUNNING prerequisites, don't give up on it yet."))
-		      (thread-sleep! 4)
+		      (thread-sleep! 0.1)
 		      (runs:loop-values tal reg reglen regfull reruns))
 		     ((or (not nth-try) ;; BB: condition on subsequent tries, condition below fires on first try 
 			  (and (number? nth-try)
-			       (< nth-try 10)))
+			       (< nth-try 2)))
 		      (hash-table-set! test-registry hed (if (number? nth-try)
 							     (+ nth-try 1)
 							     0))
@@ -1055,9 +1094,12 @@
 			  (begin
 			    (if (runs:lownoise (conc "FAILED prerequisites or other issue" hed) 60)
 				(debug:print 0 *default-log-port* "WARNING: test " hed " has FAILED prerequisites or other issue. Internal state >" nth-try "< will be overridden and we'll retry."))
-			    (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "KEEP_TRYING" #f)
-			    (hash-table-set! test-registry hed 0)
-			    (runs:loop-values newtal reg reglen regfull reruns))))
+			    ;; was: (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "KEEP_TRYING" #f)
+                            (mt:test-set-state-status-by-testname run-id test-name item-path "COMPLETED" "PREQ_FAIL" #f)
+			    (hash-table-set! test-registry hed 'removed) ;; was 0
+                            (if (not (and (null? reg) (null? tal)))
+                                (runs:loop-values tal reg reglen regfull reruns)
+                                #f))))
 		     (else
 		      (if (runs:lownoise (conc "FAILED prerequitests and we tried" hed) 60)
 			  (debug:print 0 *default-log-port* "WARNING: test " hed " has FAILED prerequitests and we've tried at least 10 times to run it. Giving up now."))
@@ -1070,11 +1112,16 @@
 			    tal
 			    reg
 			    reruns)))))
-	      ;; can't drop this - maybe running? Just keep trying
-	      (let ((runable-tests (runs:runable-tests prereqs-not-met))) ;; SUSPICIOUS: Should look at more than just prereqs-not-met?
-		(if (null? runable-tests)
-		    #f   ;; I think we are truly done here
-		    (runs:loop-values newtal reg reglen regfull reruns)))))))))
+	      ;; ELSE: can't drop this - maybe running? Just keep trying
+
+                ;;(if (not (or (not (null? reg))(not (null? tal)))) ;; old experiment
+                (let ((runable-tests (runs:runable-tests prereqs-not-met))) ;; SUSPICIOUS: Should look at more than just prereqs-not-met?
+                  (if (null? runable-tests)
+                      #f   ;; I think we are truly done here
+                      (runs:loop-values newtal reg reglen regfull reruns)))
+                ;;) ;;from old experiment
+            ) ;; end if (or (not (null? reg))(not (null? tal)))
+            ))))))
 
 ;; scan a list of tests looking to see if any are potentially runnable
 ;;
@@ -1321,7 +1368,7 @@
 		  ;; (loop (car tal)(cdr tal) reg reruns))))
 
 	(runs:incremental-print-results run-id)
-	(debug:print 4 *default-log-port* "TOP OF LOOP => "
+	(debug:print 1 *default-log-port* "TOP OF LOOP => "
 		     "test-name: " test-name
 		     "\n  test-record  " test-record
 		     "\n  hed:         " hed
@@ -1426,7 +1473,7 @@
 	  (let ((can-run-more    (runs:can-run-more-tests runsdat run-id jobgroup max-concurrent-jobs)))
 	    (if (and (list? can-run-more)
 		     (car can-run-more))
-		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmaps)))
+		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmaps))) ;; itemized test expanded here
 		  (if loop-list
 		      (apply loop loop-list)))
 		;; if can't run more just loop with next possible test
@@ -1486,12 +1533,12 @@
 (define (runs:calc-fails prereqs-not-met)
   (filter (lambda (test)
 	    (and (vector? test) ;; not (string? test))
-		 (member (db:test-get-state test) '("INCOMPLETE" "COMPLETED"))
+		 (member (db:test-get-state test) '("INCOMPLETE" "COMPLETED")) ;; TODO: pull from *common:stuff...*
 		 (not (member (db:test-get-status test)
 			      '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))))
 	  prereqs-not-met))
 
-(define (runs:calc-prereq-fail prereqs-not-met)
+(define (runs:calc-prereq-fail prereqs-not-met) ;; REMOVEME since NOT_STARTED/PREQ_FAIL is now COMPLETED/PREQ_FAIL
   (filter (lambda (test)
 	    (and (vector? test) ;; not (string? test))
 		 (equal? (db:test-get-state test) "NOT_STARTED")
