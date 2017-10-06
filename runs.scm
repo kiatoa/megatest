@@ -1087,7 +1087,7 @@
 			    ;; was: (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "KEEP_TRYING" #f)
                             (mt:test-set-state-status-by-testname run-id test-name item-path "COMPLETED" "PREQ_FAIL" #f)
 			    (hash-table-set! test-registry hed 'removed) ;; was 0
-                            (if (not (or (null? reg) (null? tal)))
+                            (if (not (and (null? reg) (null? tal)))
                                 (runs:loop-values tal reg reglen regfull reruns)
                                 #f))))
 		     (else
