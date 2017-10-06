@@ -149,13 +149,13 @@
          (if (equal? this-func "BB>")
              (set! location this-loc))))
      stack)
-    (let ((color-on "\x1b[1m")
-          (color-off "\x1b[0m")
-          (dp-args
-           (append
-            (list 0 *default-log-port*
-                  (conc color-on location "@"(/ (- (current-milliseconds) *BB-process-starttime*) 1000) color-off "   ")  )
-            in-args)))
+    (let* ((color-on "\x1b[1m")
+           (color-off "\x1b[0m")
+           (dp-args
+            (append
+             (list 0 *default-log-port*
+                   (conc color-on location "@"(/ (- (current-milliseconds) *BB-process-starttime*) 1000) color-off "   ")  )
+             in-args)))
       (apply debug:print dp-args))))
 
 (define *BBpp_custom_expanders_list* (make-hash-table))

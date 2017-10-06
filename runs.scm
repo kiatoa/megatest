@@ -504,7 +504,7 @@
 						(or (hash-table-ref/default waiton-tconfig "items" #f)
 						    (hash-table-ref/default waiton-tconfig "itemstable" #f))))
 			  (itemmaps        (tests:get-itemmaps config))  ;; (configf:lookup config "requirements" "itemmap"))
-			  (new-test-patts  (tests:extend-test-patts test-patts hed waiton itemmaps)))
+			  (new-test-patts  (tests:extend-test-patts test-patts hed waiton itemmaps))) ;; BB: items expanded here
 		     (debug:print-info 0 *default-log-port* "Test " waiton " has " (if waiton-record "a" "no") " waiton-record and" (if waiton-itemized " " " no ") "items")
 		     ;; need to account for test-patt here, if I am test "a", selected with a test-patt of "hed/b%"
 		     ;; and we are waiting on "waiton" we need to add "waiton/,waiton/b%" to test-patt
@@ -544,7 +544,7 @@
 	      (if (not (null? remtests))
 		  (begin
 		    ;; (debug:print-info 0 *default-log-port* "Preprocessing continues for " (string-intersperse remtests ", "))
-		    (loop (car remtests)(cdr remtests))))))))
+		    (loop (car remtests)(cdr remtests)))))))) ;; end test-names loop
 
     (if (not (null? required-tests))
 	(debug:print-info 1 *default-log-port* "Adding \"" (string-intersperse required-tests " ") "\" to the run queue"))
@@ -633,8 +633,21 @@
         (runs:queue-next-reg tal reg reglen regfull)      ;; reg
         reruns))                                          ;; reruns
 
+;; objective - iterate thru tests
+;;    => want to prioritize tests we haven't seen before
+;;    => sometimes need to squeeze things in (added to reg)
+;;    => review of a previously seen test is higher priority of never visited test
+;; reg - list of previously visited tests
+;; tal - list of never visited tests
+;;   prefer next hed to be from reg than tal.
+
 (define runs:nothing-left-in-queue-count 0)
 
+;; return value of runs:expand-items is passed back to runs-tests-queue and is fed to named loop with this signature:
+;;    (let loop ((hed         (car sorted-test-names))
+;;	         (tal         (cdr sorted-test-names))
+;;	         (reg         '()) ;; registered, put these at the head of tal 
+;;	         (reruns      '()))
 ;; BB: for future reference - suspect target vars are not expanded to env vars at this point (item expansion using [items]\nwhatever [system echo $TARGETVAR] doesnt work right whereas [system echo #{targetvar}] does.. Tal and Randy have tix on this.  on first pass, var not set, on second pass, ok.  
 (define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmaps)
   (let* ((loop-list       (list hed tal reg reruns))
@@ -646,12 +659,23 @@
 					       "ERROR: rmt:get-prereqs-not-met returned non-list!\n"
 					       "  res=" res " run-id=" run-id " waitons=" waitons " hed=" hed " item-path=" item-path " testmode=" testmode " itemmaps=" itemmaps)
 				  '()))))
+         (have-itemized (not (null? (lset-intersection eq? testmode '(itemmatch itemwait)))))
 	 ;; (prereqs-not-met (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails           (runs:calc-fails prereqs-not-met))
 	 (prereq-fails    (runs:calc-prereq-fail prereqs-not-met))
 	 (non-completed   (runs:calc-not-completed prereqs-not-met))
-	 (runnables       (runs:calc-runnable prereqs-not-met)))
-    (debug:print-info 4 *default-log-port* "START OF INNER COND #2 "
+	 (runnables       (runs:calc-runnable prereqs-not-met))
+         (unexpanded-prereqs
+          (filter (lambda (testname)
+                    (let* ((test-rec (hash-table-ref test-records testname))
+                           (items       (tests:testqueue-get-items  test-rec)))
+                      ;;(BB> "HEY " testname "=>"items)
+                      (or (procedure? items)(eq? items 'have-procedure))))
+                  waitons))
+
+
+         )
+    (debug:print-info 1 *default-log-port* "START OF INNER COND #2 "
 		      "\n can-run-more:    " can-run-more
 		      "\n testname:        " hed
 		      "\n prereqs-not-met: " (runs:pretty-string prereqs-not-met)
@@ -688,7 +712,16 @@
 		(set! runs:nothing-left-in-queue-count (+ runs:nothing-left-in-queue-count 1)))
 	    #f)))
 
-     ;; 
+     ;; desired result of below cond branch:
+     ;;   we want to expand items in our test of interest (hed) in the following cases:
+     ;;    case 1 - mode is itemmatch or itemwait: 
+     ;;       - all prereq tests have been expanded
+     ;;       - at least one prereq's items have completed
+     ;;    case 2 - mode is toplevel   
+     ;;       - prereqs are completed.
+     ;;       - or no prereqs can complete 
+     ;;    case 3 - mode not specified 
+     ;;       - prereqs are completed and passed (we could consider removing "and passed" -- it would change behavior from current)          
      ((or (null? prereqs-not-met)
 	  (and (member 'toplevel testmode)
 	       (null? non-completed)))
@@ -1311,7 +1344,7 @@
 		  ;; (loop (car tal)(cdr tal) reg reruns))))
 
 	(runs:incremental-print-results run-id)
-	(debug:print 4 *default-log-port* "TOP OF LOOP => "
+	(debug:print 1 *default-log-port* "TOP OF LOOP => "
 		     "test-name: " test-name
 		     "\n  test-record  " test-record
 		     "\n  hed:         " hed
