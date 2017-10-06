@@ -1358,7 +1358,7 @@
 		  ;; (loop (car tal)(cdr tal) reg reruns))))
 
 	(runs:incremental-print-results run-id)
-	(debug:print 1 *default-log-port* "TOP OF LOOP => "
+	(debug:print 4 *default-log-port* "TOP OF LOOP => "
 		     "test-name: " test-name
 		     "\n  test-record  " test-record
 		     "\n  hed:         " hed
