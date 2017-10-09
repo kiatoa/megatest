@@ -2445,6 +2445,7 @@
 	 (keystr    (conc (keys->keystr keys) ","
 			  (string-intersperse remfields ","))))
     (debug:print-info 11 *default-log-port* "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
+    
     (db:with-db
      dbstruct #f #f
      (lambda (db)
@@ -2452,7 +2453,7 @@
 	(lambda (a . x)
 	  (set! res (apply vector a x)))
 	db 
-	(conc "SELECT " keystr " FROM runs WHERE id=? AND state != 'deleted';")
+	(conc "SELECT " keystr " FROM runs WHERE id=?;")
 	run-id)))
     (debug:print-info 11 *default-log-port* "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
     (let ((finalres (vector header res)))

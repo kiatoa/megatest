@@ -735,13 +735,13 @@
   (let* ((runs-ht (hash-table-ref cached-info 'runs))
 	 (runinf  (hash-table-ref/default runs-ht run-id #f))
          (area-id (vector-ref area-info 0)))
-    (if runinf
+       (if runinf
 	runinf ;; already cached
 	(let* ((run-dat    (rmt:get-run-info run-id))               ;; NOTE: get-run-info returns a vector < row header >
 	       (run-name   (rmt:get-run-name-from-id run-id))
 	       (row        (db:get-rows run-dat))                   ;; yes, this returns a single row
 	       (header     (db:get-header run-dat))
-	       (state      (db:get-value-by-header row header "state "))
+	       (state      (db:get-value-by-header row header "state"))
 	       (status     (db:get-value-by-header row header "status"))
 	       (owner      (db:get-value-by-header row header "owner"))
 	       (event-time (db:get-value-by-header row header "event_time"))
@@ -750,7 +750,7 @@
 	       (pass-count (db:get-value-by-header row header "pass_count"))
                (db-contour (db:get-value-by-header row header "contour"))
 	       (contour    (if (args:get-arg "-prepend-contour") 
-                                 (if (> (string-length  db-contour) 0) 
+                                 (if db-contour 
                                             db-contour
 					    (args:get-arg "-contour"))))
 	       (keytarg    (if (or (args:get-arg "-prepend-contour") (args:get-arg "-prefix-target"))
@@ -761,7 +761,7 @@
 	       (new-run-id (pgdb:get-run-id dbh spec-id target run-name area-id))
 	       ;; (area-id    (db:get-value-by-header row header "area_id)"))
 	       )
-          (if new-run-id
+              (if new-run-id
 	      (begin ;; let ((run-record (pgdb:get-run-info dbh new-run-id))
 		(hash-table-set! runs-ht run-id new-run-id)
 		;; ensure key fields are up to date
@@ -770,16 +770,20 @@
 		 new-run-id
 		 state status owner event-time comment fail-count pass-count area-id)
 		new-run-id)
-	      (if (handle-exceptions
+	      (if (equal? state "deleted")
+                 (begin 
+                 (print "Warning: Run with id " run-id " was created after previous sync and deleted before the sync") #f)
+               (if (handle-exceptions
 		      exn
 		      (begin (print-call-chain)
                               (print ((condition-property-accessor 'exn 'message) exn))     
 			#f)
-		    (pgdb:insert-run
+                     
+                     (pgdb:insert-run
 		     dbh
 		     spec-id target run-name state status owner event-time comment fail-count pass-count  area-id))
 		       (tasks:run-id->mtpg-run-id dbh cached-info run-id area-info)
-		  #f))))))
+		  #f)))))))
 
 
 (define (tasks:sync-test-steps dbh cached-info test-step-ids)
@@ -863,6 +867,7 @@
   (let ((test-ht (hash-table-ref cached-info 'tests)))
     (for-each
      (lambda (test-id)
+       (print test-id)
        (let* ((test-info    (rmt:get-test-info-by-id #f test-id))
 	      (run-id       (db:test-get-run_id    test-info)) ;; look these up in db_records.scm
 	      (test-id      (db:test-get-id        test-info))
