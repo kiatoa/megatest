@@ -39,8 +39,8 @@ echo "Set additional_libpath to help find gtk or other libraries, don't forget a
 
 SYSTEM_TYPE=$(lsb_release -irs |tr ' ' '_' |tr '\n' '-')$(uname -i)-$OPTION
 
-CHICKEN_VERSION=4.12.0
-CHICKEN_BASEVER=4.12.0
+CHICKEN_VERSION=4.10.0
+CHICKEN_BASEVER=4.10.0
 
 # Set up variables
 #
