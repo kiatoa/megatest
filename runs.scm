@@ -674,7 +674,7 @@
 
 
          )
-    (debug:print-info 1 *default-log-port* "START OF INNER COND #2 "
+    (debug:print-info 4 *default-log-port* "START OF INNER COND #2 "
 		      "\n can-run-more:    " can-run-more
 		      "\n testname:        " hed
 		      "\n prereqs-not-met: " (runs:pretty-string prereqs-not-met)
@@ -1368,7 +1368,7 @@
 		  ;; (loop (car tal)(cdr tal) reg reruns))))
 
 	(runs:incremental-print-results run-id)
-	(debug:print 1 *default-log-port* "TOP OF LOOP => "
+	(debug:print 4 *default-log-port* "TOP OF LOOP => "
 		     "test-name: " test-name
 		     "\n  test-record  " test-record
 		     "\n  hed:         " hed
