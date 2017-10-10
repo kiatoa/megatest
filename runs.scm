@@ -194,7 +194,7 @@
   (thread-sleep! (cond
         	  ((> (runs:dat-can-run-more-tests-count runsdat) 20)
 		   (if (runs:lownoise "waiting on tasks" 60)(debug:print-info 2 *default-log-port* "waiting for tasks to complete, sleeping briefly ..."))
-                   (configf:lookup-number *configdat* "setup" "inter-test-delay" default: 2) ;; was 2
+                   (configf:lookup-number *configdat* "setup" "inter-test-delay" default: 0.1) ;; was 2
 		   );; obviously haven't had any work to do for a while
         	  (else 0)))
   (let* ((num-running             (rmt:get-count-tests-running run-id))
