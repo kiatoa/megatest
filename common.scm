@@ -533,13 +533,18 @@
     (7 "STUCK/DEAD")
     (8 "DEAD")
     (9 "FAIL")
-    (10 "ABORT")))
+    (10 "PREQ_FAIL")
+    (11 "PREQ_DISCARDED")
+    (12 "ABORT")))
 
 (define *common:ended-states*       ;; states which indicate the test is stopped and will not proceed
-  '("COMPLETED" "ARCHIVED" "KILLED" "KILLREQ" "STUCK" "INCOMPLETE"))
+  '("COMPLETED" "ARCHIVED" "KILLED" "KILLREQ" "STUCK" "INCOMPLETE" ))
 
 (define *common:badly-ended-states* ;; these roll up as CHECK, i.e. results need to be checked
   '("KILLED" "KILLREQ" "STUCK" "INCOMPLETE" "DEAD"))
+
+(define *common:well-ended-states* ;; an item's prereq in this state allows item to proceed
+  '("PASS" "WARN" "CHECK" "WAIVED" "SKIP"))
 
 ;; BBnote: *common:running-states* used from db:set-state-status-and-roll-up-items
 (define *common:running-states*     ;; test is either running or can be run

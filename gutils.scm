@@ -38,6 +38,7 @@
     ((COMPLETED) ;; ARCHIVED)
      (case (string->symbol status)
        ((PASS)        (list "70  249 73" status))
+       ((PREQ_FAIL PREQ_DISCARDED) (list "255 127 127" status))
        ((WARN WAIVED) (list "255 172 13" status))
        ((SKIP)        (list (gutils:get-color-spec 'SKIP) status))
        ((ABORT)       (list "198 36 166" status))

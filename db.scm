@@ -1583,13 +1583,13 @@
 ;;  select end_time-now from
 ;;      (select testname,item_path,event_time+run_duration as
 ;;                          end_time,strftime('%s','now') as now from tests where state in
-;;      ('RUNNING','REMOTEHOSTSTART','LAUNCED'));
+;;      ('RUNNING','REMOTEHOSTSTART','LAUNCHED'));
 
 (define (db:find-and-mark-incomplete dbstruct run-id ovr-deadtime)
   (let* ((incompleted '())
 	 (oldlaunched '())
 	 (toplevels   '())
-	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
+	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime")) ; FIXME suspect test run time & deadtime are not well matched; resulting in COMPLETED/DEAD status of an a-ok running test
 	 (deadtime     (if (and deadtime-str
 				(string->number deadtime-str))
 			   (string->number deadtime-str)
@@ -1652,7 +1652,7 @@
                (debug:print 0 *default-log-port* "WARNING: Marking test(s); " (string-intersperse (map conc all-ids) ", ") " as INCOMPLETE")
                (for-each
                 (lambda (test-id)
-                  (db:test-set-state-status dbstruct run-id test-id "COMPLETED" "DEAD" "Test failed to complete")) ;; fix for one aspect of Randy's ticket 1405717332
+                  (db:test-set-state-status dbstruct run-id test-id "COMPLETED" "DEAD" "Test failed to complete")) ;; fix for one aspect of Randy's ticket 1405717332 ;; TODO - fix problem where test goes to COMPLETED/DEAD while in progress, only later to go to COMPLETED/PASS.  ref ticket 220546828
                 all-ids))))))))
 
 ;; ALL REPLACED BY THE BLOCK ABOVE
@@ -4118,68 +4118,121 @@
 	;;		  (db:test-get-item-path testdat))))
 	 running-tests) ;; calling functions want the entire data
        '())
+
+   ;; collection of: for each waiton -
+   ;;   if this ref-test-name is an item in an itemized test and mode is itemwait/itemmatch:
+   ;;     if waiton is not itemized - if waiton is not both completed and in ok status, add as unmet prerequisite
+   ;;     if waiton is itemized:
+   ;;           and waiton's items are not expanded, add as unmet prerequisite
+   ;;           else if matching waiton item is not both completed and in an ok status, add as unmet prerequisite
+   ;;   else
+   ;;    if waiton toplevel is not in both completed and ok status, add as unmet prerequisite
+
    (if (or (not waitons)
 	   (null? waitons))
        '()
-       (let* ((unmet-pre-reqs '())
-	      (result         '()))
-	 (for-each 
+       (let* ((ref-test-itemized-mode (not (null? (lset-intersection eq? mode '(itemmatch itemwait)))))
+              (ref-test-toplevel-mode (not (null? (lset-intersection eq? mode '(toplevel)))))
+              (ref-test-is-toplevel   (equal? ref-item-path ""))
+              (ref-test-is-item       (not ref-test-is-toplevel))
+              (unmet-pre-reqs '())
+	      (result         '())
+              (unmet-prereq-items '())
+              )
+	 (for-each  ; waitons
 	  (lambda (waitontest-name)
 	    ;; by getting the tests with matching name we are looking only at the matching test 
 	    ;; and related sub items
 	    ;; next should be using mt:get-tests-for-run?
-	    (let ((tests             (db:get-tests-for-run-state-status dbstruct run-id waitontest-name))
+
+            (let (;(waiton-is-itemized ...)
+                  ;(waiton-items-are-expanded ...)
+                  (waiton-tests             (db:get-tests-for-run-state-status dbstruct run-id waitontest-name))
 		  (ever-seen         #f)
 		  (parent-waiton-met #f)
-		  (item-waiton-met   #f))
-	      (for-each 
-	       (lambda (test) ;; BB- this is the upstream test
-		 ;; (if (equal? waitontest-name (db:test-get-testname test)) ;; by defintion this had better be true ...
-		 (let* ((state             (db:test-get-state test))
-			(status            (db:test-get-status test))
-			(item-path         (db:test-get-item-path test)) ;; BB- this is the upstream itempath
-			(is-completed      (equal? state "COMPLETED"))
-			(is-running        (equal? state "RUNNING"))
-			(is-killed         (equal? state "KILLED"))
-			(is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
+		  (item-waiton-met   #f)
+
+                  )
+	      (for-each ; test expanded from waiton
+	       (lambda (waiton-test) 
+		 (let* ((waiton-state             (db:test-get-state waiton-test))
+			(waiton-status            (db:test-get-status waiton-test))
+			(waiton-item-path         (db:test-get-item-path waiton-test)) ;; BB- this is the upstream itempath
+                        (waiton-is-toplevel       (equal? waiton-item-path ""))
+                        (waiton-is-item           (not waiton-is-toplevel))
+			(waiton-is-completed      (member waiton-state  *common:ended-states*))
+			(waiton-is-running        (member waiton-state  *common:running-states*))
+			(waiton-is-killed         (member waiton-state  *common:badly-ended-states*))
+			(waiton-is-ok             (member waiton-status *common:well-ended-states*))
 			;;                                       testname-b    path-a    path-b
-			(same-itempath     (db:compare-itempaths ref-test-name item-path ref-item-path itemmaps))) ;; (equal? ref-item-path item-path)))
+			(same-itempath     (db:compare-itempaths ref-test-name waiton-item-path ref-item-path itemmaps))) ;; (equal? ref-item-path waiton-item-path)))
 		   (set! ever-seen #t)
-		   (cond
-		    ;; case 1, non-item (parent test) is 
-		    ((and (equal? item-path "") ;; this is the parent test of the waiton being examined
-			  is-completed
-			  (or is-ok (not (null? (lset-intersection eq? mode '(toplevel)))))) ;;  itemmatch itemwait))))))
+                   ;;(BB> "***consider waiton "waiton-test"/"waiton-item-path"***")
+                   (cond
+                    ;; case 0 - toplevel of an itemized test, at least one item in prereq has completed
+                    ((and waiton-is-item ref-test-is-toplevel ref-test-itemized-mode waiton-is-completed)
+                     (set! parent-waiton-met #t))
+
+                    ;; case 1, non-item (parent test) is 
+		    ((and waiton-is-toplevel ;; this is the parent test of the waiton being examined
+			  waiton-is-completed
+                          ;;(BB> "cond1")
+			  (or waiton-is-ok ref-test-toplevel-mode)) ;;  itemmatch itemwait))))))
 		     (set! parent-waiton-met #t))
 		    ;; Special case for toplevel and KILLED
-		    ((and (equal? item-path "") ;; this is the parent test
-			  is-killed
+		    ((and waiton-is-toplevel ;; this is the parent test
+			  waiton-is-killed
 			  (member 'toplevel mode))
+                     ;;(BB> "cond2")
 		     (set! parent-waiton-met #t))
 		    ;; For itemwait mode IFF the previous matching item is good the set parent-waiton-met
-		    ((and (not (null? (lset-intersection eq? mode '(itemmatch itemwait)))) ;; how is that different from (member mode '(itemmatch itemwait)) ?????
-			  ;; (not (equal? item-path "")) ;; this applies to both top level (to allow launching of next batch) and items
-			  same-itempath)
-		     (if (and is-completed is-ok)
-			 (set! item-waiton-met #t))
-		     (if (and (equal? item-path "") ;; if upstream rollup test is completed, parent-waiton-met is set
-			      (or is-completed is-running));; this is the parent, set it to run if completed or running ;; BB1
+                    ((and ref-test-itemized-mode ref-test-is-item same-itempath)
+                     ;;(BB> "cond3")
+		     (if (and waiton-is-completed (or waiton-is-ok ref-test-toplevel-mode)) 
+                         (set! item-waiton-met #t)
+                         (set! unmet-prereq-items (cons waiton-test unmet-prereq-items)))
+                     (if (and waiton-is-toplevel ;; if upstream rollup test is completed, parent-waiton-met is set
+			      (or waiton-is-completed waiton-is-running))
 			 (set! parent-waiton-met #t)))
 		    ;; normal checking of parent items, any parent or parent item not ok blocks running
-		    ((and is-completed
-			  (or is-ok 
+		    ((and waiton-is-completed
+			  (or waiton-is-ok 
 			      (member 'toplevel mode))              ;; toplevel does not block on FAIL
-			  (and is-ok (member 'itemmatch mode))) ;; itemmatch blocks on not ok
-		     (set! item-waiton-met #t)))))
-	       tests)
+			  (and waiton-is-ok (member 'itemmatch mode) ;; itemmatch blocks on not ok
+                               ))
+                     ;;(BB> "cond4")
+		     (set! item-waiton-met #t))
+
+                    ((and waiton-is-completed waiton-is-ok same-itempath)
+                     ;;(BB> "cond5")
+                     (set! item-waiton-met #t))
+                    (else
+                     #t
+                     ;;(BB> "condelse")
+                     ))))
+               waiton-tests)
 	      ;; both requirements, parent and item-waiton must be met to NOT add item to
 	      ;; prereq's not met list
-	      (if (not (or parent-waiton-met item-waiton-met))
-		  (set! result (append (if (null? tests) (list waitontest-name) tests) result))) ;; appends the string if the full record is not available
+               ;; (BB>
+               ;;  "\n* waiton-tests           "waiton-tests
+               ;;  "\n* parent-waiton-met      "parent-waiton-met
+               ;;  "\n* item-waiton-met        "item-waiton-met
+               ;;  "\n* ever-seen              "ever-seen
+               ;;  "\n* ref-test-itemized-mode "ref-test-itemized-mode
+               ;;  "\n* unmet-prereq-items     "unmet-prereq-items
+               ;;  "\n* result (pre)           "result
+               ;;  "\n* ever-seen              "ever-seen
+               ;;  "\n")
+
+              (cond
+               ((and ref-test-itemized-mode ref-test-is-item (not (null? unmet-prereq-items)))
+                (set! result (append unmet-prereq-items result)))
+               ((not (or parent-waiton-met item-waiton-met))
+                (set! result (append (if (null? waiton-tests) (list waitontest-name) waiton-tests) result))) ;; appends the string if the full record is not available
 	      ;; if the test is not found then clearly the waiton is not met...
 	      ;; (if (not ever-seen)(set! result (cons waitontest-name result)))))
-	      (if (not ever-seen)
-		  (set! result (append (if (null? tests)(list waitontest-name) tests) result)))))
+               ((not ever-seen)
+                (set! result (append (if (null? waiton-tests)(list waitontest-name) waiton-tests) result))))))
 	  waitons)
 	 (delete-duplicates result)))))
 
