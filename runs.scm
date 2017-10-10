@@ -194,7 +194,8 @@
   (thread-sleep! (cond
         	  ((> (runs:dat-can-run-more-tests-count runsdat) 20)
 		   (if (runs:lownoise "waiting on tasks" 60)(debug:print-info 2 *default-log-port* "waiting for tasks to complete, sleeping briefly ..."))
-		   2);; obviously haven't had any work to do for a while
+                   (configf:lookup-number *configdat* "setup" "inter-test-delay" default: 2) ;; was 2
+		   );; obviously haven't had any work to do for a while
         	  (else 0)))
   (let* ((num-running             (rmt:get-count-tests-running run-id))
 	 (num-running-in-jobgroup (rmt:get-count-tests-running-in-jobgroup run-id jobgroup))
@@ -675,7 +676,7 @@
 
 
          )
-    (debug:print-info 1 *default-log-port* "START OF INNER COND #2 "
+    (debug:print-info 2 *default-log-port* "START OF INNER COND #2 "
 		      "\n can-run-more:    " can-run-more
 		      "\n testname:        " hed
 		      "\n prereqs-not-met: " (runs:pretty-string prereqs-not-met)
