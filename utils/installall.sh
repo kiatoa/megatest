@@ -70,90 +70,11 @@ Ubuntu-16.04-i686-std)
         CHICKEN_BASEVER=4.12.0
 	;;
 SUSE_LINUX_11-x86_64-std)
-  KTYPE=26g4 
+	KTYPE=26g4 
 	CDVER=5.10
-	IUPVER=3.17
+	IUPVER=3.19.1
 	IMVER=3.11
-  ;;
-CentOS_5.11-x86_64-std)
-  KTYPE=24g3 
-  CDVER=5.4.1
-  IUPVER=3.5
-  IMVER=3.6.3
-  ;; 
-esac
-
-echo SYSTEM_TYPE=$SYSTEM_TYPE
-echo KTYPE=$KTYPE			  
-echo CDVER=$CDVER
-echo IUPVER=$IUPVER
-echo IMVER=$IMVER	
-echo CHICKEN_VERSION=$CHICKEN_VERSION
-echo CHICKEN_BASEVER=$CHICKEN_BASEVER
-
-# NOTES:
-#
-# Centos with security setup may need to do commands such as following as root:
-#
-# NB// fix the paths first
-#
-# for a in /localdisk/chicken/4.8.0/lib/*.so;do chcon -t textrel_shlib_t $a; done 
-
-echo ADDITIONAL_LIBPATH=$ADDITIONAL_LIBPATH
-echo  
-echo To use previous IUP libraries set USEOLDIUP to yes
-echo USEOLDIUP=$USEOLDIUP
-echo 
-echo Hit ^C now to do that
-
-# A nice way to run this script:
-#
-# script -c 'PREFIX=/tmp/delme ./installall.sh ' installall.log
-# logpro installall.logpro installall.html < installall.log
-# firefox installall.html
-
-sleep 5
-
-if [[ $proxy == "" ]]; then 
-  echo 'Please set the environment variable "proxy" to host.com:port (e.g. foo.com:1234) to use a proxy'
-  echo PROX=""
-else
-  export http_proxy=http://$proxy
-  export https_proxy=http://$proxy
-  export PROX="-proxy $proxy"
-fi
-
-if [[ $KTYPE == "" ]]; then
-  echo 'Using KTYPE=26'
-  export KTYPE=26g4
-else
-  echo Using KTYPE=$KTYPE
-fi
-
-# Put all the downloaded tar files in tgz
-mkdir -p tgz
-
-# http://code.call-cc.org/releases/4.8.0/chicken-4.8.0.5.tar.gz
-chicken_targz=chicken-${CHICKEN_VERSION}.tar.gz
-if ! [[ -e tgz/$chicken_targz ]]; then 
-    wget http://code.call-cc.org/releases/${CHICKEN_BASEVER}/${chicken_targz}
-    mv $chicken_targz tgz
-fi 
-
-BUILDHOME=$PWD
-DEPLOYTARG=$BUILDHOME/deploy
-
-if [[ $PREFIX == "" ]]; then
-   PREFIX=$PWD/inst
-fi
-
-export PATH=$PREFIX/bin:$PATH
-export LIBPATH=$PREFIX/lib:$PREFIX/lib64:$ADDITIONAL_LIBPATH
-export LD_LIBRARY_PATH=$LIBPATH
-export CHICKEN_INSTALL=$PREFIX/bin/chicken-install
-mkdir -p $PREFIX
-echo "export PATH=$PREFIX/bin:\$PATH" > $PREFIX/setup-chicken4x.sh
-echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:\$LD_LIBRARY_PATH" >> $PREFIX/setup-chicken4x.sh
+  >> $PREFIX/setup-chicken4x.sh
 echo "export CHICKEN_DOC_PAGER=cat" >> $PREFIX/setup-chicken4x.sh
 
 echo "setenv PATH $PREFIX/bin:\$PATH" > $PREFIX/setup-chicken4x.csh
