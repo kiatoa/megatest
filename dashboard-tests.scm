@@ -628,11 +628,12 @@
 									  item-path))
 				     " -v"))))
 	       (clean-run-execute  (lambda (x)
-				     (let ((cmd (conc "megatest -remove-runs -target " keystring " -runname " runname
+				     (let ((cmd (conc ;; "megatest -remove-runs -target " keystring " -runname " runname
+                                                 "megatest -set-state-status NOT_STARTED,n/a -target " keystring " -runname " runname
 						      " -testpatt " (conc testname "/" (if (equal? item-path "")
 						       					   "%"
 						       					   item-path))
-						      ";megatest -target " keystring " -runname " runname 
+                                                      ";megatest -target " keystring " -runname " runname 
 						      " -run -preclean -testpatt " (conc testname "/" (if (equal? item-path "")
 											   "%" 
 											   item-path))
