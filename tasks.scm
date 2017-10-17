@@ -870,7 +870,7 @@
   (let ((test-ht (hash-table-ref cached-info 'tests)))
     (for-each
      (lambda (test-id)
-       (print test-id)
+       ;(print test-id)
        (let* ((test-info    (rmt:get-test-info-by-id #f test-id))
 	      (run-id       (db:test-get-run_id    test-info)) ;; look these up in db_records.scm
 	      (test-id      (db:test-get-id        test-info))
