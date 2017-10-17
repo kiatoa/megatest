@@ -750,8 +750,10 @@
 	       (pass-count (db:get-value-by-header row header "pass_count"))
                (db-contour (db:get-value-by-header row header "contour"))
 	       (contour    (if (args:get-arg "-prepend-contour") 
-                                 (if db-contour 
-                                            db-contour
+                                 (if (and db-contour (not (equal? db-contour ""))) 
+                                           (begin 
+                                            (print "db-contour") 
+ 						db-contour)
 					    (args:get-arg "-contour"))))
 	       (keytarg    (if (or (args:get-arg "-prepend-contour") (args:get-arg "-prefix-target"))
 	       			(conc "MT_CONTOUR/MT_AREA/" (string-intersperse (rmt:get-keys) "/")) (string-intersperse (rmt:get-keys) "/"))) ;; e.g. version/iteration/platform
@@ -787,6 +789,7 @@
 
 
 (define (tasks:sync-test-steps dbh cached-info test-step-ids)
+  (print "Sync Steps " test-step-ids )
   (let ((test-ht (hash-table-ref cached-info 'tests))
         (step-ht (hash-table-ref cached-info 'steps)))
     (for-each
@@ -810,10 +813,10 @@
            (begin 
                 (if  pgdb-step-id
                    (begin
-                    (print "Updating existing test-step with test-id: " test-id " and step-id " step-id)
+                    (print "Updating existing test-step with test-id: " test-id " and step-id " step-id " pgdb test id: " pgdb-test-id )
                     (pgdb:update-test-step dbh pgdb-step-id pgdb-test-id stepname state status event_time comment logfile))
                     (begin
- 		      (print "Inserting test-step with test-id: " test-id " and step-id " step-id)
+ 		      (print "Inserting test-step with test-id: " test-id " and step-id " step-id  " pgdb test id: " pgdb-test-id)
                       (pgdb:insert-test-step dbh pgdb-test-id stepname state status event_time comment logfile )
                       (set! pgdb-step-id  (pgdb:get-test-step-id dbh pgdb-test-id stepname state))))
                 (hash-table-set! step-ht step-id pgdb-step-id ))
@@ -848,10 +851,10 @@
            (begin 
                 (if  pgdb-data-id
                    (begin
-                    (print "Updating existing test-data with test-id: " test-id " and data-id " data-id)
+                    (print "Updating existing test-data with test-id: " test-id " and data-id " data-id " pgdb test id: " pgdb-test-id)
                     (pgdb:update-test-data dbh pgdb-data-id pgdb-test-id  category variable value expected tol units comment status type))
                     (begin
- 		      (print "Inserting test-data with test-id: " test-id " and data-id " data-id)
+ 		      (print "Inserting test-data with test-id: " test-id " and data-id " data-id " pgdb test id: " pgdb-test-id)
                       (pgdb:insert-test-data dbh pgdb-test-id category variable value expected tol units comment status type )
                       (set! pgdb-data-id  (pgdb:get-test-data-id dbh pgdb-test-id  category variable))))
                 (hash-table-set! data-ht data-id pgdb-data-id ))
@@ -899,10 +902,10 @@
            (begin
 	   (if pgdb-test-id ;; have a record
 	     (begin ;; let ((key-name (conc run-id "/" test-name "/" item-path)))
-	       (print "Updating existing test with run-id: " run-id " and test-id: " test-id)
+	       (print "Updating existing test with run-id: " run-id " and test-id: " test-id " pgdb run id: " pgdb-run-id)
 	       (pgdb:update-test dbh pgdb-test-id pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived))
 	     (begin 
-                 (print "Inserting test with run-id: " run-id " and test-id: " test-id)
+                 (print "Inserting test with run-id: " run-id " and test-id: " test-id  " pgdb run id: " pgdb-run-id)
                 (pgdb:insert-test dbh pgdb-run-id test-name item-path state status host cpuload diskfree uname run-dir log-file run-duration comment event-time archived)
                 (set! pgdb-test-id (pgdb:get-test-id dbh pgdb-run-id test-name item-path))))
                (hash-table-set! test-ht test-id pgdb-test-id))
