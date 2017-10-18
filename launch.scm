@@ -458,7 +458,43 @@
                                                    (file-execute-access? fulln))
                                               fulln
                                               runscript))))) ;; assume it is on the path
-	       ) ;; (rollup-status 0)
+               (check-work-area           (lambda ()
+                                            ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
+                                            (let loop ((count 0))
+                                              (if (or (common:directory-exists? work-area)
+                                                      (> count 10))
+                                                  (change-directory work-area)
+                                                  (begin
+                                                    (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " work-area " not found")
+                                                    (thread-sleep! 10)
+                                                    (loop (+ count 1)))))
+
+                                            (if (not (string=?  (common:real-path work-area)(common:real-path (current-directory))))
+                                                (begin
+                                                  (debug:print 0 *default-log-port*
+                                                               "INFO: we are expecting to be in directory " work-area "\n"
+                                                               "     but we are actually in the directory " (current-directory) "\n"
+                                                               "     doing another change dir.")
+                                                  (change-directory work-area)))
+                                            
+                                            ;; spot check that the files in testpath are available. Too often NFS delays cause problems here.
+                                            (let ((files      (glob (conc testpath "/*")))
+                                                  (bad-files '()))
+                                              (for-each
+                                               (lambda (fullname)
+                                                 (let* ((fname (pathname-strip-directory fullname))
+                                                        (targn (conc work-area "/" fname)))
+                                                   (if (not (file-exists? targn))
+                                                       (set! bad-files (cons fname bad-files)))))
+                                               files)
+                                              (if (not (null? bad-files))
+                                                  (begin
+                                                    (debug:print 0 *default-log-port* "INFO: test data from " testpath " not copied properly or filesystem problems causing data to not be found. Re-running the copy command.")
+                                                    (debug:print 0 *default-log-port* "INFO: missing files from " work-area ": " (string-intersperse bad-files ", "))
+                                                    (launch:test-copy testpath work-area))))
+                                            ;; one more time, change to the work-area directory
+                                            (change-directory work-area)))
+	       ) ;; let*
 
 	  (if contour (setenv "MT_CONTOUR" contour))
 	  
@@ -467,94 +503,11 @@
 	  (setenv "MT_TESTSUITENAME" areaname)
 	  (setenv "MT_RUN_AREA_HOME" top-path)
 	  (set! *toppath* top-path)
+          (change-directory *toppath*) ;; temporarily switch to the run area home
 	  (setenv "MT_TEST_RUN_DIR"  work-area)
 
-	;;    ;; On NFS it can be slow and unreliable to get needed startup information.
-	;;    ;;  i. Check if we are on the homehost, if so, proceed
-	;;    ;; ii. Check if host and port passed in via CMDINFO are valid and if
-	;;    ;;     possible use them.
-	;;    (let ((bestadrs (server:get-best-guess-address (get-host-name)))
-	;;    	(needcare #f))
-	;;      (if (equal? homehost bestadrs) ;; we are likely on the homehost
-	;;    	(debug:print-info 0 *default-log-port* "test " test-name " appears to be running on the homehost " homehost)
-	;;    	(let ((host-port (if serverurl (string-split serverurl ":") #f)))
-	;;    	  (if (not *runremote*)(set! *runremote* (make-remote))) ;; init *runremote*
-	;;    	  (if (string? homehost)
-	;;    	      (if (and host-port
-	;;    		       (> (length host-port) 1))
-	;;    		  (let* ((host      (car host-port))
-        ;;                           (port      (cadr host-port))
-        ;;                           (start-res (http-transport:client-connect host port))
-        ;;                           (ping-res  (rmt:login-no-auto-client-setup start-res)))
-	;;    		    (if (and start-res
-	;;    			     ping-res)
-	;;    			;; (begin ;; let ((url  (http-transport:server-dat-make-url start-res)))
-	;;    			(begin
-	;;    			  (remote-conndat-set! *runremote* start-res)
-	;;    			  ;; (remote-server-url-set! *runremote* url)
-	;;    			  ;; (if (server:ping url)
-	;;    			  (debug:print-info 0 *default-log-port* "connected to " host ":" port " using CMDINFO data."))
-	;;    			(begin
-	;;    			  (debug:print-info 0 *default-log-port* "have CMDINFO data but failed to connect to " host ":" port)
-	;;    			  (set! *runremote* #f))
-	;;    			  ;; (remote-conndat-set! *runremote* #f))
-	;;    			))
-	;;    		  (begin
-	;;    		    (set! *runremote* #f)
-	;;    		    (debug:print-info 0 *default-log-port* (if host-port
-	;;    							       (conc "received invalid host-port information " host-port)
-	;;    							       "no host-port information received"))
-	;;    		    ;; potential for bad situation if simultaneous starting of hundreds of jobs on servers, set needcare.
-	;;    		    (set! needcare #t)))
-	;;    	      (begin
-	;;    		(set! *runremote* #f)
-	;;    		(debug:print-info 0 *default-log-port* "received no homehost information. Please report this to support as it should not happen.")
-	;;    		(set! needcare #t)))))
-	;;      (if needcare  ;; due to very slow NFS we will do a brute force mkdir to ensure that the directory inode it truly available on this host
-	;;    	(let ((logdir (conc top-path "/logs"))) ;; we'll try to create this directory
-	;;    	  (handle-exceptions
-	;;    	      exn
-	;;    	      (debug:print 0 *default-log-port* "Failed to create directory " logdir " expect problems, message: " ((condition-property-accessor 'exn 'message) exn))
-	;;    	    (create-directory logdir #t)))))
-	;;    	  
-	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
-	  (let loop ((count 0))
-	    (if (or (common:directory-exists? work-area)
-		    (> count 10))
-		(change-directory work-area)
-		(begin
-		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " work-area " not found")
-		  (thread-sleep! 10)
-		  (loop (+ count 1)))))
-
-          (if (not (string=?  (common:real-path work-area)(common:real-path (current-directory))))
-              (begin
-                (debug:print 0 *default-log-port*
-                             "INFO: we are expecting to be in directory " work-area "\n"
-                             "     but we are actually in the directory " (current-directory) "\n"
-                             "     doing another change dir.")
-                (change-directory work-area)))
+	  (launch:setup) ;; should be properly in the run area home now
           
-	  ;; spot check that the files in testpath are available. Too often NFS delays cause problems here.
-	  (let ((files      (glob (conc testpath "/*")))
-		(bad-files '()))
-	    (for-each
-	     (lambda (fullname)
-	       (let* ((fname (pathname-strip-directory fullname))
-                      (targn (conc work-area "/" fname)))
-		 (if (not (file-exists? targn))
-		     (set! bad-files (cons fname bad-files)))))
-	     files)
-	    (if (not (null? bad-files))
-                (begin
-                  (debug:print 0 *default-log-port* "INFO: test data from " testpath " not copied properly or filesystem problems causing data to not be found. Re-running the copy command.")
-                  (debug:print 0 *default-log-port* "INFO: missing files from " work-area ": " (string-intersperse bad-files ", "))
-                  (launch:test-copy testpath work-area))))
-
-          ;; one more time, change to the work-area directory
-          (change-directory work-area)
-          
-	  (launch:setup) ;; should be properly in the top-path now
 	  (set! tconfigreg (tests:get-all))
 	  (let ((sighand (lambda (signum)
 			   ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
@@ -619,6 +572,10 @@
 		;; (sqlite3:finalize! db)
 		;; (sqlite3:finalize! tdb)
 		(exit 1)))
+          ;; validate that the test run area is available
+          (check-work-area)
+          
+          ;; still need to go back to run area home for next couple steps
 	  (change-directory *toppath*) 
 
 	  ;; NOTE: Current order is to process runconfigs *before* setting the MT_ vars. This 
@@ -651,6 +608,9 @@
 		  (debug:print 0 *default-log-port* "INFO: Not starting job yet - directory " work-area " not found")
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
+
+          ;; now we can switch to the work-area?
+          (change-directory work-area)
           ;;(bb-check-path msg: "launch:execute post block 1.5")
 	  ;; (change-directory work-area) 
 	  (set! keyvals    (keys:target->keyval keys target))
