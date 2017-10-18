@@ -179,34 +179,47 @@
 		   (state         (if newstate  newstate  (db:test-get-state  test-dat)))
 		   (status        (if newstatus newstatus (db:test-get-status test-dat))))
 	      ;; (mutex-lock! *triggers-mutex*)
-	      (if (and test-name
-		       test-rundir)   ;; #f means no dir set yet
-		       ;; (common:file-exists? test-rundir)
-		       ;; (directory? test-rundir))
-		  (call-with-environment-variables
-		   (list (cons "MT_TEST_NAME"    (or test-name "no such test"))
-			 (cons "MT_TEST_RUN_DIR" (or test-rundir "no test directory yet"))
-			 (cons "MT_ITEMPATH"     (or item-path "")))
-		   (lambda ()
-		     (if (directory-exists? test-rundir)
-			 (push-directory test-rundir)
-			 (push-directory *toppath*))
-		     (set! tconfig (mt:lazy-read-test-config test-name))
-		     (for-each (lambda (trigger)
-				 (let* ((munged-trigger (string-translate trigger "/ " "--"))
+              (handle-exceptions
+               exn
+               (begin
+                 (debug:print-error 0 *default-log-port* " Exception in mt:process-triggers for run-id="run-id" test-id="test-id" newstate="newstate" newstatus="newstatus
+                                    "\n   error: " ((condition-property-accessor 'exn 'message) exn)
+                                    "\n   test-rundir="test-rundir
+                                    "\n   test-name="test-name
+                                    "\n   item-path="item-path
+                                    "\n   state="state
+                                    "\n   status="status
+                                    "\n")
+                 (print-call-chain (current-error-port))
+                 #f)
+               (if (and test-name
+                        test-rundir)   ;; #f means no dir set yet
+                   ;; (common:file-exists? test-rundir)
+                   ;; (directory? test-rundir))
+                   (call-with-environment-variables
+                    (list (cons "MT_TEST_NAME"    (or test-name "no such test"))
+                          (cons "MT_TEST_RUN_DIR" (or test-rundir "no test directory yet"))
+                          (cons "MT_ITEMPATH"     (or item-path "")))
+                    (lambda ()
+                      (if (directory-exists? test-rundir)
+                          (push-directory test-rundir)
+                          (push-directory *toppath*))
+                      (set! tconfig (mt:lazy-read-test-config test-name))
+                      (for-each (lambda (trigger)
+                                  (let* ((munged-trigger (string-translate trigger "/ " "--"))
 					(logname        (conc "last-trigger-" munged-trigger ".log")))
-				   ;; first any triggers from the testconfig
-				   (let ((cmd  (configf:lookup tconfig "triggers" trigger)))
-				     (if cmd (mt:run-trigger cmd test-id test-rundir trigger (conc "tconfig-" logname) test-name item-path event-time state status)))
-				   ;; next any triggers from megatest.config
-				   (let ((cmd  (configf:lookup *configdat* "triggers" trigger)))
-				     (if cmd (mt:run-trigger cmd test-id test-rundir trigger (conc "mtconfig-" logname) test-name item-path event-time state status)))))
-			       (list
-				(conc state "/" status)
-				(conc state "/")
-				(conc "/" status)))
+                                    ;; first any triggers from the testconfig
+                                    (let ((cmd  (configf:lookup tconfig "triggers" trigger)))
+                                      (if cmd (mt:run-trigger cmd test-id test-rundir trigger (conc "tconfig-" logname) test-name item-path event-time state status)))
+                                    ;; next any triggers from megatest.config
+                                    (let ((cmd  (configf:lookup *configdat* "triggers" trigger)))
+                                      (if cmd (mt:run-trigger cmd test-id test-rundir trigger (conc "mtconfig-" logname) test-name item-path event-time state status)))))
+                                (list
+                                 (conc state "/" status)
+                                 (conc state "/")
+                                 (conc "/" status)))
 		     (pop-directory))
-		   ))
+                    )))
 	      ;; (mutex-unlock! *triggers-mutex*)
 	      )))))
 

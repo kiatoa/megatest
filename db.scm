@@ -223,6 +223,7 @@
              (sqlite3:execute db "PRAGMA synchronous = 0;")
              (if (not file-exists)
                  (begin
+                   
                    (if (and (configf:lookup *configdat* "setup" "use-wal")
                             (string-match "^/tmp/.*" fname)) ;; this is a file in /tmp
                        (sqlite3:execute db "PRAGMA journal_mode=WAL;")
@@ -336,7 +337,7 @@
 			     (> modtimedelta 10))) ;; if db in tmp is over ten seconds older than the file in MTRA then do a sync back
 		    do-sync)
 	      (begin
-		(debug:print 4 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data \n    from " (db:dbdat-get-path mtdb) " mod time delta: " modtimedelta)
+		(debug:print 1 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data \n    from " (db:dbdat-get-path mtdb) " mod time delta: " modtimedelta)
 		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb)
                 (debug:print-info 13 *default-log-port* "db:sync-all-tables-list done.")
                 )
