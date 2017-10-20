@@ -2333,17 +2333,21 @@
                          (restore-thunk
                           (cond
                            ((not current-val) (lambda () (unsetenv env-var)))
+                           ((not (string? new-val)) #f)
                            ((eq? current-val new-val) #f)
                            (else 
                             (lambda () (setenv env-var current-val))))))
-                    (when (not (string? new-val))
-                        (debug:print 0 *default-log-port* " PROBLEM: not a string: "new-val"\n from env-alist:\n"delta-env-alist)
-                        (pp delta-env-alist)
-                        (exit 1))
+                    ;;(when (not (string? new-val))
+                    ;;    (debug:print 0 *default-log-port* " PROBLEM: not a string: "new-val"\n from env-alist:\n"delta-env-alist)
+                    ;;    (pp delta-env-alist)
+                    ;;    (exit 1))
                         
-                    (if (not new-val)  ;; modify env here
-                        (unsetenv env-var)
-                        (setenv env-var new-val))
+                    
+                    (cond
+                     ((not new-val)  ;; modify env here
+                      (unsetenv env-var))
+                     ((string? new-val)
+                      (setenv env-var new-val)))
                     restore-thunk))
                 delta-env-alist))))
     (let ((rv (thunk)))
