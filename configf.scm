@@ -243,9 +243,9 @@
 ;; post-section-procs alist of section-pattern => proc, where: (proc section-name next-section-name ht curr-path)
 ;; apply-wildcards: #t/#f - apply vars from targets with % wildcards to all matching sections
 ;;
-(define (read-config path ht allow-system #!key (environ-patt #f)            (curr-section #f)   (return-env-delta-accum #f)
+(define (read-config path ht allow-system #!key (environ-patt #f)            (curr-section #f)   
 		     (sections #f)              (settings (make-hash-table)) (keep-filenames #f)
-		     (post-section-procs '())   (apply-wildcards #t) (env-delta '()))
+		     (post-section-procs '())   (apply-wildcards #t) )
   (debug:print 9 *default-log-port* "START: " path)
   (if (and (not (port? path))
 	   (not (common:file-exists? path))) ;; for case where we are handed a port
@@ -270,8 +270,7 @@
 	(let loop ((inl               (configf:read-line inp res (calc-allow-system allow-system curr-section sections) settings)) ;; (read-line inp))
 		   (curr-section-name (if curr-section curr-section "default"))
 		   (var-flag #f);; turn on for key-var-pr and cont-ln-rx, turn off elsewhere
-		   (lead     #f)
-                   (env-delta-accum env-delta))
+		   (lead     #f))
 	  (debug:print-info 8 *default-log-port* "curr-section-name: " curr-section-name " var-flag: " var-flag "\n   inl: \"" inl "\"")
 	  (if (eof-object? inl) 
 	      (begin
@@ -286,22 +285,20 @@
 			   (hash-table-delete! res section))) ;; we are using "" as a dumping ground and must remove it before returning the ht
 		     (hash-table-keys res)))
 		(debug:print 9 *default-log-port* "END: " path)
-                (if return-env-delta-accum
-                    env-delta-accum
-                    res)
+                res
                 ) ;; retval
 	      (regex-case 
 	       inl 
 	       (configf:comment-rx _                  (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings)
-                                                            curr-section-name #f #f env-delta-accum))
+                                                            curr-section-name #f #f))
                
 	       (configf:blank-l-rx _                  (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings)
-                                                            curr-section-name #f #f env-delta-accum))
+                                                            curr-section-name #f #f))
 	       (configf:settings   ( x setting val  )
                                    (begin
                                      (hash-table-set! settings setting val)
                                      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings)
-                                           curr-section-name #f #f env-delta-accum)))
+                                           curr-section-name #f #f)))
                
 	       (configf:include-rx ( x include-file )
                                    (let* ((curr-conf-dir (pathname-directory path))
@@ -318,14 +315,14 @@
                                            (debug:print 9 *default-log-port* "Including: " full-conf)
                                            (read-config full-conf res allow-system environ-patt: environ-patt
                                                         curr-section: curr-section-name sections: sections settings: settings
-                                                        keep-filenames: keep-filenames env-delta: env-delta-accum) ; BB: todo: how do we get update env-delta-accum from updates needed from nested read-config??
+                                                        keep-filenames: keep-filenames)
                                            ;; (pop-directory)
-                                           (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f env-delta-accum))
+                                           (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
                                          (begin
                                            (debug:print '(2 9) #f "INFO: include file " include-file " not found (called from " path ")")
                                            (debug:print 2 *default-log-port* "        " full-conf)
 							      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings)
-                                                                    curr-section-name #f #f env-delta-accum)))))
+                                                                    curr-section-name #f #f)))))
 	       (configf:script-rx ( x include-script params);; handle-exceptions
                                   ;;    exn
                                   ;;    (begin
@@ -340,12 +337,12 @@
                                                  (open-input-pipe (conc include-script " " params))))))
                                         (debug:print '(2 9) *default-log-port* "Including from script output: " include-script)
                                         ;;  (print "We got here, calling read-config next. Port is: " new-inp-port)
-                                        (read-config new-inp-port res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections settings: settings keep-filenames: keep-filenames) ; BB: todo: how do we get update env-delta-accum from updates needed from nested read-config??
+                                        (read-config new-inp-port res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections settings: settings keep-filenames: keep-filenames)
                                         (close-input-port new-inp-port)
-                                        (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f env-delta-accum))
+                                        (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
                                       (begin
                                         (debug:print 0 *default-log-port* "Script not found or not exectutable: " include-script)
-                                        (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f env-delta-accum)))
+                                        (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f)))
                                   ) ;; )
 	       (configf:section-rx ( x section-name )
                                    (begin
@@ -367,7 +364,7 @@
                                            ;;	      (member section-name sections))
                                            ;;	  section-name "") ;; stick everything into "". NOPE: We need new strategy. Put stuff in correct sections and then delete all sections later.
                                            section-name
-                                           #f #f env-delta-accum)))
+                                           #f #f)))
 	       (configf:key-sys-pr ( x key cmd      )
                                    (if (calc-allow-system allow-system curr-section-name sections)
                                        (let ((alist    (hash-table-ref/default res curr-section-name '()))
@@ -397,11 +394,11 @@
                                                                                    ((return-string) cmd)
                                                                                    (else (val-proc)))
                                                                                  metadata: metapath))
-                                         (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f env-delta-accum))
+                                         (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
                                        (loop (configf:read-line inp res
                                                                 (calc-allow-system allow-system curr-section-name sections)
                                                                 settings)
-                                             curr-section-name #f #f env-delta-accum)))
+                                             curr-section-name #f #f)))
                
 	       (configf:key-no-val ( x key val)
                                    (let* ((alist   (hash-table-ref/default res curr-section-name '()))
@@ -413,7 +410,7 @@
                                      (loop (configf:read-line inp res
                                                               (calc-allow-system allow-system curr-section-name sections)
                                                               settings)
-                                           curr-section-name key #f (cons (cons key fval) env-delta-accum))))
+                                           curr-section-name key #f)))
                
 	       (configf:key-val-pr ( x key unk1 val unk2 )
                                    (let* ((alist   (hash-table-ref/default res curr-section-name '()))
@@ -428,8 +425,7 @@
                                                       (config:assoc-safe-add alist key realval metadata: metapath))
                                      (loop (configf:read-line inp res
                                                               (calc-allow-system allow-system curr-section-name sections) settings)
-                                           curr-section-name key #f
-                                           (cons (cons envar realval) env-delta-accum))))
+                                           curr-section-name key #f)))
 	       ;; if a continued line
 	       (configf:cont-ln-rx ( x whsp val     )
                                    (let ((alist (hash-table-ref/default res curr-section-name '())))
@@ -444,11 +440,11 @@
                                            ;; (print "val: " val "\nnewval: \"" newval "\"\nvarflag: " var-flag)
                                            (hash-table-set! res curr-section-name 
                                                             (config:assoc-safe-add alist var-flag newval metadata: metapath))
-                                           (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name var-flag (if lead lead whsp) env-delta-accum))
-                                         (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f env-delta-accum))))
+                                           (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name var-flag (if lead lead whsp)))
+                                         (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))))
 	       (else (debug:print-error 0 *default-log-port* "problem parsing " path ",\n   \"" inl "\"")
 		     (set! var-flag #f)
-		     (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f env-delta-accum))))
+		     (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))))
           ) ;; end loop
         )))
   
