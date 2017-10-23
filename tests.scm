@@ -148,7 +148,7 @@
 ;; returns waitons waitors tconfigdat
 ;;
 (define (tests:get-waitons test-name all-tests-registry)
-   (let* ((config  (tests:get-testconfig test-name #f all-tests-registry 'return-procs)))
+   (let* ((config  (tests:get-testconfig test-name #f all-tests-registry 'return-procs))) ;; assuming no problems with immediate evaluation, this could be simplified ('return-procs -> #t)
      (let ((instr (if config 
 		      (config-lookup config "requirements" "waiton")
 		      (begin ;; No config means this is a non-existant test

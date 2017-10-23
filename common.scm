@@ -2315,3 +2315,41 @@
 	(read-config home-cfgfile view-cfgdat #t))
     view-cfgdat))
 
+;; accept an alist or hash table containing envvar/env value pairs (value of #f causes unset) 
+;;   execute thunk in context of environment modified as per this list
+;;   restore env to prior state then return value of eval'd thunk.
+;;   ** this is not thread safe **
+(define (common:with-env-vars delta-env-alist-or-hash-table thunk)
+  (let* ((delta-env-alist (if (hash-table? delta-env-alist-or-hash-table)
+                              (hash-table->alist delta-env-alist-or-hash-table)
+                              delta-env-alist-or-hash-table))
+         (restore-thunks
+          (filter
+           identity
+           (map (lambda (env-pair)
+                  (let* ((env-var     (car env-pair))
+                         (new-val     (cadr env-pair))
+                         (current-val (get-environment-variable env-var))
+                         (restore-thunk
+                          (cond
+                           ((not current-val) (lambda () (unsetenv env-var)))
+                           ((not (string? new-val)) #f)
+                           ((eq? current-val new-val) #f)
+                           (else 
+                            (lambda () (setenv env-var current-val))))))
+                    ;;(when (not (string? new-val))
+                    ;;    (debug:print 0 *default-log-port* " PROBLEM: not a string: "new-val"\n from env-alist:\n"delta-env-alist)
+                    ;;    (pp delta-env-alist)
+                    ;;    (exit 1))
+                        
+                    
+                    (cond
+                     ((not new-val)  ;; modify env here
+                      (unsetenv env-var))
+                     ((string? new-val)
+                      (setenv env-var new-val)))
+                    restore-thunk))
+                delta-env-alist))))
+    (let ((rv (thunk)))
+      (for-each (lambda (x) (x)) restore-thunks) ;; restore env to original state
+      rv)))
