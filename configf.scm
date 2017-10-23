@@ -182,15 +182,16 @@
 		(string-substitute "\\s+$" "" res)
 		res))))))
 
-(define (configf:cfgdat->env-alist section cfgdat-ht)
+(define (configf:cfgdat->env-alist section cfgdat-ht allow-system)
   (filter
    (lambda (pair)
      (let* ((var (car pair))
             (val (cdr pair)))
        (cons var
              (cond
-              ((procedure? val)
+              ((and allow-system (procedure? val)) ;; if we decided to use something other than #t or #f for allow-system ('return-procs or 'return-string) , this may become problematic
                (val))
+              ((procedure? val) #f)
               ((string? val) val)
               (else "#f")))))
    (append
@@ -237,6 +238,11 @@
 
 ;; read a config file, returns hash table of alists
 ;; adds to ht if given (must be #f otherwise)
+;; allow-system:
+;;    #f - do not evaluate [system
+;;    #t - immediately evaluate [system and store result as string
+;;    'return-procs -- return a proc taking ht as an argument that may be evaulated at some future time
+;;    'return-string -- return a string representing a proc taking ht as an argument that may be evaulated at some future time
 ;; envion-patt is a regex spec that identifies sections that will be eval'd
 ;; in the environment on the fly
 ;; sections: #f => get all, else list of sections to gather
@@ -329,7 +335,8 @@
                                   ;;      (debug:print '(0 2 9) #f "INFO: include from script " include-script " failed.")
                                   ;;      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
                                   (if (and (common:file-exists? include-script)(file-execute-access? include-script))
-                                      (let* ((env-delta  (configf:cfgdat->env-alist curr-section-name res))
+                                      (let* ((local-allow-system  (calc-allow-system allow-system curr-section-name sections))
+                                             (env-delta  (configf:cfgdat->env-alist curr-section-name res local-allow-system))
                                              (new-inp-port
                                               (common:with-env-vars
                                                env-delta
@@ -370,7 +377,8 @@
                                        (let ((alist    (hash-table-ref/default res curr-section-name '()))
                                              (val-proc (lambda ()
                                                          (let* ((start-time (current-seconds))
-                                                                (env-delta  (configf:cfgdat->env-alist curr-section-name res))
+                                                                (local-allow-system  (calc-allow-system allow-system curr-section-name sections))
+                                                                (env-delta  (configf:cfgdat->env-alist curr-section-name res local-allow-system))
                                                                 (cmdres     (process:cmd-run->list cmd delta-env-alist-or-hash-table: env-delta)) ;; BB: here is where [system is exec'd.  needs to have env from other vars!
                                                                 (delta      (- (current-seconds) start-time))
                                                                 (status     (cadr cmdres))
