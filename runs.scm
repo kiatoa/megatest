@@ -308,6 +308,14 @@
 	      (system (conc run-post-hook " >> " actual-logf " 2>&1"))
 	      (debug:print-info 0 *default-log-port* "post-hook \"" run-post-hook "\" took " (- (current-seconds) start-time) " seconds to run."))))))
 
+
+(define (runs:make-sure-all-waitors-upon-are-in-testpatts testpatts waitors-upon)
+
+  (print "NOT IMPLEMENTED")
+  (exit 1)
+         
+  #f)
+
 ;;  test-names: Comma separated patterns same as test-patts but used in selection 
 ;;              of tests to run. The item portions are not respected.
 ;;              FIXME: error out if /patt specified
@@ -509,7 +517,7 @@
             (for-each 
 	     (lambda (waiton)
 	       (if (and waiton (not (member waiton test-names)))
-		   (let* ((waitors-in-testpatt (make-sure-all-waitors-upon-are-in-testpatts testpatts(hash-table-ref/default waitors-upon waiton '())))
+		   (let* ((waitors-in-testpatt (runs:make-sure-all-waitors-upon-are-in-testpatts testpatts (hash-table-ref/default waitors-upon waiton '())))
                           (waiton-record   (hash-table-ref/default test-records waiton #f))
 			  (waiton-tconfig  (if waiton-record (vector-ref waiton-record 1) #f))
 			  (waiton-itemized (and waiton-tconfig
