@@ -308,13 +308,15 @@
 	      (system (conc run-post-hook " >> " actual-logf " 2>&1"))
 	      (debug:print-info 0 *default-log-port* "post-hook \"" run-post-hook "\" took " (- (current-seconds) start-time) " seconds to run."))))))
 
-
-(define (runs:testpatts-mention-waitors-upon? testpatts waitors-upon)
-
-  (print "NOT IMPLEMENTED")
-  (exit 1)
-         
-  #f)
+;; return #t when all items in waitors-upon list are represented in test-patt, #f otherwise.
+(define (runs:testpatts-mention-waitors-upon? test-patt waitors-upon)
+  (let* ((tests-in-testpatt
+          (map
+           (lambda (test-patt-item)
+             (car (string-split test-patt-item "/")))
+           (string-split test-patt ",")))
+         (waitors-upon-not-mentioned (lset-difference equal? waitors-upon tests-in-testpatt)))
+    (null? waitors-upon-not-mentioned)))
 
 ;;  test-names: Comma separated patterns same as test-patts but used in selection 
 ;;              of tests to run. The item portions are not respected.
@@ -480,6 +482,7 @@
     (if (not (null? test-names))
 	(let loop ((hed (car test-names))   ;; NOTE: This is the main loop that iterates over the test-names
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
+          (debug:print-info 4 *default-log-port* "\n\ntestpatt elaboration loop => hed="hed " tal="tal" test-patts="test-patts" test-names="test-names)
 	  (change-directory *toppath*) ;; PLEASE OPTIMIZE ME!!! I think this should be a no-op but there are several places where change-directories could be happening.
 	  (setenv "MT_TEST_NAME" hed) ;; 
 	  (let*-values (((waitons             waitors   config)
@@ -510,14 +513,16 @@
             (for-each
              (lambda (waiton)
                (let* ((current-waitors-upon (hash-table-ref/default waitors-upon waiton '())))
-                 (if (not (member hed current-waitors-upon))
-                     (hash-table-set! waitors-upon waiton (cons hed current-waitors-upon)))))
+                 (debug:print-info 8 *default-log-port* " current-waiters-upon["waiton"] is "current-waitors-upon )
+                 (when (not (member hed current-waitors-upon))
+                   (debug:print-info 8 *default-log-port* " current-waiters-upon["waiton"] << "hed  )
+                   (hash-table-set! waitors-upon waiton (cons hed current-waitors-upon)))))
              (if (list? waitons) waitons '()))
-
+            (debug:print-info 8 *default-log-port* " process waitons&waitors of "hed": "(delete-duplicates (append waitons waitors)))
             (for-each 
 	     (lambda (waiton)
 	       (if (and waiton (not (member waiton test-names)))
-		   (let* ((waitors-in-testpatt (runs:testpatts-mention-waitors-upon? testpatts (hash-table-ref/default waitors-upon waiton '())))
+		   (let* ((waitors-in-testpatt (runs:testpatts-mention-waitors-upon? test-patts (hash-table-ref/default waitors-upon waiton '())))
                           (waiton-record   (hash-table-ref/default test-records waiton #f))
 			  (waiton-tconfig  (if waiton-record (vector-ref waiton-record 1) #f))
 			  (waiton-itemized (and waiton-tconfig
@@ -538,21 +543,20 @@
 		     ;; back in to also be processed on second round
 		     ;;
 		     (if waiton-tconfig ;; BB: waiter should be in test-patts as well as the waiton have a tconfig.
-			 (begin
-			   (set! test-names (cons waiton test-names)) ;; need to process this one, only add once the waiton tconfig read
-			   (if waiton-itemized
-			       (if waitors-in-testpatt
-                                   (begin
-                                     (debug:print-info 0 *default-log-port* "New test patts: " new-test-patts ", prev test patts: " test-patts)
-                                     (set! required-tests (cons (conc waiton "/") required-tests))
-                                     (set! test-patts new-test-patts))
-                                   (begin
-                                     (debug:print-info 0 *default-log-port* "Waitor(s) not yet on testpatt for " waiton ", setting up to re-process it")
-                                     (set! tal (append (cons waiton tal)(list hed)))))
-                               (begin
-				 (debug:print-info 0 *default-log-port* "Adding non-itemized test " waiton " to required-tests")
-				 (set! required-tests (cons waiton required-tests))
-				 (set! test-patts new-test-patts))))
+                         (if waiton-itemized
+                             (if waitors-in-testpatt
+                                 (begin
+                                   (debug:print-info 0 *default-log-port* "New test patts: " new-test-patts ", prev test patts: " test-patts)
+                                   (set! test-names (cons waiton test-names)) ;; need to process this one, only add once the waiton tconfig read
+                                   (set! required-tests (cons (conc waiton "/") required-tests))
+                                   (set! test-patts new-test-patts))
+                                 (begin
+                                   (debug:print-info 0 *default-log-port* "Waitor(s) not yet on testpatt for " waiton ", setting up to re-process it")
+                                   (set! tal (append (cons waiton tal)(list hed)))))
+                             (begin
+                               (debug:print-info 0 *default-log-port* "Adding non-itemized test " waiton " to required-tests")
+                               (set! required-tests (cons waiton required-tests))
+                               (set! test-patts new-test-patts)))
 			 (begin
 			   (debug:print-info 0 *default-log-port* "No testconfig info yet for " waiton ", setting up to re-process it")
 			   (set! tal (append (cons waiton tal)(list hed))))) ;; (cons (conc waiton "/") required-tests))
@@ -565,6 +569,7 @@
 		     )))
 	     (delete-duplicates (append waitons waitors)))
 	    (let ((remtests (delete-duplicates (append waitons tal))))
+              (debug:print-info 8 *default-log-port* " remtests are "remtests)
 	      (if (not (null? remtests))
 		  (begin
 		    ;; (debug:print-info 0 *default-log-port* "Preprocessing continues for " (string-intersperse remtests ", "))
