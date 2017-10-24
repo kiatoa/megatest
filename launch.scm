@@ -580,6 +580,18 @@
 	  (setenv "MT_TEST_RUN_DIR"  work-area)
 
 	  (launch:setup) ;; should be properly in the run area home now
+
+	  (if contour (setenv "MT_CONTOUR" contour))
+	  
+	  ;; immediated set some key variables from CMDINFO data, yes, these will be set again below ...
+	  ;;
+	  (setenv "MT_TESTSUITENAME" areaname)
+	  (setenv "MT_RUN_AREA_HOME" top-path)
+	  (set! *toppath* top-path)
+          (change-directory *toppath*) ;; temporarily switch to the run area home
+	  (setenv "MT_TEST_RUN_DIR"  work-area)
+
+	  (launch:setup) ;; should be properly in the run area home now
           
 	  (set! tconfigreg (tests:get-all)) ;; mapping of testname => test source path
 	  (let ((sighand (lambda (signum)

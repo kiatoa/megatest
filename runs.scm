@@ -620,7 +620,7 @@
 
 (define (runs:queue-next-reg tal reg n regfull)
   (if regfull
-      (if (null? reg) '() (cdr reg))
+      (if (null? reg) '() (cdr reg)) ;; EXPLORE: reorder (cdr reg) such that looping is more efficient
       (if (null? tal) ;; if tal is null and reg not full then '() as reg contents moved to tal
 	  '()
 	  reg)))
@@ -1280,7 +1280,7 @@
     (set! max-retries (if (and max-retries (string->number max-retries))(string->number max-retries) 100))
 
     (let loop ((hed         (car sorted-test-names))
-	       (tal         (cdr sorted-test-names))
+	       (tal         (cdr sorted-test-names)) 
 	       (reg         '()) ;; registered, put these at the head of tal 
 	       (reruns      '()))
 
