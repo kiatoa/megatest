@@ -510,7 +510,8 @@
 
 ;; BBnote: *common:std-states* - dashboard filter control and test control state buttons defined here; used in set-fields-panel and dboard:make-controls
 (define *common:std-states*   ;; for toggle buttons in dashboard
-  '((0 "ARCHIVED")
+  '(
+    (0 "ARCHIVED")
     (1 "STUCK")
     (2 "KILLREQ")
     (3 "KILLED")

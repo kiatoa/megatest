@@ -3509,7 +3509,7 @@
                  ;; NB// Pass the db so it is part fo the transaction
                  (db:test-set-state-status db run-id test-id state status comment) ;; this call sets the item state/status
                  (if (not (equal? item-path "")) ;; only roll up IF incoming test is an item
-                     (let* ((state-status-counts  (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path)) ;; item-path is used to exclude current state/status of THIS test
+                     (let* ((state-status-counts  (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path state status)) ;; item-path is used to exclude current state/status of THIS test
                             (running              (length (filter (lambda (x)
                                                                     (member (dbr:counts-state x) *common:running-states*))
                                                                   state-status-counts)))
@@ -3522,11 +3522,11 @@
                             ;;                                 (not (equal? (dbr:counts-state x) "COMPLETED")))
                             ;;                               state-status-counts))
                             (all-curr-states      (common:special-sort  ;; worst -> best (sort of)
-                                                   (delete-duplicates
-                                                    (if (not (equal? state "DELETED"))
-                                                        (cons state (map dbr:counts-state state-status-counts))
-                                                        (map dbr:counts-state state-status-counts)))
-                                                   *common:std-states* >))
+                                                       (delete-duplicates
+                                                        (if (not (equal? state "DELETED"))
+                                                            (cons state (map dbr:counts-state state-status-counts))
+                                                            (map dbr:counts-state state-status-counts)))
+                                                       *common:std-states* >))
                             (all-curr-statuses    (common:special-sort  ;; worst -> best
                                                    (delete-duplicates
                                                     (if (not (equal? state "DELETED"))
@@ -3534,7 +3534,7 @@
                                                         (map dbr:counts-status state-status-counts)))
                                                    *common:std-statuses* >))
 			    (non-completes     (filter (lambda (x)
-							 (not (equal? x "COMPLETED")))
+							 (not (member x '("DELETED" "COMPLETED"))))
 						       all-curr-states))
 			    (num-non-completes (length non-completes))
                             
@@ -3558,26 +3558,67 @@
 							       (> num-non-completes 0)))
 						      "STARTED"
                                                       (car all-curr-statuses))))
+                       (debug:print-info 2 *default-log-port*
+                                         "\n--> probe db:set-state-status-and-roll-up-items: "
+                                         "\n--> state-status-counts: "(map dbr:counts->alist state-status-counts)
+                                         "\n--> running:             "running
+                                         "\n--> bad-not-started:     "bad-not-started
+                                         "\n--> non-non-completes:   "num-non-completes
+                                         "\n--> non-completes:       "non-completes
+                                         "\n--> all-curr-states:     "all-curr-states
+                                         "\n--> all-curr-statuses:     "all-curr-statuses
+                                         "\n--> newstate              "newstate
+                                         "\n--> newstatus            "newstatus
+                                         "\n\n")
+
                        ;; (print "bad-not-supported: " bad-not-support " all-curr-states: " all-curr-states " all-curr-statuses: " all-curr-states)
                        ;;      " newstate: " newstate " newstatus: " newstatus)
                        ;; NB// Pass the db so it is part of the transaction
                        (if tl-test-id
 			   (db:test-set-state-status db run-id tl-test-id newstate newstatus #f))))))))
+                           
          (mutex-unlock! *db-transaction-mutex*)
          (if (and test-id state status (equal? status "AUTO")) 
              (db:test-data-rollup dbstruct run-id test-id status))
          tr-res)))))
 ;; BBnote: db:get-all-state-status-counts-for-test returns dbr:counts object aggregating state and status of items of a given test, *not including rollup state/status*
-(define (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path)
-  (db:with-db
-   dbstruct #f #f
-   (lambda (db)
-     (sqlite3:map-row
-      (lambda (state status count)
-	(make-dbr:counts state: state status: status count: count))
-      db
-      "SELECT state,status,count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND item_path !=? GROUP BY state,status;"
-      run-id test-name item-path))))
+(define (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path item-state-in item-status-in)
+
+
+  (let* ((test-info   (db:get-test-info dbstruct run-id test-name item-path))
+         (item-state  (or item-state-in (db:test-get-state test-info))) 
+         (item-status (or item-status-in (db:test-get-status test-info)))
+         (other-items-count-recs (db:with-db
+                                  dbstruct #f #f
+                                  (lambda (db)
+                                    (sqlite3:map-row
+                                     (lambda (state status count)
+                                       (make-dbr:counts state: state status: status count: count))
+                                     db
+                                     ;; ignore current item because we have changed its value in the current transation so this select will see the old value.
+                                     "SELECT state,status,count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND item_path !=? GROUP BY state,status;"
+                                     run-id test-name item-path))))
+
+         ;; add current item to tally outside of sql query
+         (match-countrec-lambda (lambda (countrec) 
+                                  (and (equal? (dbr:counts-state  countrec) item-state)
+                                       (equal? (dbr:counts-status countrec) item-status))))
+
+         (already-have-count-rec-list
+          (filter match-countrec-lambda other-items-count-recs)) ;; will have either 0 or 1 count recs depending if another item shares this item's state/status
+         
+         (updated-count-rec    (if (null? already-have-count-rec-list)
+                                   (make-dbr:counts state: item-state status: item-status count: 1)
+                                   (let* ((our-count-rec (car already-have-count-rec-list))
+                                          (new-count (add1 (dbr:counts-count our-count-rec))))
+                                     (make-dbr:counts state: item-state status: item-status count: new-count))))
+
+         (nonmatch-countrec-lambda (lambda (countrec) (not (match-countrec-lambda countrec))))
+         
+         (unrelated-rec-list   
+          (filter nonmatch-countrec-lambda other-items-count-recs)))
+    
+    (cons updated-count-rec unrelated-rec-list)))
 
 ;; (define (db:get-all-item-states db run-id test-name)
 ;;   (sqlite3:map-row 

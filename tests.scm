@@ -219,11 +219,22 @@
 				    newpatt))
 				(filter (lambda (x)
 					  (eq? (substring-index (conc waiting-test "/") x) 0)) ;; is this patt pertinent to the waiting test
-					patts))))
-    (string-intersperse (delete-duplicates (append patts (if (null? patts-waiton)
-							     (list (conc waiton-test "/%")) ;; really shouldn't add the waiton forcefully like this
-							     patts-waiton)))
-			",")))
+					patts)))
+         (extended-test-patt   (append patts (if (null? patts-waiton)
+                                     (list (conc waiton-test "/%")) ;; really shouldn't add the waiton forcefully like this
+                                     patts-waiton)))
+         (extended-test-patt-with-toplevels
+          (fold (lambda (testpatt-item accum )
+                  (let ((my-match (string-match "^([^%\\/]+)\\/.+$" testpatt-item)))
+                    (cons testpatt-item
+                          (if my-match
+                              (cons
+                               (conc (cadr my-match) "/")
+                               accum)
+                              accum))))
+                '()
+                extended-test-patt)))
+    (string-intersperse (delete-duplicates extended-test-patt-with-toplevels) ",")))
 
 
   
