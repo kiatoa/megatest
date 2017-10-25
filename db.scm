@@ -3558,7 +3558,7 @@
 							       (> num-non-completes 0)))
 						      "STARTED"
                                                       (car all-curr-statuses))))
-                       (debug:print-info 0 *default-log-port*
+                       (debug:print-info 2 *default-log-port*
                                          "\n--> probe db:set-state-status-and-roll-up-items: "
                                          "\n--> state-status-counts: "(map dbr:counts->alist state-status-counts)
                                          "\n--> running:             "running
@@ -3582,11 +3582,12 @@
              (db:test-data-rollup dbstruct run-id test-id status))
          tr-res)))))
 ;; BBnote: db:get-all-state-status-counts-for-test returns dbr:counts object aggregating state and status of items of a given test, *not including rollup state/status*
-(define (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path-in item-state-in item-status)
+(define (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path item-state-in item-status-in)
 
 
-  (let* ((item-state  (if item-state-in item-state-in   (get-item-state-from-db ...))) ;; TODO
-         (item-status (if item-status-in item-status-in (get-item-status-from-db ...))) ;; TODO
+  (let* ((test-info   (db:get-test-info dbstruct run-id test-name item-path))
+         (item-state  (or item-state-in (db:test-get-state test-info))) 
+         (item-status (or item-status-in (db:test-get-status test-info)))
          (other-items-count-recs (db:with-db
                                   dbstruct #f #f
                                   (lambda (db)
