@@ -2539,7 +2539,7 @@
 	  (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
 	    (sqlite3:for-each-row 
 	     (lambda (key-val)
-	       (set! res (cons (list key key-val) res)))
+	       (set! res (cons (list key (if (string? key-val) key-val "")) res))) ;; replace non-string bad values with empty string to prevent crashes. This scenario can happen when Megatest is killed on updating the db
 	     db qry run-id)))
 	keys)))
        (reverse res)))
@@ -2557,7 +2557,7 @@
 	    ;; (db:delay-if-busy dbdat)
 	    (sqlite3:for-each-row 
 	     (lambda (key-val)
-	       (set! res (cons key-val res)))
+	       (set! res (cons (if (string? key-val) key-val "") res))) ;; check that the key-val is a string for cases where a crash injected bad data in the megatest.db
 	     db qry run-id)))
 	keys)))
     (let ((final-res (reverse res)))
