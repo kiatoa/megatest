@@ -80,6 +80,10 @@
 
 (define configf:var-expand-regex (regexp "^(.*)#\\{(scheme|system|shell|getenv|get|runconfigs-get|rget|scm|sh|rp|gv|g|mtrah)\\s+([^\\}\\{]*)\\}(.*)"))
 
+(define (configf:system ht cmd)
+  (system cmd)
+  )
+
 (define (configf:process-line l ht allow-system #!key (linenum #f))
   (let loop ((res l))
     (if (string? res)
@@ -94,7 +98,7 @@
 		     (cmdsym  (string->symbol cmdtype))
 		     (fullcmd (case cmdsym
 				((scheme scm) (conc "(lambda (ht)" cmd ")"))
-				((system)     (conc "(lambda (ht)(system \"" cmd "\"))"))
+				((system)     (conc "(lambda (ht)(configf:system ht \"" cmd "\"))"))
 				((shell sh)   (conc "(lambda (ht)(string-translate (shell \""  cmd "\") \"\n\" \" \"))"))
 				((realpath rp)(conc "(lambda (ht)(common:nice-path \"" cmd "\"))"))
 				((getenv gv)  (conc "(lambda (ht)(get-environment-variable \"" cmd "\"))"))
@@ -178,7 +182,23 @@
 		     (not (equal? (hash-table-ref/default settings "trim-trailing-spaces" "no") "no")))
 		(string-substitute "\\s+$" "" res)
 		res))))))
-  
+
+(define (configf:cfgdat->env-alist section cfgdat-ht allow-system)
+  (filter
+   (lambda (pair)
+     (let* ((var (car pair))
+            (val (cdr pair)))
+       (cons var
+             (cond
+              ((and allow-system (procedure? val)) ;; if we decided to use something other than #t or #f for allow-system ('return-procs or 'return-string) , this may become problematic
+               (val))
+              ((procedure? val) #f)
+              ((string? val) val)
+              (else "#f")))))
+   (append
+    (hash-table-ref/default cfgdat-ht "default" '())
+    (if (equal? section "default") '() (hash-table-ref/default cfgdat-ht section '())))))
+
 (define (calc-allow-system allow-system section sections)
   (if sections
       (and (or (equal? "default" section)
@@ -219,15 +239,20 @@
 
 ;; read a config file, returns hash table of alists
 ;; adds to ht if given (must be #f otherwise)
+;; allow-system:
+;;    #f - do not evaluate [system
+;;    #t - immediately evaluate [system and store result as string
+;;    'return-procs -- return a proc taking ht as an argument that may be evaulated at some future time
+;;    'return-string -- return a string representing a proc taking ht as an argument that may be evaulated at some future time
 ;; envion-patt is a regex spec that identifies sections that will be eval'd
 ;; in the environment on the fly
 ;; sections: #f => get all, else list of sections to gather
 ;; post-section-procs alist of section-pattern => proc, where: (proc section-name next-section-name ht curr-path)
 ;; apply-wildcards: #t/#f - apply vars from targets with % wildcards to all matching sections
 ;;
-(define (read-config path ht allow-system #!key (environ-patt #f)            (curr-section #f)
+(define (read-config path ht allow-system #!key (environ-patt #f)            (curr-section #f)   
 		     (sections #f)              (settings (make-hash-table)) (keep-filenames #f)
-		     (post-section-procs '())   (apply-wildcards #t))
+		     (post-section-procs '())   (apply-wildcards #t) )
   (debug:print 9 *default-log-port* "START: " path)
   (if (and (not (port? path))
 	   (not (common:file-exists? path))) ;; for case where we are handed a port
@@ -267,134 +292,170 @@
 			   (hash-table-delete! res section))) ;; we are using "" as a dumping ground and must remove it before returning the ht
 		     (hash-table-keys res)))
 		(debug:print 9 *default-log-port* "END: " path)
-		res)
+                res
+                ) ;; retval
 	      (regex-case 
 	       inl 
-	       (configf:comment-rx _                  (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
-	       (configf:blank-l-rx _                  (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
-	       (configf:settings   ( x setting val  ) (begin
-							(hash-table-set! settings setting val)
-							(loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f)))
-	       (configf:include-rx ( x include-file ) (let* ((curr-conf-dir (pathname-directory path))
-							     (full-conf     (if (absolute-pathname? include-file)
-										include-file
-										(common:nice-path 
-										 (conc (if curr-conf-dir
-											   curr-conf-dir
-											   ".")
-										       "/" include-file)))))
-							(if (common:file-exists? full-conf)
-							    (begin
-							      ;; (push-directory conf-dir)
-							      (debug:print 9 *default-log-port* "Including: " full-conf)
-							      (read-config full-conf res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections settings: settings keep-filenames: keep-filenames)
-							      ;; (pop-directory)
-							      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
-							    (begin
-							      (debug:print '(2 9) #f "INFO: include file " include-file " not found (called from " path ")")
-							      (debug:print 2 *default-log-port* "        " full-conf)
-							      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f)))))
+	       (configf:comment-rx _                  (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings)
+                                                            curr-section-name #f #f))
+               
+	       (configf:blank-l-rx _                  (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings)
+                                                            curr-section-name #f #f))
+	       (configf:settings   ( x setting val  )
+                                   (begin
+                                     (hash-table-set! settings setting val)
+                                     (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings)
+                                           curr-section-name #f #f)))
+               
+	       (configf:include-rx ( x include-file )
+                                   (let* ((curr-conf-dir (pathname-directory path))
+                                          (full-conf     (if (absolute-pathname? include-file)
+                                                             include-file
+                                                             (common:nice-path 
+                                                              (conc (if curr-conf-dir
+                                                                        curr-conf-dir
+                                                                        ".")
+                                                                    "/" include-file)))))
+                                     (if (common:file-exists? full-conf)
+                                         (begin
+                                           ;; (push-directory conf-dir)
+                                           (debug:print 9 *default-log-port* "Including: " full-conf)
+                                           (read-config full-conf res allow-system environ-patt: environ-patt
+                                                        curr-section: curr-section-name sections: sections settings: settings
+                                                        keep-filenames: keep-filenames)
+                                           ;; (pop-directory)
+                                           (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
+                                         (begin
+                                           (debug:print '(2 9) #f "INFO: include file " include-file " not found (called from " path ")")
+                                           (debug:print 2 *default-log-port* "        " full-conf)
+							      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings)
+                                                                    curr-section-name #f #f)))))
 	       (configf:script-rx ( x include-script params);; handle-exceptions
                                   ;;    exn
                                   ;;    (begin
                                   ;;      (debug:print '(0 2 9) #f "INFO: include from script " include-script " failed.")
                                   ;;      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
-							 (if (and (common:file-exists? include-script)(file-execute-access? include-script))
-							     (let* ((new-inp-port (open-input-pipe (conc include-script " " params))))
-							       (debug:print '(2 9) *default-log-port* "Including from script output: " include-script)
-							      ;;  (print "We got here, calling read-config next. Port is: " new-inp-port)
-							       (read-config new-inp-port res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections settings: settings keep-filenames: keep-filenames)
-							       (close-input-port new-inp-port)
-							       (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
-							     (begin
-							       (debug:print 0 *default-log-port* "Script not found or not exectutable: " include-script)
-							       (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f)))
-							 ) ;; )
-	       (configf:section-rx ( x section-name ) (begin
-							;; call post-section-procs
-							(for-each 
-							 (lambda (dat)
-							   (let ((patt (car dat))
-								 (proc (cdr dat)))
-							     (if (string-match patt curr-section-name)
-								 (proc curr-section-name section-name res path))))
-							 post-section-procs)
-                                                        ;; after gathering the vars for a section and if apply-wildcards is true and if there is a wildcard in the section name process wildcards
-                                                        ;; NOTE: we are processing the curr-section-name, NOT section-name.
-                                                        (process-wildcards res curr-section-name)
-							(if (not (hash-table-ref/default res section-name #f))(hash-table-set! res section-name '())) ;; ensure that mere mention of a section is not lost
-							(loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings)
-							      ;; if we have the sections list then force all settings into "" and delete it later?
-							      ;; (if (or (not sections) 
-							      ;;	      (member section-name sections))
-							      ;;	  section-name "") ;; stick everything into "". NOPE: We need new strategy. Put stuff in correct sections and then delete all sections later.
-							      section-name
-							      #f #f)))
-	       (configf:key-sys-pr ( x key cmd      ) (if (calc-allow-system allow-system curr-section-name sections)
-							  (let ((alist    (hash-table-ref/default res curr-section-name '()))
-								(val-proc (lambda ()
-									    (let* ((start-time (current-seconds))
-										   (cmdres     (process:cmd-run->list cmd))
-										   (delta      (- (current-seconds) start-time))
-										   (status     (cadr cmdres))
-										   (res        (car  cmdres)))
-									      (debug:print-info 4 *default-log-port* "" inl "\n => " (string-intersperse res "\n"))
-									      (if (not (eq? status 0))
-										  (begin
-										    (debug:print-error 0 *default-log-port* "problem with " inl ", return code " status
-												 " output: " cmdres)))
-									      (if (> delta 2)
-										  (debug:print-info 0 *default-log-port* "for line \"" inl "\"\n  command: " cmd " took " delta " seconds to run with output:\n   " res)
-										  (debug:print-info 9 *default-log-port* "for line \"" inl "\"\n  command: " cmd " took " delta " seconds to run with output:\n   " res))
-									      (if (null? res)
-										  ""
-										  (string-intersperse res " "))))))
-							    (hash-table-set! res curr-section-name 
-									     (config:assoc-safe-add alist
-									   			    key 
-												    (case (calc-allow-system allow-system curr-section-name sections)
-												      ((return-procs) val-proc)
-												      ((return-string) cmd)
-												      (else (val-proc)))
-												    metadata: metapath))
-							    (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
-							  (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f)))
-	       (configf:key-no-val ( x key val)            (let* ((alist   (hash-table-ref/default res curr-section-name '()))
-								  (fval    (or (if (string? val) val #f) ""))) ;; fval should be either "" or " " (one or more spaces)
-							     (debug:print 10 *default-log-port* "   setting: [" curr-section-name "] " key " = #t")
-							     (safe-setenv key fval)
-							     (hash-table-set! res curr-section-name 
-									      (config:assoc-safe-add alist key fval metadata: metapath))
-							     (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name key #f)))
-	       (configf:key-val-pr ( x key unk1 val unk2 ) (let* ((alist   (hash-table-ref/default res curr-section-name '()))
-								  (envar   (and environ-patt (string-search (regexp environ-patt) curr-section-name)))
-								  (realval (if envar
-									       (config:eval-string-in-environment val)
-									       val)))
-							     (debug:print-info 6 *default-log-port* "read-config env setting, envar: " envar " realval: " realval " val: " val " key: " key " curr-section-name: " curr-section-name)
-							     (if envar (safe-setenv key realval))
-							     (debug:print 10 *default-log-port* "   setting: [" curr-section-name "] " key " = " val)
-							     (hash-table-set! res curr-section-name 
-									      (config:assoc-safe-add alist key realval metadata: metapath))
-							     (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name key #f)))
+                                  (if (and (common:file-exists? include-script)(file-execute-access? include-script))
+                                      (let* ((local-allow-system  (calc-allow-system allow-system curr-section-name sections))
+                                             (env-delta  (configf:cfgdat->env-alist curr-section-name res local-allow-system))
+                                             (new-inp-port
+                                              (common:with-env-vars
+                                               env-delta
+                                               (lambda ()
+                                                 (open-input-pipe (conc include-script " " params))))))
+                                        (debug:print '(2 9) *default-log-port* "Including from script output: " include-script)
+                                        ;;  (print "We got here, calling read-config next. Port is: " new-inp-port)
+                                        (read-config new-inp-port res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections settings: settings keep-filenames: keep-filenames)
+                                        (close-input-port new-inp-port)
+                                        (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
+                                      (begin
+                                        (debug:print 0 *default-log-port* "Script not found or not exectutable: " include-script)
+                                        (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f)))
+                                  ) ;; )
+	       (configf:section-rx ( x section-name )
+                                   (begin
+                                     ;; call post-section-procs
+                                     (for-each 
+                                      (lambda (dat)
+                                        (let ((patt (car dat))
+                                              (proc (cdr dat)))
+                                          (if (string-match patt curr-section-name)
+                                              (proc curr-section-name section-name res path))))
+                                      post-section-procs)
+                                     ;; after gathering the vars for a section and if apply-wildcards is true and if there is a wildcard in the section name process wildcards
+                                     ;; NOTE: we are processing the curr-section-name, NOT section-name.
+                                     (process-wildcards res curr-section-name)
+                                     (if (not (hash-table-ref/default res section-name #f))(hash-table-set! res section-name '())) ;; ensure that mere mention of a section is not lost
+                                     (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings)
+                                           ;; if we have the sections list then force all settings into "" and delete it later?
+                                           ;; (if (or (not sections) 
+                                           ;;	      (member section-name sections))
+                                           ;;	  section-name "") ;; stick everything into "". NOPE: We need new strategy. Put stuff in correct sections and then delete all sections later.
+                                           section-name
+                                           #f #f)))
+	       (configf:key-sys-pr ( x key cmd      )
+                                   (if (calc-allow-system allow-system curr-section-name sections)
+                                       (let ((alist    (hash-table-ref/default res curr-section-name '()))
+                                             (val-proc (lambda ()
+                                                         (let* ((start-time (current-seconds))
+                                                                (local-allow-system  (calc-allow-system allow-system curr-section-name sections))
+                                                                (env-delta  (configf:cfgdat->env-alist curr-section-name res local-allow-system))
+                                                                (cmdres     (process:cmd-run->list cmd delta-env-alist-or-hash-table: env-delta)) ;; BB: here is where [system is exec'd.  needs to have env from other vars!
+                                                                (delta      (- (current-seconds) start-time))
+                                                                (status     (cadr cmdres))
+                                                                (res        (car  cmdres)))
+                                                           (debug:print-info 4 *default-log-port* "" inl "\n => " (string-intersperse res "\n"))
+                                                           (if (not (eq? status 0))
+                                                               (begin
+                                                                 (debug:print-error 0 *default-log-port* "problem with " inl ", return code " status
+                                                                                    " output: " cmdres)))
+                                                           (if (> delta 2)
+                                                               (debug:print-info 0 *default-log-port* "for line \"" inl "\"\n  command: " cmd " took " delta " seconds to run with output:\n   " res)
+                                                               (debug:print-info 9 *default-log-port* "for line \"" inl "\"\n  command: " cmd " took " delta " seconds to run with output:\n   " res))
+                                                           (if (null? res)
+                                                               ""
+                                                               (string-intersperse res " "))))))
+                                         (hash-table-set! res curr-section-name 
+                                                          (config:assoc-safe-add alist
+                                                                                 key 
+                                                                                 (case (calc-allow-system allow-system curr-section-name sections)
+                                                                                   ((return-procs) val-proc)
+                                                                                   ((return-string) cmd)
+                                                                                   (else (val-proc)))
+                                                                                 metadata: metapath))
+                                         (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))
+                                       (loop (configf:read-line inp res
+                                                                (calc-allow-system allow-system curr-section-name sections)
+                                                                settings)
+                                             curr-section-name #f #f)))
+               
+	       (configf:key-no-val ( x key val)
+                                   (let* ((alist   (hash-table-ref/default res curr-section-name '()))
+                                          (fval    (or (if (string? val) val #f) ""))) ;; fval should be either "" or " " (one or more spaces)
+                                     (debug:print 10 *default-log-port* "   setting: [" curr-section-name "] " key " = #t")
+                                     (safe-setenv key fval)
+                                     (hash-table-set! res curr-section-name 
+                                                      (config:assoc-safe-add alist key fval metadata: metapath))
+                                     (loop (configf:read-line inp res
+                                                              (calc-allow-system allow-system curr-section-name sections)
+                                                              settings)
+                                           curr-section-name key #f)))
+               
+	       (configf:key-val-pr ( x key unk1 val unk2 )
+                                   (let* ((alist   (hash-table-ref/default res curr-section-name '()))
+                                          (envar   (and environ-patt (string-search (regexp environ-patt) curr-section-name)))
+                                          (realval (if envar
+                                                       (config:eval-string-in-environment val)
+                                                       val)))
+                                     (debug:print-info 6 *default-log-port* "read-config env setting, envar: " envar " realval: " realval " val: " val " key: " key " curr-section-name: " curr-section-name)
+                                     (if envar (safe-setenv key realval))
+                                     (debug:print 10 *default-log-port* "   setting: [" curr-section-name "] " key " = " val)
+                                     (hash-table-set! res curr-section-name 
+                                                      (config:assoc-safe-add alist key realval metadata: metapath))
+                                     (loop (configf:read-line inp res
+                                                              (calc-allow-system allow-system curr-section-name sections) settings)
+                                           curr-section-name key #f)))
 	       ;; if a continued line
-	       (configf:cont-ln-rx ( x whsp val     ) (let ((alist (hash-table-ref/default res curr-section-name '())))
-						(if var-flag             ;; if set to a string then we have a continued var
-						    (let ((newval (conc 
-								   (config-lookup res curr-section-name var-flag) "\n"
-								   ;; trim lead from the incoming whsp to support some indenting.
-								   (if lead
-								       (string-substitute (regexp lead) "" whsp)
-								       "")
-								   val)))
-						      ;; (print "val: " val "\nnewval: \"" newval "\"\nvarflag: " var-flag)
-						      (hash-table-set! res curr-section-name 
-								       (config:assoc-safe-add alist var-flag newval metadata: metapath))
-						      (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name var-flag (if lead lead whsp)))
-						    (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))))
+	       (configf:cont-ln-rx ( x whsp val     )
+                                   (let ((alist (hash-table-ref/default res curr-section-name '())))
+                                     (if var-flag             ;; if set to a string then we have a continued var
+                                         (let ((newval (conc 
+                                                        (config-lookup res curr-section-name var-flag) "\n"
+                                                        ;; trim lead from the incoming whsp to support some indenting.
+                                                        (if lead
+                                                            (string-substitute (regexp lead) "" whsp)
+                                                            "")
+                                                        val)))
+                                           ;; (print "val: " val "\nnewval: \"" newval "\"\nvarflag: " var-flag)
+                                           (hash-table-set! res curr-section-name 
+                                                            (config:assoc-safe-add alist var-flag newval metadata: metapath))
+                                           (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name var-flag (if lead lead whsp)))
+                                         (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))))
 	       (else (debug:print-error 0 *default-log-port* "problem parsing " path ",\n   \"" inl "\"")
 		     (set! var-flag #f)
-		     (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))))))))
+		     (loop (configf:read-line inp res (calc-allow-system allow-system curr-section-name sections) settings) curr-section-name #f #f))))
+          ) ;; end loop
+        )))
   
 ;; pathenvvar will set the named var to the path of the config
 (define (find-and-read-config fname #!key (environ-patt #f)(given-toppath #f)(pathenvvar #f))
@@ -459,6 +520,14 @@
 
 (define (configf:get-section cfgdat section)
   (hash-table-ref/default cfgdat section '()))
+
+(define (configf:set-section-var cfgdat section var val)
+  (let ((sectdat (configf:get-section cfgdat section)))
+    (hash-table-set! cfgdat section
+                     (config:assoc-safe-add sectdat var val))))
+
+    ;;(append (filter (lambda (x)(not (assoc var sectdat))) sectdat)
+    ;;	    (list var val))))
 
 (define (setup)
   (let* ((configf (find-config "megatest.config"))

@@ -509,7 +509,8 @@
 
 ;; BBnote: *common:std-states* - dashboard filter control and test control state buttons defined here; used in set-fields-panel and dboard:make-controls
 (define *common:std-states*   ;; for toggle buttons in dashboard
-  '((0 "ARCHIVED")
+  '(
+    (0 "ARCHIVED")
     (1 "STUCK")
     (2 "KILLREQ")
     (3 "KILLED")
@@ -533,13 +534,17 @@
     (8 "DEAD")
     (9 "FAIL")
     (10 "PREQ_FAIL")
-    (11 "ABORT")))
+    (11 "PREQ_DISCARDED")
+    (12 "ABORT")))
 
 (define *common:ended-states*       ;; states which indicate the test is stopped and will not proceed
-  '("COMPLETED" "ARCHIVED" "KILLED" "KILLREQ" "STUCK" "INCOMPLETE"))
+  '("COMPLETED" "ARCHIVED" "KILLED" "KILLREQ" "STUCK" "INCOMPLETE" ))
 
 (define *common:badly-ended-states* ;; these roll up as CHECK, i.e. results need to be checked
   '("KILLED" "KILLREQ" "STUCK" "INCOMPLETE" "DEAD"))
+
+(define *common:well-ended-states* ;; an item's prereq in this state allows item to proceed
+  '("PASS" "WARN" "CHECK" "WAIVED" "SKIP"))
 
 ;; BBnote: *common:running-states* used from db:set-state-status-and-roll-up-items
 (define *common:running-states*     ;; test is either running or can be run
@@ -1750,6 +1755,8 @@
 
 ;; set some env vars from an alist, return an alist with original values
 ;; (("VAR" "value") ...)
+;; a value of #f means "unset this var"
+;;
 (define (alist->env-vars lst)
   (if (list? lst)
       (let ((res '()))
@@ -2412,3 +2419,41 @@
 
 
 
+;; accept an alist or hash table containing envvar/env value pairs (value of #f causes unset) 
+;;   execute thunk in context of environment modified as per this list
+;;   restore env to prior state then return value of eval'd thunk.
+;;   ** this is not thread safe **
+(define (common:with-env-vars delta-env-alist-or-hash-table thunk)
+  (let* ((delta-env-alist (if (hash-table? delta-env-alist-or-hash-table)
+                              (hash-table->alist delta-env-alist-or-hash-table)
+                              delta-env-alist-or-hash-table))
+         (restore-thunks
+          (filter
+           identity
+           (map (lambda (env-pair)
+                  (let* ((env-var     (car env-pair))
+                         (new-val     (cadr env-pair))
+                         (current-val (get-environment-variable env-var))
+                         (restore-thunk
+                          (cond
+                           ((not current-val) (lambda () (unsetenv env-var)))
+                           ((not (string? new-val)) #f)
+                           ((eq? current-val new-val) #f)
+                           (else 
+                            (lambda () (setenv env-var current-val))))))
+                    ;;(when (not (string? new-val))
+                    ;;    (debug:print 0 *default-log-port* " PROBLEM: not a string: "new-val"\n from env-alist:\n"delta-env-alist)
+                    ;;    (pp delta-env-alist)
+                    ;;    (exit 1))
+                        
+                    
+                    (cond
+                     ((not new-val)  ;; modify env here
+                      (unsetenv env-var))
+                     ((string? new-val)
+                      (setenv env-var new-val)))
+                    restore-thunk))
+                delta-env-alist))))
+    (let ((rv (thunk)))
+      (for-each (lambda (x) (x)) restore-thunks) ;; restore env to original state
+      rv)))

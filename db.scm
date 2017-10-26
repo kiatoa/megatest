@@ -223,6 +223,7 @@
              (sqlite3:execute db "PRAGMA synchronous = 0;")
              (if (not file-exists)
                  (begin
+                   
                    (if (and (configf:lookup *configdat* "setup" "use-wal")
                             (string-match "^/tmp/.*" fname)) ;; this is a file in /tmp
                        (sqlite3:execute db "PRAGMA journal_mode=WAL;")
@@ -336,7 +337,7 @@
 			     (> modtimedelta 10))) ;; if db in tmp is over ten seconds older than the file in MTRA then do a sync back
 		    do-sync)
 	      (begin
-		(debug:print 4 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data \n    from " (db:dbdat-get-path mtdb) " mod time delta: " modtimedelta)
+		(debug:print 1 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data \n    from " (db:dbdat-get-path mtdb) " mod time delta: " modtimedelta)
 		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb)
                 (debug:print-info 13 *default-log-port* "db:sync-all-tables-list done.")
                 )
@@ -1583,7 +1584,7 @@
 ;;  select end_time-now from
 ;;      (select testname,item_path,event_time+run_duration as
 ;;                          end_time,strftime('%s','now') as now from tests where state in
-;;      ('RUNNING','REMOTEHOSTSTART','LAUNCED'));
+;;      ('RUNNING','REMOTEHOSTSTART','LAUNCHED'));
 
 (define (db:find-and-mark-incomplete dbstruct run-id ovr-deadtime)
   (let* ((incompleted '())
@@ -1994,7 +1995,7 @@
 (define (db:get-run-times dbstruct run-patt target-patt)
 (let ((res `())
            (qry 	(conc "select runname, (max(end_time)-min(event_time))/60 as runtime, target from (select runname, run_id,tests.event_time,tests.event_time+run_duration AS end_time, " (string-join (db:get-keys dbstruct) " || '/' || ") " as target from tests inner join runs on tests.run_id = runs.id where runs.runname like ? and target like ?) group by run_id ;")))
-(print qry)
+;(print qry)
 (db:with-db 
    dbstruct
    #f ;; this is for the main runs db
@@ -2538,7 +2539,7 @@
 	  (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
 	    (sqlite3:for-each-row 
 	     (lambda (key-val)
-	       (set! res (cons (list key key-val) res)))
+	       (set! res (cons (list key (if (string? key-val) key-val "")) res))) ;; replace non-string bad values with empty string to prevent crashes. This scenario can happen when Megatest is killed on updating the db
 	     db qry run-id)))
 	keys)))
        (reverse res)))
@@ -2556,7 +2557,7 @@
 	    ;; (db:delay-if-busy dbdat)
 	    (sqlite3:for-each-row 
 	     (lambda (key-val)
-	       (set! res (cons key-val res)))
+	       (set! res (cons (if (string? key-val) key-val "") res))) ;; check that the key-val is a string for cases where a crash injected bad data in the megatest.db
 	     db qry run-id)))
 	keys)))
     (let ((final-res (reverse res)))
@@ -3156,6 +3157,23 @@
 	run-name target)
        res))))
 
+(define (db:get-test-times dbstruct run-name target)
+  (let ((res `())
+        (qry 	(conc "select testname, item_path, run_duration, " (string-join (db:get-keys dbstruct) " || '/' || ") " as target from tests inner join runs on tests.run_id = runs.id where runs.runname = ? and target = ?  ;")))
+   
+  (db:with-db 
+    dbstruct
+    #f ;; this is for the main runs db
+    #f ;; does not modify db
+    (lambda (db)
+            (sqlite3:for-each-row
+	(lambda (test-name item-path test-time target )
+	  (set! res (cons (vector test-name item-path test-time) res)))
+	db
+        qry 
+	run-name target)
+       res))))
+
 ;;======================================================================
 ;; S T E P S
 ;;======================================================================
@@ -3579,7 +3597,7 @@
                  ;; NB// Pass the db so it is part fo the transaction
                  (db:test-set-state-status db run-id test-id state status comment) ;; this call sets the item state/status
                  (if (not (equal? item-path "")) ;; only roll up IF incoming test is an item
-                     (let* ((state-status-counts  (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path)) ;; item-path is used to exclude current state/status of THIS test
+                     (let* ((state-status-counts  (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path state status)) ;; item-path is used to exclude current state/status of THIS test
                             (running              (length (filter (lambda (x)
                                                                     (member (dbr:counts-state x) *common:running-states*))
                                                                   state-status-counts)))
@@ -3592,11 +3610,11 @@
                             ;;                                 (not (equal? (dbr:counts-state x) "COMPLETED")))
                             ;;                               state-status-counts))
                             (all-curr-states      (common:special-sort  ;; worst -> best (sort of)
-                                                   (delete-duplicates
-                                                    (if (not (equal? state "DELETED"))
-                                                        (cons state (map dbr:counts-state state-status-counts))
-                                                        (map dbr:counts-state state-status-counts)))
-                                                   *common:std-states* >))
+                                                       (delete-duplicates
+                                                        (if (not (equal? state "DELETED"))
+                                                            (cons state (map dbr:counts-state state-status-counts))
+                                                            (map dbr:counts-state state-status-counts)))
+                                                       *common:std-states* >))
                             (all-curr-statuses    (common:special-sort  ;; worst -> best
                                                    (delete-duplicates
                                                     (if (not (equal? state "DELETED"))
@@ -3604,7 +3622,7 @@
                                                         (map dbr:counts-status state-status-counts)))
                                                    *common:std-statuses* >))
 			    (non-completes     (filter (lambda (x)
-							 (not (equal? x "COMPLETED")))
+							 (not (member x '("DELETED" "COMPLETED"))))
 						       all-curr-states))
 			    (preq-fails        (filter (lambda (x)
 							 (equal? x "PREQ_FAIL"))
@@ -3632,6 +3650,19 @@
                                                 (else
                                                  (car all-curr-statuses)))))
 
+                       (debug:print-info 2 *default-log-port*
+                                         "\n--> probe db:set-state-status-and-roll-up-items: "
+                                         "\n--> state-status-counts: "(map dbr:counts->alist state-status-counts)
+                                         "\n--> running:             "running
+                                         "\n--> bad-not-started:     "bad-not-started
+                                         "\n--> non-non-completes:   "num-non-completes
+                                         "\n--> non-completes:       "non-completes
+                                         "\n--> all-curr-states:     "all-curr-states
+                                         "\n--> all-curr-statuses:     "all-curr-statuses
+                                         "\n--> newstate              "newstate
+                                         "\n--> newstatus            "newstatus
+                                         "\n\n")
+
                        ;; (print "bad-not-supported: " bad-not-support " all-curr-states: " all-curr-states " all-curr-statuses: " all-curr-states)
                        ;;      " newstate: " newstate " newstatus: " newstatus)
                        ;; NB// Pass the db so it is part of the transaction
@@ -3646,21 +3677,49 @@
                        (if tl-test-id
 			   (db:test-set-state-status db run-id tl-test-id newstate newstatus #f)) ;; we are still in the transaction - must access the db and not the dbstruct
 		       ))))))
+                           
          (mutex-unlock! *db-transaction-mutex*)
          (if (and test-id state status (equal? status "AUTO")) 
              (db:test-data-rollup dbstruct run-id test-id status))
          tr-res)))))
 ;; BBnote: db:get-all-state-status-counts-for-test returns dbr:counts object aggregating state and status of items of a given test, *not including rollup state/status*
-(define (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path)
-  (db:with-db
-   dbstruct #f #f
-   (lambda (db)
-     (sqlite3:map-row
-      (lambda (state status count)
-	(make-dbr:counts state: state status: status count: count))
-      db
-      "SELECT state,status,count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND item_path !=? GROUP BY state,status;"
-      run-id test-name item-path))))
+(define (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path item-state-in item-status-in)
+
+
+  (let* ((test-info   (db:get-test-info dbstruct run-id test-name item-path))
+         (item-state  (or item-state-in (db:test-get-state test-info))) 
+         (item-status (or item-status-in (db:test-get-status test-info)))
+         (other-items-count-recs (db:with-db
+                                  dbstruct #f #f
+                                  (lambda (db)
+                                    (sqlite3:map-row
+                                     (lambda (state status count)
+                                       (make-dbr:counts state: state status: status count: count))
+                                     db
+                                     ;; ignore current item because we have changed its value in the current transation so this select will see the old value.
+                                     "SELECT state,status,count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND item_path !=? GROUP BY state,status;"
+                                     run-id test-name item-path))))
+
+         ;; add current item to tally outside of sql query
+         (match-countrec-lambda (lambda (countrec) 
+                                  (and (equal? (dbr:counts-state  countrec) item-state)
+                                       (equal? (dbr:counts-status countrec) item-status))))
+
+         (already-have-count-rec-list
+          (filter match-countrec-lambda other-items-count-recs)) ;; will have either 0 or 1 count recs depending if another item shares this item's state/status
+         
+         (updated-count-rec    (if (null? already-have-count-rec-list)
+                                   (make-dbr:counts state: item-state status: item-status count: 1)
+                                   (let* ((our-count-rec (car already-have-count-rec-list))
+                                          (new-count (add1 (dbr:counts-count our-count-rec))))
+                                     (make-dbr:counts state: item-state status: item-status count: new-count))))
+
+         (nonmatch-countrec-lambda (lambda (countrec) (not (match-countrec-lambda countrec))))
+         
+         (unrelated-rec-list   
+          (filter nonmatch-countrec-lambda other-items-count-recs)))
+    
+    (cons updated-count-rec unrelated-rec-list)))
 
 ;; (define (db:get-all-item-states db run-id test-name)
 ;;   (sqlite3:map-row 
@@ -4202,68 +4261,121 @@
 	;;		  (db:test-get-item-path testdat))))
 	 running-tests) ;; calling functions want the entire data
        '())
+
+   ;; collection of: for each waiton -
+   ;;   if this ref-test-name is an item in an itemized test and mode is itemwait/itemmatch:
+   ;;     if waiton is not itemized - if waiton is not both completed and in ok status, add as unmet prerequisite
+   ;;     if waiton is itemized:
+   ;;           and waiton's items are not expanded, add as unmet prerequisite
+   ;;           else if matching waiton item is not both completed and in an ok status, add as unmet prerequisite
+   ;;   else
+   ;;    if waiton toplevel is not in both completed and ok status, add as unmet prerequisite
+
    (if (or (not waitons)
 	   (null? waitons))
        '()
-       (let* ((unmet-pre-reqs '())
-	      (result         '()))
-	 (for-each 
+       (let* ((ref-test-itemized-mode (not (null? (lset-intersection eq? mode '(itemmatch itemwait)))))
+              (ref-test-toplevel-mode (not (null? (lset-intersection eq? mode '(toplevel)))))
+              (ref-test-is-toplevel   (equal? ref-item-path ""))
+              (ref-test-is-item       (not ref-test-is-toplevel))
+              (unmet-pre-reqs '())
+	      (result         '())
+              (unmet-prereq-items '())
+              )
+	 (for-each  ; waitons
 	  (lambda (waitontest-name)
 	    ;; by getting the tests with matching name we are looking only at the matching test 
 	    ;; and related sub items
 	    ;; next should be using mt:get-tests-for-run?
-	    (let ((tests             (db:get-tests-for-run-state-status dbstruct run-id waitontest-name))
+
+            (let (;(waiton-is-itemized ...)
+                  ;(waiton-items-are-expanded ...)
+                  (waiton-tests             (db:get-tests-for-run-state-status dbstruct run-id waitontest-name))
 		  (ever-seen         #f)
 		  (parent-waiton-met #f)
-		  (item-waiton-met   #f))
-	      (for-each 
-	       (lambda (test) ;; BB- this is the upstream test
-		 ;; (if (equal? waitontest-name (db:test-get-testname test)) ;; by defintion this had better be true ...
-		 (let* ((state             (db:test-get-state test))
-			(status            (db:test-get-status test))
-			(item-path         (db:test-get-item-path test)) ;; BB- this is the upstream itempath
-			(is-completed      (equal? state "COMPLETED"))
-			(is-running        (equal? state "RUNNING"))
-			(is-killed         (equal? state "KILLED"))
-			(is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
+		  (item-waiton-met   #f)
+
+                  )
+	      (for-each ; test expanded from waiton
+	       (lambda (waiton-test) 
+		 (let* ((waiton-state             (db:test-get-state waiton-test))
+			(waiton-status            (db:test-get-status waiton-test))
+			(waiton-item-path         (db:test-get-item-path waiton-test)) ;; BB- this is the upstream itempath
+                        (waiton-is-toplevel       (equal? waiton-item-path ""))
+                        (waiton-is-item           (not waiton-is-toplevel))
+			(waiton-is-completed      (member waiton-state  *common:ended-states*))
+			(waiton-is-running        (member waiton-state  *common:running-states*))
+			(waiton-is-killed         (member waiton-state  *common:badly-ended-states*))
+			(waiton-is-ok             (member waiton-status *common:well-ended-states*))
 			;;                                       testname-b    path-a    path-b
-			(same-itempath     (db:compare-itempaths ref-test-name item-path ref-item-path itemmaps))) ;; (equal? ref-item-path item-path)))
+			(same-itempath     (db:compare-itempaths ref-test-name waiton-item-path ref-item-path itemmaps))) ;; (equal? ref-item-path waiton-item-path)))
 		   (set! ever-seen #t)
-		   (cond
-		    ;; case 1, non-item (parent test) is 
-		    ((and (equal? item-path "") ;; this is the parent test of the waiton being examined
-			  is-completed
-			  (or is-ok (not (null? (lset-intersection eq? mode '(toplevel)))))) ;;  itemmatch itemwait))))))
+                   ;;(BB> "***consider waiton "waiton-test"/"waiton-item-path"***")
+                   (cond
+                    ;; case 0 - toplevel of an itemized test, at least one item in prereq has completed
+                    ((and waiton-is-item ref-test-is-toplevel ref-test-itemized-mode waiton-is-completed)
+                     (set! parent-waiton-met #t))
+
+                    ;; case 1, non-item (parent test) is 
+		    ((and waiton-is-toplevel ;; this is the parent test of the waiton being examined
+			  waiton-is-completed
+                          ;;(BB> "cond1")
+			  (or waiton-is-ok ref-test-toplevel-mode)) ;;  itemmatch itemwait))))))
 		     (set! parent-waiton-met #t))
 		    ;; Special case for toplevel and KILLED
-		    ((and (equal? item-path "") ;; this is the parent test
-			  is-killed
+		    ((and waiton-is-toplevel ;; this is the parent test
+			  waiton-is-killed
 			  (member 'toplevel mode))
+                     ;;(BB> "cond2")
 		     (set! parent-waiton-met #t))
 		    ;; For itemwait mode IFF the previous matching item is good the set parent-waiton-met
-		    ((and (not (null? (lset-intersection eq? mode '(itemmatch itemwait)))) ;; how is that different from (member mode '(itemmatch itemwait)) ?????
-			  ;; (not (equal? item-path "")) ;; this applies to both top level (to allow launching of next batch) and items
-			  same-itempath)
-		     (if (and is-completed is-ok)
-			 (set! item-waiton-met #t))
-		     (if (and (equal? item-path "") ;; if upstream rollup test is completed, parent-waiton-met is set
-			      (or is-completed is-running));; this is the parent, set it to run if completed or running ;; BB1
+                    ((and ref-test-itemized-mode ref-test-is-item same-itempath)
+                     ;;(BB> "cond3")
+		     (if (and waiton-is-completed (or waiton-is-ok ref-test-toplevel-mode)) 
+                         (set! item-waiton-met #t)
+                         (set! unmet-prereq-items (cons waiton-test unmet-prereq-items)))
+                     (if (and waiton-is-toplevel ;; if upstream rollup test is completed, parent-waiton-met is set
+			      (or waiton-is-completed waiton-is-running))
 			 (set! parent-waiton-met #t)))
 		    ;; normal checking of parent items, any parent or parent item not ok blocks running
-		    ((and is-completed
-			  (or is-ok 
+		    ((and waiton-is-completed
+			  (or waiton-is-ok 
 			      (member 'toplevel mode))              ;; toplevel does not block on FAIL
-			  (and is-ok (member 'itemmatch mode))) ;; itemmatch blocks on not ok
-		     (set! item-waiton-met #t)))))
-	       tests)
+			  (and waiton-is-ok (member 'itemmatch mode) ;; itemmatch blocks on not ok
+                               ))
+                     ;;(BB> "cond4")
+		     (set! item-waiton-met #t))
+
+                    ((and waiton-is-completed waiton-is-ok same-itempath)
+                     ;;(BB> "cond5")
+                     (set! item-waiton-met #t))
+                    (else
+                     #t
+                     ;;(BB> "condelse")
+                     ))))
+               waiton-tests)
 	      ;; both requirements, parent and item-waiton must be met to NOT add item to
 	      ;; prereq's not met list
-	      (if (not (or parent-waiton-met item-waiton-met))
-		  (set! result (append (if (null? tests) (list waitontest-name) tests) result))) ;; appends the string if the full record is not available
+               ;; (BB>
+               ;;  "\n* waiton-tests           "waiton-tests
+               ;;  "\n* parent-waiton-met      "parent-waiton-met
+               ;;  "\n* item-waiton-met        "item-waiton-met
+               ;;  "\n* ever-seen              "ever-seen
+               ;;  "\n* ref-test-itemized-mode "ref-test-itemized-mode
+               ;;  "\n* unmet-prereq-items     "unmet-prereq-items
+               ;;  "\n* result (pre)           "result
+               ;;  "\n* ever-seen              "ever-seen
+               ;;  "\n")
+
+              (cond
+               ((and ref-test-itemized-mode ref-test-is-item (not (null? unmet-prereq-items)))
+                (set! result (append unmet-prereq-items result)))
+               ((not (or parent-waiton-met item-waiton-met))
+                (set! result (append (if (null? waiton-tests) (list waitontest-name) waiton-tests) result))) ;; appends the string if the full record is not available
 	      ;; if the test is not found then clearly the waiton is not met...
 	      ;; (if (not ever-seen)(set! result (cons waitontest-name result)))))
-	      (if (not ever-seen)
-		  (set! result (append (if (null? tests)(list waitontest-name) tests) result)))))
+               ((not ever-seen)
+                (set! result (append (if (null? waiton-tests)(list waitontest-name) waiton-tests) result))))))
 	  waitons)
 	 (delete-duplicates result)))))
 

@@ -22,6 +22,7 @@
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 ;; (declare (uses synchash))
 (declare (uses http-transport))
+;;(declare (uses rpc-transport))
 (declare (uses launch))
 (declare (uses daemon))
 
@@ -56,7 +57,7 @@
   (case transport-type
     ((http)(http-transport:launch))
     ;;((nmsg)(nmsg-transport:launch run-id))
-    ((rpc)  (rpc-transport:launch run-id))
+    ;;((rpc)  (rpc-transport:launch run-id))
     (else (debug:print-error 0 *default-log-port* "unknown server type " transport-type))))
 
 ;;======================================================================
