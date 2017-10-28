@@ -209,7 +209,8 @@
 	  (set! *last-num-running-tests* num-running)))
     (if (not (eq? 0 *globalexitstatus*))
 	(list #f num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)
-	(let ((can-not-run-more (cond
+	(let* ( ;;BBHOLD (all-tests-itemized-and-unexpanded
+               (can-not-run-more (cond
 				 ;; if max-concurrent-jobs is set and the number running is greater 
 				 ;; than it then cannot run more jobs
 				 ((and max-concurrent-jobs (>= num-running max-concurrent-jobs))
@@ -225,6 +226,7 @@
 				      (debug:print 1 *default-log-port* "WARNING: number of jobs " num-running-in-jobgroup 
 						   " in jobgroup \"" jobgroup "\" exceeds limit of " job-group-limit))
 				  #t)
+                                 ;; BBHOLD ((and (eq? 0 num-running) all-tests-itemized-and-unexpanded) #f)
 				 (else #f))))
 	  (list (not can-not-run-more) num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)))))
 
@@ -633,6 +635,33 @@
         reruns))                                          ;; reruns
 
 (define runs:nothing-left-in-queue-count 0)
+
+
+;; check if all remaining tests if
+;;   1) all tests remaining have unexpanded tests
+;;   2) all tests remaining are NOT STARTED
+;;   3) all tests remaining are itemized
+(define (runs:check-for-itemized-stalemate test-queue)
+  (null?
+   (filter (lambda (test-name) ;; BB INCOMPLETE MAKE REST WORK MONDAY
+             (let* ((test-record (hash-table-ref test-records hed))
+                    (tconfig     (tests:testqueue-get-testconfig test-record))
+                    (items       (tests:testqueue-get-items      test-record))
+                    (test-id       (rmt:get-test-id run-id test-name ""))
+                    (testdat       (if test-id (rmt:get-test-info-by-id run-id test-id) #f))
+                    (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
+                                   (if m (map string->symbol (string-split m)) '(normal))))
+                   (mode ...)
+                   (items ...)
+                   (status ...))
+               (not
+                (and
+                 (member mode '(itemwait itemmatch toplevel))
+                 (or (procedure? items)(eq? items 'have-procedure))
+                 (eq? status "NOT STARTED")))))
+           tests-queue)))
+
+
 
 ;; BB: for future reference - suspect target vars are not expanded to env vars at this point (item expansion using [items]\nwhatever [system echo $TARGETVAR] doesnt work right whereas [system echo #{targetvar}] does.. Tal and Randy have tix on this.  on first pass, var not set, on second pass, ok.  
 (define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmaps)
@@ -1177,7 +1206,7 @@
   ;;
   ;; (rmt:find-and-mark-incomplete)
 
-  (let* ((run-info             (rmt:get-run-info run-id))
+  (let* ((run-info              (rmt:get-run-info run-id))
          (tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
          (sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
          (test-registry         (make-hash-table))
@@ -1238,6 +1267,14 @@
 
       (runs:incremental-print-results run-id)
 
+
+      ;; check if all remaining tests if
+      ;;   1) all tests remaining have unexpanded tests
+      ;;   2) all tests remaining are NOT STARTED
+      ;;   3) all tests remaining are itemized
+      (or (procedure? items)(eq? items 'have-procedure))
+
+      
       (if (not (null? reruns))(debug:print-info 4 *default-log-port* "reruns=" reruns))
 
       ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
@@ -1428,7 +1465,10 @@
 		     (car can-run-more))
 		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmaps)))
 		  (if loop-list
-		      (apply loop loop-list)))
+		      (apply loop loop-list)
+                      (debug:print-info 4 *default-log-port* " -- Can't expand hed="hed)
+                      )
+                  )
 		;; if can't run more just loop with next possible test
 		(loop (car newtal)(cdr newtal) reg reruns))))
 	    
