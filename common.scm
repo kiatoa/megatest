@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
+(use srfi-1 data-structures posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
      matchable pkts (prefix dbi dbi:)
      regex)
 
@@ -30,6 +30,23 @@
 ;;       (old-exit)
 ;;       (old-exit code)))
 
+
+;; execute thunk, return value.  If exception thrown, trap exception, return #f, and emit nonfatal condition note to *default-log-port* .
+;; arguments - thunk, message
+(define (common:fail-safe thunk warning-message-on-exception)
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print-info 0 *default-log-port* "notable but nonfatal condition - "warning-message-on-exception)
+     (debug:print-info 0 *default-log-port*
+                       (string-substitute "\n?Error:" "nonfatal condition:"
+                                          (with-output-to-string
+                                            (lambda ()
+                                              (print-error-message exn) ))))
+     (debug:print-info 0 *default-log-port* "    -- continuing after nonfatal condition...")
+     #f)
+   (thunk)))
+
 (define getenv get-environment-variable)
 (define (safe-setenv key val)
   (if (substring-index ":" key) ;; variables containing : are for internal use and cannot be environment variables.
@@ -44,6 +61,16 @@
 
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
+
+
+;; returns list of fd count, socket count
+(define (get-file-descriptor-count #!key  (pid (current-process-id )))
+  (list
+    (length (glob (conc "/proc/" pid "/fd/*")))
+    (length  (filter identity (map socket? (glob (conc "/proc/" pid "/fd/*")))))
+  )
+)
+
 
 ;; GLOBALS
 
@@ -90,6 +117,7 @@
 (define *common:denoise*    (make-hash-table)) ;; for low noise printing
 (define *default-log-port*  (current-error-port))
 (define *time-zero* (current-seconds)) ;; for the watchdog
+(define *default-area-tag* "local")
 
 ;; DATABASE
 (define *dbstruct-db*         #f) ;; used to cache the dbstruct in db:setup. Goal is to remove this.
@@ -120,7 +148,7 @@
 (define *runremote*         #f)                ;; if set up for server communication this will hold <host port>
 ;; (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))
-;; (define *server-id*         #f)
+(define *server-id*         #f)
 (define *server-info*       #f)  ;; good candidate for easily convert to non-global
 (define *time-to-exit*      #f)
 (define *server-run*        #t)
@@ -161,7 +189,7 @@
   (last-server-check 0)  ;; last time we checked to see if the server was alive
   (conndat           #f)
   (transport         *transport-type*)
-  (server-timeout    (server:get-timeout)) ;; default from server:get-timeout
+  (server-timeout    (server:expiration-timeout))
   (force-server      #f)
   (ro-mode           #f)  
   (ro-mode-checked   #f)) ;; flag that indicates we have checked for ro-mode
@@ -256,9 +284,10 @@
    'adj-target
    ;; 'old2new
    'new2old
-   (if full
+   ;; (if full
        '(dejunk)
-       '()))
+       ;; '())
+       )
   (if (common:api-changed?)
       (common:set-last-run-version)))
 
@@ -481,7 +510,8 @@
 
 ;; BBnote: *common:std-states* - dashboard filter control and test control state buttons defined here; used in set-fields-panel and dboard:make-controls
 (define *common:std-states*   ;; for toggle buttons in dashboard
-  '((0 "ARCHIVED")
+  '(
+    (0 "ARCHIVED")
     (1 "STUCK")
     (2 "KILLREQ")
     (3 "KILLED")
@@ -502,14 +532,20 @@
     (5 "WAIVED")
     (6 "CHECK")
     (7 "STUCK/DEAD")
-    (8 "FAIL")
-    (9 "ABORT")))
+    (8 "DEAD")
+    (9 "FAIL")
+    (10 "PREQ_FAIL")
+    (11 "PREQ_DISCARDED")
+    (12 "ABORT")))
 
 (define *common:ended-states*       ;; states which indicate the test is stopped and will not proceed
-  '("COMPLETED" "ARCHIVED" "KILLED" "KILLREQ" "STUCK" "INCOMPLETE"))
+  '("COMPLETED" "ARCHIVED" "KILLED" "KILLREQ" "STUCK" "INCOMPLETE" ))
 
 (define *common:badly-ended-states* ;; these roll up as CHECK, i.e. results need to be checked
   '("KILLED" "KILLREQ" "STUCK" "INCOMPLETE" "DEAD"))
+
+(define *common:well-ended-states* ;; an item's prereq in this state allows item to proceed
+  '("PASS" "WARN" "CHECK" "WAIVED" "SKIP"))
 
 ;; BBnote: *common:running-states* used from db:set-state-status-and-roll-up-items
 (define *common:running-states*     ;; test is either running or can be run
@@ -832,8 +868,10 @@
 			    (file-write-access? hed)
 			    hed)
 		       (handle-exceptions
-			exn
-			#f
+			   exn
+			   (begin
+			     (debug:print-info 0 *default-log-port* "could not create " hed ", this might cause problems down the road.")
+			     #f)
 			(create-directory hed #t)))))
 	  (if (and (string? res)
 		   (directory? res))
@@ -1486,23 +1524,27 @@
      hosts)
     best-host))
 
-(define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f)(remote-host #f))
+(define (common:wait-for-cpuload maxload-in numcpus-in waitdelay #!key (count 1000) (msg #f)(remote-host #f))
   (let* ((loadavg (common:get-cpu-load remote-host))
+	 (numcpus (if (< 1 numcpus-in) ;; not possible
+		      (common:get-num-cpus remote-host)
+		      numcpus-in))
+	 (maxload (max maxload-in 0.5)) ;; so maxload must be greater than 0.5 for now BUG - FIXME?
 	 (first   (car loadavg))
 	 (next    (cadr loadavg))
-	 (adjload (* maxload numcpus))
+	 (adjload (* maxload (max 1 numcpus))) ;; possible bug where numcpus (or could be maxload) is zero, crude fallback is to at least use 1
 	 (loadjmp (- first next)))
     (cond
      ((and (> first adjload)
 	   (> count 0))
-      (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload " " (if msg msg ""))
+      (debug:print-info 0 *default-log-port* "server start delayed " waitdelay " seconds due to load " first " exceeding max of " adjload " on server " (or remote-host (get-host-name)) " (normalized load-limit: " maxload ") " (if msg msg ""))
       (thread-sleep! waitdelay)
-      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
+      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1) msg: msg remote-host: remote-host))
      ((and (> loadjmp numcpus)
 	   (> count 0))
       (debug:print-info 0 *default-log-port* "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus (if msg msg ""))
       (thread-sleep! waitdelay)
-      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
+      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1) msg: msg remote-host: remote-host)))))
 
 (define (common:wait-for-homehost-load maxload msg)
   (let* ((hh-dat (if (common:on-homehost?) ;; if we are on the homehost then pass in #f so the calls are local.
@@ -1510,7 +1552,7 @@
                      (common:get-homehost)))
          (hh     (if hh-dat (car hh-dat) #f))
          (numcpus (common:get-num-cpus hh)))
-    (common:wait-for-normalized-load maxload msg: msg remote-host: hh)))
+    (common:wait-for-normalized-load maxload msg hh)))
 
 (define (common:get-num-cpus remote-host)
   (let ((proc (lambda ()
@@ -1530,7 +1572,7 @@
 
 ;; wait for normalized cpu load to drop below maxload
 ;;
-(define (common:wait-for-normalized-load maxload #!key (msg #f)(remote-host #f))
+(define (common:wait-for-normalized-load maxload msg remote-host)
   (let ((num-cpus (common:get-num-cpus remote-host)))
     (common:wait-for-cpuload maxload num-cpus 15 msg: msg remote-host: remote-host)))
 
@@ -1714,6 +1756,8 @@
 
 ;; set some env vars from an alist, return an alist with original values
 ;; (("VAR" "value") ...)
+;; a value of #f means "unset this var"
+;;
 (define (alist->env-vars lst)
   (if (list? lst)
       (let ((res '()))
@@ -1772,10 +1816,10 @@
 
 ;; Convert strings like "5s 2h 3m" => 60x60x2 + 3x60 + 5
 (define (common:hms-string->seconds tstr)
-  (let ((parts     (string-split tstr))
+  (let ((parts     (string-split-fields "\\w+" tstr))
 	(time-secs 0)
-	;; s=seconds, m=minutes, h=hours, d=days
-	(trx       (regexp "(\\d+)([smhd])")))
+	;; s=seconds, m=minutes, h=hours, d=days, M=months, y=years, w=weeks
+	(trx       (regexp "(\\d+)([smhdMyw])")))
     (for-each (lambda (part)
 		(let ((match  (string-match trx part)))
 		  (if match
@@ -1786,8 +1830,11 @@
 							    (case (string->symbol unt)
 							      ((s) 1)
 							      ((m) 60)
-							      ((h) (* 60 60))
-							      ((d) (* 24 60 60))
+							      ((h) 3600)
+							      ((d) 86400)
+							      ((2) 604800)
+							      ((M) 2628000) ;; aproximately one month
+							      ((y) 31536000)
 							      (else 0))))))))))
 	      parts)
     time-secs))
@@ -2075,7 +2122,13 @@
              (string-split instr)))
    "/"))
 
-(define (common:faux-lock keyname #!key (wait-time 8))
+;;======================================================================
+;; L O C K I N G   M E C H A N I S M S 
+;;======================================================================
+
+;; faux-lock is deprecated. Please use simple-lock below
+;;
+(define (common:faux-lock keyname #!key (wait-time 8)(allow-lock-steal #t))
   (if (rmt:no-sync-get/default keyname #f) ;; do not be tempted to compare to pid. locking is a one-shot action, if already locked for this pid it doesn't actually count
       (if (> wait-time 0)
 	  (begin
@@ -2097,7 +2150,15 @@
         #t)
       #f))
 
-  
+;; simple lock. improve and converge on this one.
+;;
+(define (common:simple-lock keyname)
+  (rmt:no-sync-get-lock keyname))
+
+;;======================================================================
+;;
+;;======================================================================
+
 (define (common:in-running-test?)
   (and (args:get-arg "-execute") (get-environment-variable "MT_CMDINFO")))
 
@@ -2393,3 +2454,41 @@
 
 
 
+;; accept an alist or hash table containing envvar/env value pairs (value of #f causes unset) 
+;;   execute thunk in context of environment modified as per this list
+;;   restore env to prior state then return value of eval'd thunk.
+;;   ** this is not thread safe **
+(define (common:with-env-vars delta-env-alist-or-hash-table thunk)
+  (let* ((delta-env-alist (if (hash-table? delta-env-alist-or-hash-table)
+                              (hash-table->alist delta-env-alist-or-hash-table)
+                              delta-env-alist-or-hash-table))
+         (restore-thunks
+          (filter
+           identity
+           (map (lambda (env-pair)
+                  (let* ((env-var     (car env-pair))
+                         (new-val     (cadr env-pair))
+                         (current-val (get-environment-variable env-var))
+                         (restore-thunk
+                          (cond
+                           ((not current-val) (lambda () (unsetenv env-var)))
+                           ((not (string? new-val)) #f)
+                           ((eq? current-val new-val) #f)
+                           (else 
+                            (lambda () (setenv env-var current-val))))))
+                    ;;(when (not (string? new-val))
+                    ;;    (debug:print 0 *default-log-port* " PROBLEM: not a string: "new-val"\n from env-alist:\n"delta-env-alist)
+                    ;;    (pp delta-env-alist)
+                    ;;    (exit 1))
+                        
+                    
+                    (cond
+                     ((not new-val)  ;; modify env here
+                      (unsetenv env-var))
+                     ((string? new-val)
+                      (setenv env-var new-val)))
+                    restore-thunk))
+                delta-env-alist))))
+    (let ((rv (thunk)))
+      (for-each (lambda (x) (x)) restore-thunks) ;; restore env to original state
+      rv)))

@@ -128,20 +128,21 @@
      ;; I don't think it adds any value. If the server is not there, just fail and start a new connection.
      ;; also, the expire-time calculation might not be correct. We want, time-since-last-server-access > (server:get-timeout)
      ;;
-     ;; ;;DOT CASE4 [label="reset\nconnection"];
-     ;; ;;DOT MUTEXLOCK -> CASE4 [label="have connection,\nlast_access > expire_time"]; {rank=same "case 4" CASE4}
-     ;; ;;DOT CASE4 -> "rmt:send-receive";
-     ;; ;; reset the connection if it has been unused too long
-     ;; ((and runremote
-     ;;       (remote-conndat runremote)
-     ;; 	   (let ((expire-time (+ (- start-time (remote-server-timeout runremote))(random 10)))) ;; Subtract or add the random value? Seems like it should be substract but Neither fixes the "WARNING: failure in with-input-from-request to #<request>.\n message: Server closed connection before sending response"
-     ;; 	     (< (http-transport:server-dat-get-last-access (remote-conndat runremote)) expire-time)))
-     ;;  (debug:print-info 0 *default-log-port* "Connection to " (remote-server-url runremote) " expired due to no accesses, forcing new connection.")
-     ;;  (http-transport:close-connections area-dat: runremote)
-     ;;  (remote-conndat-set! runremote #f) ;; invalidate the connection, thus forcing a new connection.
-     ;;  (mutex-unlock! *rmt-mutex*)
-     ;;  (rmt:send-receive cmd rid params attemptnum: attemptnum))
-
+     ;;DOT CASE4 [label="reset\nconnection"];
+     ;;DOT MUTEXLOCK -> CASE4 [label="have connection,\nlast_access > expire_time"]; {rank=same "case 4" CASE4}
+     ;;DOT CASE4 -> "rmt:send-receive";
+     ;; reset the connection if it has been unused too long
+     ((and runremote
+           (remote-conndat runremote)
+	   (> (current-seconds) ;; if it has been more than server-timeout seconds since last contact, close this connection and start a new on
+	      (+ (http-transport:server-dat-get-last-access (remote-conndat runremote))
+		 (remote-server-timeout runremote))))
+      (debug:print-info 0 *default-log-port* "Connection to " (remote-server-url runremote) " expired due to no accesses, forcing new connection.")
+      (http-transport:close-connections area-dat: runremote)
+      (remote-conndat-set! runremote #f) ;; invalidate the connection, thus forcing a new connection.
+      (mutex-unlock! *rmt-mutex*)
+      (rmt:send-receive cmd rid params attemptnum: attemptnum))
+     
      ;;DOT CASE5 [label="local\nread"];
      ;;DOT MUTEXLOCK -> CASE5 [label="server not required,\non homehost,\nread-only query"]; {rank=same "case 5" CASE5};
      ;;DOT CASE5 -> "rmt:open-qry-close-locally";
@@ -230,9 +231,9 @@
      ;;DOT CASE11 -> "RESULT" [label="call succeeded"];
      ;; not on homehost, do server query
      (else
-      (mutex-unlock! *rmt-mutex*)
+      ;; (mutex-unlock! *rmt-mutex*)
       (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9")
-      (mutex-lock! *rmt-mutex*)
+      ;; (mutex-lock! *rmt-mutex*)
       (let* ((conninfo (remote-conndat runremote))
 	     (dat      (case (remote-transport runremote)
 			 ((http) (condition-case ;; handling here has caused a lot of problems. However it is needed to deal with attemtped communication to servers that have gone away
@@ -244,7 +245,13 @@
 			  (exit))))
 	     (success  (if (vector? dat) (vector-ref dat 0) #f))
 	     (res      (if (vector? dat) (vector-ref dat 1) #f)))
-	(if (vector? conninfo)(http-transport:server-dat-update-last-access conninfo)) ;; refresh access time
+	(if (and (vector? conninfo) (< 5 (vector-length conninfo)))
+            (http-transport:server-dat-update-last-access conninfo) ;; refresh access time
+	    (begin
+              (debug:print 0 *default-log-port* "INFO: Should not get here! conninfo=" conninfo)
+              (set! conninfo #f)
+              (remote-conndat-set! *runremote* #f)
+              (http-transport:close-connections  area-dat: runremote)))
 	;; (mutex-unlock! *rmt-mutex*)
         (debug:print-info 13 *default-log-port* "rmt:send-receive, case  9. conninfo=" conninfo " dat=" dat " runremote = " runremote)
 	(mutex-unlock! *rmt-mutex*)
@@ -252,6 +259,8 @@
 	    (if (and (vector? res)
 		     (eq? (vector-length res) 2)
 		     (eq? (vector-ref res 1) 'overloaded)) ;; since we are looking at the data to carry the error we'll use a fairly obtuse combo to minimise the chances of some sort of collision.
+                ;; this is the case where the returned data is bad or the server is overloaded and we want
+                ;; to ease off the queries
 		(let ((wait-delay (+ attemptnum (* attemptnum 10))))
 		  (debug:print 0 *default-log-port* "WARNING: server is overloaded. Delaying " wait-delay " seconds and trying call again.")
 		  (mutex-lock! *rmt-mutex*)
@@ -263,10 +272,12 @@
 		res) ;; All good, return res
 	    (begin
 	      (debug:print 0 *default-log-port* "WARNING: communication failed. Trying again, try num: " attemptnum)
-	      (remote-conndat-set!    runremote #f)
+	      (mutex-lock! *rmt-mutex*)
+              (remote-conndat-set!    runremote #f)
 	      (http-transport:close-connections area-dat: runremote)
 	      (remote-server-url-set! runremote #f)
-	      (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
+	      (mutex-unlock! *rmt-mutex*)
+              (debug:print-info 12 *default-log-port* "rmt:send-receive, case  9.1")
 	      ;; (if (not (server:check-if-running *toppath*))
 	      ;; 	  (server:start-and-wait *toppath*))
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))))))))
@@ -492,6 +503,10 @@
 (define (rmt:get-target run-id)
   (rmt:send-receive 'get-target run-id (list run-id)))
 
+(define (rmt:get-run-times runpatt targetpatt)
+  (rmt:send-receive 'get-run-times #f (list runpatt targetpatt ))) 
+
+
 ;;======================================================================
 ;;  T E S T S
 ;;======================================================================
@@ -542,6 +557,9 @@
 (define (rmt:synchash-get run-id proc synckey keynum params)
   (rmt:send-receive 'synchash-get run-id (list run-id proc synckey keynum params)))
 
+(define (rmt:get-tests-for-run-mindata run-id testpatt states status not-in)
+  (rmt:send-receive 'get-tests-for-run-mindata run-id (list run-id testpatt states status not-in)))
+  
 ;; IDEA: Threadify these - they spend a lot of time waiting ...
 ;;
 (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
@@ -669,6 +687,9 @@
 (define (rmt:get-raw-run-stats run-id)
   (rmt:send-receive 'get-raw-run-stats run-id (list run-id)))
 
+(define (rmt:get-test-times runname target)
+  (rmt:send-receive 'get-test-times #f (list runname target ))) 
+
 ;;======================================================================
 ;;  R U N S
 ;;======================================================================
@@ -697,6 +718,9 @@
 
 (define (rmt:get-runs runpatt count offset keypatts)
   (rmt:send-receive 'get-runs #f (list runpatt count offset keypatts)))
+
+(define (rmt:simple-get-runs runpatt count offset target)
+  (rmt:send-receive 'simple-get-runs #f (list runpatt count offset target)))
 
 (define (rmt:get-all-run-ids)
   (rmt:send-receive 'get-all-run-ids #f '()))
@@ -806,6 +830,9 @@
 (define (rmt:get-steps-for-test run-id test-id)
   (rmt:send-receive 'get-steps-for-test run-id (list run-id test-id)))
 
+(define (rmt:get-steps-info-by-id test-step-id)
+  (rmt:send-receive 'get-steps-info-by-id #f (list test-step-id)))
+
 ;;======================================================================
 ;;  T E S T   D A T A 
 ;;======================================================================
@@ -815,6 +842,8 @@
 (define (rmt:read-test-data* run-id test-id categorypatt varpatt #!key (work-area #f)) 
   (rmt:send-receive 'read-test-data* run-id (list run-id test-id categorypatt varpatt)))
 
+(define (rmt:get-data-info-by-id test-data-id)
+   (rmt:send-receive 'get-data-info-by-id #f (list test-data-id)))
 
 (define (rmt:testmeta-add-record testname)
   (rmt:send-receive 'testmeta-add-record #f (list testname)))
@@ -859,6 +888,9 @@
 
 (define (rmt:no-sync-del! var)
   (rmt:send-receive 'no-sync-del! #f `(,var)))
+
+(define (rmt:no-sync-get-lock keyname)
+  (rmt:send-receive 'no-sync-get-lock #f `(,keyname)))
 
 ;;======================================================================
 ;; A R C H I V E S
