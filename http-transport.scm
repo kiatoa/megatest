@@ -387,6 +387,12 @@
 				   (> (- (current-seconds) start-time) 2))
 			      (begin
 				(debug:print-info 0 *default-log-port* "Received server alive signature")
+                                (common:save-pkt `((action . alive)
+                                                   (T      . server)
+                                                   (pid    . ,(current-process-id))
+                                                   (ipaddr . ,(car sdat))
+                                                   (port   . ,(cadr sdat)))
+                                                 *configdat* #t)
 				sdat)
                               (begin
 				(debug:print-info 0 *default-log-port* "Still waiting, last-sdat=" last-sdat)
@@ -394,6 +400,13 @@
 				(if (> (- (current-seconds) start-time) 120) ;; been waiting for two minutes
 				    (begin
 				      (debug:print-error 0 *default-log-port* "transport appears to have died, exiting server")
+                                      (common:save-pkt `((action . died)
+                                                         (T      . server)
+                                                         (pid    . ,(current-process-id))
+                                                         (ipaddr . ,(car sdat))
+                                                         (port   . ,(cadr sdat))
+                                                         (msg    . "Transport died?"))
+                                                 *configdat* #t)
 				      (exit))
 				    (loop start-time
 					  (equal? sdat last-sdat)
@@ -504,7 +517,10 @@
     ;; 		      " ms")
     
     (db:print-current-query-stats)
-    
+    (common:save-pkt `((action . exit)
+                       (T      . server)
+                       (pid    . ,(current-process-id)))
+                     *configdat* #t)
     (debug:print-info 0 *default-log-port* "Server shutdown complete. Exiting")
     (exit)))
 
@@ -541,6 +557,10 @@
           (begin
             (cleanup-proc (conc "ERROR: Aborting server start because there are already " num-alive " possible servers either running or starting up"))
             (exit))))
+  (common:save-pkt `((action . start)
+		     (T      . server)
+		     (pid    . ,(current-process-id)))
+		   *configdat* #t)
     (let* ((th2 (make-thread (lambda ()
                                (debug:print-info 0 *default-log-port* "Server run thread started")
                                (http-transport:run 

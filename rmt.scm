@@ -146,6 +146,7 @@
      ;;DOT CASE5 [label="local\nread"];
      ;;DOT MUTEXLOCK -> CASE5 [label="server not required,\non homehost,\nread-only query"]; {rank=same "case 5" CASE5};
      ;;DOT CASE5 -> "rmt:open-qry-close-locally";
+
      ;; on homehost and this is a read
      ((and (not (remote-force-server runremote)) ;; honor forced use of server, i.e. server NOT required
 	   (cdr (remote-hh-dat runremote))       ;; on homehost

@@ -117,6 +117,7 @@ Actions:
    kill                      : stop tests or entire runs
    db                        : database utilities
    areas, contours, setup    : show areas, contours or setup section from megatest.config
+   gendot                    : generate a graphviz dot file from pkts.
 
 Contour actions:
    process                   : runs import, rungen and dispatch 
@@ -1167,6 +1168,7 @@ ret))
       ((gendot)
        (let* ((mtconfdat (simple-setup (args:get-arg "-start-dir")))
 	      (mtconf    (car mtconfdat)))
+	 (common:load-pkts-to-db mtconf use-lt: #t) ;; need to NOT do this by default ...
 	 (common:with-queue-db
 	  mtconf
 	  (lambda (pktsdirs pktsdir conn)
@@ -1261,6 +1263,6 @@ ret))
 
 #|
 (define mtconf (car (simple-setup #f)))
-(define dat (with-queue-db mtconf (lambda (conn)(get-pkts conn '()))))
+(define dat (common:with-queue-db mtconf (lambda (conn)(get-pkts conn '()))))
 (pp (pkts#flatten-all dat '((cmd . ((parent . P)(url . M)))(runtype . ((parent . P)))) 'id 'group-id 'uuid 'parent 'pkt-type 'pkt 'processed))
 |#

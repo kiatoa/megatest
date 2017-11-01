@@ -10,8 +10,8 @@
 ;;======================================================================
 
 (use srfi-1 data-structures posix regex-case base64 format dot-locking csv-xml z3 sql-de-lite hostinfo md5 message-digest typed-records directory-utils stack
-     matchable regex posix srfi-18 extras
-     pkts (prefix dbi dbi:))
+     matchable pkts (prefix dbi dbi:)
+     regex)
 
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
@@ -102,6 +102,7 @@
 
 (define *db-keys* #f)
 
+(define *pkts-info*    (make-hash-table)) ;; store stuff like the last parent here
 (define *configinfo*   #f)   ;; raw results from setup, includes toppath and table from megatest.config
 (define *runconfigdat* #f)   ;; run configs data
 (define *configdat*    #f)   ;; megatest.config data
@@ -2323,30 +2324,63 @@
 ;; in common
 ;;======================================================================
 
-(define common:pkt-spec
-  '((server . ((action    . a)
-	       (pid       . d)
-	       (ipaddr    . i)
-	       (port      . p)))
+(define common:pkts-spec
+  '((default . ((parent    . P)
+                (action    . a)
+                (filename  . f)))
+    (configf . ((parent    . P)
+                (action    . a)
+                (filename  . f)))
+    (server  . ((action    . a)
+		(pid       . d)
+		(ipaddr    . i)
+		(port      . p)
+		(parent    . P)))
     			  
-    (test   . ((cpuuse    . c)
-	       (diskuse   . d)
-	       (item-path . i)
-	       (runname   . r)
-	       (state     . s)
-	       (target    . t)
-	       (status    . u)))))
+    (test    . ((cpuuse    . c)
+		(diskuse   . d)
+		(item-path . i)
+		(runname   . r)
+		(state     . s)
+		(target    . t)
+		(status    . u)
+		(parent    . P)))))
 
 (define (common:get-pkts-dirs mtconf use-lt)
   (let* ((pktsdirs-str (or (configf:lookup mtconf "setup"  "pktsdirs")
 			   (and use-lt
-				(conc *toppath* "/lt/.pkts"))))
+				(conc (or *toppath*
+					  (current-directory))
+				      "/lt/.pkts"))))
 	 (pktsdirs  (if pktsdirs-str
 			(string-split pktsdirs-str " ")
 			#f)))
     pktsdirs))
 
 ;; use-lt is use linktree "lt" link to find pkts dir
+(define (common:save-pkt pktalist-in mtconf use-lt #!key (add-only #f)) ;; add-only saves the pkt only if there is a parent already
+  (if (or add-only
+	  (hash-table-exists? *pkts-info* 'last-parent))
+      (let* ((parent   (hash-table-ref/default *pkts-info* 'last-parent #f))
+	     (pktalist (if parent
+			   (cons `(parent . ,parent)
+				 pktalist-in)
+			   pktalist-in)))
+	(let-values (((uuid pkt)
+		      (alist->pkt pktalist common:pkts-spec)))
+	  (hash-table-set! *pkts-info* 'last-parent uuid)
+	  (let ((pktsdir (or (hash-table-ref/default *pkts-info* 'pkts-dir #f)
+			     (let* ((pktsdirs (common:get-pkts-dirs mtconf use-lt))
+				    (pktsdir   (car pktsdirs))) ;; assume it is there
+			       (hash-table-set! *pkts-info* 'pkts-dir pktsdir)
+			       pktsdir))))
+	    (if (not (file-exists? pktsdir))
+		(create-directory pktsdir #t))
+	    (with-output-to-file
+		(conc pktsdir "/" uuid ".pkt")
+	      (lambda ()
+		(print pkt))))))))
+	
 (define (common:with-queue-db mtconf proc #!key (use-lt #f)(toppath-in #f))
   (let* ((pktsdirs (common:get-pkts-dirs mtconf use-lt))
 	 (pktsdir  (if pktsdirs (car pktsdirs) #f))
@@ -2367,7 +2401,7 @@
 	  (proc pktsdirs pktsdir pdb)
 	  (dbi:close pdb))))))
 
-(define (common:load-pkts-to-db mtconf)
+(define (common:load-pkts-to-db mtconf #!key (use-lt #f))
   (common:with-queue-db
    mtconf
    (lambda (pktsdirs pktsdir pdb)
@@ -2398,7 +2432,8 @@
 		     (debug:print 4 *default-log-port* "pkt: " uuid " exists, skipping...")
 		     )))
 	     pkts)))))
-      pktsdirs))))
+      pktsdirs))
+   use-lt: use-lt))
 
 (define (common:get-pkt-alists pkts)
   (map (lambda (x)
