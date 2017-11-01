@@ -86,7 +86,7 @@ Misc
 
 ;; ease debugging by loading ~/.dashboardrc
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.dashboardrc")))
-  (if (file-exists? debugcontrolf)
+  (if (common:file-exists? debugcontrolf)
       (load debugcontrolf)))
 
 (debug:setup)
@@ -377,7 +377,7 @@ Misc
 (define (test-panel window-id)
   (let* ((curr-row-num 0)
 	 (viewlog    (lambda (x)
-		       (if (file-exists? logfile)
+		       (if (common:file-exists? logfile)
 					;(system (conc "firefox " logfile "&"))
 			   (iup:send-url logfile)
 			   (message-window (conc "File " logfile " not found")))))

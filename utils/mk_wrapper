@@ -54,6 +54,10 @@ EOF
 
 fi
 
+cat >> $target << EOF 
+if [[ \$(ulimit -a | grep 'open files' | awk '{print \$4}') -gt 10000 ]];then ulimit -n 10000;fi
+EOF
+
 # echo "#!/bin/bash" > $target
 # echo "exec $prefix/bin/.\$(lsb_release -sr)/$cmd \"\$@\"" >> $target
 

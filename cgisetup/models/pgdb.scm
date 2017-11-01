@@ -94,42 +94,122 @@
 	    (pgdb:get-ttype dbh target-spec)))))
 
 ;;======================================================================
+;;  T A G S
+;;======================================================================
+
+
+(define (pgdb:get-tag-info-by-name dbh tag)
+  (dbi:get-one-row dbh "SELECT id,tag_name FROM tags where tag_name=?;" tag))
+
+(define (pgdb:insert-tag dbh name )
+  (dbi:exec dbh "INSERT INTO tags (tag_name) VALUES (?)" name ))
+
+(define (pgdb:insert-area-tag dbh tag-id area-id )
+  (dbi:exec dbh "INSERT INTO area_tags (tag_id, area_id) VALUES (?,?)" tag-id area-id ))
+
+(define (pgdb:is-area-taged dbh area-id)
+   (let ((area-tag-id (dbi:get-one dbh "SELECT id FROM area_tags WHERE area_id=?;" area-id)))
+   (if area-tag-id 
+           #t
+            #f)))
+
+(define (pgdb:is-area-taged-with-a-tag dbh   tag-id area-id)
+   (let ((area-tag-id (dbi:get-one dbh "SELECT id FROM area_tags WHERE area_id=? and tag_id=?;" area-id tag-id)))
+   (if area-tag-id 
+           #t
+            #f)))
+
+
+;;======================================================================
 ;;  R U N S
 ;;======================================================================
 
 ;; given a target spec id, target and run-name return the run-id
 ;; if no run found return #f
 ;;
-(define (pgdb:get-run-id dbh spec-id target run-name)
-  (dbi:get-one dbh "SELECT id FROM runs WHERE ttype_id=? AND target=? AND run_name=?;"
-	       spec-id target run-name))
+(define (pgdb:get-run-id dbh spec-id target run-name area-id)
+  (dbi:get-one dbh "SELECT id FROM runs WHERE ttype_id=? AND target=? AND run_name=? and area_id=?;"
+	       spec-id target run-name area-id))
 
 ;; given a run-id return all the run info
 ;;
-(define (pgdb:get-run-info dbh run-id) ;; to join ttype or not?
+(define (pgdb:get-run-info dbh run-id ) ;; to join ttype or not?
   (dbi:get-one-row
    dbh   ;; 0    1       2       3      4     5      6       7        8         9         10          11         12
    "SELECT id,target,ttype_id,run_name,state,status,owner,event_time,comment,fail_count,pass_count,last_update,area_id
-       FROM runs WHERE id=?;" run-id))
+       FROM runs WHERE id=? ;" run-id ))
 
 ;; refresh the data in a run record
 ;;
-(define (pgdb:refresh-run-info dbh run-id state status owner event-time comment fail-count pass-count) ;; area-id)
+(define (pgdb:refresh-run-info dbh run-id state status owner event-time comment fail-count pass-count area-id) ;; area-id)
   (dbi:exec
    dbh
    "UPDATE runs SET
-      state=?,status=?,owner=?,event_time=?,comment=?,fail_count=?,pass_count=?
-     WHERE id=?;"
-   state status owner event-time comment fail-count pass-count run-id))
+      state=?,status=?,owner=?,event_time=?,comment=?,fail_count=?,pass_count=? 
+     WHERE id=? and area_id=?;"
+   state status owner event-time comment fail-count pass-count run-id area-id))
 
 ;; given all needed info create run record
 ;;
-(define (pgdb:insert-run dbh ttype-id target run-name state status owner event-time comment fail-count pass-count)
+(define (pgdb:insert-run dbh ttype-id target run-name state status owner event-time comment fail-count pass-count area-id)
+    (dbi:exec
+   dbh
+   "INSERT INTO runs (ttype_id,target,run_name,state,status,owner,event_time,comment,fail_count,pass_count,area_id )
+      VALUES (?,?,?,?,?,?,?,?,?,?,?);"
+    ttype-id target run-name state status owner event-time comment fail-count pass-count area-id))
+
+;;======================================================================
+;;  T E S T - S T E P S
+;;======================================================================
+
+(define (pgdb:get-test-step-id dbh test-id stepname state)
+  (dbi:get-one
+    dbh
+    "SELECT id FROM test_steps WHERE test_id=? AND stepname=? and state = ? ;"
+    test-id stepname state))
+
+(define (pgdb:insert-test-step dbh test-id stepname state status event_time comment logfile)
   (dbi:exec
    dbh
-   "INSERT INTO runs (ttype_id,target,run_name,state,status,owner,event_time,comment,fail_count,pass_count)
-      VALUES (?,?,?,?,?,?,?,?,?,?);"
-    ttype-id target run-name state status owner event-time comment fail-count pass-count))
+   "INSERT INTO test_steps (test_id,stepname,state,status,event_time,logfile,comment)
+       VALUES (?,?,?,?,?,?,?);"
+   test-id stepname  state   status  event_time   logfile   comment))
+
+(define (pgdb:update-test-step dbh step-id test-id stepname state status event_time comment logfile)
+  (dbi:exec
+    dbh
+    "UPDATE test_steps SET
+         test_id=?,stepname=?,state=?,status=?,event_time=?,logfile=?,comment=?
+          WHERE id=?;"
+    test-id stepname  state   status  event_time   logfile   comment step-id))
+
+
+;;======================================================================
+;;  T E S T - D A T A
+;;======================================================================
+
+(define (pgdb:get-test-data-id dbh test-id category variable)
+  (dbi:get-one
+    dbh
+    "SELECT id FROM test_data WHERE test_id=? AND category=? and variable = ? ;"
+    test-id category variable))
+
+(define (pgdb:insert-test-data dbh test-id category variable value expected tol units comment status type)
+  (dbi:exec
+   dbh
+   "INSERT INTO test_data (test_id, category, variable, value, expected, tol, units, comment, status, type)
+       VALUES (?,?,?,?,?,?,?,?,?,?);"
+   test-id category variable value expected tol units comment status type))
+
+(define (pgdb:update-test-data dbh data-id test-id  category variable value expected tol units comment status type)
+  (dbi:exec
+    dbh
+    "UPDATE test_data SET
+         test_id=?, category=?, variable=?, value=?, expected=?, tol=?, units=?, comment=?, status=?, type=?
+          WHERE id=?;"
+    test-id category variable value expected tol units comment status type data-id ))
+
+
 
 ;;======================================================================
 ;;  T E S T S

@@ -228,7 +228,7 @@ Version: " megatest-fossil-hash)) ;; "
 	     (file-read-access? path))
 	(let* ((dbpath    (conc path "/datashare.db"))
 	       (writeable (file-write-access? dbpath))
-	       (dbexists  (file-exists? dbpath))
+	       (dbexists  (common:file-exists? dbpath))
 	       (handler   (make-busy-timeout 136000)))
 	  (handle-exceptions
 	   exn
@@ -415,7 +415,7 @@ Version: " megatest-fossil-hash)) ;; "
 ;; remove existing link and if possible ...
 ;; create path to next of tip of target, create link back to source
 (define (datashare:build-dir-make-link source target)
-  (if (file-exists? target)(datashare:backup-move target))
+  (if (common:file-exists? target)(datashare:backup-move target))
   (create-directory (pathname-directory target) #t)
   (create-symbolic-link source target))
 
@@ -520,7 +520,7 @@ Version: " megatest-fossil-hash)) ;; "
 
 (define (datashare:pathdat-apply-heuristics configdat path)
   (cond
-   ((file-exists? path) "found")
+   ((common:file-exists? path) "found")
    (else (conc path " not installed"))))
 
 (define (datashare:get-view configdat)
@@ -694,7 +694,7 @@ Version: " megatest-fossil-hash)) ;; "
       #f
       (let loop ((hed (car paths))
 		 (tal (cdr paths)))
-	(if (file-exists? (conc hed "/" name))
+	(if (common:file-exists? (conc hed "/" name))
 	    hed
 	    (if (null? tal)
 		#f
@@ -708,7 +708,7 @@ Version: " megatest-fossil-hash)) ;; "
   (let* ((fname   (conc exe-dir "/." exe-name ".config")))
     (ini:property-separator-patt " *  *")
     (ini:property-separator #\space)
-    (if (file-exists? fname)
+    (if (common:file-exists? fname)
 	;; (ini:read-ini fname)
 	(read-config fname #f #t)
 	(make-hash-table))))
@@ -787,7 +787,7 @@ Version: " megatest-fossil-hash)) ;; "
 
 ;; ease debugging by loading ~/.dashboardrc - REMOVE FROM PRODUCTION!
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.datasharerc")))
-  (if (file-exists? debugcontrolf)
+  (if (common:file-exists? debugcontrolf)
       (load debugcontrolf)))
 
 (define (main)

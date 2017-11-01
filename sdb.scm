@@ -24,7 +24,7 @@
 ;; 
 (define (sdb:open fname)
   (let* ((dbpath    (pathname-directory fname))
-	 (dbexists  (let ((fe (file-exists? fname)))
+	 (dbexists  (let ((fe (common:file-exists? fname)))
 		      (if fe 
 			  fe
 			  (begin

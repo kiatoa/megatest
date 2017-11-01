@@ -21,7 +21,7 @@
 
 (define (portlogger:open-db fname)
   (let* ((avail    (tasks:wait-on-journal fname 5 remove: #t)) ;; wait up to about 10 seconds for the journal to go away
-	 (exists   (file-exists? fname))
+	 (exists   (common:file-exists? fname))
 	 (db       (if avail 
 		       (sqlite3:open-database fname)
 		       (begin
@@ -59,7 +59,7 @@
        (debug:print-error 0 *default-log-port* "portlogger:open-run-close failed. " proc " " params)
        (debug:print 0 *default-log-port* " message: " ((condition-property-accessor 'exn 'message) exn))
        (debug:print 5 *default-log-port* "exn=" (condition->list exn))
-       (if (file-exists? fname)(delete-file fname)) ;; brutally get rid of it
+       (if (common:file-exists? fname)(delete-file fname)) ;; brutally get rid of it
        (print-call-chain (current-error-port)))
      (let* (;; (lock   (obtain-dot-lock fname 2 9 10))
 	    (db     (portlogger:open-db fname))

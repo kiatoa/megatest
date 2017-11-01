@@ -14,7 +14,7 @@
 (use sql-de-lite) ;; srfi-1 posix regex regex-case srfi-69 srfi-18 call-with-environment-variables)
 
 (define (env:open-db fname)
-  (let* ((db-exists (file-exists? fname))
+  (let* ((db-exists (common:file-exists? fname))
 	 (db        (open-database fname)))
     (if (not db-exists)
 	(begin

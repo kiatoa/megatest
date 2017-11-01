@@ -10,6 +10,7 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
+
 (use  srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest posix-extras)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars intarweb spiffy-directory-listing)
@@ -31,7 +32,9 @@
 
 (include "common_records.scm")
 (include "db_records.scm")
+(include "js-path.scm")
 
+(require-library stml)
 (define (http-transport:make-server-url hostport)
   (if (not hostport)
       #f
@@ -58,8 +61,11 @@
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname))) 
 	 (start-port      (portlogger:open-run-close portlogger:find-port))
-	 (link-tree-path  (common:get-linktree))) ;; (configf:lookup *configdat* "setup" "linktree")))
+	 (link-tree-path  (common:get-linktree))
+	 (tmp-area        (common:get-db-tmp-area))
+	 (start-file      (conc tmp-area "/.server-start")))
     (debug:print-info 0 *default-log-port* "portlogger recommended port: " start-port)
+    ;; set some parameters for the server
     (root-path     (if link-tree-path 
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
@@ -102,9 +108,22 @@
 						  headers: '((content-type text/plain))))
 				  ((equal? (uri-path (request-uri (current-request))) 
 					   '(/ "hey"))
-				   (send-response body: "hey there!\n"
+				   (send-response body: "hey there!\n" 
 						  headers: '((content-type text/plain))))
+                                  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ "jquery3.1.0.js"))
+				   (send-response body: (http-transport:show-jquery) 
+						  headers: '((content-type application/javascript))))
+                                  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ "test_log"))
+				   (send-response body: (http-transport:html-test-log $) 
+						  headers: '((content-type text/HTML))))    
+                                  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ "dashboard"))
+				   (send-response body: (http-transport:html-dboard $) 
+						  headers: '((content-type text/HTML)))) 
 				  (else (continue))))))))
+    (with-output-to-file start-file (lambda ()(print (current-process-id))))
     (http-transport:try-start-server ipaddrstr start-port)))
 
 ;; This is recursively run by http-transport:run until sucessful
@@ -240,6 +259,7 @@
 						(debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
 						(debug:print 0 *default-log-port* " message: " msg)
 						(debug:print 0 *default-log-port* " cmd: " cmd " params: " params)
+                                                (debug:print 0 *default-log-port* " call-chain: " call-chain)
 						(if runremote
 						    (remote-conndat-set! runremote #f))
 						;; Killing associated server to allow clean retry.")
@@ -251,7 +271,7 @@
 						(db:obj->string #f))
 					    (with-input-from-request ;; was dat
 					     fullurl 
-					     (list (cons 'key "thekey")
+					     (list (cons 'key (or *server-id* "thekey"))
 						   (cons 'cmd cmd)
 						   (cons 'params sparams))
 					     read-string))
@@ -296,8 +316,14 @@
                          #f))) ;; (hash-table-ref/default *runremote* run-id #f)))
     (if (vector? server-dat)
 	(let ((api-dat (http-transport:server-dat-get-api-uri server-dat)))
-	  (close-connection! api-dat)
-	  #t)
+	  (handle-exceptions
+	    exn
+	    (begin
+	      (print-call-chain *default-log-port*)
+	      (debug:print-error 0 *default-log-port* " closing connection failed with error: " ((condition-property-accessor 'exn 'message) exn)))
+	    (close-connection! api-dat)
+            ;;(close-idle-connections!)
+	    #t))
 	#f)))
 
 
@@ -344,7 +370,9 @@
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
   (debug:print-info 0 *default-log-port* "Starting the sync-back, keep alive thread in server")
-  (let* ((server-start-time (current-seconds))
+  (let* ((tmp-area          (common:get-db-tmp-area))
+	 (started-file      (conc tmp-area "/.server-started"))
+	 (server-start-time (current-seconds))
 	 (server-info (let loop ((start-time (current-seconds))
 				 (changed    #t)
 				 (last-sdat  "not this"))
@@ -359,6 +387,12 @@
 				   (> (- (current-seconds) start-time) 2))
 			      (begin
 				(debug:print-info 0 *default-log-port* "Received server alive signature")
+                                (common:save-pkt `((action . alive)
+                                                   (T      . server)
+                                                   (pid    . ,(current-process-id))
+                                                   (ipaddr . ,(car sdat))
+                                                   (port   . ,(cadr sdat)))
+                                                 *configdat* #t)
 				sdat)
                               (begin
 				(debug:print-info 0 *default-log-port* "Still waiting, last-sdat=" last-sdat)
@@ -366,6 +400,13 @@
 				(if (> (- (current-seconds) start-time) 120) ;; been waiting for two minutes
 				    (begin
 				      (debug:print-error 0 *default-log-port* "transport appears to have died, exiting server")
+                                      (common:save-pkt `((action . died)
+                                                         (T      . server)
+                                                         (pid    . ,(current-process-id))
+                                                         (ipaddr . ,(car sdat))
+                                                         (port   . ,(cadr sdat))
+                                                         (msg    . "Transport died?"))
+                                                 *configdat* #t)
 				      (exit))
 				    (loop start-time
 					  (equal? sdat last-sdat)
@@ -373,9 +414,12 @@
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)
-	 (server-timeout (server:get-timeout))
+	 (server-timeout (server:expiration-timeout))
 	 (server-going  #f)
 	 (server-log-file (args:get-arg "-log"))) ;; always set when we are a server
+
+    (with-output-to-file started-file (lambda ()(print (current-process-id))))
+
     (let loop ((count         0)
 	       (server-state 'available)
 	       (bad-sync-count 0)
@@ -427,24 +471,19 @@
 	  (begin
 	    (debug:print 0 *default-log-port* "Server stats:")
 	    (db:print-current-query-stats)))
-      (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600))
-	     (adjusted-timeout (if (> hrs-since-start 1)
-				   (- server-timeout (inexact->exact (round (* hrs-since-start 60))))  ;; subtract 60 seconds per hour
-				   server-timeout)))
-	(if (common:low-noise-print 120 "server timeout")
-	    (debug:print-info 0 *default-log-port* "Adjusted server timeout: " adjusted-timeout))
+      (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600)))
 	(cond
          ((and *server-run*
 	       (> (+ last-access server-timeout)
-		  (current-seconds))
-	       (< (- (current-seconds) server-start-time) 3600)) ;; do not update log or touch log if we've been running for more than one hour.
+		  (current-seconds)))
           (if (common:low-noise-print 120 "server continuing")
               (debug:print-info 0 *default-log-port* "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
 	      (let ((curr-time (current-seconds)))
 		(handle-exceptions
 		    exn
 		    (debug:print 0 *default-log-port* "ERROR: Failed to change timestamp on log file " server-log-file ". Are you out of space on that disk?")
-		  (change-file-times server-log-file curr-time curr-time))))
+		  (if (not *server-overloaded*)
+		      (change-file-times server-log-file curr-time curr-time)))))
           (loop 0 server-state bad-sync-count (current-milliseconds)))
          (else
           (debug:print-info 0 *default-log-port* "Server timed out. seconds since last db access: " (- (current-seconds) last-access))
@@ -478,7 +517,10 @@
     ;; 		      " ms")
     
     (db:print-current-query-stats)
-    
+    (common:save-pkt `((action . exit)
+                       (T      . server)
+                       (pid    . ,(current-process-id)))
+                     *configdat* #t)
     (debug:print-info 0 *default-log-port* "Server shutdown complete. Exiting")
     (exit)))
 
@@ -487,52 +529,111 @@
 ;; start_server? 
 ;;
 (define (http-transport:launch)
-  ;; (if (args:get-arg "-daemonize")
-  ;;     (begin
-  ;; 	(daemon:ize)
-  ;; 	(if *alt-log-file* ;; we should re-connect to this port, I think daemon:ize disrupts it
-  ;; 	    (begin
-  ;; 	      (current-error-port *alt-log-file*)
-  ;; 	      (current-output-port *alt-log-file*)))))
-  (let* ((th2 (make-thread (lambda ()
-			     (debug:print-info 0 *default-log-port* "Server run thread started")
-			     (http-transport:run 
-			      (if (args:get-arg "-server")
-				  (args:get-arg "-server")
-				  "-")
-			      )) "Server run"))
-	 (th3 (make-thread (lambda ()
-			     (debug:print-info 0 *default-log-port* "Server monitor thread started")
-			     (http-transport:keep-running)
-			   "Keep running"))))
-    (thread-start! th2)
-    (thread-sleep! 0.25) ;; give the server time to settle before starting the keep-running monitor.
-    (thread-start! th3)
-    (set! *didsomething* #t)
-    (thread-join! th2)
-    (exit)))
+  ;; check that a server start is in progress, pause or exit if so
+  (let* ((tmp-area            (common:get-db-tmp-area))
+	 (server-start        (conc tmp-area "/.server-start"))
+	 (server-started      (conc tmp-area "/.server-started"))
+	 (start-time          (common:lazy-modification-time server-start))
+	 (started-time        (common:lazy-modification-time server-started))
+	 (server-starting     (< start-time started-time)) ;; if start-time is less than started-time then a server is still starting
+	 (start-time-old      (> (- (current-seconds) start-time) 5))
+         (cleanup-proc        (lambda (msg)
+                                (let* ((serv-fname      (conc "server-" (current-process-id) "-" (get-host-name) ".log"))
+                                       (full-serv-fname (conc *toppath* "/logs/" serv-fname))
+                                       (new-serv-fname  (conc *toppath* "/logs/" "defunct-" serv-fname)))
+                                  (debug:print 0 *default-log-port* msg)
+                                  (if (common:file-exists? full-serv-fname)
+                                      (system (conc "sleep 1;mv -f " full-serv-fname " " new-serv-fname))
+                                      (debug:print 0 *default-log-port* "INFO: cannot move " full-serv-fname " to " new-serv-fname))
+                                  (exit)))))
+    (if (and (not start-time-old) ;; last server start try was less than five seconds ago
+	     (not server-starting))
+	(begin
+	  (cleanup-proc "NOT starting server, there is either a recently started server or a server in process of starting")
+	  (exit)))
+    ;; lets not even bother to start if there are already three or more server files ready to go
+    (let* ((num-alive   (server:get-num-alive (server:get-list *toppath*))))
+      (if (> num-alive 3)
+          (begin
+            (cleanup-proc (conc "ERROR: Aborting server start because there are already " num-alive " possible servers either running or starting up"))
+            (exit))))
+  (common:save-pkt `((action . start)
+		     (T      . server)
+		     (pid    . ,(current-process-id)))
+		   *configdat* #t)
+    (let* ((th2 (make-thread (lambda ()
+                               (debug:print-info 0 *default-log-port* "Server run thread started")
+                               (http-transport:run 
+                                (if (args:get-arg "-server")
+                                    (args:get-arg "-server")
+                                    "-")
+                                )) "Server run"))
+           (th3 (make-thread (lambda ()
+                               (debug:print-info 0 *default-log-port* "Server monitor thread started")
+                               (http-transport:keep-running)
+                               "Keep running"))))
+      (thread-start! th2)
+      (thread-sleep! 0.25) ;; give the server time to settle before starting the keep-running monitor.
+      (thread-start! th3)
+      (set! *didsomething* #t)
+      (thread-join! th2)
+      (exit))))
 
-(define (http-transport:server-signal-handler signum)
-  (signal-mask! signum)
-  (handle-exceptions
-   exn
-   (debug:print 0 *default-log-port* " ... exiting ...")
-   (let ((th1 (make-thread (lambda ()
-			     (thread-sleep! 1))
-			   "eat response"))
-	 (th2 (make-thread (lambda ()
-			     (debug:print-error 0 *default-log-port* "Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
-			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
-			     (debug:print 0 *default-log-port* "       Done.")
-			     (exit 4))
-			   "exit on ^C timer")))
-     (thread-start! th2)
-     (thread-start! th1)
-     (thread-join! th2))))
+;; (define (http-transport:server-signal-handler signum)
+;;   (signal-mask! signum)
+;;   (handle-exceptions
+;;    exn
+;;    (debug:print 0 *default-log-port* " ... exiting ...")
+;;    (let ((th1 (make-thread (lambda ()
+;; 			     (thread-sleep! 1))
+;; 			   "eat response"))
+;; 	 (th2 (make-thread (lambda ()
+;; 			     (debug:print-error 0 *default-log-port* "Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
+;; 			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
+;; 			     (debug:print 0 *default-log-port* "       Done.")
+;; 			     (exit 4))
+;; 			   "exit on ^C timer")))
+;;      (thread-start! th2)
+;;      (thread-start! th1)
+;;      (thread-join! th2))))
+
+;;===============================================
+;; Java script
+;;===============================================
+(define (http-transport:show-jquery)
+  (let* ((data  (tests:readlines *java-script-lib*)))
+(string-join data "\n")))
+
+
 
 ;;======================================================================
 ;; web pages
 ;;======================================================================
+
+(define (http-transport:html-test-log $)
+   (let* ((run-id ($ 'runid))
+         (test-item ($ 'testname))
+         (parts (string-split test-item ":"))
+         (test-name (car parts))
+             
+         (item-name (if (equal? (length parts) 1)
+             ""
+             (cadr parts))))
+  ;(print $) 
+(tests:get-test-log run-id test-name item-name)))
+
+
+(define (http-transport:html-dboard $)
+  (let* ((page ($ 'page))
+         (oup       (open-output-string)) 
+         (bdy "--------------------------")
+
+         (ret  (tests:dynamic-dboard page)))
+    (s:output-new  oup  ret)
+   (close-output-port oup)
+
+  (set! bdy   (get-output-string oup))
+     (conc "<h1>Dashboard</h1>" bdy "<br/> <br/> "  )))
 
 (define (http-transport:main-page)
   (let ((linkpath (root-path)))

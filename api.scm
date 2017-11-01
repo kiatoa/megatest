@@ -41,15 +41,19 @@
     get-run-info
     get-run-status
     get-run-stats
+    get-run-times
     get-targets
     get-target
     ;; register-run
     get-tests-tags
+    get-test-times
     get-tests-for-run
     get-test-id
     get-tests-for-runs-mindata
+    get-tests-for-run-mindata
     get-run-name-from-id
     get-runs
+    simple-get-runs
     get-num-runs
     get-all-run-ids
     get-prev-run-ids
@@ -58,6 +62,7 @@
     get-steps-data
     get-steps-for-test
     read-test-data
+    read-test-data*
     login
     tasks-get-last
     testmeta-get-record
@@ -128,6 +133,7 @@
      (vector #f (vector #f "remote must be called with a vector")))
     ((> *api-process-request-count* 20) ;; 20)
      (debug:print 0 *default-log-port* "WARNING: api:execute-requests received an overloaded message.")
+     (set! *server-overloaded* #t)
      (vector #f (vector #f 'overloaded))) ;; the inner vector is what gets returned. nope, don't know why. please refactor!
     (else  
      (let* ((cmd-in            (vector-ref dat 0))
@@ -154,7 +160,22 @@
                    ((kill-server)                     (set! *server-run* #f))
 
                    ;; TESTS
-                   ((test-set-state-status-by-id)     (apply mt:test-set-state-status-by-id dbstruct params))
+
+                   ;;((test-set-state-status-by-id)     (apply mt:test-set-state-status-by-id dbstruct params))
+                   ;;BB - commented out above because it was calling below, eventually, incorrectly (dbstruct passed to mt:test-set-state-status-by-id, which previosly did more, but now only passes thru to db:set-state-status-and-roll-up-items.
+                   ((test-set-state-status-by-id)
+
+                    ;; (define (db:set-state-status-and-roll-up-items dbstruct run-id test-name item-path state status comment)
+                    (db:set-state-status-and-roll-up-items
+                     dbstruct
+                     (list-ref params 0) ; run-id
+                     (list-ref params 1) ; test-name
+                     #f                  ; item-path
+                     (list-ref params 2) ; state
+                     (list-ref params 3) ; status
+                     (list-ref params 4) ; comment
+                     ))
+                   
                    ((delete-test-records)             (apply db:delete-test-records dbstruct params))
                    ((delete-old-deleted-test-records) (apply db:delete-old-deleted-test-records dbstruct params))
                    ((test-set-state-status)           (apply db:test-set-state-status dbstruct params))
@@ -195,6 +216,12 @@
                    ((tasks-set-state-given-param-key) (apply tasks:set-state-given-param-key dbstruct params))
                    ((tasks-get-last)            (apply tasks:get-last dbstruct params))
 
+		   ;; NO SYNC DB
+		   ((no-sync-set)               (apply db:no-sync-set         *no-sync-db* params))
+		   ((no-sync-get/default)       (apply db:no-sync-get/default *no-sync-db* params))
+		   ((no-sync-del!)              (apply db:no-sync-del!        *no-sync-db* params))
+		   ((no-sync-get-lock)          (apply db:no-sync-get-lock    *no-sync-db* params))
+		 
                    ;; ARCHIVES
                    ;; ((archive-get-allocations)   
                    ((archive-register-disk)     (apply db:archive-register-disk dbstruct params))
@@ -234,6 +261,7 @@
                    ((get-count-tests-running-for-run-id) (apply db:get-count-tests-running-for-run-id dbstruct params))
                    ((synchash-get)                    (apply synchash:server-get dbstruct params))
                    ((get-raw-run-stats)               (apply db:get-raw-run-stats dbstruct params))
+		   ((get-test-times)                  (apply db:get-test-times dbstruct params))
 
                    ;; RUNS
                    ((get-run-info)                 (apply db:get-run-info dbstruct params))
@@ -242,7 +270,9 @@
                    ((get-tests-for-run)            (apply db:get-tests-for-run dbstruct params))
                    ((get-test-id)                  (apply db:get-test-id dbstruct params))
                    ((get-tests-for-run-mindata)    (apply db:get-tests-for-run-mindata dbstruct params))
+                   ((get-tests-for-runs-mindata)   (apply db:get-tests-for-runs-mindata dbstruct params))
                    ((get-runs)                     (apply db:get-runs dbstruct params))
+                   ((simple-get-runs)              (apply db:simple-get-runs dbstruct params))
                    ((get-num-runs)                 (apply db:get-num-runs dbstruct params))
                    ((get-all-run-ids)              (db:get-all-run-ids dbstruct))
                    ((get-prev-run-ids)             (apply db:get-prev-run-ids dbstruct params))
@@ -252,13 +282,17 @@
                    ((get-main-run-stats)           (apply db:get-main-run-stats dbstruct params))
                    ((get-var)                      (apply db:get-var dbstruct params))
                    ((get-run-stats)                (apply db:get-run-stats dbstruct params))
+                   ((get-run-times)                (apply db:get-run-times dbstruct params)) 
 
                    ;; STEPS
                    ((get-steps-data)               (apply db:get-steps-data dbstruct params))
                    ((get-steps-for-test)           (apply db:get-steps-for-test dbstruct params))
+		   ((get-steps-info-by-id)         (apply db:get-steps-info-by-id dbstruct params))
 
                    ;; TEST DATA
                    ((read-test-data)               (apply db:read-test-data dbstruct params))
+                   ((read-test-data*)              (apply db:read-test-data* dbstruct params))
+                   ((get-data-info-by-id)          (apply db:get-data-info-by-id dbstruct params)) 
 
                    ;; MISC
                    ((get-latest-host-load)         (apply db:get-latest-host-load dbstruct params))

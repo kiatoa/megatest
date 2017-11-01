@@ -10,8 +10,8 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest directory-utils posix-extras matchable
-     )
+(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest
+     directory-utils posix-extras matchable)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
 
@@ -22,6 +22,7 @@
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 ;; (declare (uses synchash))
 (declare (uses http-transport))
+;;(declare (uses rpc-transport))
 (declare (uses launch))
 (declare (uses daemon))
 
@@ -34,6 +35,12 @@
       (conc "http://" (car hostport) ":" (cadr hostport))))
 
 (define  *server-loop-heart-beat* (current-seconds))
+
+;;======================================================================
+;; P K T S   S T U F F 
+;;======================================================================
+
+;; ???
 
 ;;======================================================================
 ;; P K T S   S T U F F 
@@ -56,7 +63,7 @@
   (case transport-type
     ((http)(http-transport:launch))
     ;;((nmsg)(nmsg-transport:launch run-id))
-    ((rpc)  (rpc-transport:launch run-id))
+    ;;((rpc)  (rpc-transport:launch run-id))
     (else (debug:print-error 0 *default-log-port* "unknown server type " transport-type))))
 
 ;;======================================================================
@@ -118,7 +125,8 @@
 							   "")
 		      ;; " -log " logfile
 		      " -m testsuite:" testsuite)) ;; (conc " >> " logfile " 2>&1 &")))))
-	 (log-rotate  (make-thread common:rotate-logs  "server run, rotate logs thread")))
+	 (log-rotate  (make-thread common:rotate-logs  "server run, rotate logs thread"))
+         (load-limit  (configf:lookup-number *configdat* "jobtools" "maxhomehostload" default: 3.0)))
     ;; we want the remote server to start in *toppath* so push there
     (push-directory areapath)
     (debug:print 0 *default-log-port* "INFO: Trying to start server (" cmdln ") ...")
@@ -135,7 +143,7 @@
 	  (setenv "TARGETHOST" target-host)))
       
     (setenv "TARGETHOST_LOGF" logfile)
-    (common:wait-for-normalized-load 4 " delaying server start due to load" remote-host: (get-environment-variable "TARGETHOST")) ;; do not try starting servers on an already overloaded machine, just wait forever
+    (common:wait-for-normalized-load load-limit " delaying server start due to load" target-host) ;; do not try starting servers on an already overloaded machine, just wait forever
     (system (conc "nbfake " cmdln))
     (unsetenv "TARGETHOST_LOGF")
     (if (get-environment-variable "TARGETHOST")(unsetenv "TARGETHOST"))
@@ -212,7 +220,21 @@
 			     (> (length new-res) limit))
 			new-res ;; (take new-res limit)  <= need intelligent sorting before this will work
 			new-res)
-		      (loop (car tal)(cdr tal) new-res)))))))))
+		    (loop (car tal)(cdr tal) new-res)))))))))
+
+(define (server:get-num-alive srvlst)
+  (let ((num-alive 0))
+    (for-each
+     (lambda (server)
+       (match-let (((mod-time host port start-time pid)
+		    server))
+	 (let* ((uptime  (- (current-seconds) mod-time))
+		(runtime (if start-time
+			     (- mod-time start-time)
+			     0)))
+	   (if (< uptime 5)(set! num-alive (+ num-alive 1))))))
+     srvlst)
+    num-alive))
 
 ;; given a list of servers get a list of valid servers, i.e. at least
 ;; 10 seconds old, has started and is less than 1 hour old and is
@@ -236,7 +258,7 @@
 				(and start-time mod-time
 				     (> (- now start-time) 0)    ;; been running at least 0 seconds
 				     (< (- now mod-time)   16)   ;; still alive - file touched in last 16 seconds
-				     (< (- now start-time) 
+				     (< (- now start-time)       
 					(+ (- (string->number (or (configf:lookup *configdat* "server" "runtime") "3600"))
 					      180)
 					   (random 360))) ;; under one hour running time +/- 180
@@ -430,16 +452,14 @@
 	#t
 	#f)))
 
-;; timeout is in hours
-(define (server:get-timeout)
-  (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
+;; timeout is hms string: 1h 5m 3s, default is 1 minute
+;;
+(define (server:expiration-timeout)
+  (let ((tmo (configf:lookup *configdat* "server" "timeout")))
     (if (and (string? tmo)
-	     (string->number tmo))
-	(* 60 60 (string->number tmo))
-	;; (* 3 24 60 60) ;; default to three days
-	;;(* 60 60 1)     ;; default to one hour
-	(* 60 5)          ;; default to five minutes
-	)))
+	     (common:hms-string->seconds tmo)) ;; BUG: hms-string->seconds is broken, if given "10" returns 0. Also, it doesn't belong in this logic unless the string->number is changed below
+        (* 3600 (string->number tmo))
+	60)))
 
 (define (server:get-best-guess-address hostname)
   (let ((res #f))
@@ -453,4 +473,138 @@
      (map number->string
 	  (u8vector->list
 	   (if res res (hostname->ip hostname)))) ".")))
+
+;; moving this here as it needs access to db and cannot be in common.
+;;
+(define (server:writable-watchdog dbstruct)
+  (thread-sleep! 0.05) ;; delay for startup
+  (let ((legacy-sync  (common:run-sync?))
+        (sync-stale-seconds (configf:lookup-number *configdat* "server" "sync-stale-seconds" default: 300))
+	(debug-mode   (debug:debug-mode 1))
+	(last-time    (current-seconds))
+	(no-sync-db   (db:open-no-sync-db))
+        (sync-duration 0) ;; run time of the sync in milliseconds
+        ;;(this-wd-num  (begin (mutex-lock! *wdnum*mutex) (let ((x *wdnum*)) (set! *wdnum* (add1 *wdnum*)) (mutex-unlock! *wdnum*mutex) x)))
+        )
+    (set! *no-sync-db* no-sync-db) ;; make the no sync db available to api calls
+    (debug:print-info 2 *default-log-port* "Periodic sync thread started.")
+    (debug:print-info 3 *default-log-port* "watchdog starting. legacy-sync is " legacy-sync" pid="(current-process-id)  );;  " this-wd-num="this-wd-num)
+    (if (and legacy-sync (not *time-to-exit*))
+	(let* (;;(dbstruct (db:setup))
+	       (mtdb       (dbr:dbstruct-mtdb dbstruct))
+	       (mtpath     (db:dbdat-get-path mtdb))
+	       (tmp-area   (common:get-db-tmp-area))
+	       (start-file (conc tmp-area "/.start-sync"))
+	       (end-file   (conc tmp-area "/.end-sync")))
+	  (debug:print-info 0 *default-log-port* "Server running, periodic sync started.")
+	  (let loop ()
+	    ;; sync for filesystem local db writes
+	    ;;
+	    (mutex-lock! *db-multi-sync-mutex*)
+	    (let* ((need-sync        (>= *db-last-access* *db-last-sync*)) ;; no sync since last write
+		   (sync-in-progress *db-sync-in-progress*)
+                   (min-intersync-delay (configf:lookup-number *configdat* "server" "minimum-intersync-delay" default: 5))
+		   (should-sync      (and (not *time-to-exit*)
+                                          (> (- (current-seconds) *db-last-sync*) min-intersync-delay))) ;; sync every five seconds minimum, deprecated logic, can probably be removed
+		   (start-time       (current-seconds))
+                   (cpu-load-adj     (alist-ref 'adj-proc-load (common:get-normalized-cpu-load #f)))
+		   (mt-mod-time      (file-modification-time mtpath))
+		   (last-sync-start  (if (common:file-exists? start-file)
+					 (file-modification-time start-file)
+					 0))
+		   (last-sync-end    (if (common:file-exists? end-file)
+					 (file-modification-time end-file)
+					 10))
+                   (sync-period      (+ 3 (* cpu-load-adj 30))) ;; as adjusted load increases increase the sync period
+		   (recently-synced  (and (< (- start-time mt-mod-time) sync-period) ;; not useful if sync didn't modify megatest.db!
+					  (< mt-mod-time last-sync-start)))
+		   (sync-done        (<= last-sync-start last-sync-end))
+                   (sync-stale       (> start-time (+ last-sync-start sync-stale-seconds)))
+		   (will-sync        (and (not *time-to-exit*)       ;; do not start a sync if we are in the process of exiting
+                                          (or need-sync should-sync)
+					  (or sync-done sync-stale)
+					  (not sync-in-progress)
+					  (not recently-synced))))
+              (debug:print-info 13 *default-log-port* "WD writable-watchdog top of loop.  need-sync="need-sync" sync-in-progress=" sync-in-progress
+				" should-sync="should-sync" start-time="start-time" mt-mod-time="mt-mod-time" recently-synced="recently-synced" will-sync="will-sync
+				" sync-done=" sync-done " sync-period=" sync-period)
+              (if (and (> sync-period 5)
+                       (common:low-noise-print 30 "sync-period"))
+                  (debug:print-info 0 *default-log-port* "Increased sync period due to long sync times, sync took: " sync-period " seconds."))
+	      ;; (if recently-synced (debug:print-info 0 *default-log-port* "Skipping sync due to recently-synced flag=" recently-synced))
+	      ;; (debug:print-info 0 *default-log-port* "need-sync: " need-sync " sync-in-progress: " sync-in-progress " should-sync: " should-sync " will-sync: " will-sync)
+	      (if will-sync (set! *db-sync-in-progress* #t))
+	      (mutex-unlock! *db-multi-sync-mutex*)
+	      (if will-sync
+                  (let (;; (max-sync-duration  (configf:lookup-number *configdat* "server" "max-sync-duration")) ;; KEEPING THIS AVAILABLE BUT SHOULD NOT USE, I'M PRETTY SURE IT DOES NOT WORK!
+                        (sync-start         (current-milliseconds)))
+		    (with-output-to-file start-file (lambda ()(print (current-process-id))))
+		    
+		    ;; put lock here
+		    
+                    ;; (if (or (not max-sync-duration)
+                    ;;        (< sync-duration max-sync-duration)) ;; NOTE: db:sync-to-megatest.db keeps track of time of last sync and syncs incrementally
+                        (let ((res        (db:sync-to-megatest.db dbstruct no-sync-db: no-sync-db))) ;; did we sync any data? If so need to set the db touched flag to keep the server alive
+                          (set! sync-duration (- (current-milliseconds) sync-start))
+                          (if (> res 0) ;; some records were transferred, keep the db alive
+                              (begin
+                                (mutex-lock! *heartbeat-mutex*)
+                                (set! *db-last-access* (current-seconds))
+                                (mutex-unlock! *heartbeat-mutex*)
+                                (debug:print-info 0 *default-log-port* "sync called, " res " records transferred."))
+                              (debug:print-info 2 *default-log-port* "sync called but zero records transferred")))))
+;;                         ;; TODO: factor this next routine out into a function
+;;                         (with-input-from-pipe ;; this should not block other threads but need to verify this
+;;                          (conc "megatest -sync-to-megatest.db -m testsuite:" (common:get-area-name) ":" *toppath*)
+;;                          (lambda ()
+;;                            (let loop ((inl (read-line))
+;;                                       (res #f))
+;;                              (if (eof-object? inl)
+;;                                  (begin
+;;                                    (set! sync-duration (- (current-milliseconds) sync-start))
+;;                                    (cond
+;;                                     ((not res)
+;;                                      (debug:print 0 *default-log-port* "ERROR: sync from /tmp db to megatest.db appears to have failed. Recommended that you stop your runs and run \"megatest -cleanup-db\""))
+;;                                     ((> res 0)
+;;                                      (mutex-lock! *heartbeat-mutex*)
+;;                                      (set! *db-last-access* (current-seconds))
+;;                                      (mutex-unlock! *heartbeat-mutex*))))
+;;                                  (let ((num-synced (let ((matches (string-match "^Synced (\\d+).*$" inl)))
+;;                                                      (if matches
+;;                                                          (string->number (cadr matches))
+;;                                                          #f))))
+;;                                    (loop (read-line)
+;;                                          (or num-synced res))))))))))
+	      (if will-sync
+		  (begin
+		    (mutex-lock! *db-multi-sync-mutex*)
+		    (set! *db-sync-in-progress* #f)
+		    (set! *db-last-sync* start-time)
+		    (with-output-to-file end-file (lambda ()(print (current-process-id))))
+
+		    ;; release lock here
+
+		    (mutex-unlock! *db-multi-sync-mutex*)))
+	      (if (and debug-mode
+		       (> (- start-time last-time) 60))
+		  (begin
+		    (set! last-time start-time)
+		    (debug:print-info 4 *default-log-port* "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
+	    
+	    ;; keep going unless time to exit
+	    ;;
+	    (if (not *time-to-exit*)
+		(let delay-loop ((count 0))
+                  ;;(debug:print-info 13 *default-log-port* "delay-loop top; count="count" pid="(current-process-id)" this-wd-num="this-wd-num" *time-to-exit*="*time-to-exit*)
+                                                            
+		  (if (and (not *time-to-exit*)
+			   (< count 6)) ;; was 11, changing to 4. 
+		      (begin
+			(thread-sleep! 1)
+			(delay-loop (+ count 1))))
+		  (if (not *time-to-exit*) (loop))))
+	    ;; time to exit, close the no-sync db here
+	    (db:no-sync-close-db no-sync-db)
+	    (if (common:low-noise-print 30)
+		(debug:print-info 0 *default-log-port* "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*" pid="(current-process-id) ))))))) ;;" this-wd-num="this-wd-num)))))))
 

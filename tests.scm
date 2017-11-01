@@ -33,6 +33,8 @@
 (include "db_records.scm")
 (include "run_records.scm")
 (include "test_records.scm")
+(include "js-path.scm")
+
 
 ;; Call this one to do all the work and get a standardized list of tests
 ;;   gets paths from configs and finds valid tests 
@@ -63,12 +65,12 @@
       test-registry
       (let loop ((hed (car tests-paths))
 		 (tal (cdr tests-paths)))
-	(if (file-exists? hed)
+	(if (common:file-exists? hed)
 	    (for-each (lambda (test-path)
 			(let* ((tname   (last (string-split test-path "/")))
 			       (tconfig (conc test-path "/testconfig")))
 			  (if (and (not (hash-table-ref/default test-registry tname #f))
-				   (file-exists? tconfig))
+				   (common:file-exists? tconfig))
 			      (hash-table-set! test-registry tname test-path))))
 		      (glob (conc hed "/*"))))
 	(if (null? tal)
@@ -148,7 +150,7 @@
 ;; returns waitons waitors tconfigdat
 ;;
 (define (tests:get-waitons test-name all-tests-registry)
-   (let* ((config  (tests:get-testconfig test-name #f all-tests-registry 'return-procs)))
+   (let* ((config  (tests:get-testconfig test-name #f all-tests-registry 'return-procs))) ;; assuming no problems with immediate evaluation, this could be simplified ('return-procs -> #t)
      (let ((instr (if config 
 		      (config-lookup config "requirements" "waiton")
 		      (begin ;; No config means this is a non-existant test
@@ -219,11 +221,22 @@
 				    newpatt))
 				(filter (lambda (x)
 					  (eq? (substring-index (conc waiting-test "/") x) 0)) ;; is this patt pertinent to the waiting test
-					patts))))
-    (string-intersperse (delete-duplicates (append patts (if (null? patts-waiton)
-							     (list (conc waiton-test "/%")) ;; really shouldn't add the waiton forcefully like this
-							     patts-waiton)))
-			",")))
+					patts)))
+         (extended-test-patt   (append patts (if (null? patts-waiton)
+                                     (list (conc waiton-test "/%")) ;; really shouldn't add the waiton forcefully like this
+                                     patts-waiton)))
+         (extended-test-patt-with-toplevels
+          (fold (lambda (testpatt-item accum )
+                  (let ((my-match (string-match "^([^%\\/]+)\\/.+$" testpatt-item)))
+                    (cons testpatt-item
+                          (if my-match
+                              (cons
+                               (conc (cadr my-match) "/")
+                               accum)
+                              accum))))
+                '()
+                extended-test-patt)))
+    (string-intersperse (delete-duplicates extended-test-patt-with-toplevels) ",")))
 
 
   
@@ -307,7 +320,7 @@
 	 (waiver-rx   (regexp "^(\\S+)\\s+(.*)$"))
 	 (diff-rule   "diff %file1% %file2%")
 	 (logpro-rule "diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html"))
-    (if (not (file-exists? test-rundir))
+    (if (not (common:file-exists? test-rundir))
 	(begin
 	  (debug:print-error 0 *default-log-port* "test run directory is gone, cannot propagate waiver")
 	  #f)
@@ -324,7 +337,7 @@
 				     (waiver-glob (if wparts (caddr wparts) #f))
 				     (logpro-file (if waiver
 						      (let ((fname (conc hed ".logpro")))
-							(if (file-exists? fname)
+							(if (common:file-exists? fname)
 							    fname 
 							    (begin
 							      (debug:print 0 *default-log-port* "INFO: No logpro file " fname " falling back to diff")
@@ -422,15 +435,15 @@
     (let ((category (hash-table-ref/default otherdat ":category" ""))
 	  (variable (hash-table-ref/default otherdat ":variable" ""))
 	  (value    (hash-table-ref/default otherdat ":value"    #f))
-	  (expected (hash-table-ref/default otherdat ":expected" #f))
-	  (tol      (hash-table-ref/default otherdat ":tol"      #f))
+	  (expected (hash-table-ref/default otherdat ":expected" "n/a"))
+	  (tol      (hash-table-ref/default otherdat ":tol"      "n/a"))
 	  (units    (hash-table-ref/default otherdat ":units"    ""))
 	  (type     (hash-table-ref/default otherdat ":type"     ""))
 	  (dcomment (hash-table-ref/default otherdat ":comment"  "")))
       (debug:print 4 *default-log-port* 
 		   "category: " category ", variable: " variable ", value: " value
 		   ", expected: " expected ", tol: " tol ", units: " units)
-      (if (and value expected tol) ;; all three required
+      (if (and value) ;; require only value; BB was- all three required
 	  (let ((dat (conc category ","
 			   variable ","
 			   value    ","
@@ -441,7 +454,9 @@
 			   type     )))
 	    ;; This was run remote, don't think that makes sense. Perhaps not, but that is the easiest path for the moment.
 	    (rmt:csv->test-data run-id test-id
-				dat))))
+				dat)
+            (thread-sleep! 10) ;; add 10 second delay before quit incase rmt needs time to start a server.
+            )))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     ;;;;;; (if (not (equal? item-path ""))
@@ -583,9 +598,7 @@ th {background-color: #8c8c8c;}
 td.test {background-color: #d9dbdd;}
 td.PASS {background-color: #347533;}
 td.FAIL {background-color: #cc2812;}
-
-  </style>
-  <script src=/nfs/site/disks/ch_ciaf_disk023/fdk_gwa_disk003/pjhatwal/fdk/docs/qa-env-team/jquery-3.1.0.slim.min.js></script>
+</style>
 
 
   <script type="text/JavaScript">
@@ -671,6 +684,24 @@ td.FAIL {background-color: #cc2812;}
 EOF
 )
 
+(define tests:css-jscript-block-dynamic 
+#<<EOF
+           <script src= ./jquery3.1.0.js></script> 
+EOF
+)
+
+(define  (test:js-block javascript-lib)
+   (conc  "<script src=" javascript-lib "></script>" ))
+
+
+(define tests:css-jscript-block-static (test:js-block *java-script-lib*))
+
+(define (tests:css-jscript-block-cond dynamic) 
+      (if (equal? dynamic  #t)
+       tests:css-jscript-block-dynamic
+       tests:css-jscript-block-static))
+
+       
 (define (tests:run-record->test-path run numkeys)
    (append (take (vector->list run) numkeys)
 	   (list (vector-ref run (+ 1 numkeys)))))
@@ -711,42 +742,19 @@ EOF
       runs)
    resh))
 
-;; (tests:create-html-tree "test-index.html")
+;; tests:genrate dashboard body 
 ;;
-(define (tests:create-html-tree outf)
-   (let* ((lockfile  (conc outf ".lock"))
-	 (runs-to-process '())
-         (linktree  (common:get-linktree))
-          (area-name (common:get-testsuite-name))
-	  (keys      (rmt:get-keys))
-	  (numkeys   (length keys))
-         (total-runs  (rmt:get-num-runs "%"))
-         (pg-size 10)   )
-    (if (common:simple-file-lock lockfile)
-        (begin
-         (print total-runs)    
-        (let loop ((page 0))
-	(let* ((oup       (open-output-file (or outf (conc linktree "/page" page ".html"))))
-               (start (* page pg-size)) 
+
+(define (tests:dashboard-body page pg-size keys numkeys  total-runs linktree area-name get-prev-links get-next-links flag)
+  (let* ((start (* page pg-size)) 
 	       (runsdat   (rmt:get-runs "%" pg-size start (map (lambda (x)(list x "%")) keys)))
 	       (header    (vector-ref runsdat 0))
 	       (runs      (vector-ref runsdat 1))
                (ctr 0)
                (test-runs-hash (tests:get-rest-data runs header numkeys))
                (test-list (hash-table-keys test-runs-hash))
-               (get-prev-links (lambda (page linktree )   
-                            (let* ((link  (if (not (eq? page 0))
-                                            (s:a "&lt;&lt;prev" 'href (conc  linktree "/page" (- page 1) ".html"))
-                                            (s:a "" 'href (conc  linktree "/page"  page ".html")))))
-                               link)))
-                (get-next-links (lambda (page linktree total-runs)   
-                            (let* ((link  (if (> total-runs (+ 1 (* page pg-size)))
-                                            (s:a "next&gt;&gt;" 'href (conc  linktree "/page"  (+ page 1) ".html"))
-                                             (s:a "" 'href (conc  linktree "/page" page  ".html")))))
-                               link))))
-	  (s:output-new
-	   oup
-	   (s:html tests:css-jscript-block
+               ) 
+  (s:html tests:css-jscript-block (tests:css-jscript-block-cond flag)
 		   (s:title "Summary for " area-name)
 		   (s:body 'onload "addEvents();"
                           (get-prev-links page linktree)
@@ -755,7 +763,6 @@ EOF
 			   (s:h1 "Summary for " area-name)
                            (s:h3 "Filter" )
                            (s:input 'type "text"  'name "testname" 'id "testname" 'length "30" 'onkeyup "filtersome()")
-  
 			   ;; top list
 			   (s:table 'id "LinkedList1" 'border "1"
                             (map (lambda (key)
@@ -784,17 +791,49 @@ EOF
                                                                       (run-id (db:get-value-by-header run header "id"))
                                                                       (result (hash-table-ref/default run-test run-id "n/a"))
                                                                       (status (if (string? result)
-                                                                                 (begin 
-                                                                                  ; (print "string" result)
-                                                                                     result)
-                                                                                 (begin 
-                                                                                   ;  (print "not string" result )
-                                                                                 (car result)))))
-                                                                       (s:td  status 'class status)))
+										result
+										(car result)))
+                                                                        (link (if (string? result)
+										result
+                                                                                (if (equal? flag #t) 
+                                                                                (s:a (car result) 'href (conc "./test_log?runid=" run-id "&testname="  item-name ))
+										(s:a (car result) 'href (cadr result))))))
+                                                                       (s:td  link 'class status)))
                                                                 runs))))
                                                         res))
                                                    item-keys)))
-                               test-list)))))
+                               test-list)))))) 
+
+;; (tests:create-html-tree "test-index.html")
+;;
+(define (tests:create-html-tree outf)
+   (let* ((lockfile  (conc outf ".lock"))
+	 (runs-to-process '())
+         (linktree  (common:get-linktree))
+          (area-name (common:get-testsuite-name))
+	  (keys      (rmt:get-keys))
+	  (numkeys   (length keys))
+         (total-runs  (rmt:get-num-runs "%"))
+         (pg-size 10))
+    (if (common:simple-file-lock lockfile)
+        (begin
+         ;(print total-runs)    
+        (let loop ((page 0))
+	(let* ((oup       (open-output-file (or outf (conc linktree "/page" page ".html"))))
+               (get-prev-links (lambda (page linktree )   
+                            (let* ((link  (if (not (eq? page 0))
+                                   (s:a "&lt;&lt;prev" 'href (conc  linktree "/page" (- page 1) ".html"))
+                                   (s:a "" 'href (conc  linktree "/page"  page ".html")))))
+                               link)))
+               (get-next-links (lambda (page linktree total-runs)   
+                            (let* ((link  (if (> total-runs (+ 10 (* page pg-size)))
+                                   (s:a "next&gt;&gt;" 'href (conc  linktree "/page"  (+ page 1) ".html"))
+                                   (s:a "" 'href (conc  linktree "/page" page  ".html")))))
+                               link))) )
+          ;(print (tests:dashboard-body page pg-size keys numkeys total-runs linktree area-name))
+	  (s:output-new
+	   oup
+	   (tests:dashboard-body page pg-size keys numkeys total-runs linktree area-name get-prev-links get-next-links #f))
           (close-output-port oup)
          ; (set! page (+ 1 page))
           (if (> total-runs (* (+ 1 page) pg-size))
@@ -804,7 +843,78 @@ EOF
 	#f)))
 
 
+(define (tests:readlines filename)
+  (call-with-input-file filename
+    (lambda (p)
+      (let loop ((line (read-line p))
+                 (result '()))
+        (if (eof-object? line)
+            (reverse result)
+            (loop (read-line p) (cons line result)))))))
 
+(define (tests:get-test-log run-id test-name item-name)
+  (let* ((test-data    (rmt:get-tests-for-run
+				   (string->number run-id)
+                                    test-name      ;; testnamepatt
+				   '()        ;; states
+				   '()        ;; statuses
+				   #f         ;; offset
+				   #f         ;; num-to-get
+				   #f         ;; hide/not-hide
+				   #f         ;; sort-by
+				   #f         ;; sort-order
+				   #f         ;; 'shortlist                           ;; qrytype
+                                   0         ;; last update
+				   #f))
+         (path "")
+         (found 0))
+    (debug:print-info 0 *default-log-port* "found: " found )
+
+   (let loop ((hed (car test-data))
+		 (tal (cdr test-data)))
+          (debug:print-info 0 *default-log-port* "item: " (vector-ref hed 11) (vector-ref hed 10) "/" (vector-ref hed 13))
+
+	(if (equal? (vector-ref hed 11) item-name)
+            (begin
+              (set! found 1) 
+	      (set! path (conc (vector-ref hed 10) "/" (vector-ref hed 13)))))
+	    (if (and (not (null? tal)) (equal? found 0))
+		(loop (car tal)(cdr tal))))
+   (if (equal? path "")
+     "<H2>Data not found</H2>"
+     (string-join (tests:readlines path) "\n"))))
+
+
+(define (tests:dynamic-dboard page)
+;(define (tests:create-html-tree o)
+ (let* (
+;(page "1")
+          (linktree  (common:get-linktree))
+         (area-name (common:get-testsuite-name))
+	 (keys      (rmt:get-keys))
+	 (numkeys   (length keys))
+         (total-runs  (rmt:get-num-runs "%"))
+         (pg-size 10)
+         (pg (if (equal? page #f)
+                 0
+                 (- (string->number page) 1)))
+          (get-prev-links  (lambda (pg linktree)
+                           (debug:print-info 0 *default-log-port* "val: " (- 1 pg))
+                          (let* ((link  (if (not (eq? pg 0))
+                               (s:a  "&lt;&lt;prev " 'href (conc  "dashboard?page="  pg  ))
+                               (s:a "" 'href (conc  "dashboard?page=" pg)))))
+                               link)))
+          (get-next-links   (lambda (pg linktree total-runs)  
+                            (debug:print-info 0 *default-log-port* "val: " pg)
+                             (debug:print-info 0 *default-log-port* "val: " total-runs " size" pg-size)
+ 
+                            (let* ((link  (if (> total-runs (+ 10 (* pg pg-size)))
+                              (s:a  "next&gt;&gt; "  'href (conc  "dashboard?page="  (+ pg 2)  ))
+                             (s:a "" 'href (conc  "dashboard?page=" pg  )))))
+                             link)))
+         (html-body (tests:dashboard-body pg pg-size keys numkeys total-runs linktree area-name get-prev-links get-next-links #t)))
+         ;(print (tests:dashboard-body page pg-size keys numkeys total-runs linktree area-name))
+html-body))
 
 
 
@@ -841,7 +951,7 @@ EOF
 							(let* ((targ-path (string-intersperse p "/"))
                                                                (full-path (conc linktree "/" targ-path))
                                                                (run-name  (car (reverse p))))
-                                                          (if (and (file-exists? full-path)
+                                                          (if (and (common:file-exists? full-path)
                                                                    (directory?   full-path)
                                                                    (file-write-access? full-path))
                                                               (s:a run-name 'href (conc targ-path "/run-summary.html"))
@@ -880,7 +990,7 @@ EOF
                     (tests-htree (common:list->htree tests-tree-dat))
                     (html-dir    (conc linktree "/" (string-intersperse run-dir "/")))
                     (html-path   (conc html-dir "/run-summary.html"))
-                    (oup         (if (and (file-exists? html-dir)
+                    (oup         (if (and (common:file-exists? html-dir)
                                           (directory?   html-dir)
                                           (file-write-access? html-dir))
                                      (open-output-file  html-path)
@@ -908,17 +1018,17 @@ EOF
                                                                           (full-targ (conc html-dir "/" targ-path))
                                                                           (std-file  (conc full-targ "/test-summary.html"))
                                                                           (alt-file  (conc full-targ "/megatest-rollup-" test-name ".html"))
-                                                                          (html-file (if (file-exists? alt-file)
+                                                                          (html-file (if (common:file-exists? alt-file)
                                                                                          alt-file
                                                                                          std-file))
                                                                           (run-name  (car (reverse p))))
-                                                                     (if (and (not (file-exists? full-targ))
+                                                                     (if (and (not (common:file-exists? full-targ))
                                                                               (directory? full-targ)
                                                                               (file-write-access? full-targ))
                                                                          (tests:summarize-test 
                                                                           run-id 
                                                                           (rmt:get-test-id run-id test-name item-path)))
-                                                                     (if (file-exists? full-targ)
+                                                                     (if (common:file-exists? full-targ)
                                                                          (s:a run-name 'href html-file)
                                                                          (begin
                                                                            (debug:print 0 *default-log-port* "ERROR: can't access " full-targ)
@@ -1131,7 +1241,7 @@ EOF
 
 ;; (define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
 ;;   (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
-;;     (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
+;;     (set! tests (filter (lambda (test)(common:file-exists? (conc test "/testconfig"))) tests))
 ;;     (delete-duplicates
 ;;      (filter (lambda (testname)
 ;; 	       (tests:match test-patts testname #f))
@@ -1160,13 +1270,13 @@ EOF
 ;; else read the testconfig file
 ;;   if have path to test directory save the config as .testconfig and return it
 ;;
-(define (tests:get-testconfig test-name item-path test-registry system-allowed #!key (force-create #f))
+(define (tests:get-testconfig test-name item-path test-registry system-allowed #!key (force-create #f)(allow-write-cache #t))
   (let* ((use-cache    (common:use-cache?))
 	 (cache-path   (tests:get-test-path-from-environment))
 	 (cache-file   (and cache-path (conc cache-path "/.testconfig")))
 	 (cache-exists (and cache-file
 			    (not force-create)  ;; if force-create then pretend there is no cache to read
-			    (file-exists? cache-file)))
+			    (common:file-exists? cache-file)))
 	 (cached-dat   (if (and (not force-create)
 				cache-exists
 				use-cache)
@@ -1190,7 +1300,7 @@ EOF
 		     (test-path    (or (hash-table-ref/default treg test-name #f)
 				       (conc *toppath* "/tests/" test-name)))
 		     (test-configf (conc test-path "/testconfig"))
-		     (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
+		     (testexists   (and (common:file-exists? test-configf)(file-read-access? test-configf)))
 		     (tcfg         (if testexists
 				       (read-config test-configf #f system-allowed
 						    environ-patt: (if system-allowed
@@ -1201,7 +1311,8 @@ EOF
 		(if tcfg (hash-table-set! *testconfigs* test-full-name tcfg))
 		(if (and testexists
 			 cache-file
-			 (file-write-access? cache-path))
+			 (file-write-access? cache-path)
+			 allow-write-cache)
 		    (let ((tpath (conc cache-path "/.testconfig")))
 		      (debug:print-info 1 *default-log-port* "Caching testconfig for " test-name " in " tpath)
                       (if (not (common:in-running-test?))
@@ -1359,7 +1470,7 @@ EOF
   (let ((dfile (conc "/tmp/." (current-user-name) "-" (server:mk-signature) ".dot"))
 	(fname (conc "/tmp/." (current-user-name) "-" (server:mk-signature) ".dotdat")))
     (tests:write-dot-file testrecords dfile sizex sizey)
-    (if (file-exists? fname)
+    (if (common:file-exists? fname)
 	(let ((res (with-input-from-file fname
 		     (lambda ()
 		       (read-lines)))))

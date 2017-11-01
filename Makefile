@@ -49,7 +49,8 @@ ARCHSTR=$(shell lsb_release -sr)
 
 PNGFILES = $(shell cd docs/manual;ls *png)
 
-all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut ndboard
+#all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut ndboard
+all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut
 
 mtest: $(OFILES) readline-fix.scm megatest.o $(MOFILES)
 	csc $(CSCOPTS) $(OFILES) $(MOFILES) megatest.o -o mtest
@@ -60,8 +61,42 @@ dboard : $(OFILES) $(GOFILES) dashboard.scm $(MOFILES)
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
 	csc $(CSCOPTS) $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
 
-mtut: $(OFILES) mtut.scm
+mtut: $(OFILES) megatest-fossil-hash.scm mtut.scm
 	csc $(CSCOPTS) $(OFILES) mtut.scm -o mtut
+
+TCMTOBJS = \
+	api.o \
+	archive.o \
+	cgisetup/models/pgdb.o \
+	client.o \
+	common.o \
+	configf.o \
+	daemon.o \
+	db.o \
+	env.o \
+	http-transport.o \
+	items.o \
+	keys.o \
+	launch.o \
+	lock-queue.o \
+	margs.o \
+	mt.o \
+	megatest-version.o \
+	ods.o \
+	portlogger.o \
+	process.o \
+	rmt.o \
+	rpc-transport.o \
+	runconfig.o \
+	runs.o \
+	server.o \
+	tasks.o \
+	tdb.o \
+	tests.o \
+
+
+tcmt : $(TCMTOBJS) tcmt.scm
+	csc $(CSCOPTS) $(TCMTOBJS) tcmt.scm -o tcmt
 
 # install documentation to $(PREFIX)/docs
 # DOES NOT REBUILD DOCS
@@ -70,6 +105,10 @@ $(PREFIX)/share/docs/megatest_manual.html : docs/manual/megatest_manual.html
 	mkdir -p $(PREFIX)/share/docs
 	$(INSTALL) docs/manual/megatest_manual.html $(PREFIX)/share/docs/megatest_manual.html
 	for png in $(PNGFILES);do $(INSTALL) docs/manual/$$png $(PREFIX)/share/docs/$$png;done
+
+js : java-script-lib/jquery-3.1.0.slim.min.js
+	mkdir -p $(PREFIX)/share/js
+	cp java-script-lib/jquery-3.1.0.slim.min.js $(PREFIX)/share/js/jquery-3.1.0.slim.min.js
 
 $(PREFIX)/share/db/mt-pg.sql : mt-pg.sql
 	mkdir -p $(PREFIX)/share/db
@@ -122,9 +161,19 @@ $(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard utils/mk_wrapper
 $(PREFIX)/bin/.$(ARCHSTR)/mtut : mtut
 	$(INSTALL) mtut $(PREFIX)/bin/.$(ARCHSTR)/mtut
 
+install-mtut : mtut
+	$(INSTALL) mtut $(PREFIX)/bin/mtut
+
 $(PREFIX)/bin/mtutil : $(PREFIX)/bin/.$(ARCHSTR)/mtut utils/mk_wrapper
 	utils/mk_wrapper $(PREFIX) mtut $(PREFIX)/bin/mtutil
 	chmod a+x $(PREFIX)/bin/mtutil
+
+$(PREFIX)/bin/.$(ARCHSTR)/tcmt : tcmt
+	$(INSTALL) tcmt $(PREFIX)/bin/.$(ARCHSTR)/tcmt
+
+$(PREFIX)/bin/tcmt : $(PREFIX)/bin/.$(ARCHSTR)/tcmt utils/mk_wrapper
+	utils/mk_wrapper $(PREFIX) tcmt $(PREFIX)/bin/tcmt
+	chmod a+x $(PREFIX)/bin/tcmt
 
 # $(PREFIX)/bin/.$(ARCHSTR)/mdboard : multi-dboard
 #	$(INSTALL) multi-dboard $(PREFIX)/bin/.$(ARCHSTR)/mdboard
@@ -203,8 +252,13 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES) utils/mk_wrapper
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
 	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/viewscreen $(PREFIX)/bin/mt_xterm \
+	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun \
 	  $(PREFIX)/share/docs/megatest_manual.html $(PREFIX)/bin/remrun $(PREFIX)/bin/mtutil \
-          $(PREFIX)/share/db/mt-pg.sql $(PREFIX)/bin/.$(ARCHSTR)/ndboard $(PREFIX)/bin/newdashboard
+	  $(PREFIX)/bin/tcmt $(PREFIX)/share/db/mt-pg.sql \
+          js 
+#         $(PREFIX)/bin/.$(ARCHSTR)/ndboard
+
+# $(PREFIX)/bin/newdashboard
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)
@@ -284,10 +338,18 @@ datashare-testing/spublish : spublish.scm $(OFILES)
 datashare-testing/sretrieve : sretrieve.scm megatest-version.o margs.o configf.o process.o 
 	csc $(CSCOPTS) sretrieve.scm megatest-version.o margs.o configf.o process.o -o datashare-testing/sretrieve
 
+datashare-testing/sauthorize : sretrieve.scm megatest-version.o margs.o configf.o process.o common.o
+	 csc sauthorize.scm megatest-version.o margs.o configf.o process.o common.o -o datashare-testing/sauthorize
+
+
+datashare-testing/sauthorize : sretrieve.scm megatest-version.o margs.o configf.o process.o common.o
+	 csc sauthorize.scm megatest-version.o margs.o configf.o process.o common.o -o datashare-testing/sauthorize
+
+
 sretrieve/sretrieve : datashare-testing/sretrieve
 	csc $(CSCOPTS) -deploy -deployed sretrieve.scm megatest-version.o margs.o configf.o process.o
 	chicken-install -keep-installed $(PROXY) -deploy -prefix sretrieve defstruct srfi-18 format sql-de-lite \
-             srfi-1 posix regex regex-case srfi-69
+             srfi-1 posix regex regex-case srfi-69 
 
 # base64 dot-locking \
 #             csv-xml z3
@@ -314,4 +376,8 @@ altdb.scm :
 
 portlogger-example : portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
 	csc $(CSCOPTS) portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
+
+# create a pdf dot graphviz diagram from notations in rmt.scm
+rmt.pdf : rmt.scm
+	grep ';;DOT' rmt.scm | sed -e 's/.*;;DOT //' > rmt.dot;dot -Tpdf rmt.dot -o rmt.pdf
 

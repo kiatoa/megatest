@@ -55,9 +55,33 @@
 (include "run_records.scm")
 (include "megatest-fossil-hash.scm")
 
+(define *usage-log-file* #f)    ;; put path to file for logging usage in this var in the ~/.megatestrc file
+(define *usage-use-seconds* #t) ;; for Epoc seconds in usage logging change this to #t in ~/.megatestrc file
+
+;; load the ~/.megatestrc file, put (use trace)(trace-call-sites #t)(trace function-you-want-to-trace) in this file
+;;
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.megatestrc")))
-  (if (file-exists? debugcontrolf)
+  (if (common:file-exists? debugcontrolf)
       (load debugcontrolf)))
+
+;; usage logging, careful with this, it is not designed to deal with all real world challenges!
+;;
+(if (and *usage-log-file*
+         (file-write-access? *usage-log-file*))
+    (with-output-to-file
+        *usage-log-file*
+      (lambda ()
+        (print
+         (if *usage-use-seconds*
+             (current-seconds)
+             (time->string
+              (seconds->local-time (current-seconds))
+              "%Yww%V.%w %H:%M:%S"))
+         " "
+         (current-user-name) " "
+         (current-directory) " "
+         "\"" (string-intersperse (argv) " ") "\""))
+      #:append))
 
 ;; Disabled help items
 ;;  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
@@ -67,8 +91,8 @@
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
-  license GPL, Copyright Matt Welland 2006-2015
-
+  license GPL, Copyright Matt Welland 2006-2017
+ 
 Usage: megatest [options]
   -h                      : this help
   -manual                 : show the Megatest user manual
@@ -77,7 +101,8 @@ Usage: megatest [options]
 Launching and managing runs
   -run                    : run all tests or as specified by -testpatt
   -remove-runs            : remove the data for a run, requires -runname and -testpatt
-                            Optionally use :state and :status
+                            Optionally use :state and :status, use -keep-records to remove only
+                            the run data.
   -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
   -rerun FAIL,WARN...     : force re-run for tests with specificed status(s)
   -rerun-clean            : set all tests not COMPLETED+PASS,WARN,WAIVED to NOT_STARTED,n/a
@@ -91,6 +116,12 @@ Launching and managing runs
   -preclean               : remove the existing test directory before running the test
   -clean-cache            : remove the cached megatest.config and runconfigs.config files
   -no-cache               : do not use the cached config files. 
+  -one-pass               : launch as many tests as you can but do not wait for more to be ready
+  -remove-keep N action   : remove all but N most recent runs per target
+                            * Use -actions print,remove-runs,archive to specify action to take
+                            * Add param -age 120d,3h,20m to apply only to runs older than the 
+                                 specified age
+                            * Add -precmd to insert a wrapper command in front of the commands run
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
@@ -101,6 +132,7 @@ Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs e
   -status                 : Applies to runs, tests or steps depending on context
   --modepatt key          : load testpatt from <key> in runconfigs instead of default TESTPATT if -testpatt and -tagexpr are not specified
   -tagexpr tag1,tag2%,..  : select tests with tags matching expression
+  
 
 Test helpers (for use inside tests)
   -step stepname
@@ -142,10 +174,12 @@ Queries
   -since N                : get list of runs changed since time N (Unix seconds)
   -fields fieldspec       : fields to include in json dump; runs:id,runame+tests:testname+steps
   -sort fieldname         : in -list-runs sort tests by this field
+  -testdata-csv [categorypatt/]varpatt  : dump testdata for given category
 
 Misc 
   -start-dir path         : switch to this directory before running megatest
   -contour cname          : add a level of hierarcy to the linktree and run paths
+  -area-tag tagname       : add a tag to an area while syncking to pgdb
   -rebuild-db             : bring the database schema up to date
   -cleanup-db             : remove any orphan records, vacuum the db
   -import-megatest.db     : push data from megatest.db to cache db files in /tmp/$USER
@@ -183,6 +217,13 @@ Utilities
                             in the [archive-disks] section.
                             cmd: keep-html, restore, save, save-remove
   -generate-html          : create a simple html tree for browsing your runs
+  -list-run-time          : list time requered to complete runs. It supports following switches
+                            -run-patt <patt> -target-patt <patt> -dumpmode <csv,json,plain-text>
+  -list-test-time	   : list time requered to complete each test in a run. It following following arguments
+                            -runname <patt> -target <patt> -dumpmode <csv,json,plain-text>
+
+  		
+
 
 Diff report
   -diff-rep               : generate diff report (must include -src-target, -src-runname, -target, -runname
@@ -230,6 +271,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			":status"
 			"-status"
 			"-list-runs"
+                        "-testdata-csv"
 			"-testpatt"
                         "--modepatt"
                         "-tagexpr"
@@ -252,7 +294,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			":units"
 			;; misc
 			"-start-dir"
+                        "-run-patt"
+                        "-target-patt"   
 			"-contour"
+                        "-area-tag"  
 			"-server"
 			"-transport"
 			"-port"
@@ -263,7 +308,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-envdelta"
 			"-setvars"
 			"-set-state-status"
+
+                        ;; move runs stuff here
+                        "-remove-keep"           
 			"-set-run-status"
+			"-age"
+			"-archive"
+			"-actions"
+			"-precmd"
+			
 			"-debug" ;; for *verbosity* > 2
 			"-create-test"
 			"-override-timeout"
@@ -277,7 +330,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-refdb2dat"
 			"-o"
 			"-log"
-			"-archive"
 			"-since"
 			"-fields"
 			"-recover-test" ;; run-id,test-id - used internally to recover a test stuck in RUNNING state
@@ -321,9 +373,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-list-servers"
 			"-kill-servers"
                         "-run-wait"      ;; wait on a run to complete (i.e. no RUNNING)
+			"-one-pass"       ;;
 			"-local"         ;; run some commands using local db access
                         "-generate-html"
-
+			"-list-run-time"
+                        "-list-test-time"
 			;; misc queries
 			"-list-disks"
 			"-list-targets"
@@ -339,6 +393,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-runall"    ;; run all tests, respects -testpatt, defaults to %
 			"-run"       ;; alias for -runall
 			"-remove-runs"
+                        "-keep-records" ;; use with -remove-runs to remove only the run data
 			"-rebuild-db"
 			"-cleanup-db"
 			"-rollup"
@@ -350,7 +405,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-convert-to-old"
 			"-import-megatest.db"
 			"-sync-to-megatest.db"
-			
 			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
@@ -374,7 +428,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; before doing anything else change to the start-dir if provided
 ;;
 (if (args:get-arg "-start-dir")
-    (if (file-exists? (args:get-arg "-start-dir"))
+    (if (common:file-exists? (args:get-arg "-start-dir"))
         (let ((fullpath (common:real-path (args:get-arg "-start-dir"))))
           (setenv "PWD" fullpath)
           (change-directory fullpath))
@@ -391,12 +445,21 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 
 ;; TODO: for multiple areas, we will have multiple watchdogs; and multiple threads to manage
-(define *watchdog* (make-thread common:watchdog "Watchdog thread"))
+(define *watchdog* (make-thread
+		    (lambda ()
+		      (handle-exceptions
+			  exn
+			  (begin
+			    (print-call-chain)
+			    (print " message: " ((condition-property-accessor 'exn 'message) exn)))
+			(common:watchdog)))
+		    "Watchdog thread"))
 
 ;;(if (not (args:get-arg "-server"))
 ;;    (thread-start! *watchdog*)) ;; if starting a server; wait till we get to running state before kicking off watchdog
 (let* ((no-watchdog-args
        '("-list-runs"
+         "-testdata-csv"
          "-list-servers"
          "-server"
          "-list-disks"
@@ -459,7 +522,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (install-home  (common:get-install-area))
 	   (manual-html   (conc install-home "/share/docs/megatest_manual.html")))
       (if (and install-home
-	       (file-exists? manual-html))
+	       (common:file-exists? manual-html))
 	  (system (conc "(" htmlviewercmd " " manual-html " ) &"))
 	  (system (conc "(" htmlviewercmd " http://www.kiatoa.com/cgi-bin/fossils/megatest/doc/tip/docs/manual/megatest_manual.html ) &")))
       (exit)))
@@ -554,7 +617,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-clean-cache")
     (let ((toppath  (launch:setup)))
       (set! *didsomething* #t) ;; suppress the help output.
-      (runs:clean-cache (getenv "MT_TARGET")(args:get-arg "-runname") toppath)))
+      (runs:clean-cache (or (getenv "MT_TARGET")
+			    (args:get-arg "-target")
+			    (args:get-arg "-remtarg"))
+			(args:get-arg "-runname")
+			toppath)))
 	  
 (if (args:get-arg "-env2file")
     (begin
@@ -710,7 +777,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (hash-table-keys results))))
 		((sqlite3)
 		 (let* ((db-file   (or out-file (pathname-file input-db)))
-			(db-exists (file-exists? db-file))
+			(db-exists (common:file-exists? db-file))
 			(db        (sqlite3:open-database db-file)))
 		   (if (not db-exists)(sqlite3:execute db "CREATE TABLE data (sheet,section,var,val);"))
 		   (configf:map-all-hier-alist
@@ -858,7 +925,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		     #f))
 	 (cfgf   (if rundir (conc rundir "/.runconfig." megatest-version "-" megatest-fossil-hash) #f)))
     (if (and cfgf
-	     (file-exists? cfgf)
+	     (common:file-exists? cfgf)
 	     (file-write-access? cfgf)
 	     (common:use-cache?))
 	(configf:read-alist cfgf)
@@ -882,7 +949,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
                     (configf:write-alist data cfgf))
 		;; force re-read of megatest.config - this resolves circular references between megatest.config
 		(launch:setup force-reread: #t)
-		(launch:cache-config))) ;; we can safely cache megatest.config since we have a valid runconfig
+		;; (launch:cache-config) ;; there are two independent config cache locations, turning this one off for now. MRW.
+		)) ;; we can safely cache megatest.config since we have a valid runconfig
 	  data))))
 
 (if (args:get-arg "-show-runconfig")
@@ -948,7 +1016,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; since several actions can be specified on the command line the removal
 ;; is done first
-(define (operate-on action)
+(define (operate-on action #!key (mode #f)) ;; #f is "use default"
   (let* ((runrec (runs:runrec-make-record))
 	 (target (common:args-get-target)))
     (cond
@@ -977,7 +1045,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			      (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
 			      state: (common:args-get-state)
 			      status: (common:args-get-status)
-			      new-state-status: (args:get-arg "-set-state-status"))))
+			      new-state-status: (args:get-arg "-set-state-status")
+                              mode: mode)))
       (set! *didsomething* #t)))))
 
 (if (args:get-arg "-remove-runs")
@@ -985,7 +1054,23 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      "-remove-runs"
      "remove runs"
      (lambda (target runname keys keyvals)
-       (operate-on 'remove-runs))))
+       (operate-on 'remove-runs mode: (if (args:get-arg "-keep-records")
+                                          'remove-data-only
+                                          'remove-all)))))
+
+(if (args:get-arg "-remove-keep")
+    (general-run-call 
+     "-remove-keep"
+     "remove keep"
+     (lambda (target runname keys keyvals)
+       (let ((actions (map string->symbol
+                           (string-split
+			    (or (args:get-arg "-actions")
+				"print")
+			    ",")))) ;; default to printing the output
+         (runs:remove-all-but-last-n-runs-per-target target runname
+						     (string->number (args:get-arg "-remove-keep"))
+						     actions: actions)))))
 
 (if (args:get-arg "-set-state-status")
     (general-run-call 
@@ -1043,6 +1128,110 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    #f ;; index too high, should raise an error I suppose
 	    (vector-ref datavec indx))
 	#f)))
+
+
+
+
+
+(when (args:get-arg "-testdata-csv")
+  (if (launch:setup)
+      (let* ((keys        (rmt:get-keys)) ;; (db:get-keys dbstruct))
+             (runpatt     (or (args:get-arg "-runname") "%"))
+             (testpatt    (common:args-get-testpatt #f))
+             (datapatt    (args:get-arg "-testdata-csv"))
+             (match-data  (string-match "^([^/]+)/(.*)" (args:get-arg "-testdata-csv")))
+             (categorypatt (if match-data (list-ref match-data 1) "%"))
+             (setvarpatt  (if match-data
+                              (list-ref match-data 2)
+                              (args:get-arg "-testdata-csv")))
+             (runsdat     (rmt:get-runs-by-patt keys (or runpatt "%") 
+                                                (common:args-get-target) #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment") 0))
+             (header      (db:get-header runsdat))
+             (access-mode (db:get-access-mode))
+             (testpatt    (common:args-get-testpatt #f))
+             (fields-spec (if (args:get-arg "-fields")
+                              (extract-fields-constraints (args:get-arg "-fields"))
+                              (list (cons "runs" (append keys (list "id" "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count")))
+                                    (cons "tests"  db:test-record-fields) ;; "id" "testname" "test_path")
+                                    (list "steps" "id" "stepname"))))
+             (tests-spec  (let ((t (alist-ref "tests" fields-spec equal?)))
+                            (if (and t (null? t)) ;; all fields
+                                db:test-record-fields
+                                t)))
+             (adj-tests-spec (delete-duplicates (if tests-spec (cons "id" tests-spec) db:test-record-fields))) 
+             (test-field-index (make-hash-table))
+             (runs (db:get-rows runsdat))
+             )
+        (if (and tests-spec (not (null? tests-spec))) ;; do some validation and processing of the test-spec
+            (let ((invalid-tests-spec (filter (lambda (x)(not (member x db:test-record-fields))) tests-spec)))
+              (if (null? invalid-tests-spec)
+                  ;; generate the lookup map test-field-name => index-number
+                  (let loop ((hed (car adj-tests-spec))
+                             (tal (cdr adj-tests-spec))
+                             (idx 0))
+                    (hash-table-set! test-field-index hed idx)
+                    (if (not (null? tal))(loop (car tal)(cdr tal)(+ idx 1))))
+                  (begin
+                    (debug:print-error 0 *default-log-port* "Invalid test fields specified: " (string-intersperse invalid-tests-spec ", "))
+                    (exit)))))
+        (let* ((table-header (string-split "target,run,test,itempath,category,var,value,comment" ","))
+               (table-rows
+                (apply append (map  
+                               (lambda (run)
+                                 (let* ((target (string-intersperse (map (lambda (x)
+							 (db:get-value-by-header run header x))
+						       keys) "/"))
+                                        (statuses (string-split (or (args:get-arg "-status") "") ","))
+                                        (run-id  (db:get-value-by-header run header "id"))
+                                        (runname (db:get-value-by-header run header "runname")) 
+                                        (states  (string-split (or (args:get-arg "-state") "") ","))
+                                        (tests   (if tests-spec
+                                                     (db:dispatch-query access-mode rmt:get-tests-for-run db:get-tests-for-run run-id testpatt states statuses #f #f #f 'testname 'asc ;; (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
+                                                                        ;; use qryvals if test-spec provided
+                                                                        (if tests-spec
+                                                                            (string-intersperse adj-tests-spec ",")
+                                                                            ;; db:test-record-fields
+                                                                            #f)
+                                                                        #f
+                                                                        'normal)
+                                                     '())))
+                                   (apply append
+                                          (map
+                                           (lambda (test)
+                                             (let* (
+                                                    (test-id      (if (member "id"           tests-spec)(get-value-by-fieldname test test-field-index "id"          ) #f)) ;; (db:test-get-id         test))
+                                                    (testname     (if (member "testname"     tests-spec)(get-value-by-fieldname test test-field-index "testname"    ) #f)) ;; (db:test-get-testname   test))
+                                                    (itempath     (if (member "item_path"    tests-spec)(get-value-by-fieldname test test-field-index "item_path"   ) #f)) ;; (db:test-get-item-path  test))
+                                                    (fullname     (conc testname
+                                                                        (if (equal? itempath "")
+                                                                            "" 
+                                                                            (conc "/" itempath ))))
+                                                    (testdat-raw (map vector->list (rmt:read-test-data* run-id test-id categorypatt setvarpatt)))
+                                                    (testdat (filter
+                                                              (lambda (x)
+                                                                (not (equal? "logpro"
+                                                                             (list-ref x 10))))
+                                                              testdat-raw)))
+                                               (map 
+                                                (lambda (item)
+                                                  (receive (id test_id category
+                                                               variable value expected
+                                                               tol units comment status type)
+                                                      (apply values item)
+                                                    (list target runname testname itempath category variable value comment)))
+                                                testdat)))
+                                           tests))))
+                               runs))))
+          (print (string-join table-header ","))
+          (for-each (lambda(table-row)
+                      (print (string-join (map ->string table-row) ",")))
+
+                    
+                            table-rows))))
+  (set! *didsomething* #t)
+  (set! *time-to-exit* #t))
+
+
 
 ;; NOTE: list-runs and list-db-targets operate on local db!!!
 ;;
@@ -1433,7 +1622,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
              (let ((states   (or (configf:lookup *configdat* "validvalues" "cleanrerun-states")
                                  "KILLREQ,KILLED,UNKNOWN,INCOMPLETE,STUCK,NOT_STARTED"))
                    (statuses (or (configf:lookup *configdat* "validvalues" "cleanrerun-statuses")
-                                 "FAIL,INCOMPLETE,ABORT,CHECK")))
+                                 "FAIL,INCOMPLETE,ABORT,CHECK,DEAD,PREQ_FAIL,PREQ_DISCARDED")))
                (hash-table-set! args:arg-hash "-preclean" #t)
                (runs:operate-on 'set-state-status
                                 target
@@ -1581,7 +1770,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 (paths    (tests:test-get-paths-matching keys target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
-			(if (file-exists? path)
+			(if (common:file-exists? path)
 			(print path)))	
 		      paths)))
 	;; else do a general-run-call
@@ -1871,7 +2060,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (debug:print 0 *default-log-port* "Failed to setup, exiting") 
 	    (exit 1)))
       ;; keep this one local
-      (open-run-close patch-db #f)
+      ;; (open-run-close patch-db #f)
+      (let ((dbstruct (db:setup #f areapath: *toppath*)))
+        (common:cleanup-db dbstruct full: #t))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-cleanup-db")
@@ -2038,11 +2229,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-sync-to-megatest.db")
-    (begin
-      (db:multi-db-sync 
-       (db:setup #f)
-       'new2old
-       )
+    (let ((res (db:multi-db-sync 
+                (db:setup #f)
+                'new2old)))
+      (print "Synced " res " records to megatest.db")
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-sync-to")
@@ -2050,6 +2240,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (tasks:sync-to-postgres *configdat* (args:get-arg "-sync-to"))
       (set! *didsomething* #t)))
 
+(if (args:get-arg "-list-test-time")
+     (let* ((toppath (launch:setup))) 
+     (task:get-test-times)  
+     (set! *didsomething* #t)))
+
+(if (args:get-arg "-list-run-time")
+     (let* ((toppath (launch:setup))) 
+     (task:get-run-times)  
+     (set! *didsomething* #t)))
+     
 (if (args:get-arg "-generate-html")
     (let* ((toppath (launch:setup)))
       (if (tests:create-html-tree #f)

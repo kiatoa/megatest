@@ -23,6 +23,10 @@ DROP TABLE IF EXISTS test_rundat;
 DROP TABLE IF EXISTS archives;
 DROP TABLE IF EXISTS session_vars;
 DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS tags;
+DROP TABLE IF EXISTS users; 
+DROP TABLE IF EXISTS webviews;
+DROP TABLE IF EXISTS area_tags;
 
 CREATE TABLE IF NOT EXISTS session_vars (
        id SERIAL PRIMARY KEY,
@@ -42,6 +46,17 @@ CREATE TABLE IF NOT EXISTS areas (
        area_path TEXT NOT NULL,
        last_sync INTEGER DEFAULT 0,
        CONSTRAINT areaconstraint UNIQUE (area_name));
+
+CREATE TABLE IF NOT EXISTS tags (
+       id SERIAL PRIMARY KEY,
+       tag_name TEXT NOT NULL,
+       CONSTRAINT tagconstraint UNIQUE (tag_name));
+
+CREATE TABLE IF NOT EXISTS area_tags (
+       id SERIAL PRIMARY KEY,
+       tag_id   INTEGER DEFAULT 0,
+       area_id  INTEGER DEFAULT 0,
+       CONSTRAINT areatagconstraint UNIQUE (tag_id, area_id));
 
 INSERT INTO areas (id,area_name,area_path) VALUES (0,'local','.');
 
@@ -63,7 +78,7 @@ CREATE TABLE IF NOT EXISTS runs (
        pass_count INTEGER DEFAULT 0,
        last_update INTEGER DEFAULT extract(epoch from now()),
        area_id     INTEGER DEFAULT 0,
-       CONSTRAINT runsconstraint UNIQUE (target,ttype_id,run_name));
+       CONSTRAINT runsconstraint UNIQUE (target,ttype_id,run_name, area_id));
 
 CREATE TABLE IF NOT EXISTS run_stats (
        id     SERIAL PRIMARY KEY,
@@ -210,6 +225,24 @@ CREATE TABLE IF NOT EXISTS archives (
        du           INTEGER,
        archive_path TEXT);
  
+CREATE TABLE IF NOT EXISTS users(
+   id SERIAL  PRIMARY KEY   ,
+   usename           TEXT    NOT NULL,
+   fullname          TEXT    NOT NULL, 
+   email             TEXT    NOT NULL, 
+   deleted           INTEGER     default 0
+);
+ 
+CREATE TABLE IF NOT EXISTS webviews(
+   id SERIAL  PRIMARY KEY   ,
+   owner_id          INTEGER NOT NULL,
+   name              TEXT    NOT NULL, 
+   ttype_id          INTEGER DEFAULT 0,
+   view_specifics    TEXT   ,
+   col               TEXT    NOT NULL,
+   row               TEXT    NOT NULL,
+   deleted           INTEGER     default 0
+);
 
 -- TRUNCATE archive_blocks, archive_allocations, extradat, metadat,
 -- access_log, tests, test_steps, test_data, test_rundat, archives, runs,

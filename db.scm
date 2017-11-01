@@ -1,4 +1,4 @@
-;;======================================================================
+;======================================================================
 ;; Copyright 2006-2016, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
@@ -200,22 +200,22 @@
 ;; returns: db existed-prior-to-opening
 ;; RA => Returns a db handler; sets the lock if opened in writable mode
 ;;
-;;(define *db-open-mutex* (make-mutex))
+;; (define *db-open-mutex* (make-mutex))
 
 (define (db:lock-create-open fname initproc)
   (let* ((parent-dir   (or (pathname-directory fname)(current-directory))) ;; no parent? go local
          (raw-fname    (pathname-file fname))
 	 (dir-writable (file-write-access? parent-dir))
-	 (file-exists  (file-exists? fname))
+	 (file-exists  (common:file-exists? fname))
 	 (file-write   (if file-exists
 			   (file-write-access? fname)
 			   dir-writable )))
-    ;;(mutex-lock! *db-open-mutex*) ;; tried this mutex, not clear it helped.
+    ;; (mutex-lock! *db-open-mutex*) ;; tried this mutex, not clear it helped.
     (if file-write ;; dir-writable
 	(condition-case
          (let* ((lockfname   (conc fname ".lock"))
                 (readyfname  (conc parent-dir "/.ready-" raw-fname))
-                (readyexists (file-exists? readyfname)))
+                (readyexists (common:file-exists? readyfname)))
            (if (not readyexists)
                (common:simple-file-lock-and-wait lockfname))
            (let ((db      (sqlite3:open-database fname)))
@@ -223,6 +223,7 @@
              (sqlite3:execute db "PRAGMA synchronous = 0;")
              (if (not file-exists)
                  (begin
+                   
                    (if (and (configf:lookup *configdat* "setup" "use-wal")
                             (string-match "^/tmp/.*" fname)) ;; this is a file in /tmp
                        (sqlite3:execute db "PRAGMA journal_mode=WAL;")
@@ -248,7 +249,7 @@
          (begin
            (debug:print 2 *default-log-port* "WARNING: opening db in non-writable dir " fname)
            (let ((db (sqlite3:open-database fname)))
-             ;;(mutex-unlock! *db-open-mutex*)
+             ;; (mutex-unlock! *db-open-mutex*)
              db))
          (exn (io-error)  (debug:print 0 *default-log-port* "ERROR: i/o error with " fname ". Check permissions, disk space etc. and try again."))
          (exn (corrupt)   (debug:print 0 *default-log-port* "ERROR: database " fname " is corrupt. Repair it to proceed."))
@@ -266,7 +267,7 @@
 ;; ;; 
 ;; (define (db:open-rundb dbstruct run-id #!key (attemptnum 0)(do-not-open #f)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
 ;;   (let* ((dbfile       (db:dbfile-path run-id)) ;; (conc toppath "/db/" run-id ".db"))
-;;          (dbexists     (file-exists? dbfile))
+;;          (dbexists     (common:file-exists? dbfile))
 ;;          (db           (db:lock-create-open dbfile (lambda (db)
 ;;                                                      (handle-exceptions
 ;;                                                       exn
@@ -306,10 +307,10 @@
     (if (stack? tmpdb-stack)
 	(db:get-db tmpdb-stack) ;; get previously opened db (will create new db handle if all in the stack are already used
         (let* ((dbpath       (db:dbfile-path ))      ;; path to tmp db area
-               (dbexists     (file-exists? dbpath))
+               (dbexists     (common:file-exists? dbpath))
 	       (tmpdbfname   (conc dbpath "/megatest.db"))
-	       (dbfexists    (file-exists? tmpdbfname))  ;; (conc dbpath "/megatest.db")))
-               (mtdbexists   (file-exists? (conc *toppath* "/megatest.db")))
+	       (dbfexists    (common:file-exists? tmpdbfname))  ;; (conc dbpath "/megatest.db")))
+               (mtdbexists   (common:file-exists? (conc *toppath* "/megatest.db")))
                
                (mtdb         (db:open-megatest-db))
                (mtdbpath     (db:dbdat-get-path mtdb))
@@ -336,7 +337,7 @@
 			     (> modtimedelta 10))) ;; if db in tmp is over ten seconds older than the file in MTRA then do a sync back
 		    do-sync)
 	      (begin
-		(debug:print 4 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data \n    from " (db:dbdat-get-path mtdb) " mod time delta: " modtimedelta)
+		(debug:print 1 *default-log-port* "filling db " (db:dbdat-get-path tmpdb) " with data \n    from " (db:dbdat-get-path mtdb) " mod time delta: " modtimedelta)
 		(db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb refndb tmpdb)
                 (debug:print-info 13 *default-log-port* "db:sync-all-tables-list done.")
                 )
@@ -375,7 +376,7 @@
 (define (db:open-megatest-db #!key (path #f)(name #f))
   (let* ((dbdir        (or path *toppath*))
          (dbpath       (conc  dbdir "/" (or name "megatest.db")))
-	 (dbexists     (file-exists? dbpath))
+	 (dbexists     (common:file-exists? dbpath))
 	 (db           (db:lock-create-open dbpath
 					    (lambda (db)
                                               (db:initialize-main-db db)
@@ -405,6 +406,21 @@
     (mutex-unlock! *db-multi-sync-mutex*)
     (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb)))
 
+(define (db:safely-close-sqlite3-db db #!key (try-num 3))
+  (if (<= try-num 0)
+      #f
+      (handle-exceptions
+	  exn
+	  (begin
+	    (thread-sleep! 3)
+	    (sqlite3:interrupt! db)
+	    (db:safely-close-sqlite3-db db try-num: (- try-num 1)))
+	(if (sqlite3:database? db)
+	    (begin
+	      (sqlite3:finalize! db)
+	      #t)
+	    #f))))
+
 ;; close all opened run-id dbs
 (define (db:close-all dbstruct)
   (if (dbr:dbstruct? dbstruct)
@@ -419,11 +435,12 @@
               (mdb (db:dbdat-get-db (dbr:dbstruct-mtdb   dbstruct)))
               (rdb (db:dbdat-get-db (dbr:dbstruct-refndb dbstruct))))
           (map (lambda (db)
-		 (if (sqlite3:database? db)
-		     (sqlite3:finalize! db)))
+		 (db:safely-close-sqlite3-db db))
+;; 		 (if (sqlite3:database? db)
+;; 		     (sqlite3:finalize! db)))
 	       tdbs)
-          (if (sqlite3:database? mdb) (sqlite3:finalize! mdb))
-          (if (sqlite3:database? rdb) (sqlite3:finalize! rdb))))))
+          (db:safely-close-sqlite3-db mdb)     ;; (if (sqlite3:database? mdb) (sqlite3:finalize! mdb))
+          (db:safely-close-sqlite3-db rdb))))) ;; (if (sqlite3:database? rdb) (sqlite3:finalize! rdb))))))
 
 ;;   (let ((locdbs (dbr:dbstruct-locdbs dbstruct)))
 ;;     (if (hash-table? locdbs)
@@ -465,7 +482,8 @@
 	 '("event_time"     #f)
 	 '("fail_count"     #f)
 	 '("pass_count"     #f)
-	 '("archived"       #f))
+	 '("archived"       #f)
+         '("last_update"    #f))
   (list "test_steps"
 	 '("id"             #f)
 	 '("test_id"        #f)
@@ -474,7 +492,8 @@
 	 '("status"         #f)
 	 '("event_time"     #f)
 	 '("comment"        #f)
-	 '("logfile"        #f))
+	 '("logfile"        #f)
+         '("last_update"    #f))
    (list "test_data"
 	 '("id"             #f)
 	 '("test_id"        #f)
@@ -486,7 +505,8 @@
 	 '("units"          #f)
 	 '("comment"        #f)
 	 '("status"         #f)
-	 '("type"           #f))))
+	 '("type"           #f)
+         '("last_update"    #f))))
 
 ;; needs db to get keys, this is for syncing all tables
 ;;
@@ -502,7 +522,7 @@
 		   '("id"  #f))
 	     (map (lambda (k)(list k #f))
 		  (append keys
-			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count" "contour"))))
+			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count" "contour" "last_update"))))
      (list "test_meta"
 	   '("id"             #f)
 	   '("testname"       #f)
@@ -531,7 +551,7 @@
     (debug:print-error 0 *default-log-port* "" fname " appears corrupted. Making backup \"old/" fname "\"")
     (system (conc "cd " dbdir ";mkdir -p old;cat " fname " > old/" tmpname))
     (system (conc "rm -f " dbpath))
-    (if (file-exists? fnamejnl)
+    (if (common:file-exists? fnamejnl)
 	(begin
 	  (debug:print-error 0 *default-log-port* "" fnamejnl " found, moving it to old dir as " tmpjnl)
 	  (system (conc "cd " dbdir ";mkdir -p old;cat " fnamejnl " > old/" tmpjnl))
@@ -655,22 +675,38 @@
 	   (tot-count   0))
        (for-each ;; table
 	(lambda (tabledat)
-	  (let* ((tablename  (car tabledat))
-		 (fields     (cdr tabledat))
-		 (use-last-update  (if last-update
-				       (if (pair? last-update)
-					   (member (car last-update)    ;; last-update field name
-						   (map car fields))
-					   (begin
-					     (debug:print 0 *default-log-port* "ERROR: parameter last-update for db:sync-tables must be a pair, received: " last-update) ;; found in fields
-					     #f))
-				       #f))
+	  (let* ((tablename        (car tabledat))
+		 (fields           (cdr tabledat))
+		 (has-last-update  (member "last_update" fields))
+		 (use-last-update  (cond
+				    ((and has-last-update
+					  (member "last_update" fields))
+				     #t) ;; if given a number, just use it for all fields
+				    ((number? last-update) #f) ;; if not matched first entry then ignore last-update for this table
+				    ((and (pair? last-update)
+					  (member (car last-update)    ;; last-update field name
+						  (map car fields))) #t)
+				    (last-update
+				     (debug:print 0 *default-log-port* "ERROR: parameter last-update for db:sync-tables must be a pair or a number, received: " last-update) ;; found in fields
+				     #f)
+				    (else
+				     #f)))
+		 (last-update-value (if use-last-update ;; no need to check for has-last-update - it is already accounted for
+					(if (number? last-update)
+					    last-update
+					    (cdr last-update))
+					#f))
+		 (last-update-field (if use-last-update
+					(if (number? last-update)
+					    "last_update"
+					    (car last-update))
+					#f))
 		 (num-fields (length fields))
 		 (field->num (make-hash-table))
 		 (num->field (apply vector (map car fields)))
 		 (full-sel   (conc "SELECT " (string-intersperse (map car fields) ",") 
 				   " FROM " tablename (if use-last-update ;; apply last-update criteria
-							  (conc " " (car last-update) ">=" (cdr last-update))
+							  (conc " WHERE " last-update-field " >= " last-update-value)
 							  "")
 				   ";"))
 		 (full-ins   (conc "INSERT OR REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) "
@@ -828,7 +864,15 @@
                                BEGIN 
                                  UPDATE run_stats SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
-                               END;"))
+                               END;")
+  (sqlite3:execute maindb "CREATE TABLE IF NOT EXISTS test_rundat (
+                              id           INTEGER PRIMARY KEY,
+                              test_id      INTEGER,
+                              update_time  TIMESTAMP,
+                              cpuload      INTEGER DEFAULT -1,
+                              diskfree     INTEGER DEFAULT -1,
+                              diskusage    INTGER DEFAULT -1,
+                              run_duration INTEGER DEFAULT 0);"))
 
 (define (db:adj-target db)
   (let ((fields    (configf:get-section *configdat* "fields"))
@@ -881,7 +925,7 @@
 	   (>= (file-modification-time target)(file-modification-time source)))
       (hash-table-ref *global-db-store* target)
       (let* ((toppath   (launch:setup))
-	     (targ-db-last-mod (if (file-exists? target)
+	     (targ-db-last-mod (if (common:file-exists? target)
 				   (file-modification-time target)
 				   0))
 	     (cache-db  (or (hash-table-ref/default *global-db-store* target #f)
@@ -895,37 +939,37 @@
 	(hash-table-set! *global-db-store* target cache-db)
 	cache-db)))
 
-;; call a proc with a cached db
-;;
-(define (db:call-with-cached-db proc . params)
-  ;; first cache the db in /tmp
-  (let* ((cname-part (conc "megatest_cache/" (common:get-testsuite-name)))
-	 (fname      (conc  (common:get-area-path-signature) ".db"))
-	 (cache-dir  (common:get-create-writeable-dir
-		      (list (conc "/tmp/" (current-user-name) "/" cname-part)
-			    (conc "/tmp/" (current-user-name) "-" cname-part)
-			     (conc "/tmp/" (current-user-name) "_" cname-part))))
-	 (megatest-db (conc *toppath* "/megatest.db")))
-    ;; (debug:print-info 0 *default-log-port* "Using cache dir " cache-dir)
-    (if (not cache-dir)
-	(begin
-	  (debug:print 0 *default-log-port* "ERROR: Failed to find an area to write the cache db")
-	  (exit 1))
-	(let* ((th1      (make-thread
-			  (lambda ()
-			    (if (and (file-exists? megatest-db)
-				     (file-write-access? megatest-db))
-				(begin
-				  (common:sync-to-megatest.db 'timestamps) ;; internally mutexes on *db-local-sync*
-				  (debug:print-info 2 *default-log-port* "Done syncing to megatest.db"))))
-			  "call-with-cached-db sync-to-megatest.db"))
-	       (cache-db (db:cache-for-read-only
-			  megatest-db
-			  (conc cache-dir "/" fname)
-			  use-last-update: #t)))
-	  (thread-start! th1)
-	  (apply proc cache-db params)
-	  ))))
+;; ;; call a proc with a cached db
+;; ;;
+;; (define (db:call-with-cached-db proc . params)
+;;   ;; first cache the db in /tmp
+;;   (let* ((cname-part (conc "megatest_cache/" (common:get-testsuite-name)))
+;; 	 (fname      (conc  (common:get-area-path-signature) ".db"))
+;; 	 (cache-dir  (common:get-create-writeable-dir
+;; 		      (list (conc "/tmp/" (current-user-name) "/" cname-part)
+;; 			    (conc "/tmp/" (current-user-name) "-" cname-part)
+;; 			     (conc "/tmp/" (current-user-name) "_" cname-part))))
+;; 	 (megatest-db (conc *toppath* "/megatest.db")))
+;;     ;; (debug:print-info 0 *default-log-port* "Using cache dir " cache-dir)
+;;     (if (not cache-dir)
+;; 	(begin
+;; 	  (debug:print 0 *default-log-port* "ERROR: Failed to find an area to write the cache db")
+;; 	  (exit 1))
+;; 	(let* ((th1      (make-thread
+;; 			  (lambda ()
+;; 			    (if (and (common:file-exists? megatest-db)
+;; 				     (file-write-access? megatest-db))
+;; 				(begin
+;; 				  (db:sync-to-megatest.db dbstruct 'timestamps) ;; internally mutexes on *db-local-sync*
+;; 				  (debug:print-info 2 *default-log-port* "Done syncing to megatest.db"))))
+;; 			  "call-with-cached-db sync-to-megatest.db"))
+;; 	       (cache-db (db:cache-for-read-only
+;; 			  megatest-db
+;; 			  (conc cache-dir "/" fname)
+;; 			  use-last-update: #t)))
+;; 	  (thread-start! th1)
+;; 	  (apply proc cache-db params)
+;; 	  ))))
 
 ;; options:
 ;;
@@ -939,67 +983,110 @@
 ;;  run-ids: '(1 2 3 ...) or #f (for all)
 ;;
 (define (db:multi-db-sync dbstruct . options)
-  (if (not (launch:setup))
-      (debug:print 0 *default-log-port* "ERROR: not able to setup up for megatest.")
-      (let* ((mtdb     (dbr:dbstruct-mtdb dbstruct))
-	     (tmpdb    (db:get-db dbstruct))
-             (refndb   (dbr:dbstruct-refndb dbstruct))
-	     (allow-cleanup #t) ;; (if run-ids #f #t))
-	     (servers (server:get-list *toppath*)) ;; (tasks:get-all-servers (db:delay-if-busy tdbdat)))
-	     (data-synced 0)) ;; count of changed records (I hope)
+  ;; (if (not (launch:setup))
+  ;;    (debug:print 0 *default-log-port* "ERROR: not able to setup up for megatest.")
+  (let* ((mtdb     (dbr:dbstruct-mtdb dbstruct))
+	 (tmpdb    (db:get-db dbstruct))
+	 (refndb   (dbr:dbstruct-refndb dbstruct))
+	 (allow-cleanup #t) ;; (if run-ids #f #t))
+	 (servers (server:get-list *toppath*)) ;; (tasks:get-all-servers (db:delay-if-busy tdbdat)))
+	 (data-synced 0)) ;; count of changed records (I hope)
+    
+    (for-each
+     (lambda (option)
+       
+       (case option
+	 ;; kill servers
+	 ((killservers)
+	  (for-each
+	   (lambda (server)
+	     (match-let (((mod-time host port start-time pid) server))
+	       (if (and host pid)
+		   (tasks:kill-server host pid))))
+	   servers))
+	 
+	 ;; clear out junk records
+	 ;;
+	 ((dejunk)
+	  (db:delay-if-busy mtdb) ;; ok to delay on mtdb
+	  (db:clean-up mtdb)
+	  (db:clean-up tmpdb)
+	  (db:clean-up refndb))
 
-	(for-each
-	 (lambda (option)
+	 ;; sync runs, test_meta etc.
+	 ;;
+	 ((old2new)
+	  (set! data-synced
+	    (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb tmpdb refndb)
+	       data-synced)))
+	 
+	 ;; now ensure all newdb data are synced to megatest.db
+	 ;; do not use the run-ids list passed in to the function
+	 ;;
+	 ((new2old)
+	  (set! data-synced
+	    (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb refndb mtdb)
+	       data-synced)))
 
-	   (case option
-	     ;; kill servers
-	     ((killservers)
-	      (for-each
-	       (lambda (server)
-		 (match-let (((mod-time host port start-time pid) server))
-			    (if (and host pid)
-				(tasks:kill-server host pid))))
-	       servers))
+	 ((adj-target)
+	  (db:adj-target (db:dbdat-get-db mtdb))
+	  (db:adj-target (db:dbdat-get-db tmpdb))
+	  (db:adj-target (db:dbdat-get-db refndb)))
+	 
+	 ((schema)
+	  (db:patch-schema-maindb (db:dbdat-get-db mtdb))
+	  (db:patch-schema-maindb (db:dbdat-get-db tmpdb))
+	  (db:patch-schema-maindb (db:dbdat-get-db refndb))
+	  (db:patch-schema-rundb  (db:dbdat-get-db mtdb))
+	  (db:patch-schema-rundb  (db:dbdat-get-db tmpdb))
+	  (db:patch-schema-rundb  (db:dbdat-get-db refndb))))
+       
+       (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb))
+     options)
+    data-synced))
 
-	     ;; clear out junk records
-	     ;;
-	     ((dejunk)
-	      (db:delay-if-busy mtdb) ;; ok to delay on mtdb
-	      (db:clean-up mtdb)
-	      (db:clean-up tmpdb)
-              (db:clean-up refndb))
+(define (db:tmp->megatest.db-sync dbstruct last-update)
+  (let* ((mtdb        (dbr:dbstruct-mtdb dbstruct))
+	 (tmpdb       (db:get-db dbstruct))
+	 (refndb      (dbr:dbstruct-refndb dbstruct))
+	 (res         (db:sync-tables (db:sync-all-tables-list dbstruct) last-update tmpdb refndb mtdb)))
+    (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb)
+    res))
 
-	     ;; sync runs, test_meta etc.
-	     ;;
-	     ((old2new)
-	      (set! data-synced
-		    (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f mtdb tmpdb refndb)
-		       data-synced)))
-	     
-	     ;; now ensure all newdb data are synced to megatest.db
-	     ;; do not use the run-ids list passed in to the function
-	     ;;
-	     ((new2old)
-	      (set! data-synced
-		    (+ (db:sync-tables (db:sync-all-tables-list dbstruct) #f tmpdb refndb mtdb)
-		       data-synced)))
-
-	     ((adj-target)
-	      (db:adj-target (db:dbdat-get-db mtdb))
-	      (db:adj-target (db:dbdat-get-db tmpdb))
-	      (db:adj-target (db:dbdat-get-db refndb)))
-	   
-	     ((schema)
-              (db:patch-schema-maindb (db:dbdat-get-db mtdb))
-              (db:patch-schema-maindb (db:dbdat-get-db tmpdb))
-              (db:patch-schema-maindb (db:dbdat-get-db refndb))
-              (db:patch-schema-rundb  (db:dbdat-get-db mtdb))
-              (db:patch-schema-rundb  (db:dbdat-get-db tmpdb))
-              (db:patch-schema-rundb  (db:dbdat-get-db refndb))))
-	
-	   (stack-push! (dbr:dbstruct-dbstack dbstruct) tmpdb))
-	 options)
-	data-synced)))
+;;;; run-ids
+;;    if #f use *db-local-sync* : or 'local-sync-flags
+;;    if #t use timestamps      : or 'timestamps
+;;
+;;  NB// no-sync-db is the db handle, not a flag!
+;;
+(define (db:sync-to-megatest.db dbstruct #!key (no-sync-db #f)) 
+  (let* ((start-time         (current-seconds))
+	 (last-full-update   (if no-sync-db
+				 (db:no-sync-get/default no-sync-db "LAST_FULL_UPDATE" 0)
+				 0))
+	 (full-sync-needed   (> (- start-time last-full-update) 3600)) ;; every hour do a full sync
+	 (last-update        (if full-sync-needed
+				 0
+				 (if no-sync-db
+				     (db:no-sync-get/default no-sync-db "LAST_UPDATE" 0)
+				     0))) ;; (or (db:get-var dbstruct "LAST_UPDATE") 0))
+	 (sync-needed        (> (- start-time last-update) 6))
+	 (res                (if (or sync-needed ;; don't sync if a sync already occurred in the past 6 seconds
+				     full-sync-needed)
+				 (begin
+				   (if no-sync-db
+				       (begin
+					 (if full-sync-needed (db:no-sync-set no-sync-db "LAST_FULL_UPDATE" start-time))
+					 (db:no-sync-set no-sync-db "LAST_UPDATE" start-time)))
+				   (db:tmp->megatest.db-sync dbstruct last-update))
+				 0))
+	 (sync-time           (- (current-seconds) start-time)))
+      (debug:print-info 3 *default-log-port* "Sync of newdb to olddb completed in " sync-time " seconds pid="(current-process-id))
+      (if (common:low-noise-print 30 "sync new to old")
+          (if sync-needed
+              (debug:print-info 0 *default-log-port* "Sync of " res " records from newdb to olddb completed in " sync-time " seconds pid="(current-process-id))
+              (debug:print-info 0 *default-log-port* "No sync needed, last updated " (- start-time last-update) " seconds ago")))
+      res))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
@@ -1295,6 +1382,7 @@
              WHERE b.id IN (" (string-intersperse (map conc res) ",") ") AND
          last_df > ?;")
 	 dneeded))
+    (stack-push! (dbr:dbstruct-dbstack dbstruct) dbdat)
     blocks))
     
 ;; returns id of the record, register a disk allocated to archiving and record it's last known
@@ -1351,7 +1439,9 @@
 	  (sqlite3:execute db "INSERT OR REPLACE INTO archive_blocks (archive_disk_id,disk_path,last_du)
                                                         VALUES (?,?,?);"
 			   bdisk-id archive-path (or du 0))
-	  (db:archive-register-block-name dbstruct bdisk-id archive-path du: du)))))
+	  (db:archive-register-block-name dbstruct bdisk-id archive-path du: du)))
+    (stack-push! (dbr:dbstruct-dbstack dbstruct) dbdat)
+    res))
 
 
 ;; The "archived" field in tests is overloaded; 0 = not archived, > 0 archived in block with given id
@@ -1396,7 +1486,7 @@
 
 (define (open-logging-db)
   (let* ((dbpath    (conc (if *toppath* (conc *toppath* "/") "") "logging.db")) ;; fname)
-	 (dbexists  (file-exists? dbpath))
+	 (dbexists  (common:file-exists? dbpath))
 	 (db        (sqlite3:open-database dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
@@ -1494,13 +1584,13 @@
 ;;  select end_time-now from
 ;;      (select testname,item_path,event_time+run_duration as
 ;;                          end_time,strftime('%s','now') as now from tests where state in
-;;      ('RUNNING','REMOTEHOSTSTART','LAUNCED'));
+;;      ('RUNNING','REMOTEHOSTSTART','LAUNCHED'));
 
 (define (db:find-and-mark-incomplete dbstruct run-id ovr-deadtime)
   (let* ((incompleted '())
 	 (oldlaunched '())
 	 (toplevels   '())
-	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
+	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime")) ;; FIXME suspect test run time & deadtime are not well matched; resulting in COMPLETED/DEAD status of an a-ok running test
 	 (deadtime     (if (and deadtime-str
 				(string->number deadtime-str))
 			   (string->number deadtime-str)
@@ -1552,7 +1642,7 @@
        (let* (;; (min-incompleted (filter (lambda (x)
               ;;      		      (let* ((testpath (cadr x))
               ;;      			     (tdatpath (conc testpath "/testdat.db"))
-              ;;      			     (dbexists (file-exists? tdatpath)))
+              ;;      			     (dbexists (common:file-exists? tdatpath)))
               ;;      			(or (not dbexists) ;; if no file then something wrong - mark as incomplete
               ;;      			    (> (- (current-seconds)(file-modification-time tdatpath)) 600)))) ;; no change in 10 minutes to testdat.db - she's dead Jim
               ;;      		    incompleted))
@@ -1563,7 +1653,8 @@
                (debug:print 0 *default-log-port* "WARNING: Marking test(s); " (string-intersperse (map conc all-ids) ", ") " as INCOMPLETE")
                (for-each
                 (lambda (test-id)
-                  (db:test-set-state-status dbstruct run-id test-id "COMPLETED" "DEAD" "Test failed to complete")) ;; fix for one aspect of Randy's ticket 1405717332
+                  (db:test-set-state-status dbstruct run-id test-id "COMPLETED" "DEAD" "Test failed to complete")) ;; fix for one aspect of Randy's ticket 1405717332 ;; TODO - fix problem where test goes to COMPLETED/DEAD while in progress, only later to go to COMPLETED/PASS.  ref ticket 220546828
+
                 all-ids))))))))
 
 ;; ALL REPLACED BY THE BLOCK ABOVE
@@ -1619,6 +1710,10 @@
 	       "DELETE FROM runs WHERE state='deleted';"
 	       ;; delete empty runs
 	       "DELETE FROM runs WHERE id NOT IN (SELECT DISTINCT r.id FROM runs AS r INNER JOIN tests AS t ON t.run_id=r.id);"
+	       ;; remove orphaned test_rundat entries
+	       "DELETE FROM test_rundat where test_id NOT IN (SELECT id FROM tests);"
+	       ;; 
+	       "DELETE FROM test_steps WHERE test_id NOT IN (SELECT id FROM tests);"
 	       ))))
     ;; (db:delay-if-busy dbdat)
     (sqlite3:with-transaction 
@@ -1771,6 +1866,83 @@
 	      (lambda (db)
 		(sqlite3:execute db "DELETE FROM metadat WHERE var=?;" var))))
 
+;;======================================================================
+;; no-sync.db - small bits of data to be shared between servers
+;;======================================================================
+
+(define (db:open-no-sync-db)
+  (let* ((dbpath (db:dbfile-path))
+	 (dbname (conc dbpath "/no-sync.db"))
+	 (db-exists (common:file-exists? dbname))
+	 (db     (sqlite3:open-database dbname)))
+    (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
+    (if (not db-exists)
+	(begin
+	  (sqlite3:execute db "PRAGMA synchronous = 0;")
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS no_sync_metadat (var TEXT,val TEXT, CONSTRAINT no_sync_metadat_constraint UNIQUE (var));")
+	  (sqlite3:execute db "PRAGMA journal_mode=WAL;")))
+    db))
+
+;; if we are not a server create a db handle. this is not finalized
+;; so watch for problems. I'm still not clear if it is needed to manually
+;; finalize sqlite3 dbs with the sqlite3 egg.
+;;
+(define (db:no-sync-db db-in)
+  (mutex-lock! *db-access-mutex*)
+  (let ((res (if db-in
+                 db-in
+                 (let ((db (db:open-no-sync-db)))
+                   (set! *no-sync-db* db)
+                   db))))
+    (mutex-unlock! *db-access-mutex*)
+    res))
+
+(define (db:no-sync-set db var val)
+  (sqlite3:execute (db:no-sync-db db) "INSERT OR REPLACE INTO no_sync_metadat (var,val) VALUES (?,?);" var val))
+
+(define (db:no-sync-del! db var)
+  (sqlite3:execute (db:no-sync-db db) "DELETE FROM no_sync_metadat WHERE var=?;" var))
+
+(define (db:no-sync-get/default db var default)
+  (let ((res default))
+    (sqlite3:for-each-row
+     (lambda (val)
+       (set! res val))
+     (db:no-sync-db db)
+     "SELECT val FROM no_sync_metadat WHERE var=?;"
+     var)
+    (if res
+        (let ((newres (if (string? res)
+			  (string->number res)
+			  #f)))
+          (if newres
+              newres
+              res))
+        res)))
+
+(define (db:no-sync-close-db db)
+  (db:safely-close-sqlite3-db db))
+
+;; transaction protected lock aquisition
+;; either:
+;;    fails    returns  (#f . lock-creation-time)
+;;    succeeds (returns (#t . lock-creation-time)
+;; use (db:no-sync-del! db keyname) to release the lock
+;;
+(define (db:no-sync-get-lock db-in keyname)
+  (let ((db (db:no-sync-db db-in)))
+    (sqlite3:with-transaction
+     db
+     (lambda ()
+       (handle-exceptions
+	   exn
+	   (let ((lock-time (current-seconds)))
+	     (sqlite3:execute db "INSERT INTO no_sync_metadat (var,val) VALUES(?,?);" keyname lock-time)
+	     `(#t . ,lock-time))
+	 `(#f . ,(sqlite3:first-result db "SELECT val FROM no_sync_metadat WHERE var=?;" keyname)))))))
+
+
+
 ;; use a global for some primitive caching, it is just silly to
 ;; re-read the db over and over again for the keys since they never
 ;; change
@@ -1796,10 +1968,15 @@
   (if (or (null? header) (not row))
       #f
       (let loop ((hed (car header))
-		 (tal (cdr header))
-		 (n   0))
-	(if (equal? hed field)
-	    (vector-ref row n)
+                 (tal (cdr header))
+                 (n   0))
+        (if (equal? hed field)
+            (handle-exceptions
+             exn
+             (begin
+               (debug:print 0 *default-log-port* "WARNING: attempt to read non-existant field, row=" row " header=" header " field=" field)
+               #f)
+             (vector-ref row n))
 	    (if (null? tal) #f (loop (car tal)(cdr tal)(+ n 1)))))))
 
 ;; Accessors for the header/data structure
@@ -1810,6 +1987,30 @@
 ;;======================================================================
 ;;  R U N S
 ;;======================================================================
+
+
+
+
+
+(define (db:get-run-times dbstruct run-patt target-patt)
+(let ((res `())
+           (qry 	(conc "select runname, (max(end_time)-min(event_time))/60 as runtime, target from (select runname, run_id,tests.event_time,tests.event_time+run_duration AS end_time, " (string-join (db:get-keys dbstruct) " || '/' || ") " as target from tests inner join runs on tests.run_id = runs.id where runs.runname like ? and target like ?) group by run_id ;")))
+;(print qry)
+(db:with-db 
+   dbstruct
+   #f ;; this is for the main runs db
+   #f ;; does not modify db
+   (lambda (db)
+            (sqlite3:for-each-row
+	(lambda (runname runtime target )
+	  (set! res (cons (vector runname runtime target) res)))
+	db
+        qry 
+	run-patt target-patt)
+       
+       res))))
+
+
 
 (define (db:get-run-name-from-id dbstruct run-id)
   (db:with-db 
@@ -1939,6 +2140,44 @@
 		   )))
     (debug:print-info 11 *default-log-port* "db:get-runs END qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
     (vector header res)))
+
+
+(define-record simple-run target id runname state status owner event_time)
+(define-record-printer (simple-run x out)
+  (fprintf out "#,(simple-run ~S ~S ~S ~S)"
+	   (simple-run-target x) (simple-run-id x) (simple-run-runname x) (time->string (seconds->local-time (simple-run-event_time x) ))))
+
+;; simple get-runs
+;;
+(define (db:simple-get-runs dbstruct runpatt count offset target)
+    (let* ((res       '())
+	   (keys       (db:get-keys dbstruct))
+	   (runpattstr (db:patt->like "runname" runpatt))
+	   (remfields  (list "id" "runname" "state" "status" "owner" "event_time"))
+	   (targstr    (string-intersperse keys "||'/'||"))
+	   (keystr     (conc targstr " AS target,"
+			     (string-intersperse remfields ",")))
+	   (qrystr     (conc "SELECT " keystr " FROM runs WHERE (" runpattstr ") " ;; runname LIKE ? "
+			     ;; Generate: " AND x LIKE 'keypatt' ..."
+			     " AND target LIKE '" target "'"
+			     " AND state != 'deleted' ORDER BY event_time DESC "
+			     (if (number? count)
+				 (conc " LIMIT " count)
+				 "")
+			     (if (number? offset)
+				 (conc " OFFSET " offset)
+				 ""))))
+    (debug:print-info 11 *default-log-port* "db:get-runs START qrystr: " qrystr " target: " target " offset: " offset " limit: " count)
+    (db:with-db dbstruct #f #f
+		(lambda (db)		
+		  (sqlite3:for-each-row
+		   (lambda (target id runname state status owner event_time)
+		     (set! res (cons (make-simple-run target id runname state status owner event_time) res)))
+		   db
+		   qrystr
+		   )))
+    (debug:print-info 11 *default-log-port* "db:get-runs END qrystr: " qrystr " target: " target " offset: " offset " limit: " count)
+    res))
 
 ;; TODO: Switch this to use max(update_time) from each run db? Then if using a server there is no disk traffic (using inmem db)
 ;;
@@ -2207,6 +2446,7 @@
 	 (keystr    (conc (keys->keystr keys) ","
 			  (string-intersperse remfields ","))))
     (debug:print-info 11 *default-log-port* "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
+    
     (db:with-db
      dbstruct #f #f
      (lambda (db)
@@ -2214,7 +2454,7 @@
 	(lambda (a . x)
 	  (set! res (apply vector a x)))
 	db 
-	(conc "SELECT " keystr " FROM runs WHERE id=? AND state != 'deleted';")
+	(conc "SELECT " keystr " FROM runs WHERE id=?;")
 	run-id)))
     (debug:print-info 11 *default-log-port* "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
     (let ((finalres (vector header res)))
@@ -2299,7 +2539,7 @@
 	  (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
 	    (sqlite3:for-each-row 
 	     (lambda (key-val)
-	       (set! res (cons (list key key-val) res)))
+	       (set! res (cons (list key (if (string? key-val) key-val "")) res))) ;; replace non-string bad values with empty string to prevent crashes. This scenario can happen when Megatest is killed on updating the db
 	     db qry run-id)))
 	keys)))
        (reverse res)))
@@ -2317,7 +2557,7 @@
 	    ;; (db:delay-if-busy dbdat)
 	    (sqlite3:for-each-row 
 	     (lambda (key-val)
-	       (set! res (cons key-val res)))
+	       (set! res (cons (if (string? key-val) key-val "") res))) ;; check that the key-val is a string for cases where a crash injected bad data in the megatest.db
 	     db qry run-id)))
 	keys)))
     (let ((final-res (reverse res)))
@@ -2900,6 +3140,40 @@
       #f ;; default result
       test-id))))
 
+(define (db:get-test-times dbstruct run-name target)
+  (let ((res `())
+        (qry 	(conc "select testname, item_path, run_duration, " (string-join (db:get-keys dbstruct) " || '/' || ") " as target from tests inner join runs on tests.run_id = runs.id where runs.runname = ? and target = ?  ;")))
+   
+  (db:with-db 
+    dbstruct
+    #f ;; this is for the main runs db
+    #f ;; does not modify db
+    (lambda (db)
+            (sqlite3:for-each-row
+	(lambda (test-name item-path test-time target )
+	  (set! res (cons (vector test-name item-path test-time) res)))
+	db
+        qry 
+	run-name target)
+       res))))
+
+(define (db:get-test-times dbstruct run-name target)
+  (let ((res `())
+        (qry 	(conc "select testname, item_path, run_duration, " (string-join (db:get-keys dbstruct) " || '/' || ") " as target from tests inner join runs on tests.run_id = runs.id where runs.runname = ? and target = ?  ;")))
+   
+  (db:with-db 
+    dbstruct
+    #f ;; this is for the main runs db
+    #f ;; does not modify db
+    (lambda (db)
+            (sqlite3:for-each-row
+	(lambda (test-name item-path test-time target )
+	  (set! res (cons (vector test-name item-path test-time) res)))
+	db
+        qry 
+	run-name target)
+       res))))
+
 ;;======================================================================
 ;; S T E P S
 ;;======================================================================
@@ -2933,6 +3207,21 @@
 	test-id)
        (reverse res)))))
 
+ (define (db:get-steps-info-by-id dbstruct  test-step-id)
+   (db:with-db
+    dbstruct
+    #f 
+    #f
+    (lambda (db)
+      (let* ((res (vector #f #f #f #f #f #f #f #f)))
+        (sqlite3:for-each-row 
+       (lambda (id test-id stepname state status event-time logfile comment)
+         (set! res (vector id test-id stepname state status event-time (if (string? logfile) logfile "") comment)))
+       db
+       "SELECT id,test_id,stepname,state,status,event_time,logfile,comment FROM test_steps WHERE id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+       test-step-id)
+        res))))
+
 (define (db:get-steps-data dbstruct run-id test-id)
   (db:with-db
    dbstruct
@@ -2951,6 +3240,22 @@
 ;;======================================================================
 ;; T E S T  D A T A 
 ;;======================================================================
+
+ (define (db:get-data-info-by-id dbstruct  test-data-id)
+   (db:with-db
+    dbstruct
+    #f 
+    #f
+    (lambda (db)
+      (let* ((res (vector #f #f #f #f #f #f #f #f #f #f #f)))
+        (sqlite3:for-each-row 
+       (lambda (id test-id  category variable value expected tol units comment status type )
+         (set! res (vector id test-id  category variable value expected tol units comment status type)))
+       db
+       "SELECT id,test_id, category, variable, value, expected, tol, units, comment, status, type FROM test_data WHERE id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+       test-data-id)
+        res))))
+
 
 ;; WARNING: Do NOT call this for the parent test on an iterated test
 ;; Roll up test_data pass/fail results
@@ -3025,8 +3330,8 @@
 			     "logpro"                                       ;; 6 ;; Type
 			     ))))
 	   (let* ((value     (or (configf:lookup dat entry-name "measured")  "n/a"))
-		  (expected  (or (configf:lookup dat entry-name "expected")  "n/a"))
-		  (tolerance (or (configf:lookup dat entry-name "tolerance") "n/a"))
+		  (expected  (or (configf:lookup dat entry-name "expected")  0.0))
+		  (tolerance (or (configf:lookup dat entry-name "tolerance") 0.0))
 		  (comment   (or (configf:lookup dat entry-name "comment")
 				 (configf:lookup dat entry-name "desc")      "n/a"))
 		  (status    (or (configf:lookup dat entry-name "status")    "n/a"))
@@ -3131,6 +3436,21 @@
 	db
 	"SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
        (reverse res)))))
+
+;; This routine moved from tdb.scm, tdb:read-test-data
+;;
+(define (db:read-test-data* dbstruct run-id test-id categorypatt varpatt)
+  (let* ((res '()))
+    (db:with-db
+     dbstruct #f #f
+     (lambda (db)
+       (sqlite3:for-each-row 
+	(lambda (id test_id category variable value expected tol units comment status type)
+	  (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
+	db
+	"SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? AND variable LIKE ? ORDER BY category,variable;" test-id categorypatt varpatt)
+       (reverse res)))))
+
 
 ;;======================================================================
 ;; Misc. test related queries
@@ -3261,7 +3581,9 @@
 			   test-name))
 	 (item-path    (db:test-get-item-path testdat))
          (tl-testdat   (db:get-test-info dbstruct run-id test-name ""))
-         (tl-test-id   (db:test-get-id tl-testdat)))
+         (tl-test-id   (if tl-testdat
+			   (db:test-get-id tl-testdat)
+			   #f)))
     (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
 	(db:general-call dbstruct 'set-test-start-time (list test-id)))
     (mutex-lock! *db-transaction-mutex*)
@@ -3275,7 +3597,7 @@
                  ;; NB// Pass the db so it is part fo the transaction
                  (db:test-set-state-status db run-id test-id state status comment) ;; this call sets the item state/status
                  (if (not (equal? item-path "")) ;; only roll up IF incoming test is an item
-                     (let* ((state-status-counts  (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path)) ;; item-path is used to exclude current state/status of THIS test
+                     (let* ((state-status-counts  (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path state status)) ;; item-path is used to exclude current state/status of THIS test
                             (running              (length (filter (lambda (x)
                                                                     (member (dbr:counts-state x) *common:running-states*))
                                                                   state-status-counts)))
@@ -3288,11 +3610,11 @@
                             ;;                                 (not (equal? (dbr:counts-state x) "COMPLETED")))
                             ;;                               state-status-counts))
                             (all-curr-states      (common:special-sort  ;; worst -> best (sort of)
-                                                   (delete-duplicates
-                                                    (if (not (equal? state "DELETED"))
-                                                        (cons state (map dbr:counts-state state-status-counts))
-                                                        (map dbr:counts-state state-status-counts)))
-                                                   *common:std-states* >))
+                                                       (delete-duplicates
+                                                        (if (not (equal? state "DELETED"))
+                                                            (cons state (map dbr:counts-state state-status-counts))
+                                                            (map dbr:counts-state state-status-counts)))
+                                                       *common:std-states* >))
                             (all-curr-statuses    (common:special-sort  ;; worst -> best
                                                    (delete-duplicates
                                                     (if (not (equal? state "DELETED"))
@@ -3300,49 +3622,104 @@
                                                         (map dbr:counts-status state-status-counts)))
                                                    *common:std-statuses* >))
 			    (non-completes     (filter (lambda (x)
-							 (not (equal? x "COMPLETED")))
+							 (not (member x '("DELETED" "COMPLETED"))))
 						       all-curr-states))
-			    (num-non-completes (length non-completes))
-                            
+			    (preq-fails        (filter (lambda (x)
+							 (equal? x "PREQ_FAIL"))
+						       all-curr-statuses))
+                            (num-non-completes (length non-completes))
                             (newstate          (cond
-						((> running 0)
-						 "RUNNING") ;; anything running, call the situation running
-						((> bad-not-started 0)  ;; we have an ugly situation, it is completed in the sense we cannot do more.
-						 "COMPLETED") 
-						((> num-non-completes 0) ;;
-						 (car non-completes))  ;;  (remove (lambda (x)(equal? "COMPLETED" x)) all-curr-states)))
-                                                ;; only rollup DELETED if all DELETED
-						(else
-						 (car all-curr-states))))
+						((> running 0)           "RUNNING")            ;; anything running, call the situation running
+                                                ((> (length preq-fails) 0)
+                                                 "NOT_STARTED")
+						((> bad-not-started 0)   "COMPLETED")          ;; we have an ugly situation, it is completed in the sense we cannot do more.
+						((> num-non-completes 0) (car non-completes))  ;;  (remove (lambda (x)(equal? "COMPLETED" x)) all-curr-states))) ;; only rollup DELETED if all DELETED
+						(else                    (car all-curr-states))))
 			                       ;; (if (> running 0)
                                                ;;     "RUNNING"
                                                ;;     (if (> bad-not-started 0)
                                                ;;         "COMPLETED"
                                                ;;         (car all-curr-states))))
-                            (newstatus            (if (or (> bad-not-started 0)
-							  (and (equal? newstate "NOT_STARTED")
-							       (> num-non-completes 0)))
-						      "STARTED"
-                                                      (car all-curr-statuses))))
+                            (newstatus         (cond
+                                                ((> (length preq-fails) 0)
+                                                 "PREQ_FAIL")
+                                                ((or (> bad-not-started 0)
+                                                     (and (equal? newstate "NOT_STARTED")
+                                                          (> num-non-completes 0)))
+                                                 "STARTED")
+                                                (else
+                                                 (car all-curr-statuses)))))
+
+                       (debug:print-info 2 *default-log-port*
+                                         "\n--> probe db:set-state-status-and-roll-up-items: "
+                                         "\n--> state-status-counts: "(map dbr:counts->alist state-status-counts)
+                                         "\n--> running:             "running
+                                         "\n--> bad-not-started:     "bad-not-started
+                                         "\n--> non-non-completes:   "num-non-completes
+                                         "\n--> non-completes:       "non-completes
+                                         "\n--> all-curr-states:     "all-curr-states
+                                         "\n--> all-curr-statuses:     "all-curr-statuses
+                                         "\n--> newstate              "newstate
+                                         "\n--> newstatus            "newstatus
+                                         "\n\n")
+
                        ;; (print "bad-not-supported: " bad-not-support " all-curr-states: " all-curr-states " all-curr-statuses: " all-curr-states)
                        ;;      " newstate: " newstate " newstatus: " newstatus)
                        ;; NB// Pass the db so it is part of the transaction
-                       (db:test-set-state-status db run-id tl-test-id newstate newstatus #f)))))))
+                       (debug:print 4 *default-log-port* "BB> tl-test-id="tl-test-id" ; "test-name":"item-path"> bad-not-started="bad-not-started" newstate="newstate" newstatus="newstatus" num-non-completes="num-non-completes" non-completes="non-completes "len(sscs)="(length state-status-counts)  " state-status-counts: "
+                                    (apply conc
+                                           (map (lambda (x)
+                                                  (conc
+                                                   (with-output-to-string (lambda () (pp (dbr:counts->alist x)))) " | "))
+                                                state-status-counts))
+                                    
+                                    ); end debug:print
+                       (if tl-test-id
+			   (db:test-set-state-status db run-id tl-test-id newstate newstatus #f)) ;; we are still in the transaction - must access the db and not the dbstruct
+		       ))))))
+                           
          (mutex-unlock! *db-transaction-mutex*)
          (if (and test-id state status (equal? status "AUTO")) 
              (db:test-data-rollup dbstruct run-id test-id status))
          tr-res)))))
 ;; BBnote: db:get-all-state-status-counts-for-test returns dbr:counts object aggregating state and status of items of a given test, *not including rollup state/status*
-(define (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path)
-  (db:with-db
-   dbstruct #f #f
-   (lambda (db)
-     (sqlite3:map-row
-      (lambda (state status count)
-	(make-dbr:counts state: state status: status count: count))
-      db
-      "SELECT state,status,count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND item_path !=? GROUP BY state,status;"
-      run-id test-name item-path))))
+(define (db:get-all-state-status-counts-for-test dbstruct run-id test-name item-path item-state-in item-status-in)
+
+
+  (let* ((test-info   (db:get-test-info dbstruct run-id test-name item-path))
+         (item-state  (or item-state-in (db:test-get-state test-info))) 
+         (item-status (or item-status-in (db:test-get-status test-info)))
+         (other-items-count-recs (db:with-db
+                                  dbstruct #f #f
+                                  (lambda (db)
+                                    (sqlite3:map-row
+                                     (lambda (state status count)
+                                       (make-dbr:counts state: state status: status count: count))
+                                     db
+                                     ;; ignore current item because we have changed its value in the current transation so this select will see the old value.
+                                     "SELECT state,status,count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND item_path !=? GROUP BY state,status;"
+                                     run-id test-name item-path))))
+
+         ;; add current item to tally outside of sql query
+         (match-countrec-lambda (lambda (countrec) 
+                                  (and (equal? (dbr:counts-state  countrec) item-state)
+                                       (equal? (dbr:counts-status countrec) item-status))))
+
+         (already-have-count-rec-list
+          (filter match-countrec-lambda other-items-count-recs)) ;; will have either 0 or 1 count recs depending if another item shares this item's state/status
+         
+         (updated-count-rec    (if (null? already-have-count-rec-list)
+                                   (make-dbr:counts state: item-state status: item-status count: 1)
+                                   (let* ((our-count-rec (car already-have-count-rec-list))
+                                          (new-count (add1 (dbr:counts-count our-count-rec))))
+                                     (make-dbr:counts state: item-state status: item-status count: new-count))))
+
+         (nonmatch-countrec-lambda (lambda (countrec) (not (match-countrec-lambda countrec))))
+         
+         (unrelated-rec-list   
+          (filter nonmatch-countrec-lambda other-items-count-recs)))
+    
+    (cons updated-count-rec unrelated-rec-list)))
 
 ;; (define (db:get-all-item-states db run-id test-name)
 ;;   (sqlite3:map-row 
@@ -3682,7 +4059,7 @@
 		   (debug:print-info 0 *default-log-port* "WARNING: failed to test for existance of " dbfj)
 		   (thread-sleep! 1)
 		   (db:delay-if-busy count (- count 1))) 
-		 (file-exists? dbfj))
+		 (common:file-exists? dbfj))
 		(case count
 		  ((6)
 		   (thread-sleep! 0.2)
@@ -3884,68 +4261,121 @@
 	;;		  (db:test-get-item-path testdat))))
 	 running-tests) ;; calling functions want the entire data
        '())
+
+   ;; collection of: for each waiton -
+   ;;   if this ref-test-name is an item in an itemized test and mode is itemwait/itemmatch:
+   ;;     if waiton is not itemized - if waiton is not both completed and in ok status, add as unmet prerequisite
+   ;;     if waiton is itemized:
+   ;;           and waiton's items are not expanded, add as unmet prerequisite
+   ;;           else if matching waiton item is not both completed and in an ok status, add as unmet prerequisite
+   ;;   else
+   ;;    if waiton toplevel is not in both completed and ok status, add as unmet prerequisite
+
    (if (or (not waitons)
 	   (null? waitons))
        '()
-       (let* ((unmet-pre-reqs '())
-	      (result         '()))
-	 (for-each 
+       (let* ((ref-test-itemized-mode (not (null? (lset-intersection eq? mode '(itemmatch itemwait)))))
+              (ref-test-toplevel-mode (not (null? (lset-intersection eq? mode '(toplevel)))))
+              (ref-test-is-toplevel   (equal? ref-item-path ""))
+              (ref-test-is-item       (not ref-test-is-toplevel))
+              (unmet-pre-reqs '())
+	      (result         '())
+              (unmet-prereq-items '())
+              )
+	 (for-each  ; waitons
 	  (lambda (waitontest-name)
 	    ;; by getting the tests with matching name we are looking only at the matching test 
 	    ;; and related sub items
 	    ;; next should be using mt:get-tests-for-run?
-	    (let ((tests             (db:get-tests-for-run-state-status dbstruct run-id waitontest-name))
+
+            (let (;(waiton-is-itemized ...)
+                  ;(waiton-items-are-expanded ...)
+                  (waiton-tests             (db:get-tests-for-run-state-status dbstruct run-id waitontest-name))
 		  (ever-seen         #f)
 		  (parent-waiton-met #f)
-		  (item-waiton-met   #f))
-	      (for-each 
-	       (lambda (test) ;; BB- this is the upstream test
-		 ;; (if (equal? waitontest-name (db:test-get-testname test)) ;; by defintion this had better be true ...
-		 (let* ((state             (db:test-get-state test))
-			(status            (db:test-get-status test))
-			(item-path         (db:test-get-item-path test)) ;; BB- this is the upstream itempath
-			(is-completed      (equal? state "COMPLETED"))
-			(is-running        (equal? state "RUNNING"))
-			(is-killed         (equal? state "KILLED"))
-			(is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
+		  (item-waiton-met   #f)
+
+                  )
+	      (for-each ; test expanded from waiton
+	       (lambda (waiton-test) 
+		 (let* ((waiton-state             (db:test-get-state waiton-test))
+			(waiton-status            (db:test-get-status waiton-test))
+			(waiton-item-path         (db:test-get-item-path waiton-test)) ;; BB- this is the upstream itempath
+                        (waiton-is-toplevel       (equal? waiton-item-path ""))
+                        (waiton-is-item           (not waiton-is-toplevel))
+			(waiton-is-completed      (member waiton-state  *common:ended-states*))
+			(waiton-is-running        (member waiton-state  *common:running-states*))
+			(waiton-is-killed         (member waiton-state  *common:badly-ended-states*))
+			(waiton-is-ok             (member waiton-status *common:well-ended-states*))
 			;;                                       testname-b    path-a    path-b
-			(same-itempath     (db:compare-itempaths ref-test-name item-path ref-item-path itemmaps))) ;; (equal? ref-item-path item-path)))
+			(same-itempath     (db:compare-itempaths ref-test-name waiton-item-path ref-item-path itemmaps))) ;; (equal? ref-item-path waiton-item-path)))
 		   (set! ever-seen #t)
-		   (cond
-		    ;; case 1, non-item (parent test) is 
-		    ((and (equal? item-path "") ;; this is the parent test of the waiton being examined
-			  is-completed
-			  (or is-ok (not (null? (lset-intersection eq? mode '(toplevel)))))) ;;  itemmatch itemwait))))))
+                   ;;(BB> "***consider waiton "waiton-test"/"waiton-item-path"***")
+                   (cond
+                    ;; case 0 - toplevel of an itemized test, at least one item in prereq has completed
+                    ((and waiton-is-item ref-test-is-toplevel ref-test-itemized-mode waiton-is-completed)
+                     (set! parent-waiton-met #t))
+
+                    ;; case 1, non-item (parent test) is 
+		    ((and waiton-is-toplevel ;; this is the parent test of the waiton being examined
+			  waiton-is-completed
+                          ;;(BB> "cond1")
+			  (or waiton-is-ok ref-test-toplevel-mode)) ;;  itemmatch itemwait))))))
 		     (set! parent-waiton-met #t))
 		    ;; Special case for toplevel and KILLED
-		    ((and (equal? item-path "") ;; this is the parent test
-			  is-killed
+		    ((and waiton-is-toplevel ;; this is the parent test
+			  waiton-is-killed
 			  (member 'toplevel mode))
+                     ;;(BB> "cond2")
 		     (set! parent-waiton-met #t))
 		    ;; For itemwait mode IFF the previous matching item is good the set parent-waiton-met
-		    ((and (not (null? (lset-intersection eq? mode '(itemmatch itemwait)))) ;; how is that different from (member mode '(itemmatch itemwait)) ?????
-			  ;; (not (equal? item-path "")) ;; this applies to both top level (to allow launching of next batch) and items
-			  same-itempath)
-		     (if (and is-completed is-ok)
-			 (set! item-waiton-met #t))
-		     (if (and (equal? item-path "") ;; if upstream rollup test is completed, parent-waiton-met is set
-			      (or is-completed is-running));; this is the parent, set it to run if completed or running ;; BB1
+                    ((and ref-test-itemized-mode ref-test-is-item same-itempath)
+                     ;;(BB> "cond3")
+		     (if (and waiton-is-completed (or waiton-is-ok ref-test-toplevel-mode)) 
+                         (set! item-waiton-met #t)
+                         (set! unmet-prereq-items (cons waiton-test unmet-prereq-items)))
+                     (if (and waiton-is-toplevel ;; if upstream rollup test is completed, parent-waiton-met is set
+			      (or waiton-is-completed waiton-is-running))
 			 (set! parent-waiton-met #t)))
 		    ;; normal checking of parent items, any parent or parent item not ok blocks running
-		    ((and is-completed
-			  (or is-ok 
+		    ((and waiton-is-completed
+			  (or waiton-is-ok 
 			      (member 'toplevel mode))              ;; toplevel does not block on FAIL
-			  (and is-ok (member 'itemmatch mode))) ;; itemmatch blocks on not ok
-		     (set! item-waiton-met #t)))))
-	       tests)
+			  (and waiton-is-ok (member 'itemmatch mode) ;; itemmatch blocks on not ok
+                               ))
+                     ;;(BB> "cond4")
+		     (set! item-waiton-met #t))
+
+                    ((and waiton-is-completed waiton-is-ok same-itempath)
+                     ;;(BB> "cond5")
+                     (set! item-waiton-met #t))
+                    (else
+                     #t
+                     ;;(BB> "condelse")
+                     ))))
+               waiton-tests)
 	      ;; both requirements, parent and item-waiton must be met to NOT add item to
 	      ;; prereq's not met list
-	      (if (not (or parent-waiton-met item-waiton-met))
-		  (set! result (append (if (null? tests) (list waitontest-name) tests) result))) ;; appends the string if the full record is not available
+               ;; (BB>
+               ;;  "\n* waiton-tests           "waiton-tests
+               ;;  "\n* parent-waiton-met      "parent-waiton-met
+               ;;  "\n* item-waiton-met        "item-waiton-met
+               ;;  "\n* ever-seen              "ever-seen
+               ;;  "\n* ref-test-itemized-mode "ref-test-itemized-mode
+               ;;  "\n* unmet-prereq-items     "unmet-prereq-items
+               ;;  "\n* result (pre)           "result
+               ;;  "\n* ever-seen              "ever-seen
+               ;;  "\n")
+
+              (cond
+               ((and ref-test-itemized-mode ref-test-is-item (not (null? unmet-prereq-items)))
+                (set! result (append unmet-prereq-items result)))
+               ((not (or parent-waiton-met item-waiton-met))
+                (set! result (append (if (null? waiton-tests) (list waitontest-name) waiton-tests) result))) ;; appends the string if the full record is not available
 	      ;; if the test is not found then clearly the waiton is not met...
 	      ;; (if (not ever-seen)(set! result (cons waitontest-name result)))))
-	      (if (not ever-seen)
-		  (set! result (append (if (null? tests)(list waitontest-name) tests) result)))))
+               ((not ever-seen)
+                (set! result (append (if (null? waiton-tests)(list waitontest-name) waiton-tests) result))))))
 	  waitons)
 	 (delete-duplicates result)))))
 
@@ -4047,8 +4477,8 @@
 					       (final-log (vector-ref vb (+  7 numkeys)))
 					       (run-dir   (vector-ref vb (+ 18 numkeys)))
 					       (log-fpath (conc run-dir "/"  final-log))) ;; (string-intersperse keyvals "/") "/" testname "/" item-path "/"
-					  (debug:print 4 *default-log-port* "log: " log-fpath " exists: " (file-exists? log-fpath))
-					  (vector-set! vb (+ 7 numkeys) (if (file-exists? log-fpath)
+					  (debug:print 4 *default-log-port* "log: " log-fpath " exists: " (common:file-exists? log-fpath))
+					  (vector-set! vb (+ 7 numkeys) (if (common:file-exists? log-fpath)
 									    (let ((newpath (conc pathmod "/"
 												 (string-intersperse keyvals "/")
 												 "/" runname "/" testname "/"
@@ -4095,6 +4525,7 @@
 	   (conc (current-directory) "/" outputfile)))
      results)
     ;; brutal clean up
+    (stack-push! (dbr:dbstruct-dbstack dbstruct) dbdat)
     (system "rm -rf tempdir")))
 
 ;; (db:extract-ods-file db "outputfile.ods" '(("sysname" "%")("fsname" "%")("datapath" "%")) "%")

@@ -75,7 +75,7 @@
 			targ-from-db
 			(get-environment-variable "MT_TARGET"))))
     (pop-directory)
-    (if (file-exists? runconfigf)
+    (if (common:file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id #t keyvals
 			    environ-patt: (conc "(default"
 						(if targ

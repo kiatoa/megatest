@@ -76,12 +76,15 @@
          (status (close-input-pipe fh)))
     (if (eq? status 0) res #f)))
 
-(define (process:cmd-run->list cmd)
-  (let* ((fh (open-input-pipe cmd))
-         (res (port->list fh))
-         (status (close-input-pipe fh)))
-    (list res status)))
-
+(define (process:cmd-run->list cmd #!key (delta-env-alist-or-hash-table '()))
+  (common:with-env-vars
+   delta-env-alist-or-hash-table
+   (lambda ()
+     (let* ((fh (open-input-pipe cmd))
+            (res (port->list fh))
+            (status (close-input-pipe fh)))
+       (list res status)))))
+   
 (define (port->list fh)
   (if (eof-object? fh) #f
       (let loop ((curr (read-line fh))
@@ -144,7 +147,7 @@
   (handle-exceptions
    exn
    ;; possibly pid is a process not a child, look in /proc to see if it is running still
-   (file-exists? (conc "/proc/" pid))
+   (common:file-exists? (conc "/proc/" pid))
    (let-values (((rpid exit-type exit-signal)(process-wait pid #t)))
        (and (number? rpid)
 	    (equal? rpid pid)))))
