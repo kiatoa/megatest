@@ -192,7 +192,7 @@
 	   (args:get-arg "-one-pass"))
       (exit 0))
 
-  (thread-sleep! (cond
+  (thread-sleep! (cond ;; BB: check with Matt.  Should this sleep move to cond clauses below where we determine we have too many jobs running rather than each time the and condition above is true (which seems like always)?
         	  ((> (runs:dat-can-run-more-tests-count runsdat) 20)
 		   (if (runs:lownoise "waiting on tasks" 60)(debug:print-info 2 *default-log-port* "waiting for tasks to complete, sleeping briefly ..."))
                    (configf:lookup-number *configdat* "setup" "inter-test-delay" default: 0.1) ;; was 2
@@ -640,40 +640,6 @@
 
 (define runs:nothing-left-in-queue-count 0)
 
-
-;; check if all remaining tests in test queue:
-;;   1) have unexpanded tests
-;;   2) are NOT STARTED
-;;   3) are itemized
-;; indicating run cannot proceed.
-;; (define (runs:check-for-itemized-stalemate run-id test-queue test-records)
-;;   (let loop ((test-queue-left test-queue))
-;;     (if (null? test-queue)
-;;         #t
-;;         (let* ((hed (car test-queue-left))
-;;                (tal (cdr test-queue-left))
-;;                (test-record (hash-table-ref test-records hed))
-;;                (tconfig     (tests:testqueue-get-testconfig test-record))
-;;                (items       (tests:testqueue-get-items      test-record))
-;;                (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
-;;                               (if m (map string->symbol (string-split m)) '(normal))))
-;;                (num-running (num-running  (rmt:get-count-tests-running-for-run-id run-id)))
-;;                (is-itemized (not (null? (lset-intersection mode '(itemwait itemmatch toplevel)))))
-;;                )
-;;           (cond
-;;            ((> num-running 0) #f)               ;; stuff is still in flight
-;;            ((not is-itemized) #f)               ;; not an itemized test
-;;            ((> (irregex-split "/" hed ) 1) #f)  ;; this is an item of an itemized test.
-;;            ((not (or (procedure? items)(eq? items 'have-procedure))) #f) ;; items have been expanded
-;;            ((not (equal? status ...)))
-;;            ((not (tests are running or queued...)))
-;;            (else (loop tal)))))))
-
-
-
-
-
-;; BB: for future reference - suspect target vars are not expanded to env vars at this point (item expansion using [items]\nwhatever [system echo $TARGETVAR] doesnt work right whereas [system echo #{targetvar}] does.. Tal and Randy have tix on this.  on first pass, var not set, on second pass, ok.  
 (define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmaps)
   (let* ((loop-list       (list hed tal reg reruns))
 	 (prereqs-not-met (let ((res (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps)))
@@ -710,7 +676,7 @@
     ((and (not (member 'toplevel testmode))
 	   (member (hash-table-ref/default test-registry (db:test-make-full-name hed item-path) 'n/a)
 		   '(DONOTRUN removed CANNOTRUN))) ;; *common:cant-run-states-sym*) ;; '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE)) ;; try to catch repeat processing of COMPLETED tests here
-      (BB> "ei-1")
+      (debug:print-info 4 *default-log-port* "cond branch - "  "ei-1")
       (debug:print-info 1 *default-log-port* "Test " hed " set to \"" (hash-table-ref test-registry (db:test-make-full-name hed item-path)) "\". Removing it from the queue")
       (if (or (not (null? tal))
 	      (not (null? reg)))
@@ -731,7 +697,7 @@
     ((or (null? prereqs-not-met)
 	  (and (member 'toplevel testmode)
 	       (null? non-completed)))
-      (BB> "ei-2")
+      (debug:print-info 4 *default-log-port* "cond branch - "  "ei-2")
       (debug:print-info 4 *default-log-port* "runs:expand-items: (or (null? prereqs-not-met) (and (member 'toplevel testmode)(null? non-completed)))")
       (let ((test-name (tests:testqueue-get-testname test-record)))
 	(setenv "MT_TEST_NAME" test-name) ;; 
@@ -755,7 +721,7 @@
     ((and (null? fails)
 	   (null? prereq-fails)
 	   (not (null? non-completed)))
-      (BB> "ei-3")
+      (debug:print-info 4 *default-log-port* "cond branch - "  "ei-3")
       (let* ((allinqueue (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
         		      (append newtal reruns)))
 	     ;; prereqstrs is a list of test names as strings that are prereqs for hed
@@ -796,7 +762,7 @@
     ((and (null? fails) ;; have not-started tests, but unable to run them.  everything looks completed with no prospect of unsticking something that is stuck.  we should mark hed as moribund and exit or continue if there are more tests to consider
 	   (null? prereq-fails)
 	   (null? non-completed))
-     (BB> "ei-4")
+     (debug:print-info 4 *default-log-port* "cond branch - "  "ei-4")
       (if  (runs:can-keep-running? hed 20)
 	  (begin
 	    (runs:inc-cant-run-tests hed)
@@ -817,7 +783,7 @@
        (or (not (null? fails))
 	   (not (null? prereq-fails)))
        (member 'normal testmode))
-      (BB> "ei-5")
+      (debug:print-info 4 *default-log-port* "cond branch - "  "ei-5")
       (debug:print-info 1 *default-log-port* "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
 			(string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
 			", removing it from to-do list")
@@ -836,15 +802,15 @@
 	  #f)) ;; #f flags do not loop
 
      ((and (not (null? fails))(member 'toplevel testmode))
-      (BB> "ei-6")
+      (debug:print-info 4 *default-log-port* "cond branch - "  "ei-6")
       (if (or (not (null? reg))(not (null? tal)))
 	   (list (car newtal)(append (cdr newtal) reg) '() reruns)
 	  #f)) 
      ((null? runnables)
-      (BB> "ei-7")
+      (debug:print-info 4 *default-log-port* "cond branch - "  "ei-7")
       #f) ;; if we get here and non-completed is null then it is all over.
      (else
-      (BB> "ei-8")
+      (debug:print-info 4 *default-log-port* "cond branch - "  "ei-8")
       (debug:print 0 *default-log-port* "WARNING: FAILS or incomplete tests maybe preventing completion of this run. Watch for issues with test " hed ", continuing for now")
       (list (car newtal)(cdr newtal) reg reruns)))))
 
@@ -1226,7 +1192,6 @@
   ;; (rmt:find-and-mark-incomplete)
 
   (let* ((run-info              (rmt:get-run-info run-id))
-         (canary                'CANARY) ;; consider replacing by gensym
          (tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
          (sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
          (test-registry         (make-hash-table))
@@ -1281,7 +1246,6 @@
     (set! max-retries (if (and max-retries (string->number max-retries))(string->number max-retries) 100))
 
     (let loop ((hed         (car sorted-test-names))
-	       ;;(tal         (append (cdr sorted-test-names) (list canary)))
                (tal         (cdr sorted-test-names))
 	       (reg         '()) ;; registered, put these at the head of tal 
 	       (reruns      '()))
@@ -1309,10 +1273,6 @@
             ;; (rmt:find-and-mark-incomplete-all-runs)
 	    ))
 
-;;      (if (equal? hed canary)
-;;          (cond
-;;           (null?
-      
       ;; (print "Top of loop, hed=" hed ", tal=" tal " ,reruns=" reruns)
       (let* ((test-record (hash-table-ref test-records hed))
 	     (test-name   (tests:testqueue-get-testname test-record))
@@ -1424,14 +1384,14 @@
 				       1
 				       #f))
 				 waitons))))) ;; could do this more elegantly with a marker....
-          (BB> "rtq-1")
+          (debug:print-info 4 *default-log-port* "cond branch - "  "rtq-1")
 	  (debug:print 0 *default-log-port* "WARNING: Marking test " tfullname " as not runnable. It is waiting on tests that cannot be run. Giving up now.")
 	  (hash-table-set! test-registry tfullname 'removed))
 
 	 ;; items is #f then the test is ok to be handed off to launch (but not before)
 	 ;; 
 	 ((not items)
-          (BB> "rtq-2")
+          (debug:print-info 4 *default-log-port* "cond branch - "  "rtq-2")
 	  (debug:print-info 4 *default-log-port* "OUTER COND: (not items)")
 	  (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests))
 		   (not (null? tal)))
@@ -1445,7 +1405,7 @@
 	 ;;
 	 ((and (list? items)     ;; thus we know our items are already calculated
 	       (not   itemdat))  ;; and not yet expanded into the list of things to be done
-          (BB> "rtq-3")
+          (debug:print-info 4 *default-log-port* "cond branch - "  "rtq-3")
 	  (debug:print-info 4 *default-log-port* "OUTER COND: (and (list? items)(not itemdat))")
 	  ;; Must determine if the items list is valid. Discard the test if it is not.
 	  (if (and (list? items)
@@ -1468,12 +1428,10 @@
                      (tests:match test-patts hed (item-list->path my-itemdat) required: required-tests))
                    items) ))
             (if (null? items-in-testpatt)
-
-                (begin
-                  (let ((test-id   (rmt:get-test-id run-id test-name "")))
-                    (if test-id
-                        (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "ZERO_ITEMS" "This test has no items which match test pattern.")))
-                  (BB> "NEED TO FLUNK OUT "hed))
+                (let ((test-id   (rmt:get-test-id run-id test-name "")))
+                  (debug:print-info 0 *default-log-port* "Test " (tests:testqueue-get-testname test-record) " is itemized but has no items matching test pattern -- marking status ZERO_ITEMS")
+                  (if test-id
+                      (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "ZERO_ITEMS" "This test has no items which match test pattern.")))
                 
                 (for-each (lambda (my-itemdat)
                             (let* ((new-test-record (let ((newrec (make-tests:testqueue)))
@@ -1489,7 +1447,7 @@
                           items-in-testpatt)))
                           
             
-	  ;; (debug:print-info 0 *default-log-port* "Test " (tests:testqueue-get-testname test-record) " is itemized but has no items")
+
 
 	  ;; At this point we have possibly added items to tal but all must be handed off to 
 	  ;; INNER COND logic. I think loop without rotating the queue 
@@ -1504,7 +1462,7 @@
 	 ;;    - but only do that if resources exist to kick off the job
 	 ;; EXPAND ITEMS
 	 ((or (procedure? items)(eq? items 'have-procedure))
-          (BB> "rtq-4")
+          (debug:print-info 4 *default-log-port* "cond branch - "  "rtq-4")
 	  (let ((can-run-more    (runs:can-run-more-tests runsdat run-id jobgroup max-concurrent-jobs)))
 	    (if (and (list? can-run-more)
 		     (car can-run-more))
@@ -1519,11 +1477,11 @@
 	    
 	 ;; this case should not happen, added to help catch any bugs
 	 ((and (list? items) itemdat)
-          (BB> "rtq-5")
+          (debug:print-info 4 *default-log-port* "cond branch - "  "rtq-5")
 	  (debug:print-error 0 *default-log-port* "Should not have a list of items in a test and the itemspath set - please report this")
 	  (exit 1))
 	 ((not (null? reruns))
-          (BB> "rtq-6")
+          (debug:print-info 4 *default-log-port* "cond branch - "  "rtq-6")
 	  (let* ((newlst (tests:filter-non-runnable run-id tal test-records)) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
 		 (junked (lset-difference equal? tal newlst)))
 	    (debug:print-info 4 *default-log-port* "full drop through, if reruns is less than 100 we will force retry them, reruns=" reruns ", tal=" tal)
@@ -1535,14 +1493,14 @@
 		;; since reruns have been tacked on to newlst create new reruns from junked
 		(loop (car newlst)(cdr newlst) reg (delete-duplicates junked)))))
 	 ((not (null? tal))
-          (BB> "rtq-7")
+          (debug:print-info 4 *default-log-port* "cond branch - "  "rtq-7")
 	  (debug:print-info 4 *default-log-port* "I'm pretty sure I shouldn't get here."))
 	 ((not (null? reg)) ;; could we get here with leftovers?
-          (BB> "rtq-8")
+          (debug:print-info 4 *default-log-port* "cond branch - "  "rtq-8")
 	  (debug:print-info 0 *default-log-port* "Have leftovers!")
 	  (loop (car reg)(cdr reg) '() reruns))
 	 (else
-          (BB> "rtq-9")
+          (debug:print-info 4 *default-log-port* "cond branch - "  "rtq-9")
 	  (debug:print-info 4 *default-log-port* "Exiting loop with...\n  hed=" hed "\n  tal=" tal "\n  reruns=" reruns))
 	 ))) ;; end loop on sorted test names
     
