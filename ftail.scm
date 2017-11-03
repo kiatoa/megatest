@@ -1,10 +1,31 @@
+;;======================================================================
+;; Copyright 2017, Matthew Welland.
+;; 
+;;  This program is made available under the GNU GPL version 2.0 or
+;;  greater. See the accompanying file COPYING for details.
+;; 
+;;  This program is distributed WITHOUT ANY WARRANTY; without even the
+;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+;;  PURPOSE.
+;;======================================================================
 
-(use (prefix sqlite3 sqlite3:) posix typed-records) 
+(declare (unit ftail))
+
+(module ftail
+    (
+     open-tail-db
+     tail-write
+     tail-get-fid
+     file-tail
+     )
+
+(import scheme chicken data-structures extras)
+(use (prefix sqlite3 sqlite3:) posix typed-records)
 
 (define (open-tail-db )
   (let* ((basedir   (create-directory (conc "/tmp/" (current-user-name))))
 	 (dbpath    (conc basedir "/megatest_logs.db"))
-	 (dbexists  (common:file-exists? dbpath))
+	 (dbexists  (file-exists? dbpath))
 	 (db        (sqlite3:open-database dbpath))
 	 (handler   (sqlite3:make-busy-timeout 136000)))
     (sqlite3:set-busy-handler! db handler)
@@ -65,12 +86,14 @@
 ;;
 (define (tail-get-lines db fid offset count)
   (if (> offset 0)
-      (map-row (lambda (id line)
+      (sqlite3:map-row (lambda (id line)
 		 (vector id line))
 	       db
 	       "SELECT id,line FROM log_data WHERE fid=? OFFSET ? LIMIT ?;" fid offset count)
       (reverse ;; get N from the end
-       (map-row (lambda (id line)
+       (sqlite3:map-row (lambda (id line)
 		  (vector id line))
 		db
 		"SELECT id,line FROM log_data WHERE fid=? ORDER BY id DESC LIMIT ?;" fid (abs offset)))))
+
+)

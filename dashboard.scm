@@ -1016,7 +1016,7 @@ Misc
 	      (run-id           (db:get-value-by-header run (dboard:tabdat-header tabdat) "id"))
 	      (key-vals         (append key-val-dat
 					(list (let ((x (db:get-value-by-header run (dboard:tabdat-header tabdat) "runname")))
-						(if x x "")))))
+						(if (string? x) x "")))))
 	      (run-key          (string-intersperse key-vals "\n")))
 	 
 	 ;; fill in the run header key values
@@ -1684,7 +1684,9 @@ Misc
     (dboard:tabdat-last-runs-update-set! tabdat (- (current-seconds) 2))
     (for-each (lambda (run-id)
 		(let* ((run-record (hash-table-ref/default runs-hash run-id #f))
-		       (key-vals   (map (lambda (key)(db:get-value-by-header run-record runs-header key))
+		       (key-vals   (map (lambda (key)
+                                          (let ((val (db:get-value-by-header run-record runs-header key)))
+                                            (if (string? val) val "")))
 					(dboard:tabdat-keys tabdat)))
 		       (run-name   (db:get-value-by-header run-record runs-header "runname"))
 		       (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))

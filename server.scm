@@ -10,8 +10,8 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest directory-utils posix-extras matchable
-     )
+(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest
+     directory-utils posix-extras matchable)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
 
@@ -22,6 +22,7 @@
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 ;; (declare (uses synchash))
 (declare (uses http-transport))
+;;(declare (uses rpc-transport))
 (declare (uses launch))
 (declare (uses daemon))
 
@@ -34,6 +35,12 @@
       (conc "http://" (car hostport) ":" (cadr hostport))))
 
 (define  *server-loop-heart-beat* (current-seconds))
+
+;;======================================================================
+;; P K T S   S T U F F 
+;;======================================================================
+
+;; ???
 
 ;;======================================================================
 ;; P K T S   S T U F F 
@@ -56,7 +63,7 @@
   (case transport-type
     ((http)(http-transport:launch))
     ;;((nmsg)(nmsg-transport:launch run-id))
-    ((rpc)  (rpc-transport:launch run-id))
+    ;;((rpc)  (rpc-transport:launch run-id))
     (else (debug:print-error 0 *default-log-port* "unknown server type " transport-type))))
 
 ;;======================================================================

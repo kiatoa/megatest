@@ -610,7 +610,6 @@ Then in runconfigs.config
 .Example of using modified.config in a testconfig
 ------------------------------
 cat testconfig
-
 [pre-launch-env-vars]
 [include modified.config]
 ------------------------------
@@ -629,6 +628,64 @@ It is often desired to keep some older runs around but this must be balanced wit
 # use -precmd 'sleep 5;nbfake' to limit overloading the host computer but to allow the removes to run in parallel.
 megatest -actions print,remove-runs -remove-keep 3 -target %/%/%/% -runname % -age 1w -precmd 'sleep 5;nbfake'"
 ---------------------
+
+Nested Runs
+-----------
+
+A Megatest test can run a full Megatest run in either the same
+Megatest area or in another area. This is a powerful way of chaining
+complex suites of tests and or actions.
+
+If you are not using the current area you can use ezsteps to retrieve
+and setup the sub-Megatest run area.
+
+In the testconfig:
+---------------
+[subrun]
+
+# Required: wait for the run or just launch it
+#           if no then the run will be an automatic PASS irrespective of the actual result
+runwait yes|no
+
+# Optional: where to execute the run. Default is the current runarea
+runarea /some/path/to/megatest/area
+
+# Optional: method to use to determine pass/fail status of the run
+#   auto (default) - roll up the net state/status of the sub-run
+#   logpro         - use the provided logpro rules, happens automatically if there is a logpro section
+# passfail auto|logpro
+# Example of logpro:
+passfail logpro
+
+# Optional: 
+logpro ;; if this section exists then logpro is used to determine pass/fail
+  (expect:required in "LogFileBody" >= 1 "At least one pass" #/PASS/)
+  (expect:fail     in "LogFileBody"  = 0 "No FAILs allowed"  #/FAIL/)
+
+# Optional: target translator, default is to use the parent target
+target #{shell somescript.sh}
+
+# Optional: runname translator/generator, default is to use the parent runname
+runname #{somescript.sh}
+
+# Optional: testpatt spec, default is to first look for TESTPATT spec from runconfigs unless there is a contour spec
+testpatt %/item1,test2
+
+# Optional: contour spec, use the named contour from the megatest.config contour spec
+contour contourname ### NOTE: Not implemented yet! Let us know if you need this feature.
+
+# Optional: mode-patt, use this spec for testpatt from runconfigs
+mode-patt TESTPATT
+
+# Optional: tag-expr, use this tag-expr to select tests
+tag-expr quick
+
+# Optional: (not yet implemented), propagate these actions from the parent
+#           test
+#   Note// default is % for all
+propagate remove-runs archive ...
+
+---------------
 
 Programming API
 ---------------

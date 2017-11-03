@@ -76,12 +76,15 @@
          (status (close-input-pipe fh)))
     (if (eq? status 0) res #f)))
 
-(define (process:cmd-run->list cmd)
-  (let* ((fh (open-input-pipe cmd))
-         (res (port->list fh))
-         (status (close-input-pipe fh)))
-    (list res status)))
-
+(define (process:cmd-run->list cmd #!key (delta-env-alist-or-hash-table '()))
+  (common:with-env-vars
+   delta-env-alist-or-hash-table
+   (lambda ()
+     (let* ((fh (open-input-pipe cmd))
+            (res (port->list fh))
+            (status (close-input-pipe fh)))
+       (list res status)))))
+   
 (define (port->list fh)
   (if (eof-object? fh) #f
       (let loop ((curr (read-line fh))
