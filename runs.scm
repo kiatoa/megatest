@@ -213,8 +213,7 @@
 	  (set! *last-num-running-tests* num-running)))
     (if (not (eq? 0 *globalexitstatus*))
 	(list #f num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)
-	(let* ( ;;BBHOLD (all-tests-itemized-and-unexpanded
-               (can-not-run-more (cond
+	(let* ((can-not-run-more (cond
 				 ;; if max-concurrent-jobs is set and the number running is greater 
 				 ;; than it then cannot run more jobs
 				 ((and max-concurrent-jobs (>= num-running max-concurrent-jobs))
@@ -230,7 +229,6 @@
 				      (debug:print 1 *default-log-port* "WARNING: number of jobs " num-running-in-jobgroup 
 						   " in jobgroup \"" jobgroup "\" exceeds limit of " job-group-limit))
 				  #t)
-                                 ;; BBHOLD ((and (eq? 0 num-running) all-tests-itemized-and-unexpanded) #f)
 				 (else #f))))
 	  (list (not can-not-run-more) num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)))))
 
@@ -1329,14 +1327,6 @@
       
       (runs:incremental-print-results run-id)
 
-
-      ;; ;; check if all remaining tests if
-      ;; ;;   1) all tests remaining have unexpanded tests
-      ;; ;;   2) all tests remaining are NOT STARTED
-      ;; ;;   3) all tests remaining are itemized
-      ;; (or (procedure? items)(eq? items 'have-procedure))
-
-      
       (if (not (null? reruns))(debug:print-info 4 *default-log-port* "reruns=" reruns))
 
       ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
