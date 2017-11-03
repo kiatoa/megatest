@@ -186,15 +186,19 @@
 	#f)))
 
 (define (runs:can-run-more-tests runsdat run-id jobgroup max-concurrent-jobs)
+
   ;; Take advantage of a good place to exit if running the one-pass methodology
   (if (and (> (runs:dat-can-run-more-tests-count runsdat) 20)
 	   (args:get-arg "-one-pass"))
       (exit 0))
+
   (thread-sleep! (cond
         	  ((> (runs:dat-can-run-more-tests-count runsdat) 20)
 		   (if (runs:lownoise "waiting on tasks" 60)(debug:print-info 2 *default-log-port* "waiting for tasks to complete, sleeping briefly ..."))
-		   2);; obviously haven't had any work to do for a while
+                   (configf:lookup-number *configdat* "setup" "inter-test-delay" default: 0.1) ;; was 2
+                   );; obviously haven't had any work to do for a while
         	  (else 0)))
+  
   (let* ((num-running             (rmt:get-count-tests-running run-id))
 	 (num-running-in-jobgroup (rmt:get-count-tests-running-in-jobgroup run-id jobgroup))
 	 (job-group-limit         (let ((jobg-count (config-lookup *configdat* "jobgroups" jobgroup)))
@@ -637,29 +641,35 @@
 (define runs:nothing-left-in-queue-count 0)
 
 
-;; check if all remaining tests if
-;;   1) all tests remaining have unexpanded tests
-;;   2) all tests remaining are NOT STARTED
-;;   3) all tests remaining are itemized
-(define (runs:check-for-itemized-stalemate test-queue)
-  (null?
-   (filter (lambda (test-name) ;; BB INCOMPLETE MAKE REST WORK MONDAY
-             (let* ((test-record (hash-table-ref test-records hed))
-                    (tconfig     (tests:testqueue-get-testconfig test-record))
-                    (items       (tests:testqueue-get-items      test-record))
-                    (test-id       (rmt:get-test-id run-id test-name ""))
-                    (testdat       (if test-id (rmt:get-test-info-by-id run-id test-id) #f))
-                    (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
-                                   (if m (map string->symbol (string-split m)) '(normal))))
-                   (mode ...)
-                   (items ...)
-                   (status ...))
-               (not
-                (and
-                 (member mode '(itemwait itemmatch toplevel))
-                 (or (procedure? items)(eq? items 'have-procedure))
-                 (eq? status "NOT STARTED")))))
-           tests-queue)))
+;; check if all remaining tests in test queue:
+;;   1) have unexpanded tests
+;;   2) are NOT STARTED
+;;   3) are itemized
+;; indicating run cannot proceed.
+;; (define (runs:check-for-itemized-stalemate run-id test-queue test-records)
+;;   (let loop ((test-queue-left test-queue))
+;;     (if (null? test-queue)
+;;         #t
+;;         (let* ((hed (car test-queue-left))
+;;                (tal (cdr test-queue-left))
+;;                (test-record (hash-table-ref test-records hed))
+;;                (tconfig     (tests:testqueue-get-testconfig test-record))
+;;                (items       (tests:testqueue-get-items      test-record))
+;;                (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
+;;                               (if m (map string->symbol (string-split m)) '(normal))))
+;;                (num-running (num-running  (rmt:get-count-tests-running-for-run-id run-id)))
+;;                (is-itemized (not (null? (lset-intersection mode '(itemwait itemmatch toplevel)))))
+;;                )
+;;           (cond
+;;            ((> num-running 0) #f)               ;; stuff is still in flight
+;;            ((not is-itemized) #f)               ;; not an itemized test
+;;            ((> (irregex-split "/" hed ) 1) #f)  ;; this is an item of an itemized test.
+;;            ((not (or (procedure? items)(eq? items 'have-procedure))) #f) ;; items have been expanded
+;;            ((not (equal? status ...)))
+;;            ((not (tests are running or queued...)))
+;;            (else (loop tal)))))))
+
+
 
 
 
@@ -697,9 +707,10 @@
      ;; all prereqs met, fire off the test
      ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
 
-     ((and (not (member 'toplevel testmode))
+    ((and (not (member 'toplevel testmode))
 	   (member (hash-table-ref/default test-registry (db:test-make-full-name hed item-path) 'n/a)
 		   '(DONOTRUN removed CANNOTRUN))) ;; *common:cant-run-states-sym*) ;; '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE)) ;; try to catch repeat processing of COMPLETED tests here
+      (BB> "ei-1")
       (debug:print-info 1 *default-log-port* "Test " hed " set to \"" (hash-table-ref test-registry (db:test-make-full-name hed item-path)) "\". Removing it from the queue")
       (if (or (not (null? tal))
 	      (not (null? reg)))
@@ -717,9 +728,10 @@
 	    #f)))
 
      ;; 
-     ((or (null? prereqs-not-met)
+    ((or (null? prereqs-not-met)
 	  (and (member 'toplevel testmode)
 	       (null? non-completed)))
+      (BB> "ei-2")
       (debug:print-info 4 *default-log-port* "runs:expand-items: (or (null? prereqs-not-met) (and (member 'toplevel testmode)(null? non-completed)))")
       (let ((test-name (tests:testqueue-get-testname test-record)))
 	(setenv "MT_TEST_NAME" test-name) ;; 
@@ -740,9 +752,10 @@
 		(debug:print-error 0 *default-log-port* "The proc from reading the items table did not yield a list - please report this")
 		(exit 1))))))
 
-     ((and (null? fails)
+    ((and (null? fails)
 	   (null? prereq-fails)
 	   (not (null? non-completed)))
+      (BB> "ei-3")
       (let* ((allinqueue (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
         		      (append newtal reruns)))
 	     ;; prereqstrs is a list of test names as strings that are prereqs for hed
@@ -780,9 +793,10 @@
                   ))
 	      (list (car newtal)(append (cdr newtal) reg) '() reruns))))
 
-     ((and (null? fails) ;; have not-started tests, but unable to run them.  everything looks completed with no prospect of unsticking something that is stuck.  we should mark hed as moribund and exit or continue if there are more tests to consider
+    ((and (null? fails) ;; have not-started tests, but unable to run them.  everything looks completed with no prospect of unsticking something that is stuck.  we should mark hed as moribund and exit or continue if there are more tests to consider
 	   (null? prereq-fails)
 	   (null? non-completed))
+     (BB> "ei-4")
       (if  (runs:can-keep-running? hed 20)
 	  (begin
 	    (runs:inc-cant-run-tests hed)
@@ -799,10 +813,11 @@
             (runs:loop-values tal reg reglen regfull reruns)
             )))
 
-     ((and 
+    ((and 
        (or (not (null? fails))
 	   (not (null? prereq-fails)))
        (member 'normal testmode))
+      (BB> "ei-5")
       (debug:print-info 1 *default-log-port* "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
 			(string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
 			", removing it from to-do list")
@@ -821,11 +836,15 @@
 	  #f)) ;; #f flags do not loop
 
      ((and (not (null? fails))(member 'toplevel testmode))
+      (BB> "ei-6")
       (if (or (not (null? reg))(not (null? tal)))
 	   (list (car newtal)(append (cdr newtal) reg) '() reruns)
 	  #f)) 
-     ((null? runnables) #f) ;; if we get here and non-completed is null then it is all over.
+     ((null? runnables)
+      (BB> "ei-7")
+      #f) ;; if we get here and non-completed is null then it is all over.
      (else
+      (BB> "ei-8")
       (debug:print 0 *default-log-port* "WARNING: FAILS or incomplete tests maybe preventing completion of this run. Watch for issues with test " hed ", continuing for now")
       (list (car newtal)(cdr newtal) reg reruns)))))
 
@@ -1207,6 +1226,7 @@
   ;; (rmt:find-and-mark-incomplete)
 
   (let* ((run-info              (rmt:get-run-info run-id))
+         (canary                'CANARY) ;; consider replacing by gensym
          (tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
          (sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
          (test-registry         (make-hash-table))
@@ -1261,18 +1281,21 @@
     (set! max-retries (if (and max-retries (string->number max-retries))(string->number max-retries) 100))
 
     (let loop ((hed         (car sorted-test-names))
-	       (tal         (cdr sorted-test-names))
+	       ;;(tal         (append (cdr sorted-test-names) (list canary)))
+               (tal         (cdr sorted-test-names))
 	       (reg         '()) ;; registered, put these at the head of tal 
 	       (reruns      '()))
 
+      
+      
       (runs:incremental-print-results run-id)
 
 
-      ;; check if all remaining tests if
-      ;;   1) all tests remaining have unexpanded tests
-      ;;   2) all tests remaining are NOT STARTED
-      ;;   3) all tests remaining are itemized
-      (or (procedure? items)(eq? items 'have-procedure))
+      ;; ;; check if all remaining tests if
+      ;; ;;   1) all tests remaining have unexpanded tests
+      ;; ;;   2) all tests remaining are NOT STARTED
+      ;; ;;   3) all tests remaining are itemized
+      ;; (or (procedure? items)(eq? items 'have-procedure))
 
       
       (if (not (null? reruns))(debug:print-info 4 *default-log-port* "reruns=" reruns))
@@ -1286,6 +1309,10 @@
             ;; (rmt:find-and-mark-incomplete-all-runs)
 	    ))
 
+;;      (if (equal? hed canary)
+;;          (cond
+;;           (null?
+      
       ;; (print "Top of loop, hed=" hed ", tal=" tal " ,reruns=" reruns)
       (let* ((test-record (hash-table-ref test-records hed))
 	     (test-name   (tests:testqueue-get-testname test-record))
@@ -1360,19 +1387,20 @@
 	(runs:incremental-print-results run-id)
 	(debug:print 4 *default-log-port* "TOP OF LOOP => "
 		     "test-name: " test-name
-		     "\n  test-record  " test-record
 		     "\n  hed:         " hed
-		     "\n  itemdat:     " itemdat
+		     "\n  tal:         " tal
+		     "\n  reg:         " reg
+                     "\n  test-record  " test-record
+                     "\n  itemdat:     " itemdat
 		     "\n  items:       " items
 		     "\n  item-path:   " item-path
 		     "\n  waitons:     " waitons
 		     "\n  num-retries: " num-retries
-		     "\n  tal:         " tal
-		     "\n  reruns:      " reruns
+                     "\n  reruns:      " reruns
 		     "\n  regfull:     " regfull
 		     "\n  reglen:      " reglen
 		     "\n  length reg:  " (length reg)
-		     "\n  reg:         " reg)
+                     )
 
 	;; check for hed in waitons => this would be circular, remove it and issue an
 	;; error
@@ -1396,12 +1424,14 @@
 				       1
 				       #f))
 				 waitons))))) ;; could do this more elegantly with a marker....
+          (BB> "rtq-1")
 	  (debug:print 0 *default-log-port* "WARNING: Marking test " tfullname " as not runnable. It is waiting on tests that cannot be run. Giving up now.")
 	  (hash-table-set! test-registry tfullname 'removed))
 
 	 ;; items is #f then the test is ok to be handed off to launch (but not before)
 	 ;; 
 	 ((not items)
+          (BB> "rtq-2")
 	  (debug:print-info 4 *default-log-port* "OUTER COND: (not items)")
 	  (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests))
 		   (not (null? tal)))
@@ -1415,6 +1445,7 @@
 	 ;;
 	 ((and (list? items)     ;; thus we know our items are already calculated
 	       (not   itemdat))  ;; and not yet expanded into the list of things to be done
+          (BB> "rtq-3")
 	  (debug:print-info 4 *default-log-port* "OUTER COND: (and (list? items)(not itemdat))")
 	  ;; Must determine if the items list is valid. Discard the test if it is not.
 	  (if (and (list? items)
@@ -1430,21 +1461,34 @@
 					   " ")
 					  "\n"))
 				  items)))
-	  (for-each
-	   (lambda (my-itemdat)
-	     (let* ((new-test-record (let ((newrec (make-tests:testqueue)))
-				       (vector-copy! test-record newrec)
-				       newrec))
-		    (my-item-path (item-list->path my-itemdat)))
-	       (if (tests:match test-patts hed my-item-path required: required-tests) ;; (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
-		   (let ((newtestname (db:test-make-full-name hed my-item-path)))    ;; test names are unique on testname/item-path
-		     (tests:testqueue-set-items!     new-test-record #f)
-		     (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
-		     (tests:testqueue-set-item_path! new-test-record my-item-path)
-		     (hash-table-set! test-records newtestname new-test-record)
-		     (set! tal (append tal (list newtestname))))))) ;; since these are itemized create new test names testname/itempath
-	   items)
 
+          (let* ((items-in-testpatt
+                  (filter
+                   (lambda (my-itemdat)
+                     (tests:match test-patts hed (item-list->path my-itemdat) required: required-tests))
+                   items) ))
+            (if (null? items-in-testpatt)
+
+                (begin
+                  (let ((test-id   (rmt:get-test-id run-id test-name "")))
+                    (if test-id
+                        (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "ZERO_ITEMS" "This test has no items which match test pattern.")))
+                  (BB> "NEED TO FLUNK OUT "hed))
+                
+                (for-each (lambda (my-itemdat)
+                            (let* ((new-test-record (let ((newrec (make-tests:testqueue)))
+                                                      (vector-copy! test-record newrec)
+                                                      newrec))
+                                   (my-item-path (item-list->path my-itemdat))
+                                   (newtestname (db:test-make-full-name hed my-item-path)))    ;; test names are unique on testname/item-path
+                              (tests:testqueue-set-items!     new-test-record #f)
+                            (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
+                            (tests:testqueue-set-item_path! new-test-record my-item-path)
+                            (hash-table-set! test-records newtestname new-test-record)
+                            (set! tal (append tal (list newtestname)))))  ;; since these are itemized create new test names testname/itempath
+                          items-in-testpatt)))
+                          
+            
 	  ;; (debug:print-info 0 *default-log-port* "Test " (tests:testqueue-get-testname test-record) " is itemized but has no items")
 
 	  ;; At this point we have possibly added items to tal but all must be handed off to 
@@ -1459,7 +1503,8 @@
 	 ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	 ;;    - but only do that if resources exist to kick off the job
 	 ;; EXPAND ITEMS
-	 ((or (procedure? items)(eq? items 'have-procedure)) ;; BB - target vars are env vars here? to allow expansion of [items]\nsomething [system echo $SOMETARGVAR], which is wonky
+	 ((or (procedure? items)(eq? items 'have-procedure))
+          (BB> "rtq-4")
 	  (let ((can-run-more    (runs:can-run-more-tests runsdat run-id jobgroup max-concurrent-jobs)))
 	    (if (and (list? can-run-more)
 		     (car can-run-more))
@@ -1474,9 +1519,11 @@
 	    
 	 ;; this case should not happen, added to help catch any bugs
 	 ((and (list? items) itemdat)
+          (BB> "rtq-5")
 	  (debug:print-error 0 *default-log-port* "Should not have a list of items in a test and the itemspath set - please report this")
 	  (exit 1))
 	 ((not (null? reruns))
+          (BB> "rtq-6")
 	  (let* ((newlst (tests:filter-non-runnable run-id tal test-records)) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
 		 (junked (lset-difference equal? tal newlst)))
 	    (debug:print-info 4 *default-log-port* "full drop through, if reruns is less than 100 we will force retry them, reruns=" reruns ", tal=" tal)
@@ -1488,11 +1535,14 @@
 		;; since reruns have been tacked on to newlst create new reruns from junked
 		(loop (car newlst)(cdr newlst) reg (delete-duplicates junked)))))
 	 ((not (null? tal))
+          (BB> "rtq-7")
 	  (debug:print-info 4 *default-log-port* "I'm pretty sure I shouldn't get here."))
 	 ((not (null? reg)) ;; could we get here with leftovers?
+          (BB> "rtq-8")
 	  (debug:print-info 0 *default-log-port* "Have leftovers!")
 	  (loop (car reg)(cdr reg) '() reruns))
 	 (else
+          (BB> "rtq-9")
 	  (debug:print-info 4 *default-log-port* "Exiting loop with...\n  hed=" hed "\n  tal=" tal "\n  reruns=" reruns))
 	 ))) ;; end loop on sorted test names
     
