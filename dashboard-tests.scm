@@ -245,7 +245,10 @@
 ;; if there is a submegatest create a button to launch dashboard in that area
 ;;
 (define (submegatest-panel dbstruct keydat testdat runname testconfig)
-  (let* ((subarea (configf:lookup testconfig "setup" "submegatest"))
+  (let* ((subarea (or (configf:lookup testconfig "setup" "submegatest")
+                      (configf:lookup testconfig "subrun" "runarea")
+                      ;; TBD - maybe need to determine auto subrun area
+                      ))
 	 (area-exists (and subarea (common:file-exists? subarea))))
     ;; (debug:print-info 0 *default-log-port* "Megatest subarea=" subarea ", area-exists=" area-exists)
     (if subarea
@@ -476,13 +479,22 @@
                                    #f  ;; do nothing, just keep on trucking ....
                                    (setup-env-defaults runconfigf run-id (make-hash-table) keydat environ-patt: keystring))
 	 			 (make-hash-table))))
-	       (testconfig    (begin
+	       (base-testconfig    (begin ;; TODO: make this work.
 				;; (runs:set-megatest-env-vars run-id inrunname: runname testname: test-name itempath: item-path)
 				(runs:set-megatest-env-vars run-id inkeyvals: keydat inrunname: runname intarget: keystring testname: testname itempath: item-path) ;; these may be needed by the launching process
 				(handle-exceptions
 				 exn  ;; NOTE: I've no idea why this was written this way. Research, study and fix needed!
+
 				 (tests:get-testconfig (db:test-get-testname testdat) (db:test-get-item-path testdat) test-registry #f allow-write-cache: #f)
 				 (tests:get-testconfig (db:test-get-testname testdat) item-path test-registry #t allow-write-cache: #f))))
+               (testconfig (let* ((testpath (db:test-get-rundir testdat))
+                                  (subrun-tconfpath (conc testpath "/testconfig.subrun")))
+                             (if (file-exists? subrun-tconfpath)
+                                 (read-config subrun-tconfpath base-testconfig ...)
+                                 base-testconfig)))
+               ;; NOTES: (target this addition early 17ww45 for Ritika)
+               ;;   1. if testconfig.subrun exists, dont bother with base-testconfig
+               ;;   2. if .testconfig exists, do we defer to that? (do we trust it?) ;; answer as of 17ww44: no.
 	       (viewlog    (lambda (x)
 			     (if (common:file-exists? logfile)
 					;(system (conc "firefox " logfile "&"))
