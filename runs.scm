@@ -1458,22 +1458,31 @@
 					   " ")
 					  "\n"))
 				  items)))
-	  (for-each
-	   (lambda (my-itemdat)
-	     (let* ((new-test-record (let ((newrec (make-tests:testqueue)))
-				       (vector-copy! test-record newrec)
-				       newrec))
-		    (my-item-path (item-list->path my-itemdat)))
-	       (if (tests:match test-patts hed my-item-path required: required-tests) ;; (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
-		   (let ((newtestname (db:test-make-full-name hed my-item-path)))    ;; test names are unique on testname/item-path
-		     (tests:testqueue-set-items!     new-test-record #f)
-		     (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
-		     (tests:testqueue-set-item_path! new-test-record my-item-path)
-		     (hash-table-set! test-records newtestname new-test-record)
-		     (set! tal (append tal (list newtestname))))))) ;; since these are itemized create new test names testname/itempath
-	   items)
 
-	  ;; (debug:print-info 0 *default-log-port* "Test " (tests:testqueue-get-testname test-record) " is itemized but has no items")
+          (let* ((items-in-testpatt
+                  (filter
+                   (lambda (my-itemdat)
+                     (tests:match test-patts hed (item-list->path my-itemdat) required: required-tests))
+                   items) ))
+            (if (null? items-in-testpatt)
+                (let ((test-id   (rmt:get-test-id run-id test-name "")))
+                  (debug:print-info 0 *default-log-port* "Test " (tests:testqueue-get-testname test-record) " is itemized but has no items matching test pattern -- marking status ZERO_ITEMS")
+                  (if test-id
+                      (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "ZERO_ITEMS" "This test has no items which match test pattern.")))
+                
+                (for-each (lambda (my-itemdat)
+                            (let* ((new-test-record (let ((newrec (make-tests:testqueue)))
+                                                      (vector-copy! test-record newrec)
+                                                      newrec))
+                                   (my-item-path (item-list->path my-itemdat))
+
+                                   (newtestname (db:test-make-full-name hed my-item-path)))    ;; test names are unique on testname/item-path
+                              (tests:testqueue-set-items!     new-test-record #f)
+                            (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
+                            (tests:testqueue-set-item_path! new-test-record my-item-path)
+                            (hash-table-set! test-records newtestname new-test-record)
+                            (set! tal (append tal (list newtestname)))))  ;; since these are itemized create new test names testname/itempath
+                          items-in-testpatt)))
 
 	  ;; At this point we have possibly added items to tal but all must be handed off to 
 	  ;; INNER COND logic. I think loop without rotating the queue 
