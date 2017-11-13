@@ -773,6 +773,12 @@
 	  ;; so this is a good place to remove the records for 
 	  ;; any previous runs
 	  ;; (db:test-remove-steps db run-id testname itemdat)
+	  ;; now is also a good time to write the .testconfig file
+	  (let* ((tconfig-fname   (conc work-area "/.testconfig"))
+		 (tconfig-tmpfile (conc tconfig-fname ".tmp"))
+		 (tconfig         (tests:get-testconfig test-name item-path tconfigreg #t force-create: #t))) ;; 'return-procs)))
+	    (configf:write-alist tconfig tconfig-tmpfile)
+	    (file-move tconfig-tmpfile tconfig-fname #t))
 	  ;; 
 	  (let* ((m            (make-mutex))
 		 (kill-job?    #f)
