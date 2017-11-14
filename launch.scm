@@ -323,10 +323,15 @@
 	;; 6. launch the run
 	;; 7. roll up the run result and or roll up the logpro processed result
 	(if (configf:lookup testconfig "subrun" "runwait") ;; we use runwait as the flag that a subrun is requested
-	    (let* ((runarea   (configf:lookup testconfig "subrun" "runarea"))
+	    (let* ((runarea   (let ((ra (configf:lookup testconfig "subrun" "runarea")))
+				(if ra      ;; when runarea is not set we default to *toppath*. However 
+				    ra      ;; we need to force the setting in the testconfig so it will
+				    (begin  ;; be preserved in the testconfig.subrun file
+				      (configf:set-section-var testconfig "subrun" "runarea" *toppath*)
+				      *toppath*))))
 		   (passfail  (configf:lookup testconfig "subrun" "passfail"))
-		   (target    (configf:lookup testconfig "subrun" "target"))
-		   (runname   (configf:lookup testconfig "subrun" "runname"))
+		   (target    (or (configf:lookup testconfig "subrun" "target") (get-environment-variable "MT_TARGET")))
+		   (runname   (or (configf:lookup testconfig "subrun" "runname")(get-environment-variable "MT_RUNNAME")))
 		   (contour   (configf:lookup testconfig "subrun" "contour"))
 		   (testpatt  (configf:lookup testconfig "subrun" "testpatt"))
 		   (mode-patt (configf:lookup testconfig "subrun" "mode-patt"))
@@ -336,8 +341,8 @@
 		   (compact-stem (string-substitute "[/*]" "_" (conc target "-" runname "-" (or testpatt mode-patt tag-expr))))
 		   (log-file (conc compact-stem ".log"))
 		   (mt-cmd    (conc "megatest -run -target " target
-				    " -runname " (or runname (get-environment-variable "MT_RUNNAME"))
-				    (conc " -start-dir " (if runarea runarea *toppath*))
+				    " -runname " runname
+				    (conc " -start-dir " runarea) ;; (if runarea runarea *toppath*))
 				    (if testpatt  (conc " -testpatt " testpatt)  "")
 				    (if mode-patt (conc " -modepatt " mode-patt) "")
 				    (if tag-expr  (conc " -tag-expr"  tag-expr)  "")

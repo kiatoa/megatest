@@ -245,7 +245,13 @@
 ;; if there is a submegatest create a button to launch dashboard in that area
 ;;
 (define (submegatest-panel dbstruct keydat testdat runname testconfig)
-  (let* ((subarea (configf:lookup testconfig "setup" "submegatest"))
+  (let* ((test-run-dir      (db:test-get-rundir testdat))
+	 (subrun-tconf-file (conc test-run-dir "/testconfig.subrun"))
+	 (subrun-tconf      (if (file-exists? subrun-tconf-file)
+				(configf:read-alist subrun-tconf-file)
+				(make-hash-table)))
+	 (subarea           (or (configf:lookup testconfig "setup" "submegatest")
+				(configf:lookup subrun-tconf "subrun" "runarea")))
 	 (area-exists (and subarea (common:file-exists? subarea))))
     ;; (debug:print-info 0 *default-log-port* "Megatest subarea=" subarea ", area-exists=" area-exists)
     (if subarea
