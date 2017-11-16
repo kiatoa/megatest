@@ -52,7 +52,7 @@ PNGFILES = $(shell cd docs/manual;ls *png)
 #all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut ndboard
 all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut
 
-mtest: $(OFILES) readline-fix.scm megatest.o $(MOFILES)
+mtest: $(OFILES) readline-fix.scm megatest.o $(MOFILES) mofiles/ftail.o
 	csc $(CSCOPTS) $(OFILES) $(MOFILES) megatest.o -o mtest
 
 dboard : $(OFILES) $(GOFILES) dashboard.scm $(MOFILES)

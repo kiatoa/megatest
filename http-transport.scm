@@ -256,11 +256,14 @@
 					      (let ((call-chain (get-call-chain))
 						    (msg        ((condition-property-accessor 'exn 'message) exn)))
 						(set! success #f)
-						(debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
-						(debug:print 0 *default-log-port* " message: " msg)
-						(debug:print 0 *default-log-port* " cmd: " cmd " params: " params)
-                                                (debug:print 0 *default-log-port* " call-chain: " call-chain)
-						(if runremote
+                                                (if (debug:debug-mode 1)
+                                                    (debug:print-info 0 *default-log-port* "couldn't talk to server, trying again ...")
+                                                    (begin
+                                                      (debug:print 0 *default-log-port* "WARNING: failure in with-input-from-request to " fullurl ".")
+                                                      (debug:print 0 *default-log-port* " message: " msg)
+                                                      (debug:print 0 *default-log-port* " cmd: " cmd " params: " params)
+                                                      (debug:print 0 *default-log-port* " call-chain: " call-chain)))
+                                                (if runremote
 						    (remote-conndat-set! runremote #f))
 						;; Killing associated server to allow clean retry.")
 						;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
