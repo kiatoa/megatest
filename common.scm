@@ -640,7 +640,7 @@
 ;; WARNING: This code falls back to using the global Megatest
 ;;          variable *toppath*
 ;; 
-(define (common:get-db-tmp-area dbstruct)
+(define (common:get-db-tmp-area #!key (dbstruct #f))
   (if (and dbstruct (dbr:dbstruct-tmpdb-path dbstruct)) ;; *db-cache-path*
       (dbr:dbstruct-tmpdb-path) ;; *db-cache-path*
       (let ((toppath (or (and dbstruct (dbr:dbstruct-area-path dbstruct)) *toppath*))

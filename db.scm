@@ -84,7 +84,6 @@
 ;;   NOTE: This does do a sync (the db:open-db proc only does an initial sync if called with do-sync: #t
 ;;   NOTE: Longer term consider replacing db:open-db with this
 ;;
-
 ;; NOTE: loose ends!!
 ;;    db:open-db              -> not properly using tmpdb path
 ;;    common:get-db-tmp-area  -> using *toppath* and common:get-testsuite-area
