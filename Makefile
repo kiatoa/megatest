@@ -11,7 +11,7 @@ SRCFILES = common.scm items.scm launch.scm \
    http-transport.scm filedb.scm \
    client.scm daemon.scm mt.scm \
    ezsteps.scm lock-queue.scm sdb.scm \
-   rmt.scm api.scm tdb.scm rpc-transport.scm \
+   rmt.scm mrmt.scm api.scm tdb.scm rpc-transport.scm \
    portlogger.scm archive.scm env.scm diff-report.scm cgisetup/models/pgdb.scm
 
 # Eggs to install (straightforward ones)
@@ -46,7 +46,7 @@ all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut
 mtest: $(OFILES) readline-fix.scm megatest.o
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
 
-dboard : $(OFILES) $(GOFILES) dashboard.scm
+dboard : $(OFILES) $(GOFILES) dashboard.scm dashboard-areas.scm
 	csc $(CSCOPTS) $(OFILES) dashboard.scm $(GOFILES) -o dboard
 
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
