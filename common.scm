@@ -523,8 +523,10 @@
     ))
 
 ;; BBnote: *common:std-statuses* dashboard filter control and test control status buttons defined here; used in set-fields-panel and dboard:make-controls
+;; note these statuses are sorted from better to worse.
+;; This sort order is important to dcommon:status-compare3 and db:set-state-status-and-roll-up-items
 (define *common:std-statuses*
-  '(;; (0 "DELETED")
+  '(;; (0 "DELETED")  
     (1 "n/a")
     (2 "PASS")
     (3 "SKIP")

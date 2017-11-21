@@ -1503,6 +1503,7 @@
                                                       (vector-copy! test-record newrec)
                                                       newrec))
                                    (my-item-path (item-list->path my-itemdat))
+
                                    (newtestname (db:test-make-full-name hed my-item-path)))    ;; test names are unique on testname/item-path
                               (tests:testqueue-set-items!     new-test-record #f)
                             (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
@@ -1512,7 +1513,6 @@
                           items-in-testpatt)))
                           
             
-
 
 	  ;; At this point we have possibly added items to tal but all must be handed off to 
 	  ;; INNER COND logic. I think loop without rotating the queue 

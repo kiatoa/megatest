@@ -1529,7 +1529,7 @@
 	 (deadtime     (if (and deadtime-str
 				(string->number deadtime-str))
 			   (string->number deadtime-str)
-			   7200))) ;; two hours
+			   72000))) ;; twenty hours
     (db:with-db
      dbstruct #f #f
      (lambda (db)

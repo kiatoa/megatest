@@ -336,7 +336,10 @@
 ;; return -1 if status2 is better
 (define (dcommon:status-compare3 status1 status2)
   (let*
-      ((status-goodness-ranking  (list "PASS" "WARN" "WAIVED" "SKIP" "FAIL" "ABORT" #f))
+      ((status-goodness-ranking  (cdr ;; cdr to drop first item -- "n/a"
+                                  (append (map cadr *common:std-statuses*)
+                                          '(#f)) ;; algorithm requres last item to be #f
+                                  )  )
        (mem1 (member status1 status-goodness-ranking))
        (mem2 (member status2 status-goodness-ranking))
        )
