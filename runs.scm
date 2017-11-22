@@ -1457,7 +1457,8 @@
           (let* ((items-in-testpatt
                   (filter
                    (lambda (my-itemdat)
-                     (tests:match test-patts hed (item-list->path my-itemdat) required: required-tests))
+                     (tests:match test-patts hed (item-list->path my-itemdat) ))
+                   ;; was: (tests:match test-patts hed (item-list->path my-itemdat) required: required-tests))
                    items) ))
             (if (null? items-in-testpatt)
                 (let ((test-id   (rmt:get-test-id run-id test-name "")))
