@@ -310,13 +310,7 @@
 
 ;; return #t when all items in waitors-upon list are represented in test-patt, #f otherwise.
 (define (runs:testpatts-mention-waitors-upon? test-patt waitors-upon)
-  (let* ((tests-in-testpatt
-          (map
-           (lambda (test-patt-item)
-             (car (string-split test-patt-item "/")))
-           (string-split test-patt ",")))
-         (waitors-upon-not-mentioned (lset-difference equal? waitors-upon tests-in-testpatt)))
-    (null? waitors-upon-not-mentioned)))
+  (null? (tests:filter-test-names-not-matched waitors-upon test-patt)))
 
 ;;  test-names: Comma separated patterns same as test-patts but used in selection 
 ;;              of tests to run. The item portions are not respected.
@@ -426,8 +420,9 @@
     ;; 3. repeat until all deps propagated
     
     ;; any tests with direct mention in test-patts can be added to required
+    ;;(set! required-tests     (lset-intersection equal? (string-split test-patts ",") all-test-names))
+    (set! required-tests     (tests:filter-test-names all-test-names test-patts))
     ;;
-    (set! required-tests     (lset-intersection equal? (string-split test-patts ",") all-test-names))
     ;; (set! required-tests     (lset-intersection equal? test-names all-test-names))
     
     ;; look up all tests matching the comma separated list of globs in
@@ -1462,7 +1457,8 @@
           (let* ((items-in-testpatt
                   (filter
                    (lambda (my-itemdat)
-                     (tests:match test-patts hed (item-list->path my-itemdat) required: required-tests))
+                     (tests:match test-patts hed (item-list->path my-itemdat) ))
+                   ;; was: (tests:match test-patts hed (item-list->path my-itemdat) required: required-tests))
                    items) ))
             (if (null? items-in-testpatt)
                 (let ((test-id   (rmt:get-test-id run-id test-name "")))

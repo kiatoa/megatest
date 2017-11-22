@@ -1435,7 +1435,7 @@
 			      (hash-table-ref/default tconfig "pre-launch-env-overrides" '())))
 	     ;; Launchwait defaults to true, must override it to turn off wait
 	     (launchwait     (if (equal? (configf:lookup *configdat* "setup" "launchwait") "no") #f #t))
-	     (launch-results (apply (if launchwait
+	     (launch-results (apply (if launchwait ;; BB: TODO: refactor this to examine return code of launcher, if nonzero, set state to launch failed.
 					process:cmd-run-with-stderr->list
 					process-run)
 				    (if useshell

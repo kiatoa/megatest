@@ -3523,18 +3523,18 @@
                             ;;                               state-status-counts))
                             (all-curr-states      (common:special-sort  ;; worst -> best (sort of)
                                                        (delete-duplicates
-                                                        (if (not (equal? state "DELETED"))
+                                                        (if (not (member state *common:dont-roll-up-states*))
                                                             (cons state (map dbr:counts-state state-status-counts))
                                                             (map dbr:counts-state state-status-counts)))
                                                        *common:std-states* >))
                             (all-curr-statuses    (common:special-sort  ;; worst -> best
                                                    (delete-duplicates
-                                                    (if (not (equal? state "DELETED"))
+                                                    (if (not (member state *common:dont-roll-up-states*))
                                                         (cons status (map dbr:counts-status state-status-counts))
                                                         (map dbr:counts-status state-status-counts)))
                                                    *common:std-statuses* >))
 			    (non-completes     (filter (lambda (x)
-							 (not (member x '("DELETED" "COMPLETED"))))
+							 (not (member x (cons "COMPLETED" *common:dont-roll-up-states*))))
 						       all-curr-states))
 			    (num-non-completes (length non-completes))
                             
