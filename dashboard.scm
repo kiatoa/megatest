@@ -113,7 +113,8 @@ Misc
 ;; first check for the switch
 ;;
 (if (or (args:get-arg "-rh5.11")
-	(configf:lookup *configdat* "dashboard" "no-detachbox"))
+	(configf:lookup *configdat* "dashboard" "no-detachbox")
+        (not (file-exists? "/etc/os-release")))
     (set! iup:detachbox iup:vbox))
 
 (if (not (common:on-homehost?))
