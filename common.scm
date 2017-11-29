@@ -11,7 +11,7 @@
 
 (use srfi-1 data-structures posix regex-case (prefix base64 base64:)
      matchable regex posix srfi-18 extras pkts (prefix dbi dbi:)
-     (prefix sqlite3 sqlite3:)
+     (prefix sqlite3 sqlite3:) typed-records directory-utils
      )
 
 (declare (unit common))
@@ -637,7 +637,7 @@
 ;; WARNING: This code falls back to using the global Megatest
 ;;          variable *toppath*
 ;; 
-(define (common:get-db-tmp-area dbstruct)
+(define (common:get-db-tmp-area #!key (dbstruct #f))
   (if (and dbstruct (dbr:dbstruct-tmpdb-path dbstruct)) ;; *db-cache-path*
       (dbr:dbstruct-tmpdb-path dbstruct) ;; *db-cache-path*
       (let ((toppath (or (and dbstruct (dbr:dbstruct-area-path dbstruct)) *toppath*))
