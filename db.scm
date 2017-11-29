@@ -258,7 +258,7 @@
          (exn () (debug:print 0 *default-log-port* "ERROR: Unknown error with database " fname " message: " ((condition-property-accessor 'exn 'message) exn))))
 	)))
 
-
+;; this routine is used to determine if we are in write mode or read-only mode
 (define (db:mtdbpath-writable? mtdbpath)
   (let* ((parent-dir (pathname-directory mtdbpath))
          (logdir     (conc parent-dir "/logs")))
@@ -266,6 +266,8 @@
      (file-write-access? parent-dir)
      (file-write-access? mtdbpath)
      (or (not (common:file-exists? logdir)) (file-write-access? logdir))
+     (or (not (configf:lookup *configdat* "setup" "write-requires-ownership"))
+         (equal? (file-owner mtdbpath)(current-effective-user-id)))
      )))
 
 
@@ -389,7 +391,7 @@
                                               (db:initialize-main-db db)
 					      ;;(db:initialize-run-id-db db)
 					      )))
-	 (write-access (file-write-access? dbpath)))
+	 (write-access (db:mtdbpath-writable? dbpath)))
     (debug:print-info 13 *default-log-port* "db:open-megatest-db "dbpath)
     (if (and dbexists (not write-access))
 	(set! *db-write-access* #f))
