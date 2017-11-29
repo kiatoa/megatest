@@ -334,7 +334,10 @@
       (if (common:api-changed?)
 	  (let* ((mtconf (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.config"))
                 (dbfile (conc (get-environment-variable "MT_RUN_AREA_HOME") "/megatest.db"))
-                (read-only (not (file-write-access? dbfile)))
+                (read-only (or
+                            (get-environment-variable "MT_FORCE_READONLY")
+                            (not (file-write-access? (get-environment-variable "MT_RUN_AREA_HOME")))
+                            (not (file-write-access? dbfile))))
                 (dbstruct (db:setup #t)))
 	    (debug:print 0 *default-log-port*
 			 "WARNING: Version mismatch!\n"

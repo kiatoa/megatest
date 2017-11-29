@@ -259,7 +259,14 @@
 	)))
 
 
-
+(define (db:mtdbpath-writable? mtdbpath)
+  (let* ((parent-dir (pathname-directory mtdbpath))
+         (logdir     (conc parent-dir "/logs")))
+    (and
+     (file-write-access? parent-dir)
+     (file-write-access? mtdbpath)
+     (or (not (common:file-exists? logdir)) (file-write-access? logdir))
+     )))
 
 
 
@@ -316,7 +323,7 @@
                (mtdbpath     (db:dbdat-get-path mtdb))
                (tmpdb        (db:open-megatest-db path: dbpath)) ;; lock-create-open dbpath db:initialize-main-db))
                (refndb       (db:open-megatest-db path: dbpath name: "megatest_ref.db"))
-               (write-access (file-write-access? mtdbpath))
+               (write-access (db:mtdbpath-writable? mtdbpath)) ;; this determines if we are i readonly mode or not.
 	       (mtdbmodtime  (if mtdbexists (common:lazy-sqlite-db-modification-time mtdbpath)   #f))
 	       (tmpdbmodtime (if dbfexists  (common:lazy-sqlite-db-modification-time tmpdbfname) #f))
 	       (modtimedelta (and mtdbmodtime tmpdbmodtime (- mtdbmodtime tmpdbmodtime))))
