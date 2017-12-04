@@ -130,7 +130,7 @@ Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs e
   -runname                : required, name for this particular test run
   -state                  : Applies to runs, tests or steps depending on context
   -status                 : Applies to runs, tests or steps depending on context
-  --modepatt key          : load testpatt from <key> in runconfigs instead of default TESTPATT if -testpatt and -tagexpr are not specified
+  -modepatt key           : load testpatt from <key> in runconfigs instead of default TESTPATT if -testpatt and -tagexpr are not specified
   -tagexpr tag1,tag2%,..  : select tests with tags matching expression
   
 
@@ -274,6 +274,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
                         "-testdata-csv"
 			"-testpatt"
                         "--modepatt"
+                        "-modepatt"
                         "-tagexpr"
 			"-itempatt"
 			"-setlog"

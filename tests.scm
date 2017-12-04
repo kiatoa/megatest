@@ -77,6 +77,13 @@
 	    test-registry
 	    (loop (car tal)(cdr tal))))))
 
+(define (tests:filter-test-names-not-matched test-names test-patts)
+  (delete-duplicates
+   (filter (lambda (testname)
+	     (not (tests:match test-patts testname #f)))
+	   test-names)))
+
+
 (define (tests:filter-test-names test-names test-patts)
   (delete-duplicates
    (filter (lambda (testname)

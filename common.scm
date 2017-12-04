@@ -522,6 +522,13 @@
     (8 "RUNNING")
     ))
 
+(define *common:dont-roll-up-states*
+  '("DELETED"
+    "REMOVING"
+    "CLEANING"
+    "ARCHIVE_REMOVING"
+    ))
+
 ;; BBnote: *common:std-statuses* dashboard filter control and test control status buttons defined here; used in set-fields-panel and dboard:make-controls
 ;; note these statuses are sorted from better to worse.
 ;; This sort order is important to dcommon:status-compare3 and db:set-state-status-and-roll-up-items
@@ -558,6 +565,12 @@
 
 (define *common:not-started-ok-statuses* ;; if not one of these statuses when in not_started state treat as dead
   '("n/a" "na" "PASS" "FAIL" "WARN" "CHECK" "WAIVED" "DEAD" "SKIP"))
+
+;; group tests into buckets corresponding to rollup
+;;; Running, completed-pass,  completed-non-pass + worst status, not started.
+;; filter out 
+;(define (common:categorize-items-for-rollup in-tests)
+;  (
 
 (define (common:special-sort items order comp)
   (let ((items-order (map reverse order))
@@ -951,7 +964,7 @@
 (define (common:args-get-testpatt rconf)
   (let* (;; (tagexpr       (args:get-arg "-tagexpr"))
          ;; (tags-testpatt (if tagexpr (string-join (runs:get-tests-matching-tags tagexpr) ",") #f))
-         (testpatt-key  (if (args:get-arg "--modepatt") (args:get-arg "--modepatt") "TESTPATT"))
+         (testpatt-key  (or (args:get-arg "-modepatt") (args:get-arg "--modepatt") "TESTPATT"))
          (args-testpatt (or (args:get-arg "-testpatt") (args:get-arg "-runtests") "%"))
          (rtestpatt     (if rconf (runconfigs-get rconf testpatt-key) #f)))
     (cond
