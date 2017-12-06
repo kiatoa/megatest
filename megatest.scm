@@ -120,7 +120,7 @@ Launching and managing runs
   -remove-keep N action   : remove all but N most recent runs per target
                             * Use -actions print,remove-runs,archive to specify action to take
                             * Add param -age 120d,3h,20m to apply only to runs older than the 
-                                 specified age
+                                 specified age. NB// M=month, m=minute
                             * Add -precmd to insert a wrapper command in front of the commands run
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
