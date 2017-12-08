@@ -24,7 +24,7 @@ echo sudo apt install libwebkitgtk-dev
 echo sudo apt install libpangox-1.0-0 zlib1g-dev libfreetype6-dev cmake
 echo sudo apt install libssl-dev  uuid-dev
 echo sudo apt install libmotif3 -OR- set KTYPE=26g4
-echo sudo apt install cmake
+echo sudo apt install cmake curl ruby wget
 echo
 echo Set OPTION to std, currently OPTION=$OPTION
 echo
@@ -247,8 +247,10 @@ for egg in matchable readline apropos base64 regex-literals format "regex-case" 
 	coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo \
 	tcp rpc csv-xml fmt json md5 awful http-client:0.7.1 spiffy uri-common intarweb http-client \
 	spiffy-request-vars s md5 message-digest spiffy-directory-listing ssax sxml-serializer \
-	sxml-modifications logpro z3 call-with-environment-variables \
-	pathname-expand typed-records simple-exceptions numbers crypt parley srfi-42 \
+	sxml-modifications            z3 call-with-environment-variables \
+	pathname-expand typed-records \
+        logpro \
+        simple-exceptions numbers crypt parley srfi-42 \
 	alist-lib ansi-escape-sequences args basic-sequences bindings chicken-doc chicken-doc-cmd \
 	cock condition-utils debug define-record-and-printer easyffi easyffi-base \
 	expand-full ezxdisp filepath foof-loop ini-file irc lalr lazy-seq \
@@ -349,7 +351,7 @@ if ! [[ -e $PREFIX/bin/hs ]] ; then
 fi
 cd $BUILDHOME
 
-if ! [[ -e $PREFIX/bin/stmlrun ]] ; then
+if [[ ! -e $PREFIX/bin/stmlrun ]] ; then
 	#fossil clone http://www.kiatoa.com/fossils/stml stml.fossil
 	wget -c -O stml.tar.gz 'http://www.kiatoa.com/fossils/stml/tarball?name=stml&uuid=trunk'
 	tar -xzf stml.tar.gz
