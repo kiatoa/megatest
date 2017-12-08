@@ -480,8 +480,13 @@
           (debug:print-info 4 *default-log-port* "\n\ntestpatt elaboration loop => hed="hed " tal="tal" test-patts="test-patts" test-names="test-names)
 	  (change-directory *toppath*) ;; PLEASE OPTIMIZE ME!!! I think this should be a no-op but there are several places where change-directories could be happening.
 	  (setenv "MT_TEST_NAME" hed) ;; 
-	  (let*-values (((waitons             waitors   config)
-                         (tests:get-waitons   hed       all-tests-registry)))
+	  (let*-values (((waitons waitors config) (tests:get-waitons hed all-tests-registry))
+                        ((hed-mode)
+                         (let ((m (config-lookup config "requirements" "mode")))
+                           (if m (map string->symbol (string-split m)) '(normal))))
+                        ((hed-itemized-waiton) ;; are items in hed waiting on items of waiton?
+                         (not (null? (lset-intersection eq? hed-mode '(itemmatch itemwait)))))
+                        )
 	    (debug:print-info 8 *default-log-port* "waitons: " waitons)
 	    ;; check for hed in waitons => this would be circular, remove it and issue an
 	    ;; error
@@ -524,7 +529,7 @@
 						(or (hash-table-ref/default waiton-tconfig "items" #f)
 						    (hash-table-ref/default waiton-tconfig "itemstable" #f))))
 			  (itemmaps        (tests:get-itemmaps config))  ;; (configf:lookup config "requirements" "itemmap"))
-			  (new-test-patts  (tests:extend-test-patts test-patts hed waiton itemmaps))) ;; BB: items expanded here - chained-waiton goes awry by now.
+			  (new-test-patts  (tests:extend-test-patts test-patts hed waiton itemmaps hed-itemized-waiton))) 
 		     (debug:print-info 0 *default-log-port* "Test " waiton " has " (if waiton-record "a" "no") " waiton-record and" (if waiton-itemized " " " no ") "items")
 		     ;; need to account for test-patt here, if I am test "a", selected with a test-patt of "hed/b%"
 		     ;; and we are waiting on "waiton" we need to add "waiton/,waiton/b%" to test-patt
