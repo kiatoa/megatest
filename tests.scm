@@ -214,34 +214,50 @@
 ;;                                  itemmap /.*
 ;;
 ;;                                  waiting-test is waiting on waiton-test so we need to create a pattern for waiton-test given waiting-test and itemmap
-(define (tests:extend-test-patts test-patt waiting-test waiton-test itemmaps)
-  (let* ((itemmap          (tests:lookup-itemmap itemmaps waiton-test))
-	 (patts            (string-split test-patt ","))
-	 (waiting-test-len (+ (string-length waiting-test) 1))
-	 (patts-waiton     (map (lambda (x)  ;; for each incoming patt that matches the waiting test
-				  (let* ((modpatt (if itemmap (db:convert-test-itempath x itemmap) x)) 
-					 (newpatt (conc waiton-test "/" (substring modpatt waiting-test-len (string-length modpatt)))))
-				    ;; (conc waiting-test "/," waiting-test "/" (substring modpatt waiton-test-len (string-length modpatt)))))
-				    ;; (print "in map, x=" x ", newpatt=" newpatt)
-				    newpatt))
-				(filter (lambda (x)
-					  (eq? (substring-index (conc waiting-test "/") x) 0)) ;; is this patt pertinent to the waiting test
-					patts)))
-         (extended-test-patt   (append patts (if (null? patts-waiton)
-                                     (list (conc waiton-test "/%")) ;; really shouldn't add the waiton forcefully like this
-                                     patts-waiton)))
-         (extended-test-patt-with-toplevels
-          (fold (lambda (testpatt-item accum )
-                  (let ((my-match (string-match "^([^%\\/]+)\\/.+$" testpatt-item)))
-                    (cons testpatt-item
-                          (if my-match
-                              (cons
-                               (conc (cadr my-match) "/")
-                               accum)
-                              accum))))
-                '()
-                extended-test-patt)))
-    (string-intersperse (delete-duplicates extended-test-patt-with-toplevels) ",")))
+;; BB> (tests:extend-test-patts "normal-second/2" "normal-second" "normal-first" '())
+;; observed -> "normal-first/2,normal-first/,normal-second/2,normal-second/"
+;; expected -> "normal-first,normal-second/2,normal-second/"
+;; testpatt = normal-second/2
+;; waiting-test = normal-second
+;; waiton-test = normal-first
+;; itemmaps = ()
+
+(define (tests:extend-test-patts test-patt waiting-test waiton-test itemmaps itemized-waiton)
+  (cond
+   (itemized-waiton
+    (let* ((itemmap          (tests:lookup-itemmap itemmaps waiton-test))
+           (patts            (string-split test-patt ","))
+           (waiting-test-len (+ (string-length waiting-test) 1))
+           (patts-waiton     (map (lambda (x)  ;; for each incoming patt that matches the waiting test
+                                    (let* ((modpatt (if itemmap (db:convert-test-itempath x itemmap) x)) 
+                                           (newpatt (conc waiton-test "/" (substring modpatt waiting-test-len (string-length modpatt)))))
+                                      ;; (conc waiting-test "/," waiting-test "/" (substring modpatt waiton-test-len (string-length modpatt)))))
+                                      ;; (print "in map, x=" x ", newpatt=" newpatt)
+                                      newpatt))
+                                  (filter (lambda (x)
+                                            (eq? (substring-index (conc waiting-test "/") x) 0)) ;; is this patt pertinent to the waiting test
+                                          patts)))
+           (extended-test-patt   (append patts (if (null? patts-waiton)
+                                                   (list (conc waiton-test "/%")) ;; really shouldn't add the waiton forcefully like this
+                                                   patts-waiton)))
+           (extended-test-patt-with-toplevels
+            (fold (lambda (testpatt-item accum )
+                    (let ((my-match (string-match "^([^%\\/]+)\\/.+$" testpatt-item)))
+                      (cons testpatt-item
+                            (if my-match
+                                (cons
+                                 (conc (cadr my-match) "/")
+                                 accum)
+                                accum))))
+                  '()
+                  extended-test-patt)))
+      (string-intersperse (delete-duplicates extended-test-patt-with-toplevels) ",")))
+   (else ;; not waiting on items, waiting on entire waiton test.
+    (let* ((patts (string-split test-patt ","))
+           (new-patts (if (member waiton-test patts)
+                          patts
+                          (cons waiton-test patts))))
+      (string-intersperse (delete-duplicates new-patts) ",")))))
 
 
   
