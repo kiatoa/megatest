@@ -40,7 +40,7 @@ digraph G {
 		"C/2/bb" -> "E/2/res";
 	}
 
-        label = "Complex Itemmapping";
+        label = "Complex Itemmapping (arrows indicate order of execution)";
         color=green;
     }
 

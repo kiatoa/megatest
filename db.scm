@@ -4341,7 +4341,7 @@
 		    ((and waiton-is-completed
 			  (or waiton-is-ok 
 			      (member 'toplevel mode))              ;; toplevel does not block on FAIL
-			  (and waiton-is-ok (member 'itemmatch mode) ;; itemmatch blocks on not ok
+			  (and waiton-is-ok (member 'itemmatch mode) ;; itemmatch blocks on not ok ;; TODO: THIS IS PROBABLY A BUG.  ITEMMATCH AND ITEMWAIT ARE SYNONYMS!! WHAT HAPPENED OT ITEMWAIT???
                                ))
                      ;;(BB> "cond4")
 		     (set! item-waiton-met #t))
