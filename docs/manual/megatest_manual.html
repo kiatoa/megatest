@@ -1801,54 +1801,68 @@ B stuff/</pre>
 </div>
 <div class="paragraph"><p>We accomplish this by configuring the testconfigs of our tests C D and E as follows:</p></div>
 <div class="listingblock">
-<div class="title">Testconfig for Test C</div>
+<div class="title">Testconfig for Test E has</div>
 <div class="content monospaced">
 <pre>[requirements]
-waiton A B
-
-[itemmap]
-A (\d+)/aa aa/\1
-B (\d+)/bb</pre>
+waiton C
+itemmap (\d+)/res \1/bb</pre>
 </div></div>
 <div class="listingblock">
-<div class="title">Testconfig for Test D</div>
+<div class="title">Testconfig for Test D has</div>
 <div class="content monospaced">
 <pre>[requirements]
 waiton C
 itemmap (\d+)/res \1/aa</pre>
 </div></div>
 <div class="listingblock">
-<div class="title">Testconfig for Test E</div>
+<div class="title">Testconfig for Test C has</div>
 <div class="content monospaced">
 <pre>[requirements]
-waiton C
-itemmap (\d+)/res \1/bb</pre>
+waiton A B
+
+[itemmap]
+A (\d+)/aa aa/\1
+B (\d+)/bb bb/\1</pre>
 </div></div>
-<div class="paragraph"><p>Example from image just above, we want the following to occur:</p></div>
-<div class="olist arabic"><ol class="arabic">
+<div class="listingblock">
+<div class="title">Testconfigs for Test B and Test A have no waiton or itemmap configured</div>
+<div class="content monospaced">
+<pre></pre>
+</div></div>
+<div class="olist arabic"><div class="title">Walk through one item&#8201;&#8212;&#8201;we want the following to happen for testpatt <span class="monospaced">D/1/res</span> (see blue boxes in complex itemmaping figure above):</div><ol class="arabic">
 <li>
 <p>
-We want the above to execute when we request pattern <span class="monospaced">D/1/res</span>, eg from command line <span class="monospaced">megatest -run -testpatt D/1/res -target &#8230; -runname &#8230;</span>
+eg from command line <span class="monospaced">megatest -run -testpatt D/1/res -target mytarget -runname myrunname</span>
 </p>
 </li>
 <li>
 <p>
-"(\d+)/res" &#8594; "\1/aa" to require <span class="monospaced">C/1/aa</span> be executed before <span class="monospaced">D/1/res</span>
+Full list to be run is now: <span class="monospaced">D/1/res</span>
 </p>
 </li>
 <li>
 <p>
-Full list to be run is now: D/1/res, C/1/aa
+Test D has a waiton - test C.  Test D&#8217;s itemmap rule <span class="monospaced">itemmap (\d&plus;)/res \1/aa</span> &#8594;  causes <span class="monospaced">C/1/aa</span> to run before <span class="monospaced">D/1/res</span>
 </p>
 </li>
 <li>
 <p>
-"(\d+)/aa" &#8594; "aa/\1" to create item <span class="monospaced">A/aa/1</span>
+Full list to be run is now: <span class="monospaced">D/1/res</span>, <span class="monospaced">C/1/aa</span>
+</p>
+</li>
+<li>
+<p>
+Test C was a waiton - test A. Test C&#8217;s rule <span class="monospaced">A (\d&plus;)/aa aa/\1</span> &#8594; causes <span class="monospaced">A/aa/1</span> to run before <span class="monospaced">C/1/aa</span>
 </p>
 </li>
 <li>
 <p>
 Full list to be run is now: <span class="monospaced">D/1/res</span>, <span class="monospaced">C/1/aa</span>, <span class="monospaced">A/aa/1</span>
+</p>
+</li>
+<li>
+<p>
+Test A has no waitons.  All waitons of all tests in full list have been processed.  Full list is finalized.
 </p>
 </li>
 </ol></div>

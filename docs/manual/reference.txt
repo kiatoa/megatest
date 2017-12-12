@@ -387,37 +387,43 @@ image::complex-itemmap.png[]
 
 We accomplish this by configuring the testconfigs of our tests C D and E as follows:
 
-.Testconfig for Test C
-----------------------
-[requirements]
-waiton A B
-
-[itemmap]
-A (\d+)/aa aa/\1
-B (\d+)/bb 
-----------------------
-
-.Testconfig for Test D
-----------------------
-[requirements]
-waiton C
-itemmap (\d+)/res \1/aa
-----------------------
-
-.Testconfig for Test E
+.Testconfig for Test E has
 ----------------------
 [requirements]
 waiton C
 itemmap (\d+)/res \1/bb
 ----------------------
 
-Example from image just above, we want the following to occur:
+.Testconfig for Test D has
+----------------------
+[requirements]
+waiton C
+itemmap (\d+)/res \1/aa
+----------------------
 
-. We want the above to execute when we request pattern +D/1/res+, eg from command line +megatest -run -testpatt D/1/res -target ... -runname ...+
-. "(\d+)/res" -> "\1/aa" to require +C/1/aa+ be executed before +D/1/res+
-. Full list to be run is now: D/1/res, C/1/aa
-. "(\d+)/aa" -> "aa/\1" to create item +A/aa/1+
+.Testconfig for Test C has
+----------------------
+[requirements]
+waiton A B
+
+[itemmap]
+A (\d+)/aa aa/\1
+B (\d+)/bb bb/\1
+----------------------
+
+.Testconfigs for Test B and Test A have no waiton or itemmap configured
+-------------------
+-------------------
+
+.Walk through one item -- we want the following to happen for testpatt +D/1/res+ (see blue boxes in complex itemmaping figure above):
+
+. eg from command line +megatest -run -testpatt D/1/res -target mytarget -runname myrunname+
+. Full list to be run is now: +D/1/res+
+. Test D has a waiton - test C.  Test D's itemmap rule +itemmap (\d&plus;)/res \1/aa+ ->  causes +C/1/aa+ to run before +D/1/res+
+. Full list to be run is now: +D/1/res+, +C/1/aa+
+. Test C was a waiton - test A. Test C's rule +A (\d&plus;)/aa aa/\1+ -> causes +A/aa/1+ to run before +C/1/aa+
 . Full list to be run is now: +D/1/res+, +C/1/aa+, +A/aa/1+
+. Test A has no waitons.  All waitons of all tests in full list have been processed.  Full list is finalized.
 
 
 Dynamic Flow Dependency Tree
