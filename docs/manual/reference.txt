@@ -302,44 +302,90 @@ For cases were the dependent test has a similar but not identical
 itempath to the downstream test an itemmap can allow for itemmatch
 mode
 
+.example for removing part of itemmap for waiton test (eg: item +foo-x/bar+ depends on waiton's item +y/bar+)
 -------------------
 [requirements]
-mode itemmatch
+mode itemwait
+# itemmap <item pattern for this test>  <item replacement pattern for waiton test>
 itemmap .*x/ y/
+
+-------------------
+
+.example for removing part of itemmap for waiton test (eg: item +foo/bar/baz+ in this test depends on waiton's item +baz+)
+-------------------
 
 # ## pattern replacement notes
 #
 # ## Example
 # ## Remove everything up to the last /
+[requirements]
+mode itemwait
+# itemmap <item pattern for this test> <nothing here indicates removal>
 itemmap .*/
+-------------------
+
+.example replacing part of itemmap for (eg: item +foo/1234+ will imply waiton's item +bar/1234+)
+-------------------
+
 #
 # ## Example
 # ## Replace foo/ with bar/
+[requirements]
+mode itemwait
+# itemmap <item pattern for this test>  <item replacement pattern for waiton test>
 itemmap foo/ bar/
+
+-------------------
+
+.example for backreference (eg: item +foo23/thud+ will imply waiton's item +num-23/bar/thud+
+-------------------
+#
+# ## Example
+# ## can use \{number} in replacement pattern to backreference a (capture) from matching pattern similar to sed or perl
+[requirements]
+mode itemwait
+# itemmap <item pattern for this test>  <item replacement pattern for waiton test>
+itemmap foo(\d+)/ num-\1/bar/
+
+-------------------
+
+.example multiple itemmaps
+-------------------
 
 # multi-line; matches are applied in the listed order
 # The following would map:
 #   a123b321 to b321fooa123 then to 321fooa123p
 #
+[requirements]
 itemmap (a\d+)(b\d+) \2foo\1
   b(.*) \1p
 -------------------
 
-Complex mappings
-^^^^^^^^^^^^^^^^
 
-Complex mappings can be handled with the [itemmap] section
+Complex mapping
+^^^^^^^^^^^^^^^
+Complex mappings can be handled with a separate [itemmap] section (instead if an itemmap line in the [requirements] section)
+
+Each line in an itemmap section starts with a waiton test name followed by an itemmap expression
+
+.eg: The following causes waiton test A item +bar/1234+ to run when our test's +foo/1234+ item is requested as well as causing waiton test B's +blah+ item to run when our test's +stuff/blah+ item is requested
+--------------
+[itemmap]
+A foo/ bar/
+B stuff/
+--------------
+
+
+Complex mapping example
+^^^^^^^^^^^^^^^^^^^^^^^
+
+
 
 // image::itemmap.png[]
 image::complex-itemmap.png[]
 
-Example:
 
-. Request to run D/1/res
-. Megatest uses rule "(\d+)/res" -> "\1/aa" to create item C/1/aa from D/1/res
-. Full list to be run is now: D/1/res, C/1/aa
-. Megatest uses rule "(\d+)/aa" -> "aa/\1" to create item A/aa/1
-. Full list to be run is now: D/1/res, C/1/aa, A/aa/1
+We accomplish this by configuring the testconfigs of our tests C D and E as follows:
 
 .Testconfig for Test C
 ----------------------
@@ -364,6 +410,15 @@ itemmap (\d+)/res \1/aa
 waiton C
 itemmap (\d+)/res \1/bb
 ----------------------
+
+Example from image just above, we want the following to occur:
+
+. We want the above to execute when we request pattern +D/1/res+, eg from command line +megatest -run -testpatt D/1/res -target ... -runname ...+
+. "(\d+)/res" -> "\1/aa" to require +C/1/aa+ be executed before +D/1/res+
+. Full list to be run is now: D/1/res, C/1/aa
+. "(\d+)/aa" -> "aa/\1" to create item +A/aa/1+
+. Full list to be run is now: +D/1/res+, +C/1/aa+, +A/aa/1+
+
 
 Dynamic Flow Dependency Tree
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
