@@ -2475,12 +2475,15 @@
 				    (pktsdir   (car pktsdirs))) ;; assume it is there
 			       (hash-table-set! *pkts-info* 'pkts-dir pktsdir)
 			       pktsdir))))
-	    (if (not (file-exists? pktsdir))
-		(create-directory pktsdir #t))
-	    (with-output-to-file
-		(conc pktsdir "/" uuid ".pkt")
-	      (lambda ()
-		(print pkt))))))))
+            (handle-exceptions
+             exn
+             (debug:print-info 0 "failed to write out packet to " pktsdir) ;; don't care if this failed for now but MUST FIX - BUG!!
+             (if (not (file-exists? pktsdir))
+                 (create-directory pktsdir #t))
+             (with-output-to-file
+                 (conc pktsdir "/" uuid ".pkt")
+               (lambda ()
+                 (print pkt)))))))))
 	
 (define (common:with-queue-db mtconf proc #!key (use-lt #f)(toppath-in #f))
   (let* ((pktsdirs (common:get-pkts-dirs mtconf use-lt))
