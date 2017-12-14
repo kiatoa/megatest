@@ -812,6 +812,7 @@
   (set! *time-to-exit* #t)
   ;;(debug:print-info 13 *default-log-port* "got signal "signum)
   (debug:print-error 0 *default-log-port* "Received signal " signum " sending email befor exiting!!")
+  ;;TODO send email to notify admin contact listed in the config that the lisner got killed
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))
 
