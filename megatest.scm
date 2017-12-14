@@ -216,7 +216,8 @@ Utilities
   -archive cmd            : archive runs specified by selectors to one of disks specified
                             in the [archive-disks] section.
                             cmd: keep-html, restore, save, save-remove
-  -generate-html          : create a simple html tree for browsing your runs
+  -generate-html          : create a simple html dashboard for browsing your runs
+  -generate-html-structure  : create a top level html veiw to list targets/runs and a Run view within each run directory.  
   -list-run-time          : list time requered to complete runs. It supports following switches
                             -run-patt <patt> -target-patt <patt> -dumpmode <csv,json,plain-text>
   -list-test-time	   : list time requered to complete each test in a run. It following following arguments
@@ -376,7 +377,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
                         "-run-wait"      ;; wait on a run to complete (i.e. no RUNNING)
 			"-one-pass"       ;;
 			"-local"         ;; run some commands using local db access
-                        "-generate-html"
+      "-generate-html"
+      "-generate-html-structure" 
 			"-list-run-time"
                         "-list-test-time"
 			;; misc queries
@@ -2257,7 +2259,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
           (debug:print-info 0 *default-log-port* "HTML output created in " toppath "/lt/page#.html")
           (debug:print 0 *default-log-port* "Failed to create HTML output in " toppath "/lt/runs-index.html"))
       (set! *didsomething* #t)))
-
+(if (args:get-arg "-generate-html-structure")
+    (let* ((toppath (launch:setup)))
+      ;(if (tests:create-html-tree #f)
+ 				(if (tests:create-html-summary #f)
+          (debug:print-info 0 *default-log-port* "HTML output created in " toppath "/lt/targets.html")
+          (debug:print 0 *default-log-port* "Failed to create HTML output in " toppath "/lt/runs-index.html"))
+      (set! *didsomething* #t)))
 ;;======================================================================
 ;; Exit and clean up
 ;;======================================================================

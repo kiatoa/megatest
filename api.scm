@@ -25,6 +25,8 @@
     get-key-vals
     test-toplevel-num-items
     get-test-info-by-id
+    get-steps-info-by-id
+    get-data-info-by-id
     test-get-rundir-from-test-id
     get-count-tests-running-for-testname
     get-count-tests-running
@@ -68,6 +70,7 @@
     testmeta-get-record
     have-incompletes?
     synchash-get
+    get-changed-record-ids 
     ))
 
 (define api:write-queries

@@ -803,12 +803,22 @@
   ;; (signal-mask! signum)
   (set! *time-to-exit* #t)
   ;;(debug:print-info 13 *default-log-port* "got signal "signum)
-  (debug:print-error 0 *default-log-port* "Received signal " signum " exiting promptly")
+  (debug:print-error 0 *default-log-port* "Received signal " signum " aaa exiting promptly")
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))
 
+(define (special-signal-handler signum)
+  ;; (signal-mask! signum)
+  (set! *time-to-exit* #t)
+  ;;(debug:print-info 13 *default-log-port* "got signal "signum)
+  (debug:print-error 0 *default-log-port* "Received signal " signum " sending email befor exiting!!")
+  ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
+  (exit))
+
+
 (set-signal-handler! signal/int  std-signal-handler)  ;; ^C
 (set-signal-handler! signal/term std-signal-handler)
+
 ;; (set-signal-handler! signal/stop std-signal-handler)  ;; ^Z NO, do NOT handle ^Z!
 
 ;;======================================================================

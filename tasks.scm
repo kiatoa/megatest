@@ -851,12 +851,22 @@
            (begin 
                 (if  pgdb-data-id
                    (begin
-                    (print "Updating existing test-data with test-id: " test-id " and data-id " data-id " pgdb test id: " pgdb-test-id)
+                    (print "Updating existing test-data with test-id: " test-id " and  data-id " data-id " pgdb test id: " pgdb-test-id)
                     (pgdb:update-test-data dbh pgdb-data-id pgdb-test-id  category variable value expected tol units comment status type))
                     (begin
  		      (print "Inserting test-data with test-id: " test-id " and data-id " data-id " pgdb test id: " pgdb-test-id)
-                      (pgdb:insert-test-data dbh pgdb-test-id category variable value expected tol units comment status type )
-                      (set! pgdb-data-id  (pgdb:get-test-data-id dbh pgdb-test-id  category variable))))
+                       (if (handle-exceptions
+		      exn
+		      (begin (print-call-chain)
+                              (print ((condition-property-accessor 'exn 'message) exn))     
+			#f)
+                     
+                    (pgdb:insert-test-data dbh pgdb-test-id category variable value expected tol units comment status type ))
+		       ;(tasks:run-id->mtpg-run-id dbh cached-info run-id area-info)
+                      (begin
+                      ;(pgdb:insert-test-data dbh pgdb-test-id category variable value expected tol units comment status type )
+                      (set! pgdb-data-id  (pgdb:get-test-data-id dbh pgdb-test-id  category variable)))
+		  (exit))))
                 (hash-table-set! data-ht data-id pgdb-data-id ))
              (begin
                  (print "Error: Test not in pgdb"))))

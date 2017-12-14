@@ -3,7 +3,7 @@
 --        fieldname TEXT,
 --        fieldtype TEXT,
 --        CONSTRAINT keyconstraint UNIQUE (fieldname));
-
+DROP VIEW IF EXISTS area_tag_view;
 DROP TABLE IF EXISTS areas;
 DROP TABLE IF EXISTS ttype;
 DROP TABLE IF EXISTS runs;
@@ -27,6 +27,10 @@ DROP TABLE IF EXISTS tags;
 DROP TABLE IF EXISTS users; 
 DROP TABLE IF EXISTS webviews;
 DROP TABLE IF EXISTS area_tags;
+
+DROP TABLE IF EXISTS users_webviews;
+
+
 
 CREATE TABLE IF NOT EXISTS session_vars (
        id SERIAL PRIMARY KEY,
@@ -57,6 +61,10 @@ CREATE TABLE IF NOT EXISTS area_tags (
        tag_id   INTEGER DEFAULT 0,
        area_id  INTEGER DEFAULT 0,
        CONSTRAINT areatagconstraint UNIQUE (tag_id, area_id));
+
+CREATE VIEW area_tag_view as 
+select a.id as aid, t.id as tid,area_name,tag_name from areas as a inner join area_tags as at on at.area_id = a.id
+inner join tags as t on t.id = at.tag_id  ;
 
 INSERT INTO areas (id,area_name,area_path) VALUES (0,'local','.');
 
@@ -227,9 +235,10 @@ CREATE TABLE IF NOT EXISTS archives (
  
 CREATE TABLE IF NOT EXISTS users(
    id SERIAL  PRIMARY KEY   ,
-   usename           TEXT    NOT NULL,
+   username           TEXT    NOT NULL,
    fullname          TEXT    NOT NULL, 
    email             TEXT    NOT NULL, 
+   default_view      TEXT    default '',
    deleted           INTEGER     default 0
 );
  
@@ -241,8 +250,20 @@ CREATE TABLE IF NOT EXISTS webviews(
    view_specifics    TEXT   ,
    col               TEXT    NOT NULL,
    row               TEXT    NOT NULL,
+   public            INTEGER DEFAULT 0,
    deleted           INTEGER     default 0
 );
+
+
+
+CREATE TABLE IF NOT EXISTS users_webviews(
+ id      SERIAL  PRIMARY KEY   ,
+ user_id   INTEGER NOT NULL,
+ webview_id  INTEGER NOT NULL,
+ deleted     INTEGER default 0,
+ searchpattern TEXT Default ''
+);
+
 
 -- TRUNCATE archive_blocks, archive_allocations, extradat, metadat,
 -- access_log, tests, test_steps, test_data, test_rundat, archives, runs,

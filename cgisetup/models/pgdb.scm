@@ -195,6 +195,19 @@
     test-id category variable))
 
 (define (pgdb:insert-test-data dbh test-id category variable value expected tol units comment status type)
+ ; (print "INSERT INTO test_data (test_id, category, variable, value, expected, tol, units, comment, status, type)
+ ;      VALUES (?,?,?,?,?,?,?,?,?,?) " test-id " " category " " variable " " value " "  expected " "  tol " "  units " " comment  " " status  " " type)
+  (if (not (string? units))
+      (set! units "" ))
+  (if (not (string? variable))
+      (set! variable "" ))
+  (if (not (real? value))
+      (set! value 0 ))
+  (if (not (real? expected))
+      (set! expected 0  ))
+(if (not (real? tol))
+      (set! tol 0  ))
+
   (dbi:exec
    dbh
    "INSERT INTO test_data (test_id, category, variable, value, expected, tol, units, comment, status, type)

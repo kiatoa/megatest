@@ -939,6 +939,173 @@ EOF
          ;(print (tests:dashboard-body page pg-size keys numkeys total-runs linktree area-name))
 html-body))
 
+(define (tests:create-html-summary outf)
+ (let* ((lockfile  (conc outf ".lock"))
+        (linktree  (common:get-linktree))
+				(keys      (rmt:get-keys))
+        (area-name (common:get-testsuite-name)))
+    (if (common:simple-file-lock lockfile)
+        (begin
+          (let* ((runsdat   (rmt:get-runs "%" #f #f (map (lambda (x)(list x "%")) keys)))
+					       (runs      (vector-ref runsdat 1))
+                 (header      (vector-ref runsdat 0))
+        	       (oup       (open-output-file (or outf (conc linktree "/targets.html"))))
+                 (target-hash (test:create-target-hash runs header (length keys))))
+          (test:create-target-html target-hash oup area-name linktree)
+          (test:create-run-html  runs area-name linktree (length keys) header))
+	  (common:simple-file-release-lock lockfile))
+	#f)))
+
+(define (test:get-test-hash test-data)
+	(let ((resh (make-hash-table)))
+    	(map (lambda (test)
+        (let* ((test-name (vector-ref test 2))
+               (test-html-path (if (file-exists? (conc (vector-ref test 10) "/test-summary.html"))
+																 (conc (vector-ref test 10) "/test-summary.html" )
+							 									 (conc (vector-ref test 10) "/" (vector-ref test 13))))
+               (test-item  (vector-ref test 11))
+               (test-status (vector-ref test 4)))
+               (if (not (hash-table-ref/default resh test-item  #f))
+                   (hash-table-set! resh test-item   (make-hash-table)))
+               (hash-table-set! (hash-table-ref/default resh test-item  #f) test-name (list test-status test-html-path)))) 
+        test-data)
+resh))
+
+(define (test:get-data->b-keys ordered-data a-keys)
+  (delete-duplicates
+   (sort (apply
+	  append
+	  (map (lambda (sub-key)
+		 (let ((subdat (hash-table-ref ordered-data sub-key)))
+		   (hash-table-keys subdat)))
+	       a-keys))
+	 string>=?)))
+
+
+(define (test:create-run-html runs area-name linktree numkeys header)
+  (map (lambda (run)
+		 (let* ((target (string-join (take (vector->list run) numkeys) "/"))
+						(run-name (db:get-value-by-header run header "runname"))
+						(oup (open-output-file (conc linktree "/" target "/" run-name "/run.html")))
+            (run-id (db:get-value-by-header run header "id"))
+            (test-data    (rmt:get-tests-for-run
+				  								 run-id
+                           "%"       ;; testnamepatt
+				  								 '()        ;; states
+				   								 '()        ;; statuses
+				  								 	#f         ;; offset
+				  						 			#f         ;; num-to-get
+				   									#f         ;; hide/not-hide
+				  								  #f         ;; sort-by
+				   									#f         ;; sort-order
+				   									#f         ;; 'shortlist                           ;; qrytype
+                            0         ;; last update
+				  									#f))
+            (item-test-hash (test:get-test-hash test-data))
+            (items  (hash-table-keys item-test-hash))
+ 						(test-names (test:get-data->b-keys item-test-hash items)))
+    (s:output-new
+	   oup
+	   (s:html tests:css-jscript-block (tests:css-jscript-block-cond #f)
+
+		   (s:title "Runs View " run-name)
+		   (s:body
+		     (s:h1 "Runs View " )
+         (s:h2 "Target" target)
+				 (s:h2 "Run name" run-name)
+         (s:table 'border 1
+           (s:tr
+           (s:td "Items")
+           (map (lambda (test)
+            (s:td test))
+           test-names))  
+           (map (lambda (item) 
+					  (let* ((test-hash (hash-table-ref/default item-test-hash item  #f)))
+								 (if test-hash
+                  (begin
+									(s:tr
+					  			(s:td item)
+            			(map (lambda (test)
+						  		(let* ((test-details (hash-table-ref/default test-hash test  #f))
+												(status (if test-details
+																(car test-details)))
+                        (link (if test-details 
+														(cadr test-details))))
+                  (if test-details
+											(s:td 'class status
+												(s:a 'href link status ))
+                      (s:td "")))) 			
+									test-names))))))
+				  (sort items string<=?))))))
+		(close-output-port oup)))
+runs))
+
+(define (test:create-target-hash runs header numkeys)
+  (let ((resh (make-hash-table)))
+   (for-each
+     (lambda (run)
+        (let* ((run-name (db:get-value-by-header run header "runname"))
+               (target   (string-join (take (vector->list run) numkeys) "/"))
+               (run-list (hash-table-ref/default resh target  #f)))
+               
+               (if (not run-list)
+                   (hash-table-set! resh target   (list run-name))
+                   (hash-table-set! resh target   (cons run-name run-list)))))
+      runs)
+   resh))
+
+(define (test:get-max-run-cnt target-hash targets)
+   (let* ((cnt 0 ))
+   (map (lambda (target)
+        (let* ((runs  (hash-table-ref/default target-hash target  #f))
+               (run-length (if runs
+																(length runs)
+                                 0)))
+  
+              (if (< cnt run-length)
+               (set! cnt  run-length)))) 
+		targets) 
+cnt))
+ 
+(define (test:pad-runs target-hash targets max-row-length)
+ (map (lambda (target)
+        (let loop ((run-list  (hash-table-ref/default target-hash target  #f)))
+               (if (< (length run-list) max-row-length)
+                 (begin  
+               		 (hash-table-set! target-hash target   (cons "" run-list))
+               		 (loop (hash-table-ref/default target-hash target  #f) ))))) 
+		targets)
+   target-hash)
+
+(define (test:create-target-html target-hash oup area-name linktree)
+  (let* ((targets (hash-table-keys target-hash))
+         (max-row-length (test:get-max-run-cnt target-hash targets))
+         (pad-runs-hash (test:pad-runs target-hash targets max-row-length)))
+   (s:output-new
+	   oup
+	   (s:html tests:css-jscript-block (tests:css-jscript-block-cond #f)
+
+		   (s:title "Target View " area-name)
+		   (s:body
+		   (s:h1 "Target View " area-name)
+					(s:table 'id "LinkedList1" 'border "1"
+             (s:tr 'class "something" 
+               (s:td "Target")
+								(s:td 'colspan max-row-length "Runs"))                                              
+                (let* ((tbl (map (lambda (target)
+                      (s:tr
+                      (s:td target)
+										  (let* ((runs  (hash-table-ref/default target-hash target  #f))
+														 (rest-row (map (lambda (run)
+																				(if (equal? run "")
+																						(s:td run)
+																						(s:td 
+																							(s:a 'href (conc linktree "/" target "/" run "/run.html") run))))
+																				(reverse runs))))
+                              rest-row)))
+                                   targets)))
+                           tbl)))))
+          (close-output-port oup)))
 
 
 (define (tests:create-html-tree-old outf)
