@@ -621,6 +621,13 @@ th {background-color: #8c8c8c;}
 td.test {background-color: #d9dbdd;}
 td.PASS {background-color: #347533;}
 td.FAIL {background-color: #cc2812;}
+td.SKIP{background-color: #FFD733;}
+td.WARN {background-color: #EA8724;}
+td.WAIVED {background-color: #838A12;}
+td.ABORT{background-color: #EA24B7;}
+.PASS .link, .SKIP .link, .WARN .link,.WAIVED .link,.ABORT .link, .FAIL .link{color: #FFFFFF;}
+
+
 </style>
 
 
@@ -787,7 +794,7 @@ EOF
                            (s:h3 "Filter" )
                            (s:input 'type "text"  'name "testname" 'id "testname" 'length "30" 'onkeyup "filtersome()")
 			   ;; top list
-			   (s:table 'id "LinkedList1" 'border "1"
+			   (s:table 'id "LinkedList1" 'border "1" 'cellspacing 0
                             (map (lambda (key)
 				 (let* ((res (s:tr 'class "something" 
 				  (s:th key )
@@ -986,6 +993,7 @@ resh))
   (map (lambda (run)
 		 (let* ((target (string-join (take (vector->list run) numkeys) "/"))
 						(run-name (db:get-value-by-header run header "runname"))
+            (run-time (seconds->work-week/day-time (db:get-value-by-header run header "event_time")))
 						(oup (open-output-file (conc linktree "/" target "/" run-name "/run.html")))
             (run-id (db:get-value-by-header run header "id"))
             (test-data    (rmt:get-tests-for-run
@@ -1011,20 +1019,25 @@ resh))
 		   (s:title "Runs View " run-name)
 		   (s:body
 		     (s:h1 "Runs View " )
-         (s:h2 "Target" target)
-				 (s:h2 "Run name" run-name)
-         (s:table 'border 1
+         (s:h3 "Target" target)
+				 (s:p 
+					(s:b "Run name" ) run-name)
+         (s:p 
+					(s:b "Run Date" ) run-time)
+ 
+
+         (s:table 'border 1 'cellspacing 0
            (s:tr
-           (s:td "Items")
+           (s:th "Items")
            (map (lambda (test)
-            (s:td test))
+            (s:th test))
            test-names))  
            (map (lambda (item) 
 					  (let* ((test-hash (hash-table-ref/default item-test-hash item  #f)))
 								 (if test-hash
                   (begin
 									(s:tr
-					  			(s:td item)
+					  			(s:td 'class "test" item)
             			(map (lambda (test)
 						  		(let* ((test-details (hash-table-ref/default test-hash test  #f))
 												(status (if test-details
@@ -1033,7 +1046,7 @@ resh))
 														(cadr test-details))))
                   (if test-details
 											(s:td 'class status
-												(s:a 'href link status ))
+												(s:a 'class "link" 'href link status ))
                       (s:td "")))) 			
 									test-names))))))
 				  (sort items string<=?))))))
@@ -1088,13 +1101,13 @@ cnt))
 		   (s:title "Target View " area-name)
 		   (s:body
 		   (s:h1 "Target View " area-name)
-					(s:table 'id "LinkedList1" 'border "1"
+					(s:table 'id "LinkedList1" 'border "1" 'cellspacing 0
              (s:tr 'class "something" 
-               (s:td "Target")
-								(s:td 'colspan max-row-length "Runs"))                                              
+               (s:th "Target")
+								(s:th 'colspan max-row-length "Runs"))                                              
                 (let* ((tbl (map (lambda (target)
                       (s:tr
-                      (s:td target)
+                      (s:td 'class "test" target)
 										  (let* ((runs  (hash-table-ref/default target-hash target  #f))
 														 (rest-row (map (lambda (run)
 																				(if (equal? run "")
@@ -1377,7 +1390,7 @@ cnt))
 						     (db:test-get-event_time test-dat)))
 			    (s:td "Duration") (s:td (seconds->hr-min-sec (db:test-get-run_duration test-dat)))))
 	     (s:h3 "Log files")
-	     (s:table
+	     (s:table 
 	      'cellspacing "0" 'border "1"
 	      (s:tr (s:td "Final log")(s:td (s:a 'href logf logf))))
 	     (s:table
