@@ -1,0 +1,41 @@
+#!/bin/bash -x
+
+
+
+prefix=/opt/chicken/4.11.0
+buildwd=/opt/mtbuild
+mtsrcdir=$PWD
+
+
+if [[ ! -e .aptdone ]]; then
+  echo updating apt and installing packages
+  sudo apt -y update
+  if [[ ! $? == 0 ]]; then
+    echo "Problem during apt update, aborting"
+    exit 1
+  fi
+
+
+  #sudo apt -y upgrade
+  sudo apt -y install libreadline-dev libwebkitgtk-dev libpangox-1.0-0 zlib1g-dev libfreetype6-dev cmake libssl-dev  uuid-dev cmake curl ruby wget
+  if [[ ! $? == 0 ]]; then
+    echo "Problem during apt install, aborting"
+    exit 1
+  fi
+  
+  touch .aptdone
+else
+  echo 'apt work already done [.aptdone file exists]'
+fi
+
+if [[ ! -e $prefix ]]; then mkdir -p $prefix || exit 1; fi
+
+
+cd $buildwd
+
+env \
+    OPTION=std \
+    PREFIX=$prefix \
+    $mtsrcdir/utils/installall.sh
+#2>&1 | $mtsrcdir/utils/timecat.rb | tee installall.log
+

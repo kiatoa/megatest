@@ -14,6 +14,19 @@
 #  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 #  PURPOSE.
 
+mtsrcdir=$(dirname $(dirname $BASH_SOURCE))
+
+function abort() {
+    echo "Error: previous command failed: ($1)"
+    echo "Aborting."
+    exit 1
+};
+
+function do_wget() {
+    echo "Downloading $1"
+    wget "$@" || abort 'Could not download - [wget '"$@"' ]'
+};
+
 if [[ $OPTION=="" ]]; then
     export OPTION=std
 fi
@@ -46,10 +59,20 @@ CHICKEN_BASEVER=4.10.0
 #
 case $SYSTEM_TYPE in
 Ubuntu-17.10-x86_64-std)
-	KTYPE=32
-	CDVER=5.11.1
-	IUPVER=3.22
-	IMVER=3.12
+        ## libpng workaround -  https://github.com/tcoopman/image-webpack-loader/issues/95
+        if [[ ! -e /usr/lib/x86_64-linux-gnu/libpng12.so.0 ]]; then
+            do_wget -q -O /tmp/libpng12.deb http://mirrors.kernel.org/ubuntu/pool/main/libp/libpng/libpng12-0_1.2.54-1ubuntu1_amd64.deb \
+            && sudo dpkg -i /tmp/libpng12.deb \
+            && rm /tmp/libpng12.deb
+        fi
+
+        KTYPE=32
+	CDVER=5.11.1 #BB not present??
+        CDVER=5.10
+	IUPVER=3.22  # BB: not present?
+       	IUPVER=3.19.1
+	IMVER=3.12 #BB not present??
+        IMVER=3.11
 #	CHICKEN_VERSION=4.12.0
 #	CHICKEN_BASEVER=4.12.0
         ;;
@@ -120,7 +143,7 @@ echo Hit ^C now to do that
 # logpro installall.logpro installall.html < installall.log
 # firefox installall.html
 
-sleep 5
+#sleep 5
 
 if [[ $proxy == "" ]]; then 
   echo 'Please set the environment variable "proxy" to host.com:port (e.g. foo.com:1234) to use a proxy'
@@ -144,7 +167,7 @@ mkdir -p tgz
 # http://code.call-cc.org/releases/4.8.0/chicken-4.8.0.5.tar.gz
 chicken_targz=chicken-${CHICKEN_VERSION}.tar.gz
 if ! [[ -e tgz/$chicken_targz ]]; then 
-    wget http://code.call-cc.org/releases/${CHICKEN_BASEVER}/${chicken_targz}
+    do_wget http://code.call-cc.org/releases/${CHICKEN_BASEVER}/${chicken_targz} 
     mv $chicken_targz tgz
 fi 
 
@@ -185,7 +208,7 @@ cd $BUILDHOME
 #  mv 1.0.0 1.0.0.tar.gz
 #fi
 if ! [[ -e $PREFIX/lib64/libnanomsg.so.1.0.0 ]]; then
-        wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
+        do_wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
         mv 1.0.0 1.0.0.tar.gz
 	tar xf 1.0.0.tar.gz 
 	cd nanomsg-1.0.0
@@ -201,7 +224,7 @@ if ! [[ -e $PREFIX/bin/sqlite3 ]]; then
 	echo Install sqlite3
 	sqlite3_tgz=sqlite-autoconf-$SQLITE3_VERSION.tar.gz
 	if ! [[ -e tgz/$sqlite3_tgz ]]; then
-	    wget http://www.sqlite.org/2015/$sqlite3_tgz
+	    do_wget http://www.sqlite.org/2015/$sqlite3_tgz 
 	    mv $sqlite3_tgz tgz
 	fi
 
@@ -216,7 +239,7 @@ if ! [[ -e $PREFIX/bin/pg_config ]]; then
 	echo Install Postgresql
 	pgsql_tgz=postgresql-9.6.4.tar.gz
 	if ! [[ -e tgz/$pgsql_tgz ]]; then
-	  wget -c https://ftp.postgresql.org/pub/source/v9.6.4/$pgsql_tgz
+	  do_wget -c https://ftp.postgresql.org/pub/source/v9.6.4/$pgsql_tgz 
 	  mv $pgsql_tgz tgz
 	fi
 	if ! [[ -e $PREFIX/bin/pg_config ]]; then
@@ -299,8 +322,8 @@ mkdir -p $PREFIX/iuplib
 mkdir -p iup/
 for a in `echo $files` ; do
     if ! [[ -e tgz/$a ]] ; then
-        echo wget -c -O tgz/$a http://www.kiatoa.com/matt/chicken-build/$a
-	wget -c http://www.kiatoa.com/matt/chicken-build/$a
+        echo wget -c -O tgz/$a http://www.kiatoa.com/matt/chicken-build/$a 
+	do_wget -c http://www.kiatoa.com/matt/chicken-build/$a 
         mv `echo $a | cut -d'/' -f2` tgz/
     fi
     echo Untarring tgz/$a into $BUILDHOME/lib
@@ -318,7 +341,7 @@ cd $BUILDHOME
 #exit
 if ! [[ -e $PREFIX/include/callback.h ]] ; then
 	#fossil clone http://www.kiatoa.com/fossils/ffcall ffcall.fossil
-	wget -c -O ffcall.tar.gz 'http://www.kiatoa.com/fossils/ffcall/tarball?name=ffcall&uuid=trunk'
+	do_wget -c -O ffcall.tar.gz 'http://www.kiatoa.com/fossils/ffcall/tarball?name=ffcall&uuid=trunk' 
 	tar -xzf ffcall.tar.gz
 	#mkdir -p ffcall
 	cd ffcall
@@ -333,7 +356,7 @@ cd $BUILDHOME
 if ! [[ -e $PREFIX/bin/hs ]] ; then
 	#fossil clone http://www.kiatoa.com/fossils/opensrc opensrc.fossil
 	#mkdir -p opensrc
-	wget -c -O opensrc.tar.gz 'http://www.kiatoa.com/fossils/opensrc/tarball?name=opensrc&uuid=trunk'
+	do_wget -c -O opensrc.tar.gz 'http://www.kiatoa.com/fossils/opensrc/tarball?name=opensrc&uuid=trunk' 
 	tar -xzf opensrc.tar.gz
 	cd opensrc
 	#fossil open ../opensrc.fossil
@@ -353,7 +376,7 @@ cd $BUILDHOME
 
 if [[ ! -e $PREFIX/bin/stmlrun ]] ; then
 	#fossil clone http://www.kiatoa.com/fossils/stml stml.fossil
-	wget -c -O stml.tar.gz 'http://www.kiatoa.com/fossils/stml/tarball?name=stml&uuid=trunk'
+	do_wget -c -O stml.tar.gz 'http://www.kiatoa.com/fossils/stml/tarball?name=stml&uuid=trunk' 
 	tar -xzf stml.tar.gz
 	cd stml
 	#fossil open ../stml.fossil
@@ -385,11 +408,12 @@ CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL $PROX -D no-libra
 cd $BUILDHOME  
 
 # install ducttape
-if [[ -e ../ducttape ]];then
-  cd ../ducttape
+if [[ -e $mtsrcdir/ducttape ]];then
+  cd $mtsrcdir/ducttape
   $CHICKEN_INSTALL
 else
-  echo "ducttape egg not found at ../ducttape. You will need to cd into the ducttape directory in the megatest distribution and run \"chicken-install\""
+    echo "Error: ducttape egg not found at $mtsrcdir/ducttape. You will need to cd into the ducttape directory in the megatest distribution and run \"chicken-install\""
+    exit 1
 fi
 
 cd $BUILDHOME
