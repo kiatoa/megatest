@@ -1,3 +1,10 @@
+;; Run like this: ((adjust the "30" number to a value that fills memory on the machine you are using)
+;; script -c "free -g ; utils/memproblem 30 -:hm128G" memclean.log
+
+;; Fill the cache with something like this:
+;; find /path/to/lots/of/files/ -type f -exec cat {} > /dev/null \;
+
+
 (use posix numbers srfi-4)
 
 (define num-iter (or (if (> (length (argv)) 2)
