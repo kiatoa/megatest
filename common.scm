@@ -1856,13 +1856,13 @@
 			    (set! time-secs (+ time-secs (* val
 							    (case (string->symbol unt)
 							      ((s) 1)
-							      ((m) 60)
+							      ((m) 60) ;; minutes
 							      ((h) 3600)
 							      ((d) 86400)
-							      ((2) 604800)
+							      ((w) 604800)
 							      ((M) 2628000) ;; aproximately one month
 							      ((y) 31536000)
-							      (else 0))))))))))
+							      (else #f))))))))))
 	      parts)
     time-secs))
 		       

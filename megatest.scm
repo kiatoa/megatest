@@ -117,11 +117,11 @@ Launching and managing runs
   -clean-cache            : remove the cached megatest.config and runconfigs.config files
   -no-cache               : do not use the cached config files. 
   -one-pass               : launch as many tests as you can but do not wait for more to be ready
-  -remove-keep N action   : remove all but N most recent runs per target
-                            * Use -actions print,remove-runs,archive to specify action to take
-                            * Add param -age 120d,3h,20m to apply only to runs older than the 
+  -remove-keep N          : remove all but N most recent runs per target; use '-actions, -age, -precmd'
+  -age <age>              : 120d,3h,20m to apply only to runs older than the 
                                  specified age. NB// M=month, m=minute
-                            * Add -precmd to insert a wrapper command in front of the commands run
+  -actions <action>       : print,remove-runs,archive to specify action to take
+  -precmd                 : insert a wrapper command in front of the commands run
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.

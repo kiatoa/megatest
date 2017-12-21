@@ -1904,7 +1904,7 @@
     (for-each
      (lambda (target)
        (let* ((runs      (hash-table-ref runs-ht target))
-	      (sorted    (sort runs (lambda (a b)(> (simple-run-event_time a)(simple-run-event_time b)))))
+	      (sorted    (sort runs (lambda (a b)(< (simple-run-event_time a)(simple-run-event_time b)))))
 	      (to-remove (let* ((len      (length sorted))
                                 (trim-amt (- len num-to-keep)))
                            (if (> trim-amt 0)
