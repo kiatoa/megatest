@@ -323,17 +323,19 @@
 	;; 6. launch the run
 	;; 7. roll up the run result and or roll up the logpro processed result
 	(if (configf:lookup testconfig "subrun" "runwait") ;; we use runwait as the flag that a subrun is requested
-	    (let* ((runarea   (let ((ra (configf:lookup testconfig "subrun" "runarea")))
+            (configf:write-alist testconfig "testconfig.subrun") ;; BB: created here
+	    (let* ((runarea   (let ((ra (configf:lookup testconfig "subrun" "run-area")))
 				(if ra      ;; when runarea is not set we default to *toppath*. However 
 				    ra      ;; we need to force the setting in the testconfig so it will
 				    (begin  ;; be preserved in the testconfig.subrun file
 				      (configf:set-section-var testconfig "subrun" "runarea" *toppath*)
 				      *toppath*))))
+                   ;;; BB: TODO - use common:param
 		   (passfail  (configf:lookup testconfig "subrun" "passfail"))
 		   (target    (or (configf:lookup testconfig "subrun" "target") (get-environment-variable "MT_TARGET")))
 		   (runname   (or (configf:lookup testconfig "subrun" "runname")(get-environment-variable "MT_RUNNAME")))
 		   (contour   (configf:lookup testconfig "subrun" "contour"))
-		   (testpatt  (configf:lookup testconfig "subrun" "testpatt"))
+		   (testpatt  (configf:lookup testconfig "subrun" "test-patt"))
 		   (mode-patt (configf:lookup testconfig "subrun" "mode-patt"))
 		   (tag-expr  (configf:lookup testconfig "subrun" "tag-expr"))
 		   (run-wait  (configf:lookup testconfig "subrun" "runwait"))
@@ -368,7 +370,7 @@
                                        (list (list "subrun" (conc "{subrun=true} " mt-cmd)))))
 	      (configf:set-section-var testconfig "logpro" "subrun" logpro) ;; append the logpro rules to the logpro section as stepname subrun
               (if runarea (configf:set-section-var testconfig "setup" "submegatest" runarea))
-              (configf:write-alist testconfig "testconfig.subrun")
+
 	      ))
 
 	;; process the ezsteps

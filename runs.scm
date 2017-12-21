@@ -1152,7 +1152,7 @@
 			    tal
 			    reg
 			    reruns)))))
-	      ;; ELSE: can't drop this - maybe running? Just keep trying
+                ;; ELSE: can't drop this - maybe running? Just keep trying
 
                 ;;(if (not (or (not (null? reg))(not (null? tal)))) ;; old experiment
                 (let ((runable-tests (runs:runable-tests prereqs-not-met))) ;; SUSPICIOUS: Should look at more than just prereqs-not-met?
@@ -1160,7 +1160,7 @@
                       #f   ;; I think we are truly done here
                       (runs:loop-values newtal reg reglen regfull reruns)))
                 ;;) ;;from old experiment
-            ) ;; end if (or (not (null? reg))(not (null? tal)))
+                ) ;; end if (or (not (null? reg))(not (null? tal)))
             ))))))
 
 ;; scan a list of tests looking to see if any are potentially runnable
@@ -1194,7 +1194,7 @@
    runname: #f
    target: #f
    )
-)
+  )
 
 (define (runs:incremental-print-results run-id)
   (let ((curr-sec (current-seconds)))
@@ -1382,7 +1382,7 @@
 	;;     (server:kind-run *toppath*))
 	
 	(if (> num-running 0)
-	  (set! last-time-some-running (current-seconds)))
+            (set! last-time-some-running (current-seconds)))
 
         (if (> (current-seconds)(+ last-time-some-running (or (configf:lookup *configdat* "setup" "give-up-waiting") 36000)))
             (hash-table-set! *max-tries-hash* tfullname (+ (hash-table-ref/default *max-tries-hash* tfullname 0) 1)))
@@ -1407,7 +1407,7 @@
 			(runs:queue-next-tal tal reg reglen regfull)
 			(runs:queue-next-reg tal reg reglen regfull)
 			reruns))))
-		  ;; (loop (car tal)(cdr tal) reg reruns))))
+        ;; (loop (car tal)(cdr tal) reg reruns))))
 
 	(runs:incremental-print-results run-id)
 	(debug:print 4 *default-log-port* "TOP OF LOOP => "
@@ -1464,7 +1464,7 @@
 	  (runs:testdat-prereqs-not-met-set! testdat (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps))
 	  (runs:dat-can-run-more-tests-set! runsdat (runs:can-run-more-tests runsdat run-id jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 	  (let ((loop-list (runs:process-expanded-tests runsdat testdat)))
-	      (if loop-list (apply loop loop-list))))
+            (if loop-list (apply loop loop-list))))
 
 	 ;; items processed into a list but not came in as a list been processed
 	 ;;
@@ -1479,13 +1479,13 @@
 			(> (length (car items)) 0))
 		   (debug:debug-mode 1))
 	      (debug:print 2 *default-log-port* (map (lambda (row)
-				    (conc (string-intersperse
-					   (map (lambda (varval)
-						  (string-intersperse varval "="))
-						row)
-					   " ")
-					  "\n"))
-				  items)))
+                                                       (conc (string-intersperse
+                                                              (map (lambda (varval)
+                                                                     (string-intersperse varval "="))
+                                                                   row)
+                                                              " ")
+                                                             "\n"))
+                                                     items)))
 
           (let* ((items-in-testpatt
                   (filter
@@ -1507,13 +1507,13 @@
 
                                    (newtestname (db:test-make-full-name hed my-item-path)))    ;; test names are unique on testname/item-path
                               (tests:testqueue-set-items!     new-test-record #f)
-                            (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
-                            (tests:testqueue-set-item_path! new-test-record my-item-path)
-                            (hash-table-set! test-records newtestname new-test-record)
-                            (set! tal (append tal (list newtestname)))))  ;; since these are itemized create new test names testname/itempath
+                              (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
+                              (tests:testqueue-set-item_path! new-test-record my-item-path)
+                              (hash-table-set! test-records newtestname new-test-record)
+                              (set! tal (append tal (list newtestname)))))  ;; since these are itemized create new test names testname/itempath
                           items-in-testpatt)))
-                          
-            
+          
+          
 
 	  ;; At this point we have possibly added items to tal but all must be handed off to 
 	  ;; INNER COND logic. I think loop without rotating the queue 
@@ -1523,7 +1523,7 @@
 	  (if (null? tal)
 	      #f
 	      (loop (car tal)(cdr tal) reg reruns)))
-	    
+         
 	 ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	 ;;    - but only do that if resources exist to kick off the job
 	 ;; EXPAND ITEMS
@@ -1540,7 +1540,7 @@
                   )
 		;; if can't run more just loop with next possible test
 		(loop (car newtal)(cdr newtal) reg reruns))))
-	    
+         
 	 ;; this case should not happen, added to help catch any bugs
 	 ((and (list? items) itemdat)
           (debug:print-info 4 *default-log-port* "cond branch - "  "rtq-5")
@@ -1686,8 +1686,8 @@
     ;;
     (if (not (hash-table-ref/default *test-meta-updated* test-name #f))
         (begin
-	   (hash-table-set! *test-meta-updated* test-name #t)
-           (runs:update-test_meta test-name test-conf)))
+          (hash-table-set! *test-meta-updated* test-name #t)
+          (runs:update-test_meta test-name test-conf)))
     
     ;; itemdat => ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
@@ -1931,7 +1931,7 @@
 		       ((archive)
 			(if remove (system (conc precmd " megatest -archive save-remove -target " target " -runname " (simple-run-runname run) " -testpatt %"))))))
 		   actions))))
-	    sorted)))
+          sorted)))
      ;; (print "Sorted: " (map simple-run-event_time sorted))
      ;; (print "Remove: " (map simple-run-event_time to-remove))))
      (hash-table-keys runs-ht))
@@ -1990,12 +1990,12 @@
 						(db:get-value-by-header run header k)) keys) "/"))
 	     (dirs-to-remove (make-hash-table))
 	     (proc-get-tests (lambda (run-id)
-			      (mt:get-tests-for-run run-id
-						    testpatt states statuses
-						    not-in:  #f
-						    sort-by: (case action
-							       ((remove-runs) 'rundir)
-							       (else          'event_time))))))
+                               (mt:get-tests-for-run run-id
+                                                     testpatt states statuses
+                                                     not-in:  #f
+                                                     sort-by: (case action
+                                                                ((remove-runs) 'rundir)
+                                                                (else          'event_time))))))
 	 (let* ((run-id    (db:get-value-by-header run header "id"))
 		(run-state (db:get-value-by-header run header "state"))
 		(run-name  (db:get-value-by-header run header "runname"))
@@ -2074,42 +2074,42 @@
 			     (case action
 			       ((remove-runs)
 				;; if the test is a toplevel-with-children issue an error and do not remove
-				(if toplevel-with-children
-				    (begin
-				      (debug:print 0 *default-log-port* "WARNING: skipping removal of " test-fulln " with run-id " run-id " as it has sub tests")
-				      (hash-table-set! toplevel-retries test-fulln (+ (hash-table-ref/default toplevel-retries test-fulln 0) 1))
-				      (if (> (hash-table-ref toplevel-retries test-fulln) 3)
-					  (if (not (null? tal))
-					      (loop (car tal)(cdr tal))) ;; no else clause - drop it if no more in queue and > 3 tries
-					  (let ((newtal (append tal (list test))))
-					    (loop (car newtal)(cdr newtal))))) ;; loop with test still in queue
-				    (begin
-				      (debug:print-info 0 *default-log-port* "test: " test-name " itest-state: " test-state)
-				      (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
-					  (begin
-					    (if (not (hash-table-ref/default test-retry-time test-fulln #f))
-						(begin
-						  ;; want to set to REMOVING BUT CANNOT do it here?
-						  (hash-table-set! test-retry-time test-fulln (current-seconds))))
-					    (if (> (- (current-seconds)(hash-table-ref test-retry-time test-fulln)) allow-run-time)
-						;; This test is not in a correct state for cleaning up. Let's try some graceful shutdown steps first
-						;; Set the test to "KILLREQ" and wait five seconds then try again. Repeat up to five times then give
-						;; up and blow it away.
-						(begin
-						  (debug:print 0 *default-log-port* "WARNING: could not gracefully remove test " test-fulln ", tried to kill it to no avail. Forcing state to FAILEDKILL and continuing")
-					    (mt:test-set-state-status-by-id run-id (db:test-get-id test) "FAILEDKILL" "n/a" #f)
-						  (thread-sleep! 1))
-						(begin
-					    (mt:test-set-state-status-by-id run-id (db:test-get-id test) "KILLREQ" "n/a" #f)
-						  (thread-sleep! 1)))
-					    ;; NOTE: This is suboptimal as the testdata will be used later and the state/status may have changed ...
-					    (if (null? tal)
-						(loop new-test-dat tal)
-						(loop (car tal)(append tal (list new-test-dat)))))
-					  (begin
-					    (runs:remove-test-directory new-test-dat mode) ;; 'remove-all)
-					    (if (not (null? tal))
-						(loop (car tal)(cdr tal)))))))
+				(cond
+                                 (toplevel-with-children
+                                  (debug:print 0 *default-log-port* "WARNING: skipping removal of " test-fulln " with run-id " run-id " as it has sub tests")
+                                  (hash-table-set! toplevel-retries test-fulln (+ (hash-table-ref/default toplevel-retries test-fulln 0) 1))
+                                  (if (> (hash-table-ref toplevel-retries test-fulln) 3)
+                                      (if (not (null? tal))
+                                          (loop (car tal)(cdr tal))) ;; no else clause - drop it if no more in queue and > 3 tries
+                                      (let ((newtal (append tal (list test))))
+                                        (loop (car newtal)(cdr newtal))))) ;; loop with test still in queue
+                                 (else
+                                  (debug:print-info 0 *default-log-port* "test: " test-name " itest-state: " test-state)
+                                  (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
+                                      (begin
+                                        (if (not (hash-table-ref/default test-retry-time test-fulln #f))
+                                            (begin
+                                              ;; want to set to REMOVING BUT CANNOT do it here?
+                                              (hash-table-set! test-retry-time test-fulln (current-seconds))))
+                                        (if (> (- (current-seconds)(hash-table-ref test-retry-time test-fulln)) allow-run-time)
+                                            ;; This test is not in a correct state for cleaning up. Let's try some graceful shutdown steps first
+                                            ;; Set the test to "KILLREQ" and wait five seconds then try again. Repeat up to five times then give
+                                            ;; up and blow it away.
+                                            (begin
+                                              (debug:print 0 *default-log-port* "WARNING: could not gracefully remove test " test-fulln ", tried to kill it to no avail. Forcing state to FAILEDKILL and continuing")
+                                              (mt:test-set-state-status-by-id run-id (db:test-get-id test) "FAILEDKILL" "n/a" #f)
+                                              (thread-sleep! 1))
+                                            (begin
+                                              (mt:test-set-state-status-by-id run-id (db:test-get-id test) "KILLREQ" "n/a" #f)
+                                              (thread-sleep! 1)))
+                                        ;; NOTE: This is suboptimal as the testdata will be used later and the state/status may have changed ...
+                                        (if (null? tal)
+                                            (loop new-test-dat tal)
+                                            (loop (car tal)(append tal (list new-test-dat)))))
+                                      (begin
+                                        (runs:remove-test-directory new-test-dat mode) ;; 'remove-all)
+                                        (if (not (null? tal))
+                                            (loop (car tal)(cdr tal)))))))
 				(rmt:update-run-stats run-id (rmt:get-raw-run-stats run-id)))
 			       ((set-state-status)
 				(debug:print-info 2 *default-log-port* "new state " (car state-status) ", new status " (cadr state-status))
