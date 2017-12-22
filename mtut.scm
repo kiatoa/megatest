@@ -257,12 +257,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (define (param-translate param)
   (or (alist-ref (string->symbol param)
-		 '((-tag-expr  . "-tagexpr")
-		   (-mode-patt . "-modepatt")
-		   (-run-name  . "-runname")
-		   (-test-patt . "-testpatt")
-		   (-msg       . "-m")
-		   (-new       . "-set-state-status")))
+                 (common:get-param-mapping flavor: 'switch-symbol))
       param))
 
 (define (val->alist val)
