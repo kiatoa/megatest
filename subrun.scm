@@ -44,16 +44,18 @@
                                             (list switch val)
                                             #f)))
                                     switch-def-alist)))
-         (target        (alist-ref switch-alist "-target" equal?))
-         (runname       (alist-ref switch-alist "-runname" equal?))
+         (target        (or (alist-ref switch-alist "-target" equal?)
+                            "NO-TARGET"))
+         (runname       (or (alist-ref switch-alist "-runname" equal?)
+                            "NO-RUNNAME"))
          (testpatt      (alist-ref switch-alist "-testpatt" equal?))
          (mode-patt     (alist-ref switch-alist "-modepatt" equal?))
          (tag-expr      (alist-ref switch-alist "-tagexpr" equal?))
          (compact-stem  (string-substitute "[/*]" "_"
                                            (conc
-                                            (or target "NO-TARGET")
+                                            target
                                             "-"
-                                            (or runname "NO-RUNNAME")
+                                            runname
                                             "-" (or testpatt mode-patt tag-expr "NO-TESTPATT"))))
          (logfile       (conc
                          test-run-dir "/"
