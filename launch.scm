@@ -295,7 +295,8 @@
   ;; then, if runscript ran ok (or did not get called)
   ;; do all the ezsteps (if any)
   (if (or ezsteps subrun)
-      (let* ((testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
+      (let* ((test-run-dir (tests:get-test-path-from-environment))
+             (testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
 	      ;; NOTE: it is tempting to turn off force-create of testconfig but dynamic
 	      ;;       ezstep names need a full re-eval here.
 	      (tests:get-testconfig test-name item-path tconfigreg #t force-create: #t)) ;; 'return-procs)))
@@ -323,7 +324,8 @@
 	;; 6. launch the run
 	;; 7. roll up the run result and or roll up the logpro processed result
 	(if (configf:lookup testconfig "subrun" "runwait") ;; we use runwait as the flag that a subrun is requested
-            (configf:write-alist testconfig "testconfig.subrun") ;; BB: created here
+            (subrun:initialize-toprun-test testconfig test-run-dir)
+            
 	    (let* ((runarea   (let ((ra (configf:lookup testconfig "subrun" "run-area")))
 				(if ra      ;; when runarea is not set we default to *toppath*. However 
 				    ra      ;; we need to force the setting in the testconfig so it will

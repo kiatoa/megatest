@@ -1781,6 +1781,24 @@
 			       key "=" delim (mungeval val) delim)))
                     envvars)))))
 
+
+(define (common:get-param-mapping #!key (flavor #f))
+  "returns alist mapping string keys in testconfig/subrun to megatest command line switches; if flavor is switch-symbol, maps tcmt symbolic switches to megatest switches"
+  (let ((default '(("tag-expr"  . "-tagexpr")
+                   ("mode-patt" . "-modepatt")
+                   ("run-name"  . "-runname")
+                   ("contour"   . "-contour")
+                   ("mode-patt" . "-mode-patt")
+                   
+                   ("test-patt" . "-testpatt")
+                   ("msg"       . "-m")
+                   ("new"       . "-set-state-status"))))
+    (if (eq? flavor 'switch)
+        (map (lambda (x)
+               (cons (string->symbol (conc "-" (car x)) (cdr x))))
+             default)
+        default)))
+
 ;; set some env vars from an alist, return an alist with original values
 ;; (("VAR" "value") ...)
 ;; a value of #f means "unset this var"
@@ -1800,13 +1818,11 @@
 	res)
       '()))
 
+
 ;; clear vars matching pattern, run proc, set vars back
 ;; if proc is a string run that string as a command with
 ;; system.
 ;;
-
-
-
 (define (common:without-vars proc . var-patts)
   (let ((vars (make-hash-table)))
     (for-each
@@ -1828,56 +1844,6 @@
      (lambda (var val)
        (setenv var val)))
     vars))
-
-(define (common:get-param-mapping #!key (flavor #f))
-  "returns alist mapping string keys in testconfig/subrun to megatest command line switches; if flavor is switch-symbol, maps tcmt symbolic switches to megatest switches"
-  (let ((default '(("tag-expr"  . "-tagexpr")
-                   ("mode-patt" . "-modepatt")
-                   ("run-name"  . "-runname")
-                   ("contour"   . "-contour")
-                   ("mode-patt" . "-mode-patt")
-                   
-                   ("test-patt" . "-testpatt")
-                   ("msg"       . "-m")
-                   ("new"       . "-set-state-status"))))
-    (if (eq? flavor 'switch)
-        (map (lambda (x)
-               (cons (string->symbol (conc "-" (car x)) (cdr x))))
-             default)
-        default)))
-
-(define (common:sub-megatest-selector-switches test-run-dir)
-  (let* ((switch-def-alist (common:get-param-mapping flavor: 'config)))
-         (subrunfile   (conc test-run-dir "/testconfig.subrun" ))
-         (subrundata   (with-input-from-file subrunfile read))
-         (subrunconfig (configf:alist->config subrundata)))
-  ;; note - get precmd from subrun section
-  ;;   apply to submegatest commands
-
-  (apply append
-           (filter-map (lambda (item)
-                         (let ((config-key (car item))
-                               (switch     (cdr item))
-                               (val        (configf:lookup subrunconfig switch)))
-                           (if val
-                               (list switch val)
-                               #f)))
-                       switch-def-alist))))
-
-(define (common:sub-megatest-run test-run-dir switches #!key (logfile #f))
-  (let* ((real-logfile (or logfile (conc (test-run-dir) "/subrun-"
-                                         (string-substitute "[/*]" "_" (string-intersperse switches "^"))"-"
-                                         (number->string (current-seconds)) ".log")))
-         (selector-switches  (common:sub-megatest-selector-switches test-run-dir))
-         (cmd-list `("megatest" ,@selector-switches ,@switches "-log" ,real-logfile))
-         )
-    (call-with-environment-variables 
-     (list (cons "PATH" (conc (get-environment-variable "PATH") ":.")))
-     (lambda  ()
-       (common:without-vars proc "^MT_.*")
-       
-       ))))
-                             
 
 
 (define (common:run-a-command cmd #!key (with-vars #f))
