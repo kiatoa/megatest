@@ -20,6 +20,7 @@
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit launch))
+(declare (uses subrun))
 (declare (uses common))
 (declare (uses configf))
 (declare (uses db))
@@ -324,7 +325,7 @@
 	;; 6. launch the run
 	;; 7. roll up the run result and or roll up the logpro processed result
 	(if (configf:lookup testconfig "subrun" "runwait") ;; we use runwait as the flag that a subrun is requested
-            (subrun:initialize-toprun-test testconfig test-run-dir logpro)
+            (subrun:initialize-toprun-test testconfig test-run-dir)
 	    (let* ((mt-cmd (subrun:launch-cmd test-run-dir)))
               (debug:print-info 0 *default-log-port* "Subrun command is \"" mt-cmd "\"")
               (set! ezsteps #t) ;; set the needed flag
