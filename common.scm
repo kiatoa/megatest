@@ -15,7 +15,8 @@
      matchable regex posix (srfi 18) extras ;; tcp 
      (prefix nanomsg nmsg:)
      (prefix sqlite3 sqlite3:)
-     pkts)
+     pkts
+     )
 
 (declare (unit common))
 
@@ -1795,7 +1796,7 @@
                    ("new"       . "-set-state-status"))))
     (if (eq? flavor 'switch)
         (map (lambda (x)
-               (cons (string->symbol (conc "-" (car x)) (cdr x))))
+               (cons (string->symbol (conc "-" (car x))) (cdr x)))
              default)
         default)))
 

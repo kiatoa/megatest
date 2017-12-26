@@ -1,4 +1,35 @@
 
+;; Copyright 2006-2016, Matthew Welland.
+;; 
+;;  This program is made available under the GNU GPL version 2.0 or
+;;  greater. See the accompanying file COPYING for details.
+;; 
+;;  This program is distributed WITHOUT ANY WARRANTY; without even the
+;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+;;  PURPOSE.
+
+;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
+
+(use (prefix sqlite3 sqlite3:) srfi-1 posix regex regex-case srfi-69 (srfi 18) 
+     posix-extras directory-utils pathname-expand typed-records format)
+(declare (unit subrun))
+(declare (uses runs))
+(declare (uses db))
+(declare (uses common))
+(declare (uses items))
+(declare (uses runconfig))
+(declare (uses tests))
+(declare (uses server))
+(declare (uses mt))
+(declare (uses archive))
+;; (declare (uses filedb))
+
+(include "common_records.scm")
+(include "key_records.scm")
+(include "db_records.scm")
+(include "run_records.scm")
+(include "test_records.scm")
+
 
 (define (subrun:initialize-toprun-test test-run-dir testconfig)
   (let ((ra (configf:lookup testconfig "subrun" "run-area")))
