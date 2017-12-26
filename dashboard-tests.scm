@@ -251,7 +251,7 @@
 				(configf:read-alist subrun-tconf-file)
 				(make-hash-table)))
 	 (subarea           (or (configf:lookup testconfig "setup" "submegatest")
-				(configf:lookup subrun-tconf "subrun" "runarea")))
+				(configf:lookup subrun-tconf "subrun" "run-area")))
 	 (area-exists (and subarea (common:file-exists? subarea))))
     ;; (debug:print-info 0 *default-log-port* "Megatest subarea=" subarea ", area-exists=" area-exists)
     (if subarea

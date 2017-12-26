@@ -24,7 +24,7 @@
 ;;(declare (uses archive))
 ;; (declare (uses filedb))
 
-(include "common_records.scm")
+;(include "common_records.scm")
 ;;(include "key_records.scm")
 ;;(include "db_records.scm")
 ;;(include "run_records.scm")
@@ -34,21 +34,29 @@
 (define (subrun:initialize-toprun-test  testconfig test-run-dir)
 
   (let ((ra (configf:lookup testconfig "subrun" "run-area"))
-        (logpro (configf:lookup testconfig "subrun" "logpro")))
+        (logpro (configf:lookup testconfig "subrun" "logpro"))
+        (symlink-target (conc test-run-dir "/subrun-area"))
+        )
   (when (not ra)      ;; when runarea is not set we default to *toppath*. However 
               ;; we need to force the setting in the testconfig so it will
           ;; be preserved in the testconfig.subrun file
       (configf:set-section-var testconfig "subrun" "runarea" *toppath*))
     (configf:set-section-var testconfig "logpro" "subrun" logpro) ;; append the logpro rules to the logpro section as stepname subrun
+
+    (if (common:file-exists? symlink-target)
+        (delete-file symlink-target))
+    
+    (create-symbolic-link ra symlink-target)
+
     (configf:write-alist testconfig "testconfig.subrun")))
 
 
 (define (subrun:launch-cmd test-run-dir)
-  (let ((log-prefix "run")
-        (switches (subrun:selector+log-switches test-run-dir log-prefix))
-        (run-wait #t)
-        (cmd      (conc "megatest -run "switches" "
-                        (if runwait "-run-wait " ""))))
+  (let* ((log-prefix "run")
+         (switches (subrun:selector+log-switches test-run-dir log-prefix))
+         (run-wait #t)
+         (cmd      (conc "megatest -run "switches" "
+                         (if run-wait "-run-wait " ""))))
     cmd))
 
 ;; set state/status of test item
@@ -63,27 +71,34 @@
          (subrundata   (with-input-from-file subrunfile read))
          (subrunconfig (configf:alist->config subrundata))
          (run-area     (configf:lookup subrunconfig "subrun" "run-area"))
-         (defvals      `(("-runname" . ,(get-environment-variable "MT_RUNNAME"))
-                         ("-target"  . ,(get-environment-variable "MT_TARGET"))))
-         (switch-alist (apply
-                        append
-                        (filter-map (lambda (item)
-                                      (let ((config-key (car item))
-                                            (switch     (cdr item))
-                                            (defval     (alist-ref defvals switch equal?))
-                                            (val        (or (configf:lookup subrunconfig switch)
-                                                            defval)))
-                                        (if val
-                                            (list switch val)
-                                            #f)))
-                                    switch-def-alist)))
-         (target        (or (alist-ref "-target" switch-alist  equal? #f) ;; want data-structures alist-ref, not alist-lib alist-ref
-                            "NO-TARGET"))
-         (runname       (or (alist-ref "-runname" switch-alist equal? #f)
-                            "NO-RUNNAME"))
-         (testpatt      (alist-ref "-testpatt" switch-alist equal? #f))
-         (mode-patt     (alist-ref "-modepatt" switch-alist equal? #f))
-         (tag-expr      (alist-ref "-tagexpr" switch-alist equal? #f))
+         (defvals      `(("start-dir" . ,(or run-area  ;; default values if not specified in subrun section of tconf
+                                             (get-environment-variable "MT_RUN_AREA_HOME")
+                                             "/no/rundir/found")) 
+                         ("run-name"  . ,(or (get-environment-variable "MT_RUNNAME") "NO-RUNNAME"))
+                         ("target"    . ,(or (get-environment-variable "MT_TARGET")  "NO-TARGET"))))
+         (switch-alist-pre  (filter-map (lambda (item)
+                                          (let* ((config-key (car item))
+                                                 (switch     (cdr item))
+                                                 (defval     (alist-ref config-key defvals equal? #f))
+                                                 (val        (or (configf:lookup subrunconfig "subrun" config-key)
+                                                                 defval)))
+                                            (if val
+                                                (cons switch val)
+                                                #f)))
+                                        switch-def-alist))
+
+         ;; testpatt may be modified if all three of mode-patt, tag-expr, and testpatt are null
+         (mode-patt     (alist-ref "-modepatt" switch-alist-pre equal? #f))
+         (tag-expr      (alist-ref "-tagexpr" switch-alist-pre equal? #f))
+         (testpatt      (alist-ref "-testpatt" switch-alist-pre equal?
+                                   (if (not (or mode-patt tag-expr)) "%" #f))) ;; testpatt is % if not
+                                                                               ;; otherwise specified
+
+         ;; define compact-stem for logfile
+         (target        (alist-ref "-target" switch-alist-pre equal? #f)) ;; want data-structures alist-ref, not alist-lib alist-ref
+         (runname       (alist-ref "-runname" switch-alist-pre equal? #f))
+
+
          (compact-stem  (string-substitute "[/*]" "_"
                                            (conc
                                             target
@@ -95,23 +110,27 @@
                          (or log-prefix "")
                          (if log-prefix "-" "")
                          compact-stem
-                         ".log")))
+                         ".log"))
+         ;; swap out testpatt with modified test-patt and add -log
+         (switch-alist  (cons
+                         (cons "-log" logfile)
+                         (map (lambda (item)
+                                (if (equal? (car item) "-testpatt")
+                                    (cons "-testpatt" testpatt)
+                                    item))
+                                switch-alist-pre))))
     ;; note - get precmd from subrun section
     ;;   apply to submegatest commands
-    
-    (conc
-     " -start-dir " run-area " "
-     " -runname " runname " "
-     " -target " target " "
-     (if testpatt (conc "-testpatt " testpatt" ") "")
-     (if modepatt (conc "-modepatt " modepatt" ") "")
-     (if tag-expr (conc "-tag-expr " tag-expr" ") "")
-     
-     (string-intersperse
-      (apply append
-           (map (lambda (x) (list (car x) (cdr x))) switch-def-alist))
-      " ")
-     "-log " logfile)))
+    (let* ((res
+            (string-intersperse
+             (apply
+              append
+              (map
+               (lambda (x)
+                 (list (car x) (cdr x)))
+               switch-alist))
+              " ")))
+      res)))
 
 
 (define (subrun:exec-sub-megatest test-run-dir switches #!key (logfile #f))
