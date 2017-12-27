@@ -11,22 +11,23 @@
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
 (use (prefix sqlite3 sqlite3:) srfi-1 posix regex regex-case srfi-69 (srfi 18) 
-     posix-extras directory-utils pathname-expand typed-records format)
+     posix-extras directory-utils pathname-expand typed-records format
+     call-with-environment-variables)
 (declare (unit subrun))
 ;;(declare (uses runs))
-;;(declare (uses db))
+(declare (uses db))
 (declare (uses common))
 ;;(declare (uses items))
 ;;(declare (uses runconfig))
 ;;(declare (uses tests))
 ;;(declare (uses server))
-;;(declare (uses mt))
+(declare (uses mt))
 ;;(declare (uses archive))
 ;; (declare (uses filedb))
 
 ;(include "common_records.scm")
 ;;(include "key_records.scm")
-;;(include "db_records.scm")
+(include "db_records.scm") ;; provides db:test-get-id
 ;;(include "run_records.scm")
 ;;(include "test_records.scm")
 
@@ -35,6 +36,20 @@
            (common:file-exists? (conc test-run-dir "/testconfig.subrun") ))
       #t
       #f))
+
+(define (subrun:subrun-removed? test-run-dir)
+  (if (subrun:subrun-test-initialized? test-run-dir)
+      (let ((flagfile (conc test-run-dir "/subrun.removed")))
+        (if (common:file-exists? flagfile)
+            #t
+            #f))
+      #t))
+
+(define (subrun:set-subrun-removed test-run-dir)
+  (let ((flagfile (conc test-run-dir "/subrun.removed")))
+    (if (and (subrun:subrun-test-initialized? test-run-dir) (not (common:file-exists? flagfile)))
+        (with-output-to-file flagfile
+          (lambda () (print (current-seconds)))))))
 
 (define (subrun:testconfig-defines-subrun? testconfig)
   (configf:lookup testconfig "subrun" "runwait")) ;; we use runwait as the flag that a subrun is requested
@@ -64,27 +79,16 @@
 ;; fork off megatest
 ;; set state/status of test item
 ;;
-
-  (let* ((subrun-alist (subrun:selector+log-alist test-run-dir log-prefix))
-         (runlog       (alist-ref "-log" subrun-alist equal? #f)))
-    (if (not (common:file-exists? runlog))
-        (BB> "no runlog @ "runlog)
-        (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
-            ;; This test is not in a correct state for cleaning up. Let's try some graceful shutdown steps first
-            ;; Set the test to "KILLREQ" and wait five seconds then try again. Repeat up to five times then give
-            ;; up and blow it away.
-            
-            ;; call in submegatest:
-            ;;  (tasks:kill-runner target run-name testpatt)
-            
-            (mt:test-set-state-status-by-id run-id (db:test-get-id test) "SUBRUN-KILLREQ" "n/a" #f)
-            )
-
-        ;; on success:
-        ;;   set state of test, or delete it or whatever
-        )
-    )
-  )
+  (BB> "Entered subrun:remove-subrun with "test-fulln)
+  (if (and (not (subrun:subrun-removed? test-run-dir)) (subrun:subrun-test-initialized? test-run-dir))
+      (let* ((remove-result
+              (subrun:exec-sub-megatest test-run-dir "-remove-runs" "remove")))
+        (if remove-result
+            (begin
+              (subrun:set-subrun-removed test-run-dir)
+              #t)
+            #f))
+      #t))
 
 (define (subrun:launch-cmd test-run-dir)
   (let* ((log-prefix "run")
@@ -171,19 +175,32 @@
            " ")))
     res))
 
-(define (subrun:exec-sub-megatest test-run-dir switches #!key (logfile #f))
-  (let* ((real-logfile (or logfile (conc (test-run-dir) "/subrun-"
-                                         (string-substitute "[/*]" "_" (string-intersperse switches "^"))"-"
-                                         (number->string (current-seconds)) ".log")))
-         (selector-switches  (common:sub-megatest-selector-switches test-run-dir))
-         (cmd-list `("megatest" ,@selector-switches ,@switches "-log" ,real-logfile))
-         )
+(define (subrun:exec-sub-megatest test-run-dir action-switches-str log-prefix)
+  (let* ((selector-switches  (subrun:selector+log-switches test-run-dir log-prefix))
+         (cmd (conc "megatest " selector-switches " " action-switches-str ))
+         (pid #f)
+         (proc (lambda ()
+                 (debug:print-info 0 *default-log-port* "Running sub megatest command: "cmd)
+                 ;;(set! pid (process-run "/usr/bin/xterm" (list ))))))
+                 (set! pid (process-run "/bin/bash" (list "-c" cmd))))))
     (call-with-environment-variables 
      (list (cons "PATH" (conc (get-environment-variable "PATH") ":.")))
      (lambda  ()
-       (common:without-vars proc "^MT_.*")
-       
-       ))))
-                             
+       (common:without-vars proc "^MT_.*")))
+    (let processloop ((i 0))
+      (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
+        (if (eq? pid-val 0)
+            (begin
+              (thread-sleep! 2)
+              (processloop (+ i 1)))
+            (begin
+              (debug:print-info 0 *default-log-port* "sub megatest " action-switches-str " completed with exit code " exit-code)
+              (if (eq? 0 exit-code)
+                  (begin
+                    #t)
+                  (begin
+                    #f))))))))
 
 
+
+;; (subrun:exec-sub-megatest "/nfs/pdx/disks/icf_env_disk001/bjbarcla/gwa/issues/mtdev/165/megatest/ext-tests/tests/subrun-usecases/toparea/links/SYSTEM_val/RELEASE_val/go/toptest" "-foo" "foo")

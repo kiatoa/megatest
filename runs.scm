@@ -2066,7 +2066,8 @@
 				  (run-dir       ;;(filedb:get-path *fdb*
 				   ;; (rmt:sdb-qry 'getid 
 				   (db:test-get-rundir new-test-dat)) ;; )    ;; run dir is from the link tree
-                                  (has-subrun   (subrun:subrun-test-initialized? run-dir))
+                                  (has-subrun    (and (subrun:subrun-test-initialized? run-dir)
+                                                      (not (subrun:subrun-removed? run-dir))))
 				  (test-state    (db:test-get-state new-test-dat))
 				  (test-fulln    (db:test-get-fullname new-test-dat))
 				  (uname         (db:test-get-uname    new-test-dat))
@@ -2086,10 +2087,21 @@
                                         (loop (car newtal)(cdr newtal))))) ;; loop with test still in queue
                                  (has-subrun
                                   ;; BB TODO - manage toplevasel-retries hash and retries in general
-                                  (subrun:remove-subrun test-run-dir new-test-dat test-name item-path test-state test-fulln toplevel-with-children test)
-                                  
+                                  (debug:print 0 *default-log-port* "WARNING: postponing removal of " test-fulln " with run-id " run-id " as it has a subrun")
+                                  (let* ((subrun-remove-succeeded
+                                          (subrun:remove-subrun run-dir new-test-dat test-name item-path test-state test-fulln toplevel-with-children test)))
+                                    (cond
+                                     (subrun-remove-succeeded
+                                      
+                                      (debug:print 0 *default-log-port* "Now removing of " test-fulln " with run-id " run-id " as it has a subrun")
+                                      (runs:remove-test-directory new-test-dat mode))
+                                     (else
+                                      (let* ((logfile (subrun:get-log-path run-dir "remove")))
+                                        (debug:print 0 *default-log-port* "WARNING: removal of subrun failed.  Please check "logfile" for details."))))
+                                    
+                                  (if (not (null? tal))
+                                            (loop (car tal)(cdr tal)))))
 
-                                  )
                                  (else
                                   (debug:print-info 0 *default-log-port* "test: " test-name " itest-state: " test-state)
                                   (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))

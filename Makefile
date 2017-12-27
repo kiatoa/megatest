@@ -93,6 +93,7 @@ TCMTOBJS = \
 	tasks.o \
 	tdb.o \
 	tests.o \
+	subrun.o \
 
 
 tcmt : $(TCMTOBJS) tcmt.scm
