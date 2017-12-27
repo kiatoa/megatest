@@ -30,6 +30,14 @@
 ;;(include "run_records.scm")
 ;;(include "test_records.scm")
 
+(define (subrun:subrun-test-initialized? test-run-dir)
+  (if (and (common:file-exists? (conc test-run-dir "/subrun-area") )
+           (common:file-exists? (conc test-run-dir "/testconfig.subrun") ))
+      #t
+      #f))
+
+(define (subrun:testconfig-defines-subrun? testconfig)
+  (configf:lookup testconfig "subrun" "runwait")) ;; we use runwait as the flag that a subrun is requested
 
 (define (subrun:initialize-toprun-test  testconfig test-run-dir)
 
@@ -51,6 +59,33 @@
     (configf:write-alist testconfig "testconfig.subrun")))
 
 
+(define (subrun:remove-subrun test-run-dir new-test-dat test-name item-path test-state test-fulln toplevel-with-children test)
+;; set state/status of test item
+;; fork off megatest
+;; set state/status of test item
+;;
+
+  (let* ((subrun-alist (subrun:selector+log-alist test-run-dir log-prefix))
+         (runlog       (alist-ref "-log" subrun-alist equal? #f)))
+    (if (not (common:file-exists? runlog))
+        (BB> "no runlog @ "runlog)
+        (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
+            ;; This test is not in a correct state for cleaning up. Let's try some graceful shutdown steps first
+            ;; Set the test to "KILLREQ" and wait five seconds then try again. Repeat up to five times then give
+            ;; up and blow it away.
+            
+            ;; call in submegatest:
+            ;;  (tasks:kill-runner target run-name testpatt)
+            
+            (mt:test-set-state-status-by-id run-id (db:test-get-id test) "SUBRUN-KILLREQ" "n/a" #f)
+            )
+
+        ;; on success:
+        ;;   set state of test, or delete it or whatever
+        )
+    )
+  )
+
 (define (subrun:launch-cmd test-run-dir)
   (let* ((log-prefix "run")
          (switches (subrun:selector+log-switches test-run-dir log-prefix))
@@ -59,13 +94,8 @@
                          (if run-wait "-run-wait " ""))))
     cmd))
 
-;; set state/status of test item
-;; fork off megatest
-;; set state/status of test item
-;;
 
-
-(define (subrun:selector+log-switches test-run-dir log-prefix)
+(define (subrun:selector+log-alist test-run-dir log-prefix)
   (let* ((switch-def-alist (common:get-param-mapping flavor: 'config))
          (subrunfile   (conc test-run-dir "/testconfig.subrun" ))
          (subrundata   (with-input-from-file subrunfile read))
@@ -119,19 +149,27 @@
                                     (cons "-testpatt" testpatt)
                                     item))
                                 switch-alist-pre))))
+    switch-alist))
     ;; note - get precmd from subrun section
     ;;   apply to submegatest commands
-    (let* ((res
-            (string-intersperse
-             (apply
-              append
-              (map
-               (lambda (x)
-                 (list (car x) (cdr x)))
-               switch-alist))
-              " ")))
-      res)))
 
+(define (subrun:get-log-path test-run-dir log-prefix)
+  (let* ((alist (subrun:selector+log-alist test-run-dir log-prefix))
+         (res   (alist-ref "-log" alist equal? #f)))
+    res))
+
+(define (subrun:selector+log-switches test-run-dir log-prefix)
+  (let* ((switch-alist (subrun:selector+log-alist test-run-dir log-prefix))
+         (res
+          (string-intersperse
+           (apply
+            append
+            (map
+             (lambda (x)
+               (list (car x) (cdr x)))
+             switch-alist))
+           " ")))
+    res))
 
 (define (subrun:exec-sub-megatest test-run-dir switches #!key (logfile #f))
   (let* ((real-logfile (or logfile (conc (test-run-dir) "/subrun-"

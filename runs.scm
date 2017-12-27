@@ -2066,6 +2066,7 @@
 				  (run-dir       ;;(filedb:get-path *fdb*
 				   ;; (rmt:sdb-qry 'getid 
 				   (db:test-get-rundir new-test-dat)) ;; )    ;; run dir is from the link tree
+                                  (has-subrun   (subrun:subrun-test-initialized? run-dir))
 				  (test-state    (db:test-get-state new-test-dat))
 				  (test-fulln    (db:test-get-fullname new-test-dat))
 				  (uname         (db:test-get-uname    new-test-dat))
@@ -2083,6 +2084,12 @@
                                           (loop (car tal)(cdr tal))) ;; no else clause - drop it if no more in queue and > 3 tries
                                       (let ((newtal (append tal (list test))))
                                         (loop (car newtal)(cdr newtal))))) ;; loop with test still in queue
+                                 (has-subrun
+                                  ;; BB TODO - manage toplevasel-retries hash and retries in general
+                                  (subrun:remove-subrun test-run-dir new-test-dat test-name item-path test-state test-fulln toplevel-with-children test)
+                                  
+
+                                  )
                                  (else
                                   (debug:print-info 0 *default-log-port* "test: " test-name " itest-state: " test-state)
                                   (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
@@ -2112,11 +2119,13 @@
                                             (loop (car tal)(cdr tal)))))))
 				(rmt:update-run-stats run-id (rmt:get-raw-run-stats run-id)))
 			       ((set-state-status)
+                                ;; BB TODO - manage has-subrun case
 				(debug:print-info 2 *default-log-port* "new state " (car state-status) ", new status " (cadr state-status))
 				(mt:test-set-state-status-by-id run-id (db:test-get-id test) (car state-status)(cadr state-status) #f)
 				(if (not (null? tal))
 				    (loop (car tal)(cdr tal))))
 			       ((run-wait)
+                                ;; BB TODO - manage has-subrun case
 				(debug:print-info 2 *default-log-port* "still waiting, " (length tests) " tests still running")
 				(thread-sleep! 10)
 				(let ((new-tests (proc-get-tests run-id)))
@@ -2124,6 +2133,7 @@
 				      (debug:print-info 1 *default-log-port* "Run completed according to zero tests matching provided criteria.")
 				      (loop (car new-tests)(cdr new-tests)))))
 			       ((archive)
+                                ;; BB TODO - manage has-subrun case
 				(if (and run-dir (not toplevel-with-children))
 				    (let ((ddir (conc run-dir "/")))
 				      (case (string->symbol (args:get-arg "-archive"))
