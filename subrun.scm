@@ -37,6 +37,12 @@
       #t
       #f))
 
+(define (subrun:launch-dashboard test-run-dir)
+  (if (subrun:subrun-test-initialized? test-run-dir)
+      (let* ((subarea (subrun:get-runarea test-run-dir)))
+        (if (and subarea (common:file-exists? subarea))
+            (system (conc "cd " subarea ";env -i PATH=$PATH DISPLAY=$DISPLAY HOME=$HOME USER=$USER dashboard &"))))))
+
 (define (subrun:subrun-removed? test-run-dir)
   (if (subrun:subrun-test-initialized? test-run-dir)
       (let ((flagfile (conc test-run-dir "/subrun.removed")))
@@ -102,6 +108,16 @@
                          (if run-wait "-run-wait " ""))))
     cmd))
 
+
+(define (subrun:get-runarea test-run-dir)
+  (if (subrun:subrun-test-initialized? test-run-dir)
+      (let* ((info-alist (subrun:selector+log-alist
+                          test-run-dir
+                          "foo"))
+             (run-area   (if (list? info-alist)
+                             (alist-ref "-start-dir" info-alist equal? #f)
+                             #f)))
+        run-area)))
 
 (define (subrun:selector+log-alist test-run-dir log-prefix)
   (let* ((switch-def-alist (common:get-param-mapping flavor: 'config))

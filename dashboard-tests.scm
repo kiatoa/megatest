@@ -30,6 +30,7 @@
 (declare (uses ezsteps))
 ;; (declare (uses sdb))
 ;; (declare (uses filedb))
+(declare (uses subrun))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -246,21 +247,15 @@
 ;;
 (define (submegatest-panel dbstruct keydat testdat runname testconfig)
   (let* ((test-run-dir      (db:test-get-rundir testdat))
-	 (subrun-tconf-file (conc test-run-dir "/testconfig.subrun"))
-	 (subrun-tconf      (if (file-exists? subrun-tconf-file)
-				(configf:read-alist subrun-tconf-file)
-				(make-hash-table)))
-	 (subarea           (or (configf:lookup testconfig "setup" "submegatest")
-				(configf:lookup subrun-tconf "subrun" "run-area")))
-	 (area-exists (and subarea (common:file-exists? subarea))))
-    ;; (debug:print-info 0 *default-log-port* "Megatest subarea=" subarea ", area-exists=" area-exists)
+	 (subarea           (subrun:get-runarea test-run-dir))
+	 (area-exists       (and subarea (common:file-exists? subarea))))
     (if subarea
 	(iup:frame 
 	 #:title "Megatest Run Info" ; #:expand "YES"
 	 (iup:button
 	  "Launch Dashboard"
 	  #:action (lambda (obj)
-		     (system (conc "cd " subarea ";env -i PATH=$PATH DISPLAY=$DISPLAY HOME=$HOME USER=$USER dashboard &")))))
+                     (subrun:launch-dashboard test-run-dir))))
 	(iup:vbox))))
 
 ;; use a global for setting the buttons colors

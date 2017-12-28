@@ -34,7 +34,7 @@
 (declare (uses tree))
 (declare (uses dcommon))
 (declare (uses vg))
-
+(declare (uses subrun))
 ;; (declare (uses dashboard-main))
 (declare (uses megatest-version))
 (declare (uses mt))
@@ -2457,6 +2457,15 @@ Misc
              " -testpatt " item-test-path 
              " -state RUNNING,REMOTEHOSTSTART,LAUNCHED,NOT_STARTED"))))
 
+   (let* ((rundir    (db:test-get-rundir      test-info))
+          (has-subrun (subrun:subrun-test-initialized? rundir)))
+       (if has-subrun
+           (iup:menu-item
+            "Launch subrun dashboard"
+            #:action
+            (lambda (obj)
+              (subrun:launch-dashboard rundir)))
+           (iup:vbox)))
    
    (iup:menu-item
     "Run"
@@ -2569,6 +2578,9 @@ Misc
 			      editor)
 			  " " tconfig " &")))
 	  (system cmd))))
+
+     
+     
      ))))
 
 (define (make-dashboard-buttons commondat) ;;  runs-sum-dat new-view-dat)
