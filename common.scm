@@ -15,11 +15,13 @@
      matchable regex posix (srfi 18) extras ;; tcp 
      (prefix nanomsg nmsg:)
      (prefix sqlite3 sqlite3:)
-     pkts)
+     pkts
+     )
 
 (declare (unit common))
 
 (include "common_records.scm")
+
 
 ;; (require-library margs)
 ;; (include "margs.scm")
@@ -1781,6 +1783,26 @@
 			       key "=" delim (mungeval val) delim)))
                     envvars)))))
 
+
+(define (common:get-param-mapping #!key (flavor #f))
+  "returns alist mapping string keys in testconfig/subrun to megatest command line switches; if flavor is switch-symbol, maps tcmt symbolic switches to megatest switches"
+  (let ((default '(("tag-expr"  . "-tagexpr")
+                   ("mode-patt" . "-modepatt")
+                   ("run-name"  . "-runname")
+                   ("contour"   . "-contour")
+                   ("mode-patt" . "-mode-patt")
+                   ("target"    . "-target")
+                   ("test-patt" . "-testpatt")
+                   ("msg"       . "-m")
+                   ("log"       . "-log")
+                   ("start-dir" . "-start-dir")
+                   ("new"       . "-set-state-status"))))
+    (if (eq? flavor 'switch-symbol)
+        (map (lambda (x)
+               (cons (string->symbol (conc "-" (car x))) (cdr x)))
+             default)
+        default)))
+
 ;; set some env vars from an alist, return an alist with original values
 ;; (("VAR" "value") ...)
 ;; a value of #f means "unset this var"
@@ -1799,6 +1821,7 @@
 		  lst)
 	res)
       '()))
+
 
 ;; clear vars matching pattern, run proc, set vars back
 ;; if proc is a string run that string as a command with
@@ -1825,6 +1848,7 @@
      (lambda (var val)
        (setenv var val)))
     vars))
+
 
 (define (common:run-a-command cmd #!key (with-vars #f))
   (let* ((pre-cmd  (dtests:get-pre-command))
@@ -2607,3 +2631,9 @@
     (let ((rv (thunk)))
       (for-each (lambda (x) (x)) restore-thunks) ;; restore env to original state
       rv)))
+
+(define (common:send-thunk-to-background-thread thunk #!key (name #f))
+  ;;(BB> "launched thread " name)
+  (if name
+      (thread-start! (make-thread thunk name))
+      (thread-start! (make-thread thunk))))

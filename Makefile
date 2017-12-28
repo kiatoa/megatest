@@ -11,7 +11,7 @@ SRCFILES = common.scm items.scm launch.scm \
    http-transport.scm filedb.scm tdb.scm \
    client.scm daemon.scm mt.scm \
    ezsteps.scm lock-queue.scm sdb.scm \
-   rmt.scm api.scm \
+   rmt.scm api.scm subrun.scm \
    portlogger.scm archive.scm env.scm diff-report.scm cgisetup/models/pgdb.scm
 
 # module source files
@@ -93,6 +93,7 @@ TCMTOBJS = \
 	tasks.o \
 	tdb.o \
 	tests.o \
+	subrun.o \
 
 
 tcmt : $(TCMTOBJS) tcmt.scm

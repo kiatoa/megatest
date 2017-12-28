@@ -20,6 +20,7 @@
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit launch))
+(declare (uses subrun))
 (declare (uses common))
 (declare (uses configf))
 (declare (uses db))
@@ -295,7 +296,8 @@
   ;; then, if runscript ran ok (or did not get called)
   ;; do all the ezsteps (if any)
   (if (or ezsteps subrun)
-      (let* ((testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
+      (let* ((test-run-dir (tests:get-test-path-from-environment))
+             (testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
 	      ;; NOTE: it is tempting to turn off force-create of testconfig but dynamic
 	      ;;       ezstep names need a full re-eval here.
 	      (tests:get-testconfig test-name item-path tconfigreg #t force-create: #t)) ;; 'return-procs)))
@@ -322,54 +324,14 @@
 	;; 5. fix testpatt or calculate it from contour
 	;; 6. launch the run
 	;; 7. roll up the run result and or roll up the logpro processed result
-	(if (configf:lookup testconfig "subrun" "runwait") ;; we use runwait as the flag that a subrun is requested
-	    (let* ((runarea   (let ((ra (configf:lookup testconfig "subrun" "runarea")))
-				(if ra      ;; when runarea is not set we default to *toppath*. However 
-				    ra      ;; we need to force the setting in the testconfig so it will
-				    (begin  ;; be preserved in the testconfig.subrun file
-				      (configf:set-section-var testconfig "subrun" "runarea" *toppath*)
-				      *toppath*))))
-		   (passfail  (configf:lookup testconfig "subrun" "passfail"))
-		   (target    (or (configf:lookup testconfig "subrun" "target") (get-environment-variable "MT_TARGET")))
-		   (runname   (or (configf:lookup testconfig "subrun" "runname")(get-environment-variable "MT_RUNNAME")))
-		   (contour   (configf:lookup testconfig "subrun" "contour"))
-		   (testpatt  (configf:lookup testconfig "subrun" "testpatt"))
-		   (mode-patt (configf:lookup testconfig "subrun" "mode-patt"))
-		   (tag-expr  (configf:lookup testconfig "subrun" "tag-expr"))
-		   (run-wait  (configf:lookup testconfig "subrun" "runwait"))
-		   (logpro    (configf:lookup testconfig "subrun" "logpro"))
-		   (compact-stem (string-substitute "[/*]" "_" (conc target "-" runname "-" (or testpatt mode-patt tag-expr))))
-		   (log-file (conc compact-stem ".log"))
-		   (mt-cmd    (conc "megatest -run -target " target
-				    " -runname " runname
-				    (conc " -start-dir " runarea) ;; (if runarea runarea *toppath*))
-				    (if testpatt  (conc " -testpatt " testpatt)  "")
-				    (if mode-patt (conc " -modepatt " mode-patt) "")
-				    (if tag-expr  (conc " -tag-expr"  tag-expr)  "")
-				    (if (equal? run-wait "yes") " -run-wait " "")
-				    " -log " log-file)))
-	      ;; change directory to runarea, create it if needed, we do NOT create the directory 
-	;; (if runarea
-	;;     (if (directory-exists? runarea)
-	;;         (change-directory runarea)
-	;;         (begin
-	;;   	(debug:print 0 *default-log-port* "ERROR: for sub-megatest run the runarea \"" runarea "\" does not exist! EXITING.")
-	;;   	(exit 1))))
-	      ;; (let ((subrun (conc *toppath* "/subrun") #t))
-	      ;; 	 (create-directory subrun)
-	      ;; 	 (change-directory subrun)))
-	      
-	      ;; by this point we are in the right place to run the subrun and we have a Megatest command to run
-	      ;; (filter (lambda (x)(string-match "MT_.*" (car x))) (get-environment-variables))
-	      ;; (common:without-vars mt-cmd "^MT_.*")
+	(when (configf:lookup testconfig "subrun" "runwait") ;; we use runwait as the flag that a subrun is requested
+            (subrun:initialize-toprun-test testconfig test-run-dir)
+	    (let* ((mt-cmd (subrun:launch-cmd test-run-dir)))
               (debug:print-info 0 *default-log-port* "Subrun command is \"" mt-cmd "\"")
               (set! ezsteps #t) ;; set the needed flag
-	      (set! ezstepslst (append (or ezstepslst '())
-                                       (list (list "subrun" (conc "{subrun=true} " mt-cmd)))))
-	      (configf:set-section-var testconfig "logpro" "subrun" logpro) ;; append the logpro rules to the logpro section as stepname subrun
-              (if runarea (configf:set-section-var testconfig "setup" "submegatest" runarea))
-              (configf:write-alist testconfig "testconfig.subrun")
-	      ))
+	      (set! ezstepslst
+                    (append (or ezstepslst '())
+                            (list (list "subrun" (conc "{subrun=true} " mt-cmd)))))))
 
 	;; process the ezsteps
 	(if ezsteps

@@ -255,15 +255,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; given a mtutil param, return the old megatest equivalent
 ;;
-(define (param-translate param)
-  (or (alist-ref (string->symbol param)
-		 '((-tag-expr  . "-tagexpr")
-		   (-mode-patt . "-modepatt")
-		   (-run-name  . "-runname")
-		   (-test-patt . "-testpatt")
-		   (-msg       . "-m")
-		   (-new       . "-set-state-status")))
-      param))
+(define (megatest-param->mtutil-param param)
+  (let* ((mapping-alist (common:get-param-mapping flavor: 'switch-symbol)))
+    (alist-ref (string->symbol param) mapping-alist eq? param)
+    param))
 
 (define (val->alist val)
   (let ((val-list (string-split-fields ";\\s*" val #:infix)))
@@ -965,10 +960,11 @@ ret))
 	  (hash-table-keys torun)))))))
 
 (define (pkt->cmdline pkta)
-  (let* ((action (or (lookup-action-by-key (alist-ref 'A pkta)) "noaction"))
-	 (action-param (case (string->symbol action)
-			 ((-set-state-status) (conc (alist-ref 'l pkta) " "))
-			 (else ""))))
+  (let* ((param-mapping-alist (common:get-param-mapping flavor: 'switch-symbol))
+         (action        (or (lookup-action-by-key (alist-ref 'A pkta)) "noaction"))
+	 (action-param  (case (string->symbol action)
+                          ((-set-state-status) (conc (alist-ref 'l pkta) " "))
+                          (else ""))))
     (fold (lambda (a res)
 	    (let* ((key (car a)) ;; get the key name
 		   (val (cdr a))
@@ -976,7 +972,7 @@ ret))
 			    (lookup-param-by-key key inlst: *switch-keys*))))
 	      ;; (print "key: " key " val: " val " par: " par)
 	      (if par
-		  (conc res " " (param-translate par) " " val)
+		  (conc res " " (alist-ref (string->symbol par) param-mapping-alist eq? par) " " val)
 		  (if (alist-ref key *additional-cards*) ;; these cards do not translate to parameters or switches
 		      res
 		      (begin

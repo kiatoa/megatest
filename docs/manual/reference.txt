@@ -706,10 +706,10 @@ In the testconfig:
 
 # Required: wait for the run or just launch it
 #           if no then the run will be an automatic PASS irrespective of the actual result
-runwait yes|no
+run-wait yes|no
 
 # Optional: where to execute the run. Default is the current runarea
-runarea /some/path/to/megatest/area
+run-area /some/path/to/megatest/area
 
 # Optional: method to use to determine pass/fail status of the run
 #   auto (default) - roll up the net state/status of the sub-run
@@ -727,10 +727,10 @@ logpro ;; if this section exists then logpro is used to determine pass/fail
 target #{shell somescript.sh}
 
 # Optional: runname translator/generator, default is to use the parent runname
-runname #{somescript.sh}
+run-name #{somescript.sh}
 
 # Optional: testpatt spec, default is to first look for TESTPATT spec from runconfigs unless there is a contour spec
-testpatt %/item1,test2
+test-patt %/item1,test2
 
 # Optional: contour spec, use the named contour from the megatest.config contour spec
 contour contourname ### NOTE: Not implemented yet! Let us know if you need this feature.
@@ -741,7 +741,7 @@ mode-patt TESTPATT
 # Optional: tag-expr, use this tag-expr to select tests
 tag-expr quick
 
-# Optional: (not yet implemented), propagate these actions from the parent
+# Optional: (not yet implemented, remove-runs is always propagated at this time), propagate these actions from the parent
 #           test
 #   Note// default is % for all
 propagate remove-runs archive ...
