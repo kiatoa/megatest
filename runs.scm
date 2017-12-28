@@ -2101,7 +2101,7 @@
                                        (common:send-thunk-to-background-thread
                                         (lambda ()
                                           (let* ((subrun-remove-succeeded
-                                                  (subrun:remove-subrun run-dir new-test-dat test-name item-path test-state test-fulln toplevel-with-children test)))
+                                                  (subrun:remove-subrun run-dir keep-records)))
                                             (hash-table-set! backgrounded-remove-result test-fulln subrun-remove-succeeded)
                                             (hash-table-set! backgrounded-remove-status test-fulln 'done)))
                                         name: (conc "remove-subrun:"test-fulln))
@@ -2129,12 +2129,18 @@
                                              (debug:print 0 *default-log-port* "ERROR: removing subrun of of " test-fulln " with run-id " run-id " ; see logfile @ "logfile)))
                                           (subrun-remove-succeeded
                                            (debug:print 0 *default-log-port* "Now removing of " test-fulln " with run-id " run-id " since subrun was removed.")
-                                           (runs:remove-test-directory new-test-dat mode))
+                                           ;;(runs:remove-test-directory new-test-dat mode) ;; let normal case handle this. it will go thru loop again as non-subrun
+                                           )
                                           (else
                                            (let* ((logfile (subrun:get-log-path run-dir "remove")))
                                              (debug:print 0 *default-log-port* "WARNING: removal of subrun failed.  Please check "logfile" for details."))))
-                                         (if (not (null? tal))
-                                             (loop (car tal)(cdr tal)))))
+                                         ;;(if (not (null? tal))
+                                         ;;    (loop (car tal)(cdr tal)))
+                                         
+                                         ;; send to back of line, loop (will not match has-subrun next time through)
+                                       (let ((newtal (append tal (list test))))
+                                        (loop (car newtal)(cdr newtal)))
+                                         ))
                                       ) ; end case rem-status
                                     ) ; end let
                                   ); end cond has-subrun

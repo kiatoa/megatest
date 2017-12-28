@@ -74,15 +74,19 @@
     (configf:write-alist testconfig "testconfig.subrun")))
 
 
-(define (subrun:remove-subrun test-run-dir new-test-dat test-name item-path test-state test-fulln toplevel-with-children test)
+(define (subrun:remove-subrun test-run-dir keep-records )
 ;; set state/status of test item
 ;; fork off megatest
 ;; set state/status of test item
 ;;
   ;;(BB> "Entered subrun:remove-subrun with "test-fulln)
   (if (and (not (subrun:subrun-removed? test-run-dir)) (subrun:subrun-test-initialized? test-run-dir))
-      (let* ((remove-result
-              (subrun:exec-sub-megatest test-run-dir "-remove-runs" "remove")))
+      (let* ((action-switches-str
+              (conc "-remove-runs"
+                    (if keep-records "-keep-records " "")
+                    ))
+             (remove-result
+              (subrun:exec-sub-megatest test-run-dir action-switches-str "remove")))
         (if remove-result
             (begin
               (subrun:set-subrun-removed test-run-dir)
