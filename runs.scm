@@ -2051,6 +2051,9 @@
 									 #f))))))
 		       (toplevel-retries (make-hash-table)) ;; try three times to loop through and remove top level tests
 		       (test-retry-time  (make-hash-table))
+                       (backgrounded-remove-status     (make-hash-table))
+                       (backgrounded-remove-last-visit (make-hash-table))
+                       (backgrounded-remove-result     (make-hash-table))
 		       (allow-run-time   10)) ;; seconds to allow for killing tests before just brutally killing 'em
 		   (let loop ((test (car sorted-tests))
 			      (tal  (cdr sorted-tests)))
@@ -2086,21 +2089,55 @@
                                       (let ((newtal (append tal (list test))))
                                         (loop (car newtal)(cdr newtal))))) ;; loop with test still in queue
                                  (has-subrun
-                                  ;; BB TODO - manage toplevasel-retries hash and retries in general
-                                  (debug:print 0 *default-log-port* "WARNING: postponing removal of " test-fulln " with run-id " run-id " as it has a subrun")
-                                  (let* ((subrun-remove-succeeded
-                                          (subrun:remove-subrun run-dir new-test-dat test-name item-path test-state test-fulln toplevel-with-children test)))
-                                    (cond
-                                     (subrun-remove-succeeded
-                                      
-                                      (debug:print 0 *default-log-port* "Now removing of " test-fulln " with run-id " run-id " as it has a subrun")
-                                      (runs:remove-test-directory new-test-dat mode))
-                                     (else
-                                      (let* ((logfile (subrun:get-log-path run-dir "remove")))
-                                        (debug:print 0 *default-log-port* "WARNING: removal of subrun failed.  Please check "logfile" for details."))))
-                                    
-                                  (if (not (null? tal))
-                                            (loop (car tal)(cdr tal)))))
+                                  ;; 
+                                  (let ((last-visit (hash-table-ref/default backgrounded-remove-last-visit test-fulln 0))
+                                        (now        (current-seconds))
+                                        (rem-status (hash-table-ref/default backgrounded-remove-status test-fulln 'not-started)))
+                                    (case rem-status
+                                      ((not-started)
+                                       (debug:print 0 *default-log-port* "WARNING: postponing removal of " test-fulln " with run-id " run-id " as it has a subrun")
+                                       (hash-table-set! backgrounded-remove-status test-fulln 'started)
+                                       (hash-table-set! backgrounded-remove-last-visit test-fulln (current-seconds))
+                                       (common:send-thunk-to-background-thread
+                                        (lambda ()
+                                          (let* ((subrun-remove-succeeded
+                                                  (subrun:remove-subrun run-dir new-test-dat test-name item-path test-state test-fulln toplevel-with-children test)))
+                                            (hash-table-set! backgrounded-remove-result test-fulln subrun-remove-succeeded)
+                                            (hash-table-set! backgrounded-remove-status test-fulln 'done)))
+                                        name: (conc "remove-subrun:"test-fulln))
+                                       
+                                       ;; send to back of line, loop
+                                       (let ((newtal (append tal (list test))))
+                                        (loop (car newtal)(cdr newtal)))
+                                       )
+                                      ((started)
+                                       ;; if last visit was within last second, sleep 1 second
+                                       (if (< (- now last-visit) 1.0)
+                                           (thread-sleep! 1.0))
+                                       (hash-table-set! backgrounded-remove-last-visit test-fulln (current-seconds))
+                                       ;; send to back of line, loop
+                                       (let ((newtal (append tal (list test))))
+                                        (loop (car newtal)(cdr newtal)))
+                                       )
+                                      ((done)
+                                       ;; drop this one; if remaining, loop, else finish
+                                       (hash-table-set! backgrounded-remove-last-visit test-fulln (current-seconds))
+                                       (let ((subrun-remove-succeeded (hash-table-ref/default backgrounded-remove-result test-fulln 'exception)))
+                                         (cond
+                                          ((eq? subrun-remove-succeeded 'exception)
+                                           (let* ((logfile (subrun:get-log-path run-dir "remove")))
+                                             (debug:print 0 *default-log-port* "ERROR: removing subrun of of " test-fulln " with run-id " run-id " ; see logfile @ "logfile)))
+                                          (subrun-remove-succeeded
+                                           (debug:print 0 *default-log-port* "Now removing of " test-fulln " with run-id " run-id " since subrun was removed.")
+                                           (runs:remove-test-directory new-test-dat mode))
+                                          (else
+                                           (let* ((logfile (subrun:get-log-path run-dir "remove")))
+                                             (debug:print 0 *default-log-port* "WARNING: removal of subrun failed.  Please check "logfile" for details."))))
+                                         (if (not (null? tal))
+                                             (loop (car tal)(cdr tal)))))
+                                      ) ; end case rem-status
+                                    ) ; end let
+                                  ); end cond has-subrun
 
                                  (else
                                   (debug:print-info 0 *default-log-port* "test: " test-name " itest-state: " test-state)

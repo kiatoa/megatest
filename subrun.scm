@@ -79,7 +79,7 @@
 ;; fork off megatest
 ;; set state/status of test item
 ;;
-  (BB> "Entered subrun:remove-subrun with "test-fulln)
+  ;;(BB> "Entered subrun:remove-subrun with "test-fulln)
   (if (and (not (subrun:subrun-removed? test-run-dir)) (subrun:subrun-test-initialized? test-run-dir))
       (let* ((remove-result
               (subrun:exec-sub-megatest test-run-dir "-remove-runs" "remove")))

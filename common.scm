@@ -22,6 +22,7 @@
 
 (include "common_records.scm")
 
+
 ;; (require-library margs)
 ;; (include "margs.scm")
 
@@ -2630,3 +2631,9 @@
     (let ((rv (thunk)))
       (for-each (lambda (x) (x)) restore-thunks) ;; restore env to original state
       rv)))
+
+(define (common:send-thunk-to-background-thread thunk #!key (name #f))
+  ;;(BB> "launched thread " name)
+  (if name
+      (thread-start! (make-thread thunk name))
+      (thread-start! (make-thread thunk))))
