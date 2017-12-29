@@ -126,8 +126,6 @@
   (let* ((insane-pattern (irregex "[^[a-zA-Z0-9_\\-]")))
     (regex#string-substitute insane-pattern "_" inpath #t)))
 
-(subrun:sanitize-path "a/b/c-d/e*f")
-
 (define (subrun:get-runarea test-run-dir)
   (if (subrun:subrun-test-initialized? test-run-dir)
       (let* ((info-alist (subrun:selector+log-alist
