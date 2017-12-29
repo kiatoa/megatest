@@ -2657,5 +2657,9 @@
    (lambda (thread-name)
      (let* ((thread (hash-table-ref/default *common:thread-punchlist* thread-name #f)))
        (if thread
-           (thread-join! thread))))
+           (handle-exceptions
+           exn
+           #t ;; just ignore it, it might have died in the meantime so joining it will throw an exception
+           (thread-join! thread))
+           )))
    (hash-table-keys *common:thread-punchlist*)))
