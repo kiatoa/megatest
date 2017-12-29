@@ -2882,7 +2882,7 @@
    (lambda (db)
      (sqlite3:first-result
       db
-      "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a');" run-id))))
+      "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=?;" run-id))))
 
 ;; For a given testname how many items are running? Used to determine
 ;; probability for regenerating html
