@@ -57,6 +57,12 @@
         (with-output-to-file flagfile
           (lambda () (print (current-seconds)))))))
 
+(define (subrun:unset-subrun-removed test-run-dir)
+  (let ((flagfile (conc test-run-dir "/subrun.removed")))
+    (if (and (subrun:subrun-test-initialized? test-run-dir) (common:file-exists? flagfile))
+        (delete-file flagfile))))
+
+
 (define (subrun:testconfig-defines-subrun? testconfig)
   (configf:lookup testconfig "subrun" "runwait")) ;; we use runwait as the flag that a subrun is requested
 
@@ -79,13 +85,20 @@
 
     (configf:write-alist testconfig "testconfig.subrun")))
 
+(define (subrun:set-state-status test-run-dir state status new-state-status)
+  (if (and (not (subrun:subrun-removed? test-run-dir)) (subrun:subrun-test-initialized? test-run-dir))
+      (let* ((action-switches-str
+              (conc "-set-state-status "new-state-status
+                    (if state (conc " -state "state) "")
+                    (if status (conc " -status "status) "")))
+             (log-prefix (conc "set-state-status="new-state-status
+                    (if state (conc ":state="state) "")
+                    (if status (conc "+status="status) "")))
+             (submt-result 
+              (subrun:exec-sub-megatest test-run-dir action-switches-str log-prefix)))
+        submt-result)))
 
 (define (subrun:remove-subrun test-run-dir keep-records )
-;; set state/status of test item
-;; fork off megatest
-;; set state/status of test item
-;;
-  ;;(BB> "Entered subrun:remove-subrun with "test-fulln)
   (if (and (not (subrun:subrun-removed? test-run-dir)) (subrun:subrun-test-initialized? test-run-dir))
       (let* ((action-switches-str
               (conc "-remove-runs"
@@ -101,6 +114,9 @@
       #t))
 
 (define (subrun:launch-cmd test-run-dir)
+  (if (subrun:subrun-removed? test-run-dir)
+      (subrun:unset-subrun-removed test-run-dir))      
+
   (let* ((log-prefix "run")
          (switches (subrun:selector+log-switches test-run-dir log-prefix))
          (run-wait #t)

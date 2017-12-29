@@ -2632,8 +2632,30 @@
       (for-each (lambda (x) (x)) restore-thunks) ;; restore env to original state
       rv)))
 
+(define *common:thread-punchlist* (make-hash-table))
 (define (common:send-thunk-to-background-thread thunk #!key (name #f))
   ;;(BB> "launched thread " name)
-  (if name
-      (thread-start! (make-thread thunk name))
-      (thread-start! (make-thread thunk))))
+
+  ;; we need a unique name for the thread.
+  (let* ((realname (if name
+                       (if (not (hash-table-ref/default *common:thread-punchlist* name #f))
+                           name
+                           (conc name"-" (symbol->string (gensym))))
+                       (conc "anonymous-"(symbol->string (gensym)))))
+         (realthunk (lambda ()
+                      (let ((res (thunk)))
+                        (hash-table-delete! *common:thread-punchlist* realname)
+                        res)))
+         (thread   (make-thread realthunk realname)))
+    (hash-table-set! *common:thread-punchlist* realname thread)
+    (thread-start! thread)
+    ))
+
+(define (common:join-backgrounded-threads)
+  ;; may need to trap and ignore exceptions -- dunno how atomic threads are...
+  (for-each
+   (lambda (thread-name)
+     (let* ((thread (hash-table-ref/default *common:thread-punchlist* thread-name #f)))
+       (if thread
+           (thread-join! thread))))
+   (hash-table-keys *common:thread-punchlist*)))

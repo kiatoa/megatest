@@ -2174,9 +2174,21 @@
                                             (loop (car tal)(cdr tal)))))))
 				(rmt:update-run-stats run-id (rmt:get-raw-run-stats run-id)))
 			       ((set-state-status)
-                                ;; BB TODO - manage has-subrun case
-				(debug:print-info 2 *default-log-port* "new state " (car state-status) ", new status " (cadr state-status))
-				(mt:test-set-state-status-by-id run-id (db:test-get-id test) (car state-status)(cadr state-status) #f)
+                                (let* ((new-state (car state-status))
+                                       (new-status (cadr state-status))
+                                       (test-id (db:test-get-id test))
+                                       (test-run-dir (db:test-get-rundir new-test-dat))
+                                       (has-subrun (and (subrun:subrun-test-initialized? test-run-dir)
+                                                      (not (subrun:subrun-removed? test-run-dir)))))
+                                  (when has-subrun
+                                     (common:send-thunk-to-background-thread
+                                        (lambda ()
+                                          (subrun:set-state-status test-run-dir state status new-state-status)
+                                          )
+                                        )
+                                    )
+                                  (debug:print-info 2 *default-log-port* "new state " new-state ", new status " new-status )
+                                  (mt:test-set-state-status-by-id run-id test-id new-state new-status #f))
 				(if (not (null? tal))
 				    (loop (car tal)(cdr tal))))
 			       ((run-wait)
@@ -2199,7 +2211,8 @@
 				    (loop (car tal)(cdr tal))))
 			       )))
 		       )
-		     (if worker-thread (thread-join! worker-thread))))))
+		     (if worker-thread (thread-join! worker-thread)))
+                   (common:join-backgrounded-threads))))
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
 	       (let* ((run-id   (db:get-value-by-header run header "id")) ;; NB// masks run-id from above?
