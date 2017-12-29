@@ -2868,7 +2868,7 @@
       db
       ;; WARNING BUG EDIT ME - merged from v1.55 - not sure what is right here ...
       ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted') AND NOT (uname = 'n/a' AND item_path = '');")
-      "SELECT count(id) FROM tests WHERE state in ('RUNNING','REMOTEHOSTSTART') AND run_id=?;" 
+      "SELECT count(id) FROM tests WHERE state in ('RUNNING','REMOTEHOSTSTART','LAUNCHED') AND run_id=?;" 
       run-id)))) ;; NOT IN (SELECT id FROM runs WHERE state='deleted');")
 
 ;; NEW BEHAVIOR: Look only at single run with run-id
