@@ -88,7 +88,7 @@
 (define (subrun:set-state-status test-run-dir state status new-state-status)
   (if (and (not (subrun:subrun-removed? test-run-dir)) (subrun:subrun-test-initialized? test-run-dir))
       (let* ((action-switches-str
-              (conc "-set-state-status="new-state-status
+              (conc "-set-state-status "new-state-status
                                 (if state (conc " -state "state ""))
                                 (if status (conc " -status "status) "")))
              (log-prefix (subrun:sanitize-path

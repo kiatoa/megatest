@@ -1790,7 +1790,6 @@
                    ("mode-patt" . "-modepatt")
                    ("run-name"  . "-runname")
                    ("contour"   . "-contour")
-                   ("mode-patt" . "-mode-patt")
                    ("target"    . "-target")
                    ("test-patt" . "-testpatt")
                    ("msg"       . "-m")
