@@ -44,7 +44,7 @@ CKPATH=$(shell dirname $(shell dirname $(CSIPATH)))
 # ARCHSTR=$(shell uname -m)_$(shell uname -r)
 # BASH_MACHTYPE=$(shell bash -c "echo \$$MACHTYPE")
 # ARCHSTR=$(BASH_MACHTYPE)_$(shell lsb_release -sr)
-ARCHSTR=$(shell lsb_release -sr)
+ARCHSTR=$(shell if [[ -e /usr/bin/sw_vers ]]; then /usr/bin/sw_vers -productVersion; else lsb_release -sr; fi)
 # ARCHSTR=$(shell bash -c "echo \$$MACHTYPE")
 
 PNGFILES = $(shell cd docs/manual;ls *png)

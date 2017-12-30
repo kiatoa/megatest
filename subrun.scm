@@ -89,12 +89,13 @@
   (if (and (not (subrun:subrun-removed? test-run-dir)) (subrun:subrun-test-initialized? test-run-dir))
       (let* ((action-switches-str
               (conc "-set-state-status "new-state-status
-                                (if state (conc " -state "state ""))
-                                (if status (conc " -status "status) "")))
-             (log-prefix (subrun:sanitize-path
-                          (conc "set-state-status="new-state-status
-                                (if state (conc ":state="state ""))
-                                (if status (conc "+status="status) ""))))
+                    (if state (conc " -state "state) "")
+                    (if status (conc " -status "status) "")))
+             (log-prefix
+              (subrun:sanitize-path
+               (conc "set-state-status="new-state-status
+                     (if state (conc ":state="state) "")
+                     (if status (conc "+status="status) ""))))
              (submt-result 
               (subrun:exec-sub-megatest test-run-dir action-switches-str log-prefix)))
         submt-result)))
@@ -182,8 +183,9 @@
                           "-" (or testpatt mode-patt tag-expr "NO-TESTPATT"))))
          (logfile       (conc
                          test-run-dir "/"
-                         (or (subrun:sanitize-path log-prefix) "")
-                         (if log-prefix "-" "")
+                         (if log-prefix
+                             (conc (subrun:sanitize-path log-prefix) "-")
+                             "")
                          compact-stem
                          ".log"))
          ;; swap out testpatt with modified test-patt and add -log
