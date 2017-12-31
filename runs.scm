@@ -2146,6 +2146,7 @@
                                   ); end cond has-subrun
 
                                  (else
+                                  ;; BB - TODO - consider backgrounding to threads to delete tests (work below) 
                                   (debug:print-info 0 *default-log-port* "test: " test-name " itest-state: " test-state)
                                   (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
                                       (begin
