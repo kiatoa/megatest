@@ -71,7 +71,10 @@
     (if (or (not (string? curr-top))
 	    (string-null? curr-top)
 	    (string-match "^\\s*$" curr-top))
-	(iup:attribute-set! obj "ADDBRANCH0" top))
+          (iup:attribute-set! obj "ADDBRANCH0" top))
+
+
+    
     (cond
      ((not (equal? top (iup:attribute obj "TITLE0")))
       (print "ERROR: top name " top " doesn't match " (iup:attribute obj "TITLE0")))
