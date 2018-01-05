@@ -186,6 +186,30 @@
 ;; Miscellaneous
 (define *triggers-mutex*     (make-mutex))     ;; block overlapping processing of triggers
 
+(use posix-extras pathname-expand files)
+
+(define ##sys#expand-home-path pathname-expand) ;; plugs a hole in posix-extras in recent chicken versions
+(define (realpath x) (resolve-pathname  (pathname-expand (or x "/dev/null")) ))
+
+(define (common:get-this-exe-fullpath #!key (argv (argv)))
+  (let* ((this-script
+          (cond
+           ((and (> (length argv) 2)
+                 (string-match "^(.*/csi|csi)$" (car argv))
+                 (string-match "^-(s|ss|sx|script)$" (cadr argv)))
+            (caddr argv))
+           (else (car argv))))
+         (fullpath (realpath this-script)))
+    fullpath))
+(define *common:this-exe-fullpath* (common:get-this-exe-fullpath))
+(define *common:this-exe-dir*      (pathname-directory *common:this-exe-fullpath*))
+(define *common:this-exe-name*     (pathname-strip-directory *common:this-exe-fullpath*))
+
+
+
+
+
+
 (defstruct remote
   (hh-dat            (common:get-homehost)) ;; homehost record ( addr . hhflag )
   (server-url        (if *toppath* (server:check-if-running *toppath*))) ;; (server:check-if-running *toppath*) #f))

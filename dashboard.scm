@@ -16,7 +16,7 @@
 
 (use canvas-draw)
 (import canvas-draw-iup)
-
+(use ducttape-lib)
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 typed-records sparse-vectors) ;; defstruct
 (import (prefix sqlite3 sqlite3:))
 
@@ -326,6 +326,18 @@ Misc
                             (member (car alist-entry)
                                     '(allruns-by-id allruns))) ;; FIELDS OF INTEREST
                           (dboard:tabdat->alist tabdat-item)))))
+
+
+(define (dboard:launch-testpanel run-id test-id)
+  (let* ((cfg-sh  (conc *common:this-exe-dir* "/cfg.sh"))
+         (cmd (conc
+               (if (common:file-exists? cfg-sh)
+                   (conc "source "cfg-sh" && ")
+                   "")
+               *common:this-exe-fullpath*
+               " -test " run-id "," test-id
+               " &")))
+    (system cmd)))
 
 (define (dboard:tabdat-target-string vec)
   (let ((targ (dboard:tabdat-target vec)))
@@ -2136,11 +2148,11 @@ Misc
 									"%" 
 									item-path)))
                                   (status-chars (char-set->list (string->char-set status)))
-                                  (testpanel-cmd      (conc toolpath " -test " (dboard:tabdat-curr-run-id tabdat) "," test-id " &")))
+                                  (run-id       (dboard:tabdat-curr-run-id tabdat)))
                              (debug:print-info 13 *default-log-port* "status-chars=["status-chars"] status=["status"]")
                              (cond
                               ((member #\1 status-chars) ;; 1 is left mouse button
-                               (system testpanel-cmd))
+                               (dboard:launch-testpanel run-id test-id))
                               
                               ((member #\2 status-chars) ;; 2 is middle mouse button
                                
@@ -2396,11 +2408,7 @@ Misc
     "Test Control Panel"
     #:action
     (lambda (obj)
-      (let* ((toolpath (car (argv)))
-             (testpanel-cmd
-              (conc toolpath " -test " run-id "," test-id " &")))
-        (system testpanel-cmd)
-        )))
+      (launch-testpanel run-id test-id)))
    
    (iup:menu-item
     (conc "View Log " item-test-path)
@@ -2730,10 +2738,8 @@ Misc
 				       (let* ((toolpath (car (argv)))
 					      (buttndat (hash-table-ref (dboard:tabdat-buttondat runs-dat) button-key))
 					      (test-id  (db:test-get-id (vector-ref buttndat 3)))
-					      (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
-					      (cmd  (conc toolpath " -test " run-id "," test-id "&")))
-					 (system cmd)))
-				   )))))
+					      (run-id   (db:test-get-run_id (vector-ref buttndat 3))))
+                                         (dboard:launch-testpanel run-id test-id))))))))
 	  (hash-table-set! (dboard:tabdat-buttondat runs-dat) button-key (vector 0 "100 100 100" button-key #f #f)) 
 	  (vector-set! testvec testnum butn)
 	  (loop runnum (+ testnum 1) testvec (cons butn res))))))

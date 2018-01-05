@@ -18,7 +18,9 @@
                                         ;     launch-repl
      keyword-skim
      skim-cmdline-opts-noarg-by-regex
-     skim-cmdline-opts-withargs-by-regex 
+     skim-cmdline-opts-withargs-by-regex
+     get-cli-arg
+     get-cli-switch
      concat-lists
      ducttape-process-command-line
      ducttape-append-logfile
@@ -44,20 +46,48 @@
      wwdate->isodate
      current-wwdate
      current-isodate
-     
+     *this-exe-dir*
+     *this-exe-name*
+     *this-exe-fullpath*
      )
 
   (import scheme chicken extras ports data-structures )
   (use posix regex ansi-escape-sequences test srfi-1 irregex slice srfi-13 rfc3339)
   ;;scsh-process ;; dropping scsh-process, it was clobbering posix's process and process*
   (use directory-utils uuid-lib filepath srfi-19 ) ; linenoise
-  
+
+    ;; plugs a hole in posix-extras in latter chicken versions
+  (use posix-extras pathname-expand files)
+  (define ##sys#expand-home-path pathname-expand)
+  (define (realpath x) (resolve-pathname  (pathname-expand (or x "/dev/null")) ))
+
   (include "mimetypes.scm") ; provides ext->mimetype
   (include "workweekdate.scm")
   (define ducttape-lib-version 1.00)
   (define (toplevel-command sym proc) (lambda () #f))
+
+;;;; define some handy globals
+  ;; resolve fullpath to this script or binary.
+  (define (__get-this-script-fullpath #!key (argv (argv)))
+    (let* ((this-script
+            (cond
+             ((and (> (length argv) 2)
+                   (string-match "^(.*/csi|csi)$" (car argv))
+                   (string-match "^-(s|ss|sx|script)$" (cadr argv)))
+              (caddr argv))
+             (else (car argv))))
+           (fullpath (realpath this-script)))
+      fullpath))
+  
+  (define *this-exe-fullpath* (__get-this-script-fullpath))
+  (define *this-exe-dir*      (pathname-directory *this-exe-fullpath*))
+  (define *this-exe-name*     (pathname-strip-directory *this-exe-fullpath*))
+  
+
 ;;;; utility procedures
 
+
+  
   ;; begin credit: megatest's process.scm
   (define (port->list fh )
     (if (eof-object? fh) #f
@@ -638,6 +668,22 @@
                 (loop (cons (cadr args-remaining) kwval) (cddr args-remaining) args-to-return))
             (loop (cadr args-remaining) (cddr args-remaining) args-to-return)))
        (else (loop kwval (cdr args-remaining) (cons (car args-remaining) args-to-return))))))
+
+
+  (define (get-cli-arg arg #!key (default #f) (is-list #f))
+    (let* ((temp    (skim-cmdline-opts-withargs-by-regex arg)))
+      (if (> (length temp) 0)
+          (if is-list
+              temp
+              (car temp))
+          default)))
+
+  (define (get-cli-switch arg)
+    (let ((temp (skim-cmdline-opts-noarg-by-regex arg)))
+      (if (> (length temp) 0)
+          (car temp)
+          #f)))
+  
 
 
 
