@@ -15,7 +15,7 @@
      matchable regex posix (srfi 18) extras ;; tcp 
      (prefix nanomsg nmsg:)
      (prefix sqlite3 sqlite3:)
-     pkts
+     pkts (prefix dbi dbi:)
      )
 
 (declare (unit common))
