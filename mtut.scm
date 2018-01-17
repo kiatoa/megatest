@@ -188,7 +188,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ("-msg"             . M)
     ("-start-dir"       . S)
     ("-set-vars"        . v)
-    ("-config"          . r)
+    ("-config"          . h)
     ))
 (define *switch-keys*
   '(
@@ -220,6 +220,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; D timestamp
 ;; T card type
 
+;; a summary list of used card types for helping to not accidentally re-use them
+;;
+;; ADGIMSTUZabcdefghiklnoprstuvwx
+
 ;; utilitarian alist for standard cards
 ;;
 (define *additional-cards*
@@ -234,6 +238,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ;; Extras
     (a  . runkey    ) ;; needed for matching up pkts with target derived from runkey
     ;; (l  . new-ss    ) ;; new state/status
+    (b  . branch    ) ;; repository branch or tag (fossil or git)
+    (f  . url       ) ;; repository URL (e.g. fossil or git)
+    (g  . clone     ) ;; existing clone area (cached in /tmp)
     ))
 
 ;; inlst is an alternative input
@@ -833,6 +840,9 @@ ret))
 						      (areas    . ,areas)
 						      ;; (target   . ,runkey)
 						      (action   . ,action)
+						      (branch   . ,branch)
+						      (url      . ,url)
+						      (clone    . ,(conc fdir "/" fname))
                                                       ))))
 			     (print "Got datetime=" datetime " node=" node))))
 		       val-alist))

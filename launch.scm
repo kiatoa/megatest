@@ -1044,7 +1044,8 @@
 	;; COND ends here.
 	
 	;; additional house keeping
-	(let* ((linktree (common:get-linktree)))
+	(let* ((linktree (or (common:get-linktree)
+			     (conc *toppath* "/lt"))))
 	  (if linktree
 	      (begin
 		(if (not (common:file-exists? linktree))
