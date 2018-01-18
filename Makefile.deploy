@@ -1,19 +1,22 @@
 # make install CSCOPTS='-accumulate-profile -profile-name $(PWD)/profile-ww$(shell date +%V.%u)'
-PREFIX=$(PWD)
+#PREFIX=$(PWD)
 CSCOPTS= -deploy 
 INSTALL=install
+CHICKEN=$(shell which csc)
+CHICKEN_BIN_DIR=$(shell dirname ${CHICKEN}/)
+CHICKEN_DIR=${CHICKEN_BIN_DIR}/..
 SRCFILES = common.scm items.scm launch.scm \
    ods.scm runconfig.scm server.scm configf.scm \
    db.scm keys.scm margs.scm megatest-version.scm \
    process.scm runs.scm tasks.scm tests.scm genexample.scm \
    http-transport.scm filedb.scm \
-   client.scm synchash.scm daemon.scm mt.scm \
+   client.scm daemon.scm mt.scm \
    ezsteps.scm lock-queue.scm sdb.scm \
    rmt.scm api.scm tdb.scm rpc-transport.scm \
-   portlogger.scm archive.scm env.scm
+   portlogger.scm archive.scm env.scm diff-report.scm cgisetup/models/pgdb.scm
 
 # Eggs to install (straightforward ones)
-EGGS=crypt matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
+EGGS=string-utils:1.4.0 matchable:3.7 readline:4.1.3 apropos:2.2.1 base64 regex-literals format regex-case test coops trace csv \
 dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
 json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
 spiffy-directory-listing ssax sxml-serializer sxml-modifications iup canvas-draw sqlite3
@@ -44,7 +47,7 @@ IUPVER=3.17
 KTYPE=26g4
 CDVER=5.10
 
-all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard eggs sqlite matt iup 
+all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard mtut eggs sqlite matt iup 
 
 mtest: $(OFILES) readline-fix.scm megatest.o
 	mkdir -p $(PREFIX)/deploy
@@ -53,18 +56,26 @@ mtest: $(OFILES) readline-fix.scm megatest.o
 eggs: $(PREFIX)/deploy/mtest/fmt.so
 
 $(PREFIX)/deploy/mtest/fmt.so:
-	chicken-install -deploy -p $(PREFIX)/deploy/mtest base64 format regex-case simple-exceptions typed-records apropos directory-utils md5 spiffy http-client spiffy-request-vars spiffy-directory-listing posix-extras call-with-environment-variables csv typed-records pathname-expand json crypt dot-locking csv-xml z3 sql-de-lite hostinfo rpc directory-utils md5 spiffy http-client spiffy-request-vars spiffy-directory-listing posix-extras call-with-environment-variables rpc fmt
+	chicken-install -deploy -p $(PREFIX)/deploy/mtest string-utils:1.2.4 base64:3.3.1 format:3.1.6 regex-case simple-exceptions typed-records directory-utils dbi crypt ansi-escape-sequences moremacros test slice rfc3339 spiffy uuid-lib filepath srfi-19 readline http-client spiffy-request-vars spiffy-directory-listing posix-extras call-with-environment-variables csv pathname-expand json dot-locking csv-xml:0.10.2 z3 sql-de-lite hostinfo rpc fmt data-structures posix apropos sparse-vectors address-info
+	cd utils/opensrc/mutils && chicken-install -deploy -p $(PREFIX)/deploy/mtest 
+	cd ducttape && chicken-install -deploy -p $(PREFIX)/deploy/mtest
+	cp $(CHICKEN_DIR)/lib/chicken/7/chicken.import.so $(PREFIX)/deploy/mtest/
+	cp $(CHICKEN_DIR)/lib/chicken/7/foreign* $(PREFIX)/deploy/mtest/
+	cp $(CHICKEN_DIR)/lib/chicken/7/ports.import.so $(PREFIX)/deploy/mtest/
+	cp $(CHICKEN_DIR)/lib/chicken/7/data-structures.import.so $(PREFIX)/deploy/mtest/
+	cp $(CHICKEN_DIR)/lib/chicken/7/posix.import.so $(PREFIX)/deploy/mtest/
+	cp $(CHICKEN_DIR)/lib/chicken/7/irregex.import.so $(PREFIX)/deploy/mtest/
+
 
 sqlite: $(PREFIX)/deploy/mtest/sqlite3.so
 
 $(PREFIX)/deploy/mtest/sqlite3.so: 
 	wget http://www.sqlite.org/2015/sqlite-autoconf-3090200.tar.gz
 	tar xfz sqlite-autoconf-3090200.tar.gz
-	cd sqlite-autoconf-3090200
-	cd sqlite-autoconf-3090200 && ./configure --prefix=`realpath $(PREFIX)/deploy/mtest`
+	cd sqlite-autoconf-3090200 && ./configure --prefix=$(PREFIX)
 	cd sqlite-autoconf-3090200 && make
 	cd sqlite-autoconf-3090200 && make install
-	CSC_OPTIONS='-I$(PREFIX)/deploy/mtest/include -L$(PREFIX)/deploy/mtest/' chicken-install -deploy -p $(PREFIX)/deploy/mtest sqlite3
+	CSC_OPTIONS="-I$(PREFIX)/include -L$(PREFIX)/lib -L$(PREFIX)/lib64" chicken-install -deploy -p $(PREFIX)/deploy/mtest sqlite3
 
 matt:  $(PREFIX)/deploy/mtest/stml.so
 
@@ -97,11 +108,11 @@ $(PREFIX)/deploy/mtest/iup.so:
 	cp $(PREFIX)/deploy/mtest/ftgl/lib/*/* $(PREFIX)/deploy/mtest/
 	wget -c -O ffcall.tar.gz 'http://www.kiatoa.com/fossils/ffcall/tarball?name=ffcall&uuid=trunk'
 	tar -xzf ffcall.tar.gz
-	cd ffcall && ./configure --prefix=`realpath $(PREFIX)/deploy/mtest/` --enable-shared
+	cd ffcall && ./configure --prefix=$(PREFIX) --enable-shared
 	cd ffcall &&  make CC="gcc -fPIC"
 	cd ffcall &&  make install
-	CSC_OPTIONS="-I$(PREFIX)/deploy/mtest/include -L$(PREFIX)/deploy/mtest" chicken-install -deploy -p $(PREFIX)/deploy/mtest -D no-library-checks -feature disable-iup-web iup
-	CSC_OPTIONS="-I$(PREFIX)/deploy/mtest/include -L$(PREFIX)/deploy/mtest" chicken-install -deploy -p $(PREFIX)/deploy/mtest -D no-library-checks canvas-draw	
+	CSC_OPTIONS="-I$(PREFIX)/include -I$(PREFIX)/deploy/mtest/include -L$(PREFIX)/deploy/mtest" chicken-install -deploy -p $(PREFIX)/deploy/mtest -D no-library-checks -feature disable-iup-web iup
+	CSC_OPTIONS="-I$(PREFIX)/include -I$(PREFIX)/deploy/mtest//include -L$(PREFIX)/deploy/mtest" chicken-install -deploy -p $(PREFIX)/deploy/mtest -D no-library-checks canvas-draw	
  
 dboard: $(OFILES) $(GOFILES) dashboard.scm
 	csc $(CSCOPTS) $(OFILES) dashboard.scm $(GOFILES) -o $(PREFIX)/deploy/mtest/dboard2
@@ -264,15 +275,17 @@ $(DEPLOYHELPERS) : utils/mt_*
 	chmod a+X $@
 
 deploytarg/apropos.so : Makefile
-	chicken-install -p deploytarg -deploy -keep-installed $(EGGS)
-
+	for egg in $(EGGS); do \
+	  echo "chicken-install -p deploytarg -deploy -keep-installed $$egg "; \
+	  chicken-install -p deploytarg -deploy -keep-installed $$egg ; \
+	done
 #	for i in apropos base64 canvas-draw csv-xml directory-utils dot-locking extras fmt format hostinfo http-client intarweb json md5 message-digest posix posix-extras readline regex regex-case s11n spiffy spiffy-request-vars sqlite3 srfi-1 srfi-18 srfi-69 tcp test uri-common check-errors synch matchable sql-null tcp-server rpc blob-utils string-utils variable-item defstruct uri-generic sendfile opensll openssl lookup-table list-utils stack; do \
 #	chicken-install -prefix deploytarg -deploy $$i;done
 
 # deploytarg/libsqlite3.so : 
 # 	CSC_OPTIONS="-Ideploytarg -Ldeploytarg" $CHICKEN_INSTALL -prefix deploytarg -deploy sqlite3
 
-deploy : deploytarg/mtest deploytarg/dboard $(DEPLOYHELPERS) deploytarg/nbfake deploytarg/viewsceen deploytarg/nbfind deploytarg/apropos.so
+deploy : deploytarg/mtest deploytarg/dboard $(DEPLOYHELPERS) deploytarg/nbfake deploytarg/remrun deploytarg/viewsceen deploytarg/nbfind deploytarg/apropos.so
 
 # deploytarg/libiupcd.so : $(CKPATH)/lib/libiupcd.so
 # 	for i in iup im cd av call sqlite; do \
@@ -333,9 +346,9 @@ altdb.scm :
 	if  csi -ne '(use mysql-client)';then \
            echo "(use mysql-client)(hash-table-set! *available-db* 'mysql #t)" >> altdb.scm; \
 	fi
-	if csi -ne '(use postgresql)';then \
-	   echo "(use postgresql)(hash-table-set! *available-db* 'postgresql #t)" >> altdb.scm;\
-	fi
+#	if csi -ne '(use postgresql)';then \
+#	   echo "(use postgresql)(hash-table-set! *available-db* 'postgresql #t)" >> altdb.scm;\
+#	fi
 
 portlogger-example : portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
 	csc $(CSCOPTS) portlogger-example.scm api.o archive.o client.o common.o configf.o daemon.o dashboard-tests.o db.o dcommon.o ezsteps.o filedb.o genexample.o gutils.o http-transport.o items.o keys.o launch.o lock-queue.o margs.o megatest-version.o mt.o ods.o portlogger.o process.o rmt.o rpc-transport.o runconfig.o runs.o sdb.o server.o synchash.o tasks.o tdb.o tests.o tree.o
