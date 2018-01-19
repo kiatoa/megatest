@@ -1513,7 +1513,7 @@
              (success        (if launchwait (equal? 0 (cadr launch-results-prev)) #t))
              (launch-results (if launchwait (car launch-results-prev) launch-results-prev)))
         (if (not success)
-            (tests:test-set-status! run-id test-id "COMPLETED" "DEAD" #f #f)) ;; (if launch-results launch-results "FAILED"))
+            (tests:test-set-status! run-id test-id "COMPLETED" "DEAD" "launcher failed; exited non-zero; check mt_launch.log" #f)) ;; (if launch-results launch-results "FAILED"))
         (mutex-unlock! *launch-setup-mutex*) ;; yes, really should mutex all the way to here. Need to put this entire process into a fork.
 	;; (rmt:no-sync-del! lock-key)         ;; release the lock for starting this test
 	(if (not launchwait) ;; give the OS a little time to allow the process to start
