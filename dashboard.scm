@@ -329,14 +329,17 @@ Misc
 
 
 (define (dboard:launch-testpanel run-id test-id)
-  (let* ((cfg-sh  (conc *common:this-exe-dir* "/cfg.sh"))
-         (cmd (conc
-               (if (common:file-exists? cfg-sh)
-                   (conc "source "cfg-sh" && ")
-                   "")
-               *common:this-exe-fullpath*
-               " -test " run-id "," test-id
-               " &")))
+  (let* (;; (cfg-sh  (conc *common:this-exe-dir* "/cfg.sh"))
+         ;; (cmd (conc
+         ;;       (if (common:file-exists? cfg-sh)
+         ;;           (conc "source "cfg-sh" && ")
+         ;;           "")
+         ;;       *common:this-exe-fullpath*
+         ;;       " -test " run-id "," test-id
+         ;;       " &"))
+         (cmd (conc *common:this-exe-dir*"/../dashboard "
+                    "-test " run-id "," test-id
+                    " &")))
     (system cmd)))
 
 (define (dboard:tabdat-target-string vec)

@@ -1027,12 +1027,14 @@
                            (debug:print-info 0 *default-log-port* message))
                        #f) (thunk) ))
 
-(define (common:file-exists? path-string)
+(define (common:file-exists? path-string #!key (silent #f))
   ;; this avoids stack dumps in the case where 
 
   ;;;; TODO: catch permission denied exceptions and emit appropriate warnings, eg:  system error while trying to access file: "/nfs/pdx/disks/icf_env_disk001/bjbarcla/gwa/issues/mtdev/randy-slow/reproduce/q...
   (common:false-on-exception (lambda () (file-exists? path-string))
-                             message: (conc "Unable to access path: " path-string)
+                             message: (if (not silent)
+                                          (conc "Unable to access path: " path-string)
+                                          #f)
                              ))
 
 (define (common:directory-exists? path-string)

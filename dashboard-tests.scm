@@ -248,7 +248,7 @@
 (define (submegatest-panel dbstruct keydat testdat runname testconfig)
   (let* ((test-run-dir      (db:test-get-rundir testdat))
 	 (subarea           (subrun:get-runarea test-run-dir))
-	 (area-exists       (and subarea (common:file-exists? subarea))))
+	 (area-exists       (and subarea (common:file-exists? subarea silent: #t))))
     (if subarea
 	(iup:frame 
 	 #:title "Megatest Run Info" ; #:expand "YES"
