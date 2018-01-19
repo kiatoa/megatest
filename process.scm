@@ -47,6 +47,32 @@
 	     (close-output-port fho)
 	     result))))) ;; )
 
+(define (process:cmd-run-with-stderr-and-exitcode->list cmd . params)
+  ;; (print "Called with cmd=" cmd ", proc=" proc ", params=" params)
+;;  (handle-exceptions
+;;   exn
+;;   (begin
+;;     (print "ERROR:  Failed to run command: " cmd " " (string-intersperse params " "))
+;;     (print "       " ((condition-property-accessor 'exn 'message) exn))
+;;     #f)
+   (let-values (((fh fho pid fhe) (if (null? params)
+				      (process* cmd)
+				      (process* cmd params))))
+       (let loop ((curr (read-line fh))
+		  (result  '()))
+	 (let ((errstr (process:conservative-read fhe)))
+	   (if (not (string=? errstr ""))
+	       (set! result (append result (list errstr)))))
+       (if (not (eof-object? curr))
+	   (loop (read-line fh)
+		 (append result (list curr)))
+	   (begin
+	     ;(close-input-port fh)
+	     ;(close-input-port fhe)
+	     ;(close-output-port fho)
+             (let-values (((anotherpid normalexit? exitstatus)  (process-wait pid)))
+               (list result (if normalexit? exitstatus -1))))))))
+
 (define (process:cmd-run-proc-each-line cmd proc . params)
   ;; (print "Called with cmd=" cmd ", proc=" proc ", params=" params)
   (handle-exceptions

@@ -1498,8 +1498,8 @@
 			      (hash-table-ref/default tconfig "pre-launch-env-overrides" '())))
 	     ;; Launchwait defaults to true, must override it to turn off wait
 	     (launchwait     (if (equal? (configf:lookup *configdat* "setup" "launchwait") "no") #f #t))
-	     (launch-results (apply (if launchwait ;; BB: TODO: refactor this to examine return code of launcher, if nonzero, set state to launch failed.
-					process:cmd-run-with-stderr->list
+	     (launch-results-prev (apply (if launchwait ;; BB: TODO: refactor this to examine return code of launcher, if nonzero, set state to launch failed.
+					process:cmd-run-with-stderr-and-exitcode->list
 					process-run)
 				    (if useshell
 					(let ((cmdstr (string-intersperse fullcmd " ")))
@@ -1509,7 +1509,11 @@
 					(car fullcmd))
 				    (if useshell
 					'()
-					(cdr fullcmd)))))
+					(cdr fullcmd))))
+             (success        (if launchwait (equal? 0 (cadr launch-results-prev)) #t))
+             (launch-results (if launchwait (car launch-results-prev) launch-results-prev)))
+        (if (not success)
+            (tests:test-set-status! run-id test-id "COMPLETED" "DEAD" #f #f)) ;; (if launch-results launch-results "FAILED"))
         (mutex-unlock! *launch-setup-mutex*) ;; yes, really should mutex all the way to here. Need to put this entire process into a fork.
 	;; (rmt:no-sync-del! lock-key)         ;; release the lock for starting this test
 	(if (not launchwait) ;; give the OS a little time to allow the process to start
