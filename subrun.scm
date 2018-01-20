@@ -138,7 +138,8 @@
              (run-area   (if (list? info-alist)
                              (alist-ref "-start-dir" info-alist equal? #f)
                              #f)))
-        run-area)))
+        run-area)
+      #f))
 
 (define (subrun:selector+log-alist test-run-dir log-prefix)
   (let* ((switch-def-alist (common:get-param-mapping flavor: 'config))
