@@ -1318,7 +1318,16 @@
 ;;    - could be ssh to host from hosts table (update regularly with load)
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
-(define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
+
+(define (launch-test . args)
+  (let ((child-pid (process-fork)))
+    (if (zero? child-pid)
+        (begin
+          (set! *common:local-force-server* 'always)
+          (apply launch-test-inner args))
+        #t)))
+
+(define (launch-test-inner test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
   (mutex-lock! *launch-setup-mutex*) ;; setting variables and processing the testconfig is NOT thread-safe, reuse the launch-setup mutex
   (let* ( ;; (lock-key        (conc "test-" test-id))
 	;; (got-lock        (let loop ((lock        (rmt:no-sync-get-lock lock-key))

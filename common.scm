@@ -1190,8 +1190,9 @@
   
 ;; force use of server?
 ;;
+(define *common:local-force-server* #f)
 (define (common:force-server?)
-  (let* ((force-setting (configf:lookup *configdat* "server" "force"))
+  (let* ((force-setting (or *common:local-force-server* (configf:lookup *configdat* "server" "force")))
 	 (force-type    (if force-setting (string->symbol force-setting) #f))
 	 (force-result  (case force-type
 			  ((#f)     #f)
