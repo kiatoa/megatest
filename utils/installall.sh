@@ -184,7 +184,7 @@ cd $BUILDHOME
 #  wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
 #  mv 1.0.0 1.0.0.tar.gz
 #fi
-if ! [[ -e $PREFIX/lib64/libnanomsg.so.1.0.0 ]]; then
+if ! [[ -e $PREFIX/lib/libnanomsg.so ]]; then
         wget --no-check-certificate https://github.com/nanomsg/nanomsg/archive/1.0.0.tar.gz 
         mv 1.0.0 1.0.0.tar.gz
 	tar xf 1.0.0.tar.gz 
@@ -269,8 +269,11 @@ do
 		exit 1
 	fi
 done
-if [[ -e `which mysql_config` ]]; then
-  $CHICKEN_INSTALL $PROX mysql-client
+
+if [[ ! -e $PREFIX/lib/chicken/7/mysql-client.so ]];then
+    if [[ -e `which mysql_config` ]]; then
+	$CHICKEN_INSTALL $PROX mysql-client
+    fi
 fi
 
 cd $BUILDHOME
@@ -297,17 +300,21 @@ echo $files
 
 mkdir -p $PREFIX/iuplib
 mkdir -p iup/
-for a in `echo $files` ; do
+for a in $files ; do
+    targfile=$(echo $a | cut -d'/' -f2)
     if ! [[ -e tgz/$a ]] ; then
         echo wget -c -O tgz/$a http://www.kiatoa.com/matt/chicken-build/$a
 	wget -c http://www.kiatoa.com/matt/chicken-build/$a
-        mv `echo $a | cut -d'/' -f2` tgz/
+	mv $targfile tgz/
     fi
-    echo Untarring tgz/$a into $BUILDHOME/lib
-    tar -xzf tgz/`echo $a | cut -d'/' -f2` -C iup/
-    #(cd $PREFIX/lib;tar xfvz $BUILDHOME/tgz/$a;mv include/* ../include)
-    # (cd $DEPLOYTARG;tar xfvz $BUILDHOME/$a)
+    if ! [[ -e tgz/$targfile ]] ; then
+	echo "ERROR: Failed to get http://www.kiatoa.com/matt/chicken-build/$a, please report this to matt@kiatoa.com"
+	exit 1
+    fi
+    echo Untarring tgz/$targfile into $BUILDHOME/lib
+    tar -xzf tgz/$targfile -C iup/
 done
+
 cp iup/include/* $PREFIX/include/
 cp iup/*.so $PREFIX/lib/
 cp iup/*.a $PREFIX/lib/
