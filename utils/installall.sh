@@ -14,7 +14,9 @@
 #  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 #  PURPOSE.
 
-if [[ $OPTION=="" ]]; then
+# echo OPTION=$OPTION
+
+if [[ $OPTION == "" ]]; then
     export OPTION=std
 fi
 
@@ -68,6 +70,14 @@ Ubuntu-16.04-x86_64-std)
 	IMVER=3.12
 #	CHICKEN_VERSION=4.12.0
 #	CHICKEN_BASEVER=4.12.0
+	;;
+Ubuntu-16.04-x86_64-new)
+	KTYPE=32
+	CDVER=5.11.1
+	IUPVER=3.22
+	IMVER=3.12
+	CHICKEN_VERSION=4.13.0
+	CHICKEN_BASEVER=4.13.0
 	;;
 Ubuntu-16.04-i686-std)
 	KTYPE=32
