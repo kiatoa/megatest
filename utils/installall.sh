@@ -16,6 +16,11 @@
 
 # echo OPTION=$OPTION
 
+# BKM for ubuntu 17.04:
+#  sudo dpkg -i libpng12-0_1.2.54-1ubuntu1_amd64.deb
+#  sudo dpkg -i libpng12-0_1.2.54-1ubuntu1_amd64.deb
+
+
 if [[ $OPTION == "" ]]; then
     export OPTION=std
 fi
